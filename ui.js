@@ -125,7 +125,7 @@
     d.innerHTML = `未解锁 · ${esc(r.name)}<br><b>${SIM.shopItem(r.id).levels[0].cost} 金</b> · 商店购买`; d.title = r.desc; d.addEventListener('click', () => toggleShop(true)); $('rlabs').appendChild(d); labs[r.id] = d; }
   (function place() { const S = G.S, vw = innerWidth, vh = innerHeight;
     for (const r of PFWorld.REGIONS) { const d = labs[r.id]; if (S.eff.regions.includes(r.id)) { d.hidden = true; continue; }
-      const c = G.toClient(r.sign.x, r.sign.y), on = c.x > -60 && c.x < vw + 60 && c.y > 0 && c.y < vh + 80;
+      const c = G.toClient(r.sign.x, r.sign.y), on = c.x > 90 && c.x < vw - 90 && c.y - 52 > 64 && c.y < vh - 64; // keep clear of the HUD panels at the top and bottom
       d.hidden = !on; if (on) { d.style.left = Math.round(c.x) + 'px'; d.style.top = Math.round(c.y - 52) + 'px'; } }
     requestAnimationFrame(place); })();
   // ---- save menu ----
