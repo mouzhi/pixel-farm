@@ -299,7 +299,7 @@
   showOffline(G.SAVE.offline);
   const loveHud = $('loveHud'), loveTip = $('loveTip'), loveIco = $('loveIco');
   if (loveIco) { loveIco.style.backgroundImage = 'url(' + ICONS.heart + ')'; loveIco.style.backgroundRepeat = 'no-repeat'; }
-  function placeLoveTip() { if (!loveHud || !loveTip) return; const r = $('hud').getBoundingClientRect(); loveTip.style.top = Math.round(r.bottom + 6) + 'px'; }
+  function placeLoveTip() { if (loveTip) loveTip.style.top = ''; } // v5.1.2: tip sits in the left dock under the HUD, no floating offset
   function drawLoveTip() {
     if (!loveTip || loveTip.hidden || !G.loveStatus) return;
     const love = G.loveStatus();
