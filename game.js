@@ -456,9 +456,12 @@ function fit() { // largest whole multiple of the buffer in *device* pixels, pla
   zoom = clamp(zoom, 0, zMax);
   const fitMax = Math.min(vw / W, vh / H);
   const base = Math.max(1, Math.floor(fitMax));
-  // zoom is extra integer steps, but never larger than the stage; if the stage is shorter than 1 device
-  // pixel per buffer pixel (landscape phone), allow a fractional CSS scale so the whole picture stays on screen
-  const s = fitMax < 1 ? fitMax : Math.max(1, Math.min(base + zoom, Math.floor(vw / W), Math.floor(vh / H)));
+  const fb = window.PFPlatform && PFPlatform.framebuffer;
+  // mobile: use the locked integer scale so the buffer fills the screen; extra zoom crops the edges
+  let s;
+  if (window.PFPlatform && PFPlatform.mobile && fb && fb.scale && fitMax >= 1) s = Math.max(1, (fb.scale | 0) + zoom);
+  else if (fitMax < 1) s = fitMax; // short/landscape: keep the whole picture on screen
+  else s = Math.max(1, Math.min(base + zoom, Math.floor(vw / W), Math.floor(vh / H)));
   const wrap = document.getElementById('wrap'), left = Math.floor((vw - W * s) / 2), top = Math.floor((vh - H * s) / 2);
   wrap.style.left = (box.left + left / dpr) + 'px'; wrap.style.top = (box.top + top / dpr) + 'px';
   cv.style.width = W * s / dpr + 'px'; cv.style.height = H * s / dpr + 'px';
@@ -2251,8 +2254,10 @@ const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };
 function saveNow() {
   if (SAVE.off) return false;
   const r = PFSave.write(snapshot()); SAVE.error = r.ok ? null : r.error;
-  if (r.ok) { SAVE.at = Date.now(); noteLog('flush'); noteLog('syncSoon', 'autosave'); }
-  else window.dispatchEvent(new CustomEvent('pf:save-error', { detail: { error: r.error, bytes: r.bytes || 0 } }));
+  if (r.ok) {
+    SAVE.at = Date.now(); noteLog('flush'); noteLog('syncSoon', 'autosave');
+    window.dispatchEvent(new CustomEvent('pf:saved', { detail: { earned: S.earned, day: S.day } }));
+  } else window.dispatchEvent(new CustomEvent('pf:save-error', { detail: { error: r.error, bytes: r.bytes || 0 } }));
   return r.ok;
 }
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; only gold changes

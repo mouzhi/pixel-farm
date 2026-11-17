@@ -58,6 +58,8 @@ def stage() -> None:
     shutil.copy2(HERE / "mobile.js", STAGE / "mobile.js")
     shutil.copy2(HERE / "mobile.css", STAGE / "mobile.css")
     shutil.copy2(HERE / "boot.js", STAGE / "boot.js")
+    shutil.copy2(HERE / "leaderboard.js", STAGE / "leaderboard.js")
+    shutil.copy2(HERE / "ui-icons.png", STAGE / "ui-icons.png")
 
     game = (STAGE / "game.js").read_text()
     if OPTIONAL_CHAIN in game:

@@ -1,20 +1,36 @@
-/* 竖屏手机壳：在 game.js 之前运行，打开 mobile 旗标，并在 DOM 上排版。网页版不加载本文件。 */
+/* 竖屏壳：全屏画面 + 像素图标叠加。网页版不加载。 */
 (function (root) {
   'use strict';
   var P = root.PFPlatform || (root.PFPlatform = {});
   P.mobile = true;
-  P.framebuffer = { w: 240, h: 426 }; // ~9:16 low-res buffer, integer-upscaled
   P.saveEveryMs = 30000;
   P.followFarmer = true;
+
+  function chooseFramebuffer() {
+    if (P.fbLocked) return P.framebuffer;
+    var dpr = root.devicePixelRatio || 1;
+    var cssW = root.innerWidth || 360;
+    var cssH = root.innerHeight || 640;
+    var vw = Math.max(1, Math.floor(cssW * dpr));
+    var vh = Math.max(1, Math.floor(cssH * dpr));
+    var scale = Math.max(1, Math.floor(vw / 220));
+    var W = Math.max(160, Math.floor(vw / scale));
+    var H = Math.max(160, Math.floor(vh / scale));
+    P.framebuffer = { w: W, h: H, scale: scale };
+    return P.framebuffer;
+  }
+  P.framebuffer = chooseFramebuffer();
+  var settleChrome;
+  P.chromeReady = new Promise(function (resolve) { settleChrome = resolve; });
+  function lockFramebuffer() {
+    chooseFramebuffer();
+    P.fbLocked = true;
+    if (settleChrome) { settleChrome(); settleChrome = null; }
+  }
 
   var doc = document;
   doc.documentElement.classList.add('xhs-mobile');
   if (doc.body) doc.body.classList.add('xhs-mobile');
-
-  function cssPx(el, prop) {
-    if (!el) return 0;
-    return parseFloat(root.getComputedStyle(el)[prop]) || 0;
-  }
 
   P.stageBox = function () {
     var stage = doc.getElementById('xhs-stage');
@@ -39,13 +55,18 @@
     toastT = setTimeout(function () { toastEl.hidden = true; }, 2800);
   };
 
-  function measureChrome() {
-    var top = doc.getElementById('xhs-top');
-    var tabs = doc.getElementById('xhs-tabs');
-    var th = top ? Math.ceil(top.getBoundingClientRect().height) : 56;
-    var bh = tabs ? Math.ceil(tabs.getBoundingClientRect().height) : 64;
-    doc.documentElement.style.setProperty('--xhs-top-h', th + 'px');
-    doc.documentElement.style.setProperty('--xhs-tab-h', bh + 'px');
+  function ico(id, kind, title, fn) {
+    var b = doc.createElement('button');
+    b.type = 'button';
+    b.id = id;
+    b.className = 'xhs-ico xhs-ico-' + kind;
+    b.title = title;
+    b.setAttribute('aria-label', title);
+    var i = doc.createElement('i');
+    i.setAttribute('aria-hidden', 'true');
+    b.appendChild(i);
+    b.addEventListener('click', fn);
+    return b;
   }
 
   function reparentSheets() {
@@ -53,144 +74,145 @@
       var el = doc.getElementById(id);
       if (el && el.parentNode !== doc.body) doc.body.appendChild(el);
     });
+    ['log', 'catches', 'minimap', 'tools', 'say', 'rlabs', 'hud'].forEach(function (id) {
+      var el = doc.getElementById(id);
+      if (el && el.parentNode !== doc.body) doc.body.appendChild(el);
+    });
+  }
+
+  function closeSheets(except) {
+    ['shop', 'store', 'menu', 'xhs-board'].forEach(function (id) {
+      var el = doc.getElementById(id);
+      if (el && el !== except) el.hidden = true;
+    });
+    var dock = doc.getElementById('xhs-inv-dock');
+    if (dock && except !== dock) dock.hidden = true;
+    markIcons();
+  }
+
+  function markIcons() {
+    var bag = doc.getElementById('xhs-btn-bag');
+    var storeB = doc.getElementById('xhs-btn-store');
+    var shopB = doc.getElementById('xhs-btn-shop');
+    var boardB = doc.getElementById('xhs-btn-board');
+    var followB = doc.getElementById('xhs-follow');
+    var dock = doc.getElementById('xhs-inv-dock');
+    var shop = doc.getElementById('shop');
+    var store = doc.getElementById('store');
+    var board = doc.getElementById('xhs-board');
+    if (bag) bag.classList.toggle('on', !!(dock && !dock.hidden));
+    if (storeB) storeB.classList.toggle('on', !!(store && !store.hidden));
+    if (shopB) shopB.classList.toggle('on', !!(shop && !shop.hidden));
+    if (boardB) boardB.classList.toggle('on', !!(board && !board.hidden));
+    if (followB) followB.classList.toggle('on', !!P.followFarmer);
+  }
+  P._markTabs = markIcons;
+
+  function toggleEl(el) {
+    if (!el) return;
+    var open = el.hidden;
+    closeSheets(open ? el : null);
+    el.hidden = !open;
+    markIcons();
+  }
+
+  function setFollow(on) {
+    P.followFarmer = !!on;
+    markIcons();
+  }
+
+  function syncSpeedBtn() {
+    var btn = doc.getElementById('xhs-btn-speed');
+    if (!btn) return;
+    var S = root.__farm && __farm.S;
+    var max = S && S.eff ? S.eff.speedMax : 1;
+    btn.hidden = !(max > 1);
+    var cur = (S && S.speed) || 1;
+    var em = btn.querySelector('em');
+    if (!em) { em = doc.createElement('em'); btn.appendChild(em); }
+    em.textContent = cur + '×';
+    btn.classList.toggle('on', cur > 1);
+  }
+
+  function cycleSpeed() {
+    var G = root.__farm;
+    if (!G || !G.setGameSpeed || !G.S) return;
+    var max = G.S.eff.speedMax || 1;
+    var opts = [1, 2, 4].filter(function (v) { return v <= max; });
+    if (!opts.length) return;
+    var i = opts.indexOf(G.S.speed || 1);
+    G.setGameSpeed(opts[(i + 1) % opts.length]);
+    syncSpeedBtn();
+  }
+
+  function compactHud() {
+    var day = doc.getElementById('day');
+    if (day) {
+      var t = day.textContent || '';
+      var i = t.indexOf(' · ');
+      if (i > 0) day.textContent = t.slice(0, i);
+    }
+    var coins = doc.getElementById('coins');
+    if (coins && coins.parentElement && !coins.parentElement.classList.contains('xhs-coins')) {
+      coins.parentElement.classList.add('xhs-coins');
+    }
   }
 
   function buildChrome() {
-    if (doc.getElementById('xhs-top')) return;
-    var top = doc.createElement('div'); top.id = 'xhs-top';
+    if (doc.getElementById('xhs-stage')) return;
     var stage = doc.createElement('div'); stage.id = 'xhs-stage';
-    var tabs = doc.createElement('div'); tabs.id = 'xhs-tabs';
-    var fab = doc.createElement('div'); fab.id = 'xhs-fab';
+    var dockInv = doc.createElement('div'); dockInv.id = 'xhs-inv-dock'; dockInv.hidden = true;
+    var dock = doc.createElement('div'); dock.id = 'xhs-dock';
+    var corner = doc.createElement('div'); corner.id = 'xhs-corner';
     var toast = doc.createElement('div'); toast.id = 'xhs-toast'; toast.hidden = true;
-    var hud = doc.getElementById('hud');
     var wrap = doc.getElementById('wrap');
-    doc.body.insertBefore(top, wrap);
-    if (hud) top.appendChild(hud);
-    doc.body.insertBefore(stage, wrap);
-    if (wrap) stage.appendChild(wrap);
-    doc.body.appendChild(tabs);
-    doc.body.appendChild(fab);
+    var hud = doc.getElementById('hud');
+    var inv = doc.getElementById('inv');
+    if (wrap) {
+      doc.body.insertBefore(stage, wrap);
+      stage.appendChild(wrap);
+    } else doc.body.appendChild(stage);
+    if (hud && hud.parentNode !== doc.body) doc.body.appendChild(hud);
+    if (inv) dockInv.appendChild(inv);
+    doc.body.appendChild(dockInv);
+    doc.body.appendChild(dock);
+    doc.body.appendChild(corner);
     doc.body.appendChild(toast);
     toastEl = toast;
     reparentSheets();
 
-    function tab(id, label, fn) {
-      var b = doc.createElement('button');
-      b.type = 'button';
-      b.id = id;
-      b.textContent = label;
-      b.addEventListener('click', fn);
-      tabs.appendChild(b);
-      return b;
-    }
-    var shop = doc.getElementById('shop');
-    var store = doc.getElementById('store');
-    var menu = doc.getElementById('menu');
-    var speed = doc.getElementById('speed');
-    function closeSheets(except) {
-      [shop, store, menu].forEach(function (el) {
-        if (el && el !== except) el.hidden = true;
-      });
-      markTabs();
-    }
-    function toggle(el) {
-      if (!el) return;
-      var open = el.hidden;
-      closeSheets(open ? el : null);
-      el.hidden = !open;
-      markTabs();
-    }
-    tab('tabShop', '商店', function () {
-      var btn = doc.getElementById('shopBtn');
-      if (btn) btn.click();
-      else toggle(shop);
-      markTabs();
-    });
-    tab('tabStore', '仓库', function () {
+    dock.appendChild(ico('xhs-btn-bag', 'bag', '背包', function () {
+      toggleEl(doc.getElementById('xhs-inv-dock'));
+    }));
+    dock.appendChild(ico('xhs-btn-store', 'store', '仓库', function () {
       var btn = doc.getElementById('storeBtn');
+      closeSheets(doc.getElementById('store'));
       if (btn) btn.click();
-      else toggle(store);
-      markTabs();
-    });
-    tab('tabSave', '存档', function () {
-      var btn = doc.getElementById('menuBtn');
+      else toggleEl(doc.getElementById('store'));
+      markIcons();
+    }));
+    dock.appendChild(ico('xhs-btn-shop', 'shop', '商店', function () {
+      var btn = doc.getElementById('shopBtn');
+      closeSheets(doc.getElementById('shop'));
       if (btn) btn.click();
-      else toggle(menu);
-      markTabs();
-    });
-    var tabSpeed = tab('tabSpeed', '倍速', function () {
-      if (speed && speed.hidden) { P.toast && P.toast('商店买了加速之后才能用'); return; }
-      if (speed) {
-        // reveal the existing speed buttons as a small sheet above the tabs
-        speed.style.display = speed.style.display === 'flex' ? 'none' : 'flex';
-        speed.style.position = 'fixed';
-        speed.style.left = '8px';
-        speed.style.right = '8px';
-        speed.style.bottom = 'calc(var(--xhs-tab-h, 64px) + 8px)';
-        speed.style.zIndex = '23';
-        speed.style.gap = '8px';
-        speed.style.justifyContent = 'center';
-      }
-    });
-    tab('tabMenu', '菜单', function () {
-      var mapBtn = doc.getElementById('mapBtn');
-      if (mapBtn) mapBtn.click();
-      else {
-        var mm = doc.getElementById('minimap');
-        if (mm) mm.hidden = !mm.hidden;
-      }
-      markTabs();
-    });
+      else toggleEl(doc.getElementById('shop'));
+      markIcons();
+    }));
 
-    function markTabs() {
-      var map = [
-        ['tabShop', shop],
-        ['tabStore', store],
-        ['tabSave', menu]
-      ];
-      map.forEach(function (pair) {
-        var b = doc.getElementById(pair[0]);
-        if (b) b.classList.toggle('on', pair[1] && !pair[1].hidden);
-      });
-      var menuTab = doc.getElementById('tabMenu');
-      var mm = doc.getElementById('minimap');
-      if (menuTab) menuTab.classList.toggle('on', !!(mm && !mm.hidden));
-      var fab = doc.getElementById('xhs-fab');
-      var sheetOpen = (shop && !shop.hidden) || (store && !store.hidden) || (menu && !menu.hidden);
-      if (fab) fab.hidden = !!sheetOpen;
-    }
-    P._markTabs = markTabs;
+    var follow = ico('xhs-follow', 'follow', '跟随农夫', function () {
+      setFollow(!P.followFarmer);
+    });
+    follow.classList.add('on');
+    doc.body.appendChild(follow);
 
-    function fabBtn(label, fn) {
-      var b = doc.createElement('button');
-      b.type = 'button';
-      b.className = 'pbtn';
-      b.textContent = label;
-      b.addEventListener('click', fn);
-      fab.appendChild(b);
-      return b;
-    }
-    var followBtn = fabBtn('跟随', function () {
-      P.followFarmer = !P.followFarmer;
-      followBtn.classList.toggle('on', !!P.followFarmer);
-      followBtn.textContent = P.followFarmer ? '跟随中' : '跟随';
-    });
-    followBtn.classList.add('on');
-    followBtn.textContent = '跟随中';
-    fabBtn('回家', function () {
-      P.followFarmer = false;
-      followBtn.classList.remove('on');
-      followBtn.textContent = '跟随';
-      if (root.__farm && __farm.homeCam) __farm.homeCam();
-    });
-    fabBtn('左转', function () {
-      if (root.__farm && __farm.cam) __farm.cam.ta -= Math.PI / 2;
-    });
-    fabBtn('右转', function () {
-      if (root.__farm && __farm.cam) __farm.cam.ta += Math.PI / 2;
-    });
+    corner.appendChild(ico('xhs-btn-board', 'board', '排行榜', function () {
+      if (P.leaderboard && typeof P.leaderboard.open === 'function') P.leaderboard.open();
+      markIcons();
+    }));
+    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
+    speed.hidden = true;
+    corner.appendChild(speed);
 
-    measureChrome();
     if (root.__farm && __farm.fit) __farm.fit();
   }
 
@@ -204,52 +226,57 @@
       var ids = Object.keys(pointers);
       if (ids.length < 2) return null;
       var a = pointers[ids[0]], b = pointers[ids[1]];
-      return { dist: Math.hypot(a.x - b.x, a.y - b.y), cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+      return {
+        dist: Math.hypot(a.x - b.x, a.y - b.y),
+        angle: Math.atan2(b.y - a.y, b.x - a.x),
+        cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2
+      };
     }
     var last = null, lastZoom = 0;
+    function cancelFollow() { if (P.followFarmer) setFollow(false); }
     cv.addEventListener('pointerdown', function (e) {
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
       if (count() >= 2) {
         last = pair();
         lastZoom = root.__farm && __farm.getZoom ? __farm.getZoom() : 0;
-        P.followFarmer = false;
-        var fb = doc.querySelector('#xhs-fab button');
-        if (fb) { fb.classList.remove('on'); fb.textContent = '跟随'; }
+        cancelFollow();
+        // stop the game's one-finger drag from fighting the pinch/twist
+        if (root.__farm) try { doc.body.classList.remove('grab'); } catch (err) {}
       }
     }, true);
     cv.addEventListener('pointermove', function (e) {
       if (!pointers[e.pointerId]) return;
       pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (count() >= 2 && last && root.__farm && __farm.setZoom) {
-        var now = pair();
-        if (now && last.dist > 8) {
-          var steps = Math.round(Math.log(now.dist / last.dist) / Math.log(1.25));
-          if (steps) __farm.setZoom(lastZoom + steps);
-        }
+      if (count() < 2 || !last) return;
+      e.stopPropagation();
+      var now = pair();
+      if (!now || now.dist < 8) return;
+      var G = root.__farm;
+      if (G && G.cam && isFinite(now.angle) && isFinite(last.angle)) {
+        var dAng = now.angle - last.angle;
+        if (dAng > Math.PI) dAng -= Math.PI * 2;
+        if (dAng < -Math.PI) dAng += Math.PI * 2;
+        G.cam.ta += dAng;
+      }
+      if (G && G.setZoom && last.dist > 8) {
+        var dz = Math.round(Math.log(now.dist / last.dist) / Math.log(1.25));
+        if (dz) G.setZoom(lastZoom + dz);
       }
     }, true);
-    function up(e) { delete pointers[e.pointerId]; if (count() < 2) last = null; }
+    function up(e) {
+      delete pointers[e.pointerId];
+      if (count() < 2) last = null;
+    }
     cv.addEventListener('pointerup', up, true);
     cv.addEventListener('pointercancel', up, true);
-    // panning already exists; a one-finger drag should stop follow
-    cv.addEventListener('pointerdown', function () {
-      /* follow is paused only after the existing drag marks itself moved — hooked below */
-    });
   }
 
   function hookFollowPause() {
     var cv = doc.getElementById('game');
     if (!cv || cv._xhsFollow) return;
     cv._xhsFollow = true;
-    cv.addEventListener('pointermove', function (e) {
-      if (e.buttons || (e.pointerType === 'touch')) {
-        // if the game set body.grab, the player is panning
-        if (doc.body.classList.contains('grab') && P.followFarmer) {
-          P.followFarmer = false;
-          var btns = doc.querySelectorAll('#xhs-fab button');
-          if (btns[0]) { btns[0].classList.remove('on'); btns[0].textContent = '跟随'; }
-        }
-      }
+    cv.addEventListener('pointermove', function () {
+      if (doc.body.classList.contains('grab') && P.followFarmer) setFollow(false);
     });
   }
 
@@ -261,7 +288,6 @@
     doc.addEventListener('visibilitychange', function () { if (doc.hidden) hideSave(); });
     root.addEventListener('pagehide', hideSave);
     root.addEventListener('freeze', hideSave);
-    // official capability list (2026-11-13) has no onHide/onShow lifecycle hook; probe anyway
     var mini = root.xhs && root.xhs.miniTool;
     P.lifecycle = { onHide: !!(mini && (mini.onHide || mini.onAppHide || mini.onUnload)) };
     if (mini && typeof mini.onHide === 'function') {
@@ -280,35 +306,42 @@
     wirePinch();
     hookFollowPause();
     hookSaves();
-    measureChrome();
+    if (!P.fbLocked) chooseFramebuffer();
     if (root.__farm && __farm.fit) __farm.fit();
+    compactHud();
+    syncSpeedBtn();
     if (root.visualViewport) {
       visualViewport.addEventListener('resize', function () {
-        measureChrome();
         if (root.__farm && __farm.fit) __farm.fit();
       });
     }
     root.addEventListener('resize', function () {
-      measureChrome();
       if (root.__farm && __farm.fit) __farm.fit();
     });
     root.addEventListener('orientationchange', function () {
-      setTimeout(function () {
-        measureChrome();
-        if (root.__farm && __farm.fit) __farm.fit();
-      }, 80);
+      setTimeout(function () { if (root.__farm && __farm.fit) __farm.fit(); }, 80);
     });
   }
 
-  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', bootUi);
-  else bootUi();
-  // game.js loads later via boot.js; retry chrome wiring after it appears
+  function afterLayout(fn) {
+    if (root.requestAnimationFrame) requestAnimationFrame(function () { requestAnimationFrame(fn); });
+    else setTimeout(fn, 0);
+  }
+  function startChrome() {
+    bootUi();
+    afterLayout(function () { if (!P.fbLocked) lockFramebuffer(); });
+  }
+  if (doc.readyState === 'loading') doc.addEventListener('DOMContentLoaded', startChrome);
+  else startChrome();
+
   var n = 0;
   var iv = setInterval(function () {
     n++;
-    if (doc.getElementById('hud') && !doc.getElementById('xhs-top')) bootUi();
+    if (doc.getElementById('hud') && !doc.getElementById('xhs-stage')) bootUi();
     if (doc.getElementById('game')) { wirePinch(); hookFollowPause(); hookSaves(); }
     reparentSheets();
+    compactHud();
+    syncSpeedBtn();
     var mm = doc.getElementById('minimap');
     if (mm && !mm._xhsDefaulted) {
       mm._xhsDefaulted = true;
@@ -319,7 +352,10 @@
     if ((root.__farm && root.__farm.fit) || n > 80) {
       bootUi();
       if (root.__farm && __farm.fit) __farm.fit();
+      compactHud();
+      syncSpeedBtn();
       if (n > 80) clearInterval(iv);
     }
   }, 50);
+  setTimeout(function () { if (!P.fbLocked) lockFramebuffer(); }, 400);
 })(typeof window !== 'undefined' ? window : globalThis);

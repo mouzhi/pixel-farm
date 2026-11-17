@@ -195,6 +195,8 @@
     followFarmer: existing.followFarmer,
     stageBox: existing.stageBox,
     toast: existing.toast,
-    lifecycle: existing.lifecycle
+    lifecycle: existing.lifecycle,
+    chromeReady: existing.chromeReady,
+    fbLocked: existing.fbLocked
   };
 })(typeof window !== 'undefined' ? window : globalThis);

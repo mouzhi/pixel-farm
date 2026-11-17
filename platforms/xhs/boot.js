@@ -1,4 +1,4 @@
-/* 等平台存储预热后再按顺序加载游戏脚本（避免 PFSave.read 读到空存储） */
+/* 等平台存储预热、竖屏壳量好 framebuffer 后再按顺序加载游戏脚本 */
 (function () {
   var scripts = [
     'assets/palette.js',
@@ -13,7 +13,8 @@
     'playlog.js',
     'fx.js',
     'game.js',
-    'ui.js'
+    'ui.js',
+    'leaderboard.js'
   ];
   function loadAll() {
     var i = 0;
@@ -35,7 +36,10 @@
     }
     next();
   }
-  var ready = window.PFPlatform && window.PFPlatform.ready;
-  if (ready && typeof ready.then === 'function') ready.then(loadAll, loadAll);
-  else loadAll();
+  function after(p, fn) {
+    if (p && typeof p.then === 'function') p.then(fn, fn);
+    else fn();
+  }
+  var plat = window.PFPlatform || {};
+  after(plat.ready, function () { after(plat.chromeReady, loadAll); });
 })();
