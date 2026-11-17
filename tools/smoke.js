@@ -65,11 +65,51 @@ const fail = [];
       const bad = (ui.meters || []).filter(m => !m.ok);
       const storeOk = ui.storeOpen && ui.hasGiant && ui.hasGold && ui.hasWood && ui.hasHay && ui.storeN >= 7 && ui.sellGold >= ui.basketGold;
       const loveOk = ui.mid && ui.mid.loveVal === '63/100' && ui.mid.tipOpen && /聊天 \+3/.test(ui.mid.tipTxt) && /野花/.test(ui.mid.tipTxt) && /好感满后/.test(ui.mid.hint) && ui.mid.fillW > 0 && /等待大木屋/.test(ui.fullHint) && /一家/.test(ui.movedVal) && /已经住在农场/.test(ui.movedHint);
-      const okUi = !bad.length && storeOk && loveOk && ui.version === '5.1.1';
+      const okUi = !bad.length && storeOk && loveOk && ui.version === '5.1.2';
       console.log(okUi ? 'ok  ' : 'FAIL', 'meters+store+love', JSON.stringify({ bad, storeOpen: ui.storeOpen, sellGold: ui.sellGold, love: { mid: ui.mid, fullHint: ui.fullHint, movedVal: ui.movedVal, movedHint: ui.movedHint }, flags: { g: ui.hasGiant, e: ui.hasGold, w: ui.hasWood, h: ui.hasHay, f: ui.hasFish, n: ui.storeN, v: ui.version } }));
       if (!okUi) fail.push('meters+store+love');
       // close the panel so the later screenshot-less colour test is not blocked; Esc on window
       await p.keyboard.press('Escape');
+      // v5.1.2: 第N天 HUD, the event log, inventory, title, and catch list must not overlap
+      const sizes = [[1920, 1080], [1366, 768], [1280, 720], [1024, 768], [1024, 576]];
+      const layoutHits = [];
+      for (const [w, h] of sizes) {
+        await p.setViewportSize({ width: w, height: h });
+        const hit = await p.evaluate(() => {
+          const S = __farm.S;
+          S.eff.crops = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
+          S.animals = [{ kind: 'chicken', h: 1 }, { kind: 'cow', h: 1 }, { kind: 'sheep', h: 1 }];
+          S.log = ['18:40 卖了 12 个南瓜，进账 1020 金', '16:05 浇完了南边的菜地', '12:20 和阿禾聊了几句', '07:15 出门拔草收集种子'];
+          document.getElementById('log').innerHTML = S.log.map(s => '<div>' + s + '</div>').join('');
+          const catches = document.getElementById('catches');
+          catches.hidden = false;
+          catches.innerHTML = '<div class="h">今日渔获</div><div>今 · 鲫鱼 8 金</div>';
+          const tip = document.getElementById('loveTip'); if (tip) tip.hidden = true;
+          if (__farm.hud) __farm.hud();
+          __farm.refreshUI();
+          const rect = id => {
+            const e = document.getElementById(id);
+            if (!e || e.hidden || e.getClientRects().length === 0) return null;
+            const r = e.getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height };
+          };
+          const boxes = { hud: rect('hud'), log: rect('log'), inv: rect('inv'), title: rect('title'), catches: rect('catches') };
+          const overlap = (a, b) => {
+            if (!a || !b) return 0;
+            const x = Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x));
+            const y = Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y));
+            return x > 1 && y > 1 ? Math.round(x * y) : 0; // 1px tolerance for subpixel seams
+          };
+          const pairs = [['hud', 'log'], ['hud', 'inv'], ['hud', 'title'], ['hud', 'catches'], ['log', 'inv'], ['log', 'catches'], ['log', 'title'], ['catches', 'inv'], ['title', 'inv']];
+          const bad = pairs.map(([a, b]) => ({ pair: a + '+' + b, area: overlap(boxes[a], boxes[b]) })).filter(x => x.area);
+          return { bad, vw: innerWidth, vh: innerHeight };
+        });
+        if (hit.bad.length) layoutHits.push({ w, h, bad: hit.bad });
+      }
+      const okLayout = !layoutHits.length;
+      console.log(okLayout ? 'ok  ' : 'FAIL', 'hud-log-layout', JSON.stringify(layoutHits));
+      if (!okLayout) fail.push('hud-log-layout');
+      await p.setViewportSize({ width: 1280, height: 800 });
     }
     const r = await p.evaluate(manual => {
       const colours = () => { const d = document.getElementById('game').getContext('2d').getImageData(0, 0, 426, 266).data, s = new Set(); for (let i = 0; i < d.length; i += 16) s.add(d[i] << 16 | d[i + 1] << 8 | d[i + 2]); return s.size; };
