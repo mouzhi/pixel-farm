@@ -6,7 +6,7 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 20, RNG = process.argv[3];
 const ORDER = ['field', 'can', 'field', 'shoe', 'hoe', 'basket', 'field', 'speed', 'can', 'axe', 'forest', 'strawberry', 'east', 'shoe', 'basket', 'orchard', 'watermelon', 'speed', 'south', 'hoe', 'can', 'shoe',
-  'pasture', 'coop', 'chicken', 'chicken', 'chicken', 'shed', 'sheep', 'chicken', 'cow', 'sheep', 'chicken', 'chicken', 'sheep', 'cow'];
+  'rod', 'pasture', 'coop', 'chicken', 'chicken', 'chicken', 'shed', 'sheep', 'chicken', 'cow', 'sheep', 'chicken', 'chicken', 'sheep', 'cow', 'rod', 'coast', 'searod'];
 // Phase 3 player: once he has the axe and the forest he marks 2 trees a day, and plants every sapling on the next free spot of a fixed list
 const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]); for (const [x, y] of [[20, 70], [30, 96], [176, 24], [184, 100], [12, 120]]) PLANT.push([x, y]);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png' };
@@ -37,14 +37,15 @@ const server = http.createServer((req, res) => {
         else if (r.reason === 'maxed') i++; else break; }
       if (days.length < S.day - 1) days.push({ day: S.day - 1, earn: S.dayEarn[S.dayEarn.length - 1], coins: S.coins, earned: S.earned, open: __farm.tiles.filter(t => t.open).length,
         seeds: seeds(S.store) + seeds(F.bag) + F.gathered, min: Math.round(real / 6) / 10, idle: idleTiles, flow: Object.assign({}, S.flow), wood: S.woodGold || 0, fruit: S.fruitGold || 0, trees: S.trees.filter(t => t.kind !== 'wild' && t.stage === 'tree').length,
-        anim: S.animals.length, animG: S.animalGold || 0, hayG: S.hayGold || 0, happy: S.animals.length ? Math.round(S.animals.reduce((a, x) => a + x.h, 0) / S.animals.length) : '-' });
+        anim: S.animals.length, animG: S.animalGold || 0, hayG: S.hayGold || 0, happy: S.animals.length ? Math.round(S.animals.reduce((a, x) => a + x.h, 0) / S.animals.length) : '-', fishG: S.fishGold || 0 });
       if (S.t % 1440 >= 12 * 60 && S.t % 1440 < 12 * 60 + 5) idleTiles = __farm.tiles.filter(t => t.open && !t.crop).length; // empty tiles at noon
     }
-    return { buys, days, up: S.up, flow: S.flow };
+    return { buys, days, up: S.up, flow: S.flow, fishG: S.fishGold || 0, earned: S.earned, coins: S.coins };
   }, { DAYS, ORDER, PLANT });
-  console.log('  day  earn coins earned  open seeds noonEmpty realMin woodG fruitG fruitTrees anim animG  hayG happy');
-  for (const d of out.days) console.log([d.day, d.earn, d.coins, d.earned, d.open, d.seeds, d.idle, d.min, d.wood, d.fruit, d.trees, d.anim, d.animG, d.hayG, d.happy].map(v => String(v).padStart(5)).join(' '));
+  console.log('  day  earn coins earned  open seeds noonEmpty realMin woodG fruitG fruitTrees anim animG  hayG happy fishG');
+  for (const d of out.days) console.log([d.day, d.earn, d.coins, d.earned, d.open, d.seeds, d.idle, d.min, d.wood, d.fruit, d.trees, d.anim, d.animG, d.hayG, d.happy, d.fishG].map(v => String(v).padStart(5)).join(' '));
   console.log('\nseed flow (whole run):', JSON.stringify(out.flow));
+  console.log('totals: earned', out.earned, 'coins', out.coins, 'fishG', out.fishG);
   console.log('\npurchases:'); for (const b of out.buys) console.log(`  day ${b.day}  ${b.min} min  ${b.id} ${b.label}  ${b.cost}g`);
   if (errs.length) console.log('ERRORS', errs);
   await browser.close(); server.close();

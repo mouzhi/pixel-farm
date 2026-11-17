@@ -43,6 +43,13 @@
         spawn({ x: x + R(-1, 1), y: y + R(-1, 1), z, vx: Math.cos(a) * sp * 0.35, vy: Math.sin(a) * 0.2, vz: R(6, 14), life: R(0.35, 0.7), c: pick(C), sh: 'px', s: Math.random() < 0.4 ? 2 : 1 });
       }
       for (let i = 0; i < 3; i++) spawn({ x: x + R(-2, 2), y: y + R(-1, 1), z: z + R(0, 2), vx: R(-2, 2), vy: R(-1, 1), vz: R(3, 7), life: R(0.4, 0.8), c: pick(C), c2: Wd[1], sh: 'puff', s: 2, g: 18 });
+    } else if (kind === 'splash') {
+      const C = cols || [Wt[3], Wt[4], Wt[5], '#9fdcec', '#ffffff'], n = o.n || 10;
+      for (let i = 0; i < n; i++) {
+        const a = -Math.PI / 2 + R(-1.1, 1.1);
+        spawn({ x: x + R(-2, 2), y: y + R(-1, 1), z: z + 1, vx: Math.cos(a) * R(4, 11) * 0.45, vy: Math.sin(a) * 0.2, vz: R(10, 18), life: R(0.35, 0.7), c: pick(C), sh: 'drop', s: Math.random() < 0.45 ? 3 : 2, g: 55 });
+      }
+      for (let i = 0; i < 4; i++) spawn({ x: x + R(-2, 2), y, z: z + 2, vx: R(-4, 4), vy: R(-1, 1), vz: R(5, 10), life: 0.28, c: WHITE, sh: 'px', s: 1, g: 22 });
     } else if (kind === 'water' || kind === 'drop') {
       const C = cols || [Wt[3], Wt[4], Wt[5], '#9fdcec'], n = o.n || 8;
       for (let i = 0; i < n; i++) {

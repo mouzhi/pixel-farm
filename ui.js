@@ -49,7 +49,10 @@
     hay: pixIcon(['', '', '', '', '   kkkkkkkkkk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '   kkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#f2cf55', b: wd[3] }),
     egg: pixIcon(['', '', '', '', '      kkk', '     kcccк', '    kcccccк', '    kccccck', '    kcccccck', '    kcecccck', '     keccck', '      kkkk'].map(r => r.replace(/к/g, 'k').padEnd(16)), { k: ink, c: '#f6ecd0', e: st[3] }),
     wool: pixIcon(['', '', '', '    kk kk', '   kcckcck', '  kcceccccck', '  kcccccecck', ' kceccccccck', ' kccccceccck', '  kccecccck', '   kkcckkk', '     kk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', e: st[3] }),
-    milk: pixIcon(['', '', '      kkk', '      kak', '     kkkkk', '    kcccck', '    kcccck', '    kaaaak', '    kcccck', '    kcccck', '    kcccck', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', a: wt[3] }) });
+    milk: pixIcon(['', '', '      kkk', '      kak', '     kkkkk', '    kcccck', '    kcccck', '    kaaaak', '    kcccck', '    kcccck', '    kcccck', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', a: wt[3] }),
+    rod: pixIcon(['', '', '             k', '            kb', '           kb', '          kb', '         kb', '        kb', '       kb', '      kb', '   kkkb', '  kwwwk', '  kwkwk', '   kkk'].map(r => r.padEnd(16)), { k: ink, b: wd[3], w: '#fff6dc' }),
+    searod: pixIcon(['', '              k', '             ks', '            ks', '           ks', '          ks', '         ks', '        ks', '       ks', '      ks', '   kkks', '  kwwwk', '  kwrwk', '   kkk'].map(r => r.padEnd(16)), { k: ink, s: st[3], w: '#fff6dc', r: (P && P.roof) ? P.roof[2] : '#b8432f' }),
+    coast: pixIcon(['', '', '', '                ', '     www  ww', '   wwkwkwwkwk', '  wkkkkkkkkkk', '  kssysysyssk', '  ksssssssssk', ' kssysysysssk', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbbbb', 'bbbbbbbbbbbbbbbb'].map(r => r.padEnd(16)), { k: ink, w: wt[4], b: wt[2], s: wd[4], y: '#fff6dc' }) });
   const artIcon = k => { const a = G.animalArt(k), n = Math.max(16, a.width, a.height), c = document.createElement('canvas'); c.width = c.height = n;
     c.getContext('2d').drawImage(a, (n - a.width) >> 1, n - a.height - ((n - a.height) >> 2)); return c.toDataURL(); };
   for (const k of ['chicken', 'sheep', 'cow']) ICONS[k] = artIcon(k);
@@ -65,7 +68,8 @@
   let invKey = '';
   function inv() {
     const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
-    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, F.gathered, !!atlas, F.wood, F.saplings.apple, F.saplings.orange, S.hay, S.animals.map(a => a.h).join('/'), S.eff.regions.length].join(',');
+    const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(k)).length;
+    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, F.gathered, !!atlas, F.wood, F.saplings.apple, F.saplings.orange, S.hay, S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
     if (key === invKey) return; invKey = key;
     const pips = Array.from({ length: Math.min(S.waterMax, 30) }, (_, i) => `<b class="${i < F.water ? 'on' : ''}"></b>`).join('');
     let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i><div class="pips">${pips}</div><span class="k">水壶 ${F.water}/${S.waterMax}</span></div>`;
@@ -77,6 +81,15 @@
     if (S.eff.regions.includes('pasture')) h += `<div class="slot${S.hay ? '' : ' dim'}" title="仓库里的干草：每只鸡每天 1 份，羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）"><i style="background:url(${ICONS.hay});background-size:32px"></i><span class="k">干草</span><span class="n">${S.hay}</span></div>`;
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
       h += `<div class="slot" title="${S.animals.map(a => `${PFAnimals.KINDS[a.kind].name} ${a.h}（${PFAnimals.mood(a.h)}）`).join('，')}。喂饱、加水、摸一摸会更开心；开心（80 以上）多产一份，闷闷不乐（30 以下）不产。"><i style="background:url(${ICONS.chicken});background-size:32px;image-rendering:pixelated"></i><span class="k">${mood}</span><span class="n">${S.animals.length}</span></div>`; }
+    // v4.6: the starter bamboo rod is always owned (shop level 0); fish in the basket are listed by kind
+    const FS = window.PFFish, rod = FS.rodOf(E.rod || 0);
+    const rodTip = E.searod ? `${rod.name}，另有海竿，可在码头海钓` : `${rod.name}（开局就有）。商店可升级钢竿、碳素竿；买下海边和海竿后能海钓`;
+    h += `<div class="slot" title="${rodTip}"><i style="background:url(${E.searod ? ICONS.searod : ICONS.rod});background-size:32px;image-rendering:pixelated"></i><span class="k">${E.searod ? '海竿' : rod.name}</span></div>`;
+    if (FS && fishN) {
+      const counts = {}; for (const k of F.crops) if (FS.isFish(k)) counts[k] = (counts[k] || 0) + 1;
+      for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id);
+        h += `<div class="slot" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条"><i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i><span class="k">${f.name}</span><span class="n">${counts[id]}</span></div>`; }
+    }
     $('inv').innerHTML = h;
   }
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
@@ -88,9 +101,9 @@
     let sec = '';
     for (const id of SIM.SHOP_IDS) {
       const o = SIM.offer(S.up, S.coins, id), it = o.item, n = it.levels.length, lv = o.have;
-      const s2 = it.farm ? '牧场（先买北牧场，再盖棚、买动物）' : it.region ? '区域（大地图上用篱笆围着的地方）' : '工具和解锁'; if (s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
+      const s2 = it.fish ? '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）' : it.farm ? '牧场（先买北牧场，再盖棚、买动物）' : it.region ? '区域（大地图上用篱笆围着的地方）' : '工具和解锁'; if (s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : it.farm && id === 'coop' ? `<button class="pbtn look" data-look="pasture">看看</button>` : '';
-      const now = lv ? it.levels[lv - 1].label : '未购买';
+      const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
       h += `<div class="card${o.maxed ? ' max' : ''}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${o.cost} 金</button>${o.locked ? `<span class="short">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short">还差 ${o.short}</span>`}</div>`) + '</div>';

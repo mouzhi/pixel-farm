@@ -66,7 +66,7 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
 
 ## 存档兼容
 
-存档从 v4.0 开始上线（`saveVersion` 1）；v4.1 升到 2（加了 `upgrades` 商店等级和 `settings.speed`，作物多了 `n` 已采摘次数）；v4.2 升到 3（加了 `yard` 院子杂物列表，缺这个字段的旧档在加载时补种，已清空的空列表保持为空）；v4.3 升到 4（加了区域和斧头的 `upgrades`、`trees` 树列表（`null` 表示用默认森林）、`orders` 砍树种树指令、`inventory.wood` 和 `inventory.saplings`，每格田多了 `f` 所属的地）；v4.3.1 升到 5（家门口田改成三次各 +4 格，旧的 18 格档升到 20 格，已开放的格子不会变少）；v4.5 升到 6（加了牧场、建筑和动物的 `upgrades`、`animals` 动物列表、`trough` 饲料槽和水槽、`inventory.hay` 干草，`prices` 多了 egg / wool / milk）。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
+存档从 v4.0 开始上线（`saveVersion` 1）；v4.1 升到 2（加了 `upgrades` 商店等级和 `settings.speed`，作物多了 `n` 已采摘次数）；v4.2 升到 3（加了 `yard` 院子杂物列表，缺这个字段的旧档在加载时补种，已清空的空列表保持为空）；v4.3 升到 4（加了区域和斧头的 `upgrades`、`trees` 树列表（`null` 表示用默认森林）、`orders` 砍树种树指令、`inventory.wood` 和 `inventory.saplings`，每格田多了 `f` 所属的地）；v4.3.1 升到 5（家门口田改成三次各 +4 格，旧的 18 格档升到 20 格，已开放的格子不会变少）；v4.5 升到 6（加了牧场、建筑和动物的 `upgrades`、`animals` 动物列表、`trough` 饲料槽和水槽、`inventory.hay` 干草，`prices` 多了 egg / wool / milk）；v4.6 升到 7（加了 `rod` / `searod` / `coast` 的 `upgrades` 和 `catches` 渔获记录，旧档自动拥有竹竿）。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
 
 - 存档放在 `localStorage` 的 `mouzhi/pixel-farm:save`，上一份能读的存档在 `:bak`。键名都带 `mouzhi/pixel-farm:` 前缀，因为同一个 GitHub Pages 域名下的其他项目共用 localStorage。
 - 存档是一个 JSON 对象，带整数 `saveVersion`。读档时按顺序跑 `MIGRATIONS[v]`，把 v-1 升到 v，一直升到 `CURRENT`；然后 `validate()` 补齐所有缺失字段的默认值、限制范围，所以缺字段不会报错。

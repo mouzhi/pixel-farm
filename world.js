@@ -5,7 +5,7 @@
 'use strict';
 (function (root) {
   const TILE = 8;
-  const WORLD = { x0: -160, y0: -112, x1: 352, y1: 208 };           // 64 x 40 tiles
+  const WORLD = { x0: -160, y0: -112, x1: 352, y1: 288 };           // 64 x 50 tiles (v4.6: +10 tiles of coast and sea to the south)
   const HOME = { x0: 0, y0: 0, x1: 192, y1: 128 };                  // the original farm
   // rect: the fenced clearing; field: a tile block (c0/r0 in world tiles); gate: where the path enters; barrel: local water
   const REGIONS = [
@@ -21,6 +21,10 @@
     { id: 'pasture', name: '北牧场', rect: [216, -100, 344, -8], gate: { x: 216, y: -40 }, sign: { x: 212, y: -50 }, center: { x: 280, y: -54 },
       barrel: { x: 232, y: -22 }, trough: { x: 272, y: -24 }, coop: { x: 248, y: -78 }, shed: { x: 312, y: -76 }, hay: { x: 336, y: -46 },
       roam: { chicken: [226, -62, 296, -14], sheep: [262, -56, 336, -14], cow: [262, -56, 336, -14] }, desc: '一片草场，能养鸡、羊和牛' },
+    // v4.6 seaside: a fenced beach south-east of the south terrace; the pier and open sea sit in `water` (still area 'coast')
+    { id: 'coast', name: '海边', rect: [200, 212, 344, 256], gate: { x: 220, y: 212 }, sign: { x: 208, y: 208 }, center: { x: 272, y: 236 },
+      pier: { x: 280, y: 256 }, water: [200, 248, 352, 288],
+      fish: { stand: { x: 280, y: 268 }, hook: { x: 280, y: 278 } }, desc: '沙滩和码头，有海竿就能海钓' },
   ];
   const REGION_IDS = REGIONS.map(r => r.id);
   const region = id => REGIONS.find(r => r.id === id);
@@ -28,7 +32,17 @@
   // which area a point belongs to: 'home', a region id, or null (wild forest)
   function areaAt(x, y) {
     if (inRect(x, y, [HOME.x0 - 4, HOME.y0 - 4, HOME.x1 + 4, HOME.y1 + 4])) return 'home';
-    for (const r of REGIONS) if (inRect(x, y, r.rect)) return r.id;
+    for (const r of REGIONS) if (inRect(x, y, r.rect) || (r.water && inRect(x, y, r.water))) return r.id;
+    return null;
+  }
+  // shoreline of the southern sea (world units). Deterministic, no game RNG.
+  function seaShore(x) { return 250 + Math.sin(x * 0.07) * 8 + Math.sin(x * 0.19 + 1.3) * 5; }
+  // 'water' / 'sand' / null. The ocean is south of the shore and east of x≈155, so it never touches the south terrace.
+  function seaAt(x, y) {
+    if (x < 155) return null;
+    const s = seaShore(x);
+    if (y > s + 2) return 'water';
+    if (y > s - 9) return 'sand';
     return null;
   }
   // paths from the farm to each gate (world units, poly-lines); the farmer walks them and the ground paints them as dirt
@@ -38,6 +52,7 @@
     orchard: [{ x: 36, y: 42 }, { x: 24, y: 42 }, { x: 10, y: 34 }, { x: -20, y: 22 }, { x: -40, y: 8 }],
     south: [{ x: 68, y: 112 }, { x: 68, y: 150 }],
     pasture: [{ x: 158, y: 54 }, { x: 176, y: 54 }, { x: 200, y: 54 }, { x: 200, y: -40 }, { x: 216, y: -40 }],
+    coast: [{ x: 176, y: 66 }, { x: 176, y: 190 }, { x: 220, y: 212 }],
   };
   // fruit trees: fruit per picking, days between pickings, sell price each
   const FRUIT = {
@@ -76,7 +91,7 @@
   // chopping a grown forest tree: wood plus one fruit sapling (apple 60% / orange 40%)
   function chopYield(rnd) { return { wood: WOOD.perChop, sapling: rnd() < 0.6 ? 'apple' : 'orange' }; }
   const choppable = (t, regions) => t.kind === 'wild' && t.stage === 'tree' && regions.includes('forest');
-  const api = { TILE, WORLD, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
+  const api = { TILE, WORLD, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
     MAX_ORDERS, fruitTree, defaultTrees, treeOvernight, pickFruit, chopYield, choppable };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorld = api;
 })(typeof window !== 'undefined' ? window : globalThis);
