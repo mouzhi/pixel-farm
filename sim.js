@@ -3,6 +3,7 @@
 // Phase 2: shop (tools, basket, speed, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
 // Phase 3: the axe and four regions on the big map (geometry and tree rules live in world.js).
 // Phase 4: the north pasture, a coop and a shed, chickens / sheep / cows (care rules live in animals.js).
+// Phase 5 (v5.0): house tiers and pen fences cost wood as well as gold; family rules live in family.js.
 'use strict';
 (function (root) {
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
@@ -31,14 +32,14 @@
       { cost: 130, label: '再开 4 格', desc: '田地 16 → 20 格' },
       { cost: 250, label: '开垦最后 4 格', desc: '田地 20 → 24 格' },
     ] },
-    { id: 'can', name: '水壶', icon: 'can', levels: [{ cost: 80, label: '铜水壶', desc: '装 8 格水' }, { cost: 600, label: '银水壶', desc: '装 16 格水' }, { cost: 2000, label: '金水壶', desc: '装 30 格水' }] },
+    { id: 'can', name: '水壶', icon: 'can', levels: [{ cost: 80, label: '铜水壶', desc: '装 8 格水' }, { cost: 600, label: '银水壶', desc: '装 16 格水' }, { cost: 2000, label: '金水壶', desc: '装 30 格水' }, { cost: 4500, label: '花洒水壶', desc: '装 40 格水；一次浇一片 3×3（每格还是用 1 格水）' }] },
     { id: 'shoe', name: '鞋子', icon: 'shoe', levels: [{ cost: 200, label: '布鞋', desc: '走路 ×1.25' }, { cost: 800, label: '皮靴', desc: '走路 ×1.5' }, { cost: 2500, label: '风行靴', desc: '走路 ×1.8' }] },
     { id: 'hoe', name: '锄头', icon: 'hoe', levels: [{ cost: 250, label: '钢锄头', desc: '开垦快一倍' }, { cost: 3000, label: '宽锄头', desc: '一锄翻 3×3' }] },
     { id: 'basket', name: '篮子', icon: 'basket', levels: [{ cost: 300, label: '大篮子', desc: '一次装 20 个' }, { cost: 1200, label: '手推车', desc: '一次装 40 个' }] },
     { id: 'speed', name: '游戏倍速', icon: 'speed', levels: [{ cost: 600, label: '2× 速度', desc: '解锁 2× 按钮' }, { cost: 3000, label: '4× 速度', desc: '解锁 4× 按钮' }] },
     { id: 'strawberry', name: '草莓种子', icon: 'strawberry', levels: [{ cost: 800, label: '草莓', desc: '4 天结果，之后每天摘一次，共 10 次' }] },
     { id: 'watermelon', name: '西瓜种子', icon: 'watermelon', levels: [{ cost: 2500, label: '西瓜', desc: '6 天成熟，卖 220' }] },
-    { id: 'axe', name: '斧头', icon: 'axe', levels: [{ cost: 500, label: '斧头', desc: '能砍林场的树：木材 5 份 + 果树苗 1 棵' }] },
+    { id: 'axe', name: '斧头', icon: 'axe', levels: [{ cost: 500, label: '斧头', desc: '能砍家门口和已买区域里的野树（果树不砍）：木材 5 份进仓库 + 果树苗 1 棵，偶尔掉点小东西；只有林场的树会长回来' }] },
     // regions (Phase 3): one level each; buying opens the fence
     { id: 'forest', name: '林场', icon: 'forest', region: 1, levels: [{ cost: 800, label: '林场', desc: '北边的树林，能砍树（要斧头），树会长回来' }] },
     { id: 'east', name: '东田', icon: 'east', region: 1, levels: [{ cost: 1200, label: '东田', desc: '东边 24 格大田，满地杂物，带水桶' }] },
@@ -58,6 +59,13 @@
     // companions (v4.6): no hay, no product, a small bonus each
     { id: 'cat', name: '猫', icon: 'cat', pet: 1, levels: [{ cost: 120, label: '橘猫' }, { cost: 180, label: '黑猫' }, { cost: 260, label: '三花猫' }].map(l => Object.assign(l, { desc: '在农场里晒太阳、跟着散步；每天早上叼来 1 颗胡萝卜种子' })) },
     { id: 'dog', name: '狗', icon: 'dog', pet: 1, levels: [{ cost: 160, label: '柴犬' }, { cost: 240, label: '黑白狗' }, { cost: 320, label: '棕色小狗' }].map(l => Object.assign(l, { desc: '跟着农夫到处走，农夫走路快 3%' })) },
+    // v5.0 phase 5: the house grows with wood + gold; each tier is one more room (people who can live and work here)
+    { id: 'house', name: '房子', icon: 'house', home: 1, levels: [
+      { cost: 800, wood: 40, label: '大木屋', desc: '加一间屋，人口上限 2：阿禾可以搬来一起住；仓库能放 200 份木材' },
+      { cost: 3000, wood: 150, label: '二层农舍', desc: '加盖二楼，人口上限 3：可以有第一个孩子；仓库 400 份木材' },
+      { cost: 8000, wood: 400, label: '庄园', desc: '两边加厢房，人口上限 4：可以有第二个孩子；仓库 800 份木材' },
+    ] },
+    { id: 'fence', name: '木篱笆', icon: 'fence', home: 1, levels: [{ cost: 200, wood: 60, label: '棚子的木篱笆', desc: '给盖好的（和以后盖的）每个棚子围上篱笆，动物每晚心情 +4' }] },
     { id: 'rod', name: '钓竿', icon: 'rod', fish: 1, levels: [{ cost: 400, label: '钢竿', desc: '咬钩更快，更容易钓到少见的鱼' }, { cost: 1600, label: '碳素竿', desc: '再快一些，锦鲤更常见' }] },
     { id: 'coast', name: '海边', icon: 'coast', region: 1, fish: 1, levels: [{ cost: 3500, label: '海边', desc: '东南边的沙滩和码头，看得见海' }] },
     { id: 'searod', name: '海竿', icon: 'searod', fish: 1, needs: 'coast', levels: [{ cost: 2000, label: '大海竿', desc: '能在码头上钓海鱼' }] },
@@ -70,7 +78,7 @@
     const lv = id => Math.min(shopItem(id).levels.length, Math.max(0, up[id] | 0));
     return {
       field: lv('field'),
-      waterMax: [WATER_MAX0, 8, 16, 30][lv('can')],
+      waterMax: [WATER_MAX0, 8, 16, 30, 40][lv('can')], water3: lv('can') >= 4, // v5.0: the sprinkler can waters a 3x3 patch
       walk: Math.round([1, 1.25, 1.5, 1.8][lv('shoe')] * (1 + 0.03 * lv('dog')) * 1000) / 1000, // v4.7: each dog +3%
       tillDur: lv('hoe') >= 1 ? 2 : 4, till3: lv('hoe') >= 2,
       basket: [BASKET, 20, 40][lv('basket')],
@@ -82,16 +90,18 @@
       animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow'), pig: lv('pig') },
       pets: { cat: lv('cat'), dog: lv('dog') },
       rod: lv('rod'), searod: lv('searod') > 0,
+      house: lv('house'), fence: lv('fence') > 0,
     };
   }
   // what the next level of an item costs and whether it can be bought now
-  function offer(up, coins, id) {
+  function offer(up, coins, id, woodHave = 0) {
     const it = shopItem(id); if (!it) return null;
     const have = Math.max(0, (up && up[id]) | 0);
     if (have >= it.levels.length) return { id, maxed: true, have, item: it };
     const L = it.levels[have];
-    if (it.needs && !((up && up[it.needs]) > 0)) return { id, item: it, have, level: L, cost: L.cost, ok: false, locked: it.needs, short: 0 };
-    return { id, item: it, have, level: L, cost: L.cost, ok: coins >= L.cost, short: Math.max(0, L.cost - coins) };
+    const wood = L.wood || 0, shortWood = Math.max(0, wood - (woodHave | 0)); // v5.0: some levels also cost wood from the barn
+    if (it.needs && !((up && up[it.needs]) > 0)) return { id, item: it, have, level: L, cost: L.cost, wood, ok: false, locked: it.needs, short: 0, shortWood: 0 };
+    return { id, item: it, have, level: L, cost: L.cost, wood, ok: coins >= L.cost && !shortWood, short: Math.max(0, L.cost - coins), shortWood };
   }
   // 12 of the 24 home tiles are open at the start; each field upgrade opens 4 more tiles (12 → 16 → 20 → 24)
   // field 0: west 4 cols × first 3 rows. field 1: + east 2 cols of the first 2 rows.

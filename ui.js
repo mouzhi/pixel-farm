@@ -44,7 +44,7 @@
   ICONS.east = ICONS.field; ICONS.south = ICONS.field;
   // v4.5 pasture: buildings and products drawn here; the animals reuse the game's own sprites
   const house = (roof) => pixIcon(['', '', '       kk', '      krrk', '     krrrrk', '    krrrrrrk', '   krrrrrrrrk', '  kkkkkkkkkkkk', '   kwwwwwwwwk', '   kwwkkkwwwk', '   kwwkikwwwk', '   kwwkikwwwk', '   kkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, r: roof, w: wd[3], i: ink });
-  Object.assign(ICONS, { coop: house(rf[2]), shed: house(st[2]), sty: house(wd[2]), fold: house('#f2cf55'),
+  Object.assign(ICONS, { house: house(rf[3]), fence: null, coop: house(rf[2]), shed: house(st[2]), sty: house(wd[2]), fold: house('#f2cf55'),
     truffle: pixIcon(['', '', '', '', '', '     kkkk', '    kbbtbk', '   kbtbbbbk', '   kbbbbtbk', '   kbtbbbbk', '    kbbbbk', '     kkkk'].map(r => r.padEnd(16)), { k: ink, b: wd[1], t: wd[3] }),
     pasture: pixIcon(['', '', '', '', '  k   k   k   k', ' kwk kwk kwk kwk', ' kwkkkwkkkwkkkwk', ' kwwwwwwwwwwwwwk', ' kwkkkwkkkwkkkwk', ' kwwwwwwwwwwwwwk', ' kwkgkwkgkwkgkwk', 'gkwkgkwkgkwkgkwkg', 'ggggggggggggggggg'].map(r => r.padEnd(16)), { k: ink, w: wd[4], g: gr[3] }),
     hay: pixIcon(['', '', '', '', '   kkkkkkkkkk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '   kkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#f2cf55', b: wd[3] }),
@@ -54,6 +54,8 @@
     rod: pixIcon(['', '', '             k', '            kb', '           kb', '          kb', '         kb', '        kb', '       kb', '      kb', '   kkkb', '  kwwwk', '  kwkwk', '   kkk'].map(r => r.padEnd(16)), { k: ink, b: wd[3], w: '#fff6dc' }),
     searod: pixIcon(['', '              k', '             ks', '            ks', '           ks', '          ks', '         ks', '        ks', '       ks', '      ks', '   kkks', '  kwwwk', '  kwrwk', '   kkk'].map(r => r.padEnd(16)), { k: ink, s: st[3], w: '#fff6dc', r: (P && P.roof) ? P.roof[2] : '#b8432f' }),
     coast: pixIcon(['', '', '', '                ', '     www  ww', '   wwkwkwwkwk', '  wkkkkkkkkkk', '  kssysysyssk', '  ksssssssssk', ' kssysysysssk', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbbbb', 'bbbbbbbbbbbbbbbb'].map(r => r.padEnd(16)), { k: ink, w: wt[4], b: wt[2], s: wd[4], y: '#fff6dc' }) });
+  ICONS.fence = ICONS.pasture; // v5.0
+  ICONS.heart = pixIcon(['', '', '', '   kkk   kkk', '  kpppk kpppk', ' kpphppkpppppk', ' kphhpppppppk', ' kpppppppppppk', '  kpppppppppk', '   kpppppppk', '    kpppppk', '     kpppk', '      kpk', '       k'].map(r => r.padEnd(16)), { k: ink, p: '#e57fa0', h: '#f6ecd0' });
   const artIcon = k => { const a = G.animalArt(k), n = Math.max(16, a.width, a.height), c = document.createElement('canvas'); c.width = c.height = n;
     c.getContext('2d').drawImage(a, (n - a.width) >> 1, n - a.height - ((n - a.height) >> 2)); return c.toDataURL(); };
   for (const k of PFAnimals.KIND_IDS) ICONS[k] = artIcon(k);
@@ -72,14 +74,20 @@
   function inv() {
     const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
     const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(k)).length;
-    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, F.gathered, !!atlas, F.wood, F.saplings.apple, F.saplings.orange, S.hay, S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
+    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
     if (key === invKey) return; invKey = key;
     const pips = Array.from({ length: Math.min(S.waterMax, 30) }, (_, i) => `<b class="${i < F.water ? 'on' : ''}"></b>`).join('');
     let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i><div class="pips">${pips}</div><span class="k">水壶 ${F.water}/${S.waterMax}</span></div>`;
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0);
       h += `<div class="slot${n ? '' : ' dim'}" title="${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟">${cropIcon(k)}<span class="k">${SIM.CROPS[k].name}种</span><span class="n">${n}</span></div>`; }
     h += `<div class="slot${F.crops.length ? '' : ' dim'}" title="篮子：装满 ${E.basket} 个就去集市"><i style="background:url(${BASKET});background-size:32px"></i><span class="k">篮子</span><span class="n">${F.crops.length}/${E.basket}</span></div>`;
-    if (F.wood) h += `<div class="slot" title="木材：去集市卖，每份 ${PFWorld.WOOD.price} 金"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}</span></div>`;
+    if (F.wood || E.axe) { const cap = PFWorld.HOUSE_TIERS[E.house || 0].woodCap; // v5.0: wood is a material kept in the storehouse
+      h += `<div class="slot${F.wood ? '' : ' dim'}" title="仓库里的木材：扩建房子、给动物棚子围篱笆要用。仓库最多放 ${cap} 份（房子越大越多），放不下的才拿去集市卖（${PFWorld.WOOD.price} 金一份）"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}/${cap}</span></div>`; }
+    { const fam = S.family, FA = window.PFFamily, tier = PFWorld.HOUSE_TIERS[E.house || 0]; // v5.0: 阿禾 and the children
+      if (!fam.moved && fam.met) h += `<div class="slot" title="阿禾是集市的店主（7:00–19:00 开门）。农夫每天第一次去集市会和她聊几句（+${FA.CHAT}），篮子里有野花、鱼、果子或鸡蛋就送她一样；每天头两趟卖东西各 +${FA.SALE}。好感满 ${FA.LOVE_MAX}、房子扩建成大木屋后，她就搬来一起经营农场，摊子交给她爸爸。"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">阿禾</span><span class="n">${fam.love}/${FA.LOVE_MAX}</span></div>`;
+      if (fam.moved) { const kids = fam.kids.map(k => `${k.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[FA.kidStage(k, S.day)]}）`);
+        const jobs = S.members.map(m => `${m.name}：${m.home ? '在家' : m.task ? m.task.label : '歇着'}`);
+        h += `<div class="slot" title="${tier.name}：最多住 ${tier.pop} 人。家人：阿禾${kids.length ? '、' + kids.join('、') : ''}。${jobs.join('；')}"><i style="background:url(${ICONS.house});background-size:32px;image-rendering:pixelated"></i><span class="k">家人</span><span class="n">${1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length}/${tier.pop}</span></div>`; } }
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<div class="slot" title="${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置"><i style="background:url(${FRUIT_ICON[k]});background-size:32px"></i><span class="k">${PFWorld.FRUIT[k].name}苗</span><span class="n">${F.saplings[k]}</span></div>`;
     if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) h += `<div class="slot${S.hay ? '' : ' dim'}" title="仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）"><i style="background:url(${ICONS.hay});background-size:32px"></i><span class="k">干草</span><span class="n">${S.hay}</span></div>`;
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
@@ -98,18 +106,18 @@
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
   const shop = $('shop'); let shopKey = '';
   function drawShop(force) {
-    const S = G.S, key = [S.coins, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
+    const S = G.S, key = [S.coins, G.F.wood, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
     if (!force && key === shopKey) return; shopKey = key;
-    let h = `<div class="shead"><b>商店</b><span>金币 <b style="color:#ffd76a">${S.coins}</b></span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="cards">`;
+    let h = `<div class="shead"><b>商店</b><span>金币 <b style="color:#ffd76a">${S.coins}</b> · 木材 <b style="color:#e0b880">${G.F.wood}</b></span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="cards">`;
     let sec = '';
     for (const id of SIM.SHOP_IDS) {
-      const o = SIM.offer(S.up, S.coins, id), it = o.item, n = it.levels.length, lv = o.have;
-      const s2 = it.fish ? '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）' : it.pet ? '小伙伴（猫猫狗狗，不吃干草）' : it.farm ? '动物（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）' : it.region ? '区域（大地图上用篱笆围着的地方）' : '工具和解锁'; if (s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
+      const o = SIM.offer(S.up, S.coins, id, G.F.wood), it = o.item, n = it.levels.length, lv = o.have;
+      const s2 = it.home ? '房子（木材 + 金币；房子越大，能住的家人越多）' : it.fish ? '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）' : it.pet ? '小伙伴（猫猫狗狗，不吃干草）' : it.farm ? '动物（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）' : it.region ? '区域（大地图上用篱笆围着的地方）' : '工具和解锁'; if (s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
       const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
       h += `<div class="card${o.maxed ? ' max' : ''}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
-          `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${o.cost} 金</button>${o.locked ? `<span class="short">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short">还差 ${o.short}</span>`}</div>`) + '</div>';
+          `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${o.cost} 金${o.wood ? ` + ${o.wood} 木` : ''}</button>${o.locked ? `<span class="short">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short">还差 ${[o.short ? o.short + ' 金' : '', o.shortWood ? o.shortWood + ' 木材' : ''].filter(Boolean).join('、')}</span>`}</div>`) + '</div>';
     }
     shop.innerHTML = h + '</div>';
   }
@@ -135,11 +143,11 @@
   $('mapBtn').addEventListener('click', toggleMap);
   let toolKey = '';
   function tools() {
-    const S = G.S, F = G.F, m = G.input, chop = S.eff.axe && S.eff.regions.includes('forest');
+    const S = G.S, F = G.F, m = G.input, chop = S.eff.axe; // v5.0: any wild tree at home or in a bought region
     const key = [chop, F.saplings.apple, F.saplings.orange, m.mode, m.kind, S.orders.length].join(',');
     if (key === toolKey) return; toolKey = key;
     let h = '';
-    if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点林场里的树标记要砍，再点一次取消（Esc 退出）">砍树</button>`;
+    if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}" data-m="plant" data-k="${k}" title="点一块空草地，农夫会去种（Esc 退出）">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}</button>`;
     const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树和种树指令">指令 ${n} ✕</button>`;
     $('tools').innerHTML = h; $('tools').hidden = !h;

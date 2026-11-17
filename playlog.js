@@ -26,7 +26,8 @@
       income: emptyIncome(), spend: {}, purchases: [],
       tiles: snap.tiles || 0, regions: snap.regions || 0, animals: snap.animals || 0,
       busyMin: 0, idleMin: 0, sleepMin: 0, idle: emptyIdle(),
-      speed: snap.speed || 1, fps: null, offline: []
+      speed: snap.speed || 1, fps: null, offline: [],
+      family: {} // v5.0: busy game minutes per family member (partner / kid0 / kid1), and the gold they brought in from the market
     };
   }
   function r1(n) { return Math.round((n || 0) * 10) / 10; }
@@ -63,6 +64,7 @@
     d.fps = x.fps || null;
     d.offline = Array.isArray(x.offline) ? x.offline.slice() : [];
     d.realAt = x.realAt || d.realAt;
+    if (x.family && typeof x.family === 'object') for (const k of Object.keys(x.family)) { const f = x.family[k] || {}; d.family[k] = { busyMin: +f.busyMin || 0, gold: +f.gold || 0 }; }
     return d;
   }
   function cap() {
@@ -198,6 +200,10 @@
     if (c.bucket === 'sleep') cur.sleepMin += dm;
     else if (c.bucket === 'idle') { cur.idleMin += dm; cur.idle[c.idle] = (cur.idle[c.idle] || 0) + dm; }
     else cur.busyMin += dm;
+  }
+  function work(who, dm, gold) { // v5.0: a family member's work (dm busy game minutes, or gold from a sale)
+    if (!cur || !who) return; const fam = cur.family || (cur.family = {}), f = fam[who] || (fam[who] = { busyMin: 0, gold: 0 });
+    if (dm > 0) f.busyMin += dm; if (gold > 0) f.gold += gold;
   }
   function sampleFps(fpsVal) {
     const v = +fpsVal; if (!(v > 0) || v > 1000) return;
@@ -403,7 +409,7 @@
     KEY, SCHEMA, MAX_DAYS, MAX_EVENTS, SAVE_FILE, LOG_FILE, SYNC_MIN_MS,
     load, flush, boot, reset, get, current, exportObject, wrapSave,
     openDay, closeDay, startSession, endSession,
-    income, spend, purchase, event, tick, sampleFps, offline, classify,
+    income, spend, purchase, event, tick, work, sampleFps, offline, classify,
     supported, status, pickDir, resumeDir, forgetDir, hydrateDir,
     writeToDir, readFromDir, syncNow, syncSoon, syncMorning, filesForSync,
     download, downloadLog, memoryDir
