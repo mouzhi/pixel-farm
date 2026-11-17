@@ -295,11 +295,24 @@ async function test(name, fn) {
       const chopped = { stage: home.stage, wood: FM.wood, saplings: FM.saplings.apple + FM.saplings.orange };
       f.advance(1440, 10); const dug = !S.trees.some(t => t.id === 'h5'); // a home stump is dug out overnight
       FM.wood = 30; const short = f.buy('house'); FM.wood = 60; const ok = f.buy('house'); const tier1 = { wood: FM.wood, pop: f.popCap(), m: f.houseProp.m.w };
-      S.day = Math.max(S.day, 3); S.family = f.FAM.empty(); FM.crops = ['carrot', 'flower']; f.giftAtStall(); const gift = { love: S.family.love, met: S.family.met, crops: FM.crops.slice() }; f.giftAtStall(); gift.again = S.family.love;
+      S.day = Math.max(S.day, 3); S.family = f.FAM.empty(); FM.crops = ['carrot', 'flower']; f.giftAtStall(); const gift = { love: S.family.love, met: S.family.met, crops: FM.crops.slice() }; f.giftAtStall(); gift.again = S.family.love; f.giftAtStall(); gift.third = S.family.love;
+            // v5.0: the stall shuts at 19:00 — no market trips on the board, and a trip that arrives late sells nothing
+            const t0 = S.t; S.t = Math.floor(S.t / 1440) * 1440 + 21 * 60; FM.crops = ['carrot', 'carrot']; const coins0 = S.coins;
+            const night = { open: f.shopOpen(), kinds: f.board().map(j => j.kind) }; const k = f.sellTask(); k.done(); night.kept = FM.crops.length; night.coins = S.coins - coins0;
+            S.t = Math.floor(S.t / 1440) * 1440 + 9 * 60; night.dayOpen = f.shopOpen(); S.t = t0; FM.crops = []; gift.night = night;
+            // v5.0 sprinkler can (水壶 level 4): one action waters the dry crops in a 3x3 patch, 1 water each
+            const T9 = f.tiles.find(t => t.f === 'home' && t.open && f.tiles.filter(u => u.f === 'home' && u.open && Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1).length === 9);
+            const nine = f.tiles.filter(u => u.f === 'home' && Math.abs(u.c - T9.c) <= 1 && Math.abs(u.r - T9.r) <= 1), keep = nine.map(u => [u.crop, u.watered, u.tilled]);
+            nine.forEach(u => { u.crop = { type: 'carrot', age: 0, n: 0, stage: 0, rot: 0 }; u.watered = false; u.tilled = true; });
+            const sp = {}; for (const [lvl, key] of [[3, 'gold'], [4, 'sprinkler']]) { S.up.can = lvl; S.eff = window.PFSim.effects(S.up); nine.forEach(u => { u.watered = false; }); FM.water = 30; f.waterTask(T9).done(); sp[key] = nine.filter(u => u.watered).length; sp[key + 'Water'] = 30 - FM.water; }
+            S.up.can = 0; S.eff = window.PFSim.effects(S.up); nine.forEach((u, i) => { [u.crop, u.watered, u.tilled] = keep[i]; }); gift.sprinkler = sp;
             return { lockedForest, rim, fruit: fruit.why, chopped, dug, short: short.reason + ':' + short.shortWood, ok: ok.ok, tier1, gift }; });
     if (process.env.PF_DEBUG) console.log(JSON.stringify(r));
     assert(!r.lockedForest && !r.rim && /果树/.test(r.fruit), JSON.stringify(r));
-    assert.strictEqual(r.gift.love, 15); assert.deepStrictEqual(r.gift.crops, ['carrot']); assert.strictEqual(r.gift.again, 15, 'one chat a day');
+    assert.strictEqual(r.gift.love, 16, 'chat 3 + flower 12 + a sale 1'); assert.deepStrictEqual(r.gift.crops, ['carrot']); assert.strictEqual(r.gift.again, 17, 'second sale trip +1'); assert.strictEqual(r.gift.third, 17, 'one chat a day, two sale bonuses');
+    const n = r.gift.night; assert(!n.open && n.dayOpen, 'stall open by day, shut at night'); assert(!n.kinds.some(k => k === 'sell' || k === 'buy' || k === 'hay'), 'no market trips at night: ' + n.kinds);
+    assert.strictEqual(n.kept, 2, 'the basket waits until morning'); assert.strictEqual(n.coins, 0);
+    assert.deepStrictEqual(r.gift.sprinkler, { gold: 1, goldWater: 1, sprinkler: 9, sprinklerWater: 9 }, 'sprinkler waters the 3x3 patch');
     assert.strictEqual(r.chopped.stage, 'stump'); assert(r.chopped.wood >= 5 && r.chopped.saplings === 1, JSON.stringify(r.chopped)); assert(r.dug, 'home stump dug out');
     assert.strictEqual(r.short, 'short:10'); assert(r.ok); assert.strictEqual(r.tier1.wood, 20); assert.strictEqual(r.tier1.pop, 2); assert(r.tier1.m > 70, 'bigger house model');
     // she moves in the morning after love reaches 100, the children follow with a bigger house; nobody shares a target

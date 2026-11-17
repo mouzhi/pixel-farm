@@ -275,7 +275,7 @@ ok('shop effects: base and fully upgraded', () => {
   const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.speedMax, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, 1, false]);
   assert.deepStrictEqual(b.crops, ['carrot', 'cabbage', 'pumpkin']);
   const max = {}; for (const id of SIM.SHOP_IDS) max[id] = SIM.shopItem(id).levels.length; const m = SIM.effects(max);
-  assert.deepStrictEqual([m.waterMax, m.walk, m.basket, m.speedMax, m.till3, m.tillDur], [30, 1.962, 40, 4, true, 2]); // 1.8 boots × 1.09 from three dogs
+  assert.deepStrictEqual([m.waterMax, m.water3, m.walk, m.basket, m.speedMax, m.till3, m.tillDur], [40, true, 1.962, 40, 4, true, 2]); // 1.8 boots × 1.09 from three dogs
   assert.deepStrictEqual(m.crops, SIM.IDS);
   assert.deepStrictEqual([0, 1, 2, 3].map(SIM.homeOpenCount), [12, 16, 20, 24]);
 });
@@ -334,12 +334,14 @@ ok('fences: +4 mood a night for every animal', () => {
   const a = [AN.animal('chicken0', 'chicken')], b = [AN.animal('chicken0', 'chicken')], tr = () => ({ feed: 9, water: 1 });
   AN.overnight(a, tr()); AN.overnight(b, tr(), AN.CARE.fence); assert.strictEqual(b[0].h - a[0].h, Math.min(AN.CARE.fence, 100 - a[0].h));
 });
-ok('family: meet 阿禾 on day 3, one chat and one gift a day, she moves in at 100 love once the house has room', () => {
-  const f = FAM.empty(); assert.strictEqual(FAM.visit(f, 2, 'flower'), 0); assert.strictEqual(f.met, 0);
-  assert.strictEqual(FAM.visit(f, 3, 'flower'), FAM.CHAT + 12); assert.strictEqual(FAM.visit(f, 3, 'flower'), 0); assert.strictEqual(f.met, 3);
+ok('family: 阿禾 keeps the stall; one chat and one gift a day, +1 for the first two sale trips, she moves in at 100 love once the house has room', () => {
+  const f = FAM.empty(); assert.strictEqual(FAM.MEET_DAY, 1);
+  assert.strictEqual(FAM.visit(f, 3, 'flower', 2), FAM.CHAT + 12 + FAM.SALE); assert.strictEqual(f.met, 3);
+  assert.strictEqual(FAM.visit(f, 3, null, 5), FAM.SALE); assert.strictEqual(FAM.visit(f, 3, null, 5), 0, 'only two sale bonuses a day'); assert.strictEqual(FAM.visit(f, 3, 'flower', 0), 0, 'one gift a day');
+  assert.strictEqual(FAM.visit(f, 4, null, 0), FAM.CHAT); assert.strictEqual(f.sales, 0, 'sale count resets each day');
   for (const id of FS.FISH_IDS) assert.strictEqual(FAM.giftValue(id), FAM.GIFT_FISH, id);
   assert.strictEqual(FAM.giftValue('wool'), 0); assert.strictEqual(FAM.bestGift(['carrot', 'egg', 'apple', 'wool']), 'apple'); assert.strictEqual(FAM.bestGift(['carrot', 'milk']), null);
-  let d = 4; while (f.love < 100) FAM.visit(f, d++, 'egg'); assert(d - 3 >= 10 && d - 3 <= 16, 'eggs only: about two weeks of visits (' + (d - 3) + ')');
+  let d = 5; while (f.love < 100) { FAM.visit(f, d, 'egg', 3); FAM.visit(f, d++, null, 3); } assert(d - 3 >= 8 && d - 3 <= 14, 'eggs and two sale trips a day: about ten days (' + (d - 3) + ')');
   assert.deepStrictEqual(FAM.morning(f, d, 1), ['waiting']); assert.strictEqual(f.moved, 0);
   assert.deepStrictEqual(FAM.morning(f, d + 1, 2), ['moved']); assert.strictEqual(f.moved, d + 1);
   assert.strictEqual(FAM.visit(f, d + 2, 'flower'), 0); // no more courting once she lives here

@@ -469,6 +469,9 @@ if (window.PF_CROPS) { CROPI.img.onload = () => CROPI.ok = true; CROPI.img.src =
 const HOUSE = { x: 36, y: 24 }, BARN = { x: 158, y: 26 }, WELL = { x: 100, y: 22 }, STALL = { x: 160, y: 100 }, POND = { x: 34, y: 100, rx: 19, ry: 12 }, BENCH = { x: 64, y: 108 };
 const DOOR = { x: 36, y: 40 }, BARN_DOOR = { x: 158, y: 41 }, WELL_SPOT = { x: 100, y: 31 }, STALL_SPOT = { x: 160, y: 111 }, BENCH_SPOT = { x: 64, y: 112 };
 const KEEPER = { x: 160, y: 97.4 };
+// v5.0: the stall keeps hours. 阿禾 (later her father) opens at 7:00 and goes home at 19:00; at night nothing is sold or bought
+const SHOP_OPEN = 7 * 60, SHOP_CLOSE = 19 * 60;
+const shopOpen = (T = S.t % 1440) => T >= SHOP_OPEN && T < SHOP_CLOSE;
 const FIELD = { c0: 9, r0: 7, cols: 6, rows: 4 }; // tiles x 72..120, y 56..88
 const props = [];
 const addProp = (m, x, y, rot = 0, o = {}) => { const p = Object.assign({ m, x, y, rot, z: 0 }, o); props.push(p); return p; };
@@ -672,7 +675,8 @@ function storeTask() { return { kind: 'store', label: '正在把种子放进仓�
 function homeTask() { const me = F; return { kind: 'home', label: '回家睡觉', to: DOOR, dur: 5, done: () => { me.home = true; me.sleeping = true; if (me === FARMER) log('回到家，躺下睡觉 Zzz'); } }; }
 function board() {
   const T = S.t % 1440, E = S.eff, out = [];
-  const post = (kind, base, at, make, key) => { if (at) out.push({ kind, base, at, make, key }); }; // at = null: every target is claimed
+  const shut = T < SHOP_OPEN || T >= SHOP_CLOSE - 20; // v5.0: no trips to a closed stall (crops wait in the basket until morning)
+  const post = (kind, base, at, make, key) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key }); }; // at = null: every target is claimed
   const open = tiles.filter(t => t.open && !CLAIM.has(t));
   const ripe = open.filter(t => t.crop && SIM.ripe(t.crop));
   const dry = open.filter(t => t.crop && !SIM.ripe(t.crop) && !t.watered);
@@ -683,7 +687,9 @@ function board() {
   if (ripe.length && !full) { const t = rngNear(ripe); post('harvest', 90, t, () => harvestTask(t)); }
   if (dry.length) { const late = T >= 15 * 60;
     if (F.water <= 0) { const w = rngNear(waterSpots()); post('refill', late ? 95 : 60, w, () => refillTask(w)); }
-    else { const t = rngNear(dry); post('water', late ? 96 : 61, t, () => waterTask(t)); } }
+    else { let t = rngNear(dry); // v5.0 sprinkler can: aim at the tile with the most thirsty crops around it
+      if (t && E.water3) t = dry.reduce((b, u) => { const v = dry.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - travel(F, u); return v > b.v ? { t: u, v } : b; }, { t, v: -1e9 }).t;
+      post('water', late ? 96 : 61, t, () => waterTask(t)); } }
   if (tilledEmpty.length && bagN > 0) { const t = rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t)); }
   else if (tilledEmpty.length && (storeN > 0 || F.gathered > 0)) post('fetch', 68, BARN_DOOR, () => fetchTask(tilledEmpty.length + tillable.length));
   else if (tilledEmpty.length && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) post('buy', 55, STALL_SPOT, sellTask);
@@ -736,7 +742,7 @@ function board() {
 function chooseTask() {
   const T = S.t % 1440;
   if (T >= BEDTIME || T < WAKE - 30) {
-    if (F.crops.length && T < BEDTIME + 60) return sellTask();
+    if (F.crops.length && shopOpen(T)) return sellTask(); // v5.0: the stall is shut at night; the basket waits until morning
     if (F.gathered > 0 && T < BEDTIME + 60) return storeTask();
     return homeTask();
   }
@@ -763,7 +769,11 @@ function harvestTask(t) {
 }
 function refillTask(w = WELL_SPOT) { const well = w === WELL_SPOT; return { label: well ? '正在井边打水' : '正在水桶边打水', to: w, dur: well ? 8 : 6, fx: 'water', done: () => { F.water = S.waterMax; log(`在${well ? '井边' : '水桶边'}装满了水壶（${S.waterMax} 格）`); } }; }
 function waterTask(t) {
-  return { label: '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => { if (t.watered || F.water <= 0 || !t.crop) return; F.water--; t.watered = true; groundDirty = true; burst(t.x, t.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop'); } };
+  const wide = S.eff.water3;
+  return { label: wide ? '正在用花洒浇一片' : '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => {
+    const area = wide ? tiles.filter(u => u.f === t.f && Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1).sort((a, b) => (a === t ? -1 : b === t ? 1 : 0)) : [t];
+    for (const u of area) { if (u.watered || F.water <= 0 || !u.crop || !u.open) continue; F.water--; u.watered = true; groundDirty = true; burst(u.x, u.y, 6, ['#8cc6dc', '#5b9cc4'], wide ? 4 : 10, 'drop'); }
+  } };
 }
 function plantTask(t) {
   const ty = SIM.pickFromBag(F.bag, S.prices);
@@ -904,15 +914,16 @@ const FLOWER_PRICE = 5; // v5.0: a wildflower from a felled tree (a gift for 阿
 const priceOfAny = ty => ty === 'flower' ? FLOWER_PRICE : FS.isFish(ty) ? FS.priceOf(ty) : WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
 // v5.0 the storehouse holds this much wood (a bigger house has a bigger woodshed)
 const woodCap = () => WD.HOUSE_TIERS[S.eff.house || 0].woodCap;
-// v5.0 family: 阿禾 sells flowers at the market from day 3. The first stop there each day is a chat (+3) and the best gift in
-// the basket (a wildflower, a fish, fruit, an egg ...); at 100 she moves in once the house has a second room.
+// v5.0 family: 阿禾 keeps the stall. The first stop there each day is a chat (+3) and the best gift in the basket (a wildflower,
+// a fish, fruit, an egg ...); the day's first two sale trips add +1 each. At 100 she moves in once the house has a second room
+// and her father takes over the stall.
 function giftAtStall() {
-  const fam = S.family; if (fam.moved || S.day < FAM.MEET_DAY || fam.chatDay === S.day) return;
-  const first = !fam.met, g = FAM.bestGift(F.crops); if (g) F.crops.splice(F.crops.indexOf(g), 1);
-  const add = FAM.visit(fam, S.day, g); if (!add) return;
+  const fam = S.family; if (fam.moved || S.day < FAM.MEET_DAY) return;
+  const first = !fam.met, g = fam.chatDay !== S.day ? FAM.bestGift(F.crops) : null; if (g) F.crops.splice(F.crops.indexOf(g), 1);
+  const add = FAM.visit(fam, S.day, g, F.crops.length); if (!add) return;
   const name = g ? (g === 'flower' ? '一束野花' : FS.isFish(g) ? '一条' + FS.BY_ID[g].name : '一个' + (WD.FRUIT[g] ? WD.FRUIT[g].name : AN.PRODUCTS[g] ? AN.PRODUCTS[g].name : g)) : '';
-  if (first) log('在集市遇到了卖花的阿禾，聊了几句');
-  log((g ? `送给阿禾${name}，` : '和阿禾聊了一会儿，') + `好感 +${add}（${fam.love}/${FAM.LOVE_MAX}）`);
+  if (first) log('认识了集市的店主阿禾，聊了几句');
+  log((g ? `送给阿禾${name}，` : add > FAM.SALE ? '和阿禾聊了一会儿，' : '把菜卖给阿禾，') + `好感 +${add}（${fam.love}/${FAM.LOVE_MAX}）`);
   hearts(STALL.x - 10, STALL.y + 4, 16);
   if (fam.love >= FAM.LOVE_MAX) log(S.eff.house >= 1 ? '阿禾答应明天搬过来一起住' : '阿禾说：等房子再大一点，我就搬过来（要先扩建成大木屋）');
 }
@@ -920,6 +931,7 @@ function giftAtStall() {
 function sellTask() {
   const kid = F.role === 'child'; // children sell what they picked; buying stays with the grown-ups
   return { label: F.crops.length ? '正在去市场卖菜' : S.animals.length && S.hay < AN.need(S.animals) * 2 ? '正在去市场买干草' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
+    if (!shopOpen()) { if (F === FARMER) log('集市已经关门了，明天早上再来卖'); return; }
     if (F === FARMER) giftAtStall();
     const n = F.crops.length, open = tiles.filter(t => t.open);
     let sum = 0, nFish = 0, by = { crops: 0, fruit: 0, animals: 0, fish: 0, wood: 0 };
@@ -1039,7 +1051,7 @@ function familyMorning() {
   const before = S.members.map(m => m.id + m.role).join();
   for (const e of FAM.morning(S.family, S.day, popCap())) {
     emit('family', { event: e });
-    if (e === 'moved') log(`阿禾搬进了${WD.HOUSE_TIERS[S.eff.house].name}，从今天起一起经营农场`);
+    if (e === 'moved') { log(`阿禾搬进了${WD.HOUSE_TIERS[S.eff.house].name}，从今天起一起经营农场`); log('集市的摊子交给阿禾的爸爸照看'); }
     if (e === 'waiting' && S.day % 3 === 0) log('阿禾在等房子扩建成大木屋，好搬过来一起住');
     if (e === 'born') { const k = S.family.kids[S.family.kids.length - 1]; log(`家里添了一个宝宝：${k.name}！`); hearts(DOOR.x, DOOR.y, 30); }
   }
@@ -1439,11 +1451,12 @@ function syncFenceProps() {
 }
 // ---- v5.0 family sprites: palette swaps of the farmer sheet (style A colours only); children are a few rows shorter ----
 const FAM_LOOK = {
-  partner: { '#4fa3cf': '#e57fa0', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#f6ecd0', '#7a2c24': '#ecc27c', '#8a5530': '#3b2219', '#5e3524': '#1c1626' },
-  kid0: { '#4fa3cf': '#86cc4a', '#2f6ea0': '#358a3c', '#1f3d68': '#24603a', '#a8432e': '#f2cf55', '#7a2c24': '#d3984c' },
+  partner: { '#4fa3cf': '#52af3a', '#2f6ea0': '#358a3c', '#1f3d68': '#24603a', '#a8432e': '#f6ecd0', '#7a2c24': '#ecc27c', '#8a5530': '#cf6a3c', '#5e3524': '#a8432e' }, // like her shop sprite
+  kid0: { '#a8432e': '#f2cf55', '#7a2c24': '#d3984c' },
+  father: { '#cf6a3c': '#9a9ea0', '#a8432e': '#666a73', '#7a2c24': '#3e3f4c', '#358a3c': '#8a5530', '#24603a': '#5e3524', '#e57fa0': '#f2c29a' }, // 阿禾's father: grey hair, brown apron (keeper rows)
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
 };
-const FAM_SPR = new Map(); // look:role -> { img, flip }; at most 5 (partner, two children x child / teen)
+const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 6 (partner, father, two children x child / teen)
 function famSheet(look, cut = 0) {
   const key = look + ':' + cut; let sh = FAM_SPR.get(key); if (sh || !SPR.ok) return sh || null;
   const W0 = SPR.img.width, H0 = SPR.img.height, src = mkc(W0, H0), g = src.getContext('2d', { willReadFrequently: true }); g.drawImage(SPR.img, 0, 0);
@@ -1458,11 +1471,10 @@ function famSheet(look, cut = 0) {
   sh = { img, flip }; FAM_SPR.set(key, sh); return sh;
 }
 const lookOf = m => m.id === 'partner' ? ['partner', 0] : [m.id, m.role === 'child' ? 6 : 3];
+const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
 const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', '.bbbbbbbbb.', 'b.........b']);
 function familyDraw(list, T) { // pushes the family into the depth-sorted list; returns the ones that get a ghost
   const out = [], fam = S.family;
-  if (!fam.moved && S.day >= FAM.MEET_DAY && T >= 8 * 60 && T < 17.5 * 60) { const sh = famSheet('partner'); // her flower stall, left of the keeper
-    if (sh) list.push({ bb: 1, x: STALL.x - 13, y: STALL_SPOT.y - 4, row: 'idle_front', fr: 0, flip: false, sheet: sh, partnerNpc: 1 }); }
   for (const m of S.members) { if (m.home) continue; const [look, cut] = lookOf(m), sh = famSheet(look, cut); if (!sh) continue;
     const d = Object.assign({ bb: 1, x: m.x, y: m.y, basket: m.crops.length ? m.crops[m.crops.length - 1] : null, sheet: sh, member: m.id }, farmerPose(m)); list.push(d); out.push(d); }
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby');
@@ -1513,7 +1525,7 @@ function drawBasket(c, fx, fy, o) { // little basket of the last crop, held at t
 function bbShadow(c, o, wide = 1) { const [sx, sy] = proj(o.x, o.y); const x = Math.round(sx), y = Math.round(sy); c.fillStyle = '#000';
   c.fillRect(x - 4 * wide, y - 1, 9 * wide, 3); c.fillRect(x - 6 * wide, y, 13 * wide, 1); }
 function drawSpr(c, o, poseT) { // small 2D sprite anchored at its bottom centre; optional wind sway of the top half
-  const [sx, sy] = proj(o.x, o.y), s = o.spr, x = Math.round(sx) - (s.width >> 1), y = Math.round(sy) - s.height + 2;
+  const [sx, sy] = proj(o.x, o.y), s = o.spr, x = Math.round(sx) - (s.width >> 1), y = Math.round(sy) - s.height + 2 - (o.lift || 0); // lift: hung above its anchor
   if (!o.sway) { c.drawImage(s, x, y); return; }
   const [dx] = clumpPose(o.x, o.y, o.sway, 0, poseT), cut = s.height >> 1;
   c.drawImage(s, 0, 0, s.width, cut, x + dx, y, s.width, cut); c.drawImage(s, 0, cut, s.width, s.height - cut, x, y + cut, s.width, s.height - cut);
@@ -1745,7 +1757,8 @@ function render() {
   if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y, basket: F.crops.length ? F.crops[F.crops.length - 1] : null }, farmerPose()); list.push(farmerD); }
   const familyD = familyDraw(list, T); // v5.0: 阿禾 (at her flower stall, or at home on the farm), the children, a cradle on the porch
   const selling = F.task && F.task.to === STALL_SPOT && !F.moving && !F.home;
-  list.push({ bb: 1, x: KEEPER.x, y: KEEPER.y, row: selling && SPR.rows.keeper_wave !== undefined ? 'keeper_wave' : 'keeper', fr: selling ? Math.floor(realT * 5) : (Math.floor(realT * 0.8) % 5 === 4 ? 1 : 0), flip: false });
+  if (!shopOpen(T)) list.push({ spr: CLOSED, x: STALL.x, y: STALL_SPOT.y + 1, lift: 13 }); // v5.0: gone home; a little 'closed' board on the counter
+  else list.push({ bb: 1, x: KEEPER.x, y: KEEPER.y, sheet: S.family.moved ? famSheet('father') || undefined : undefined, row: selling && SPR.rows.keeper_wave !== undefined ? 'keeper_wave' : 'keeper', fr: selling ? Math.floor(realT * 5) : (Math.floor(realT * 0.8) % 5 === 4 ? 1 : 0), flip: false });
   for (const o of list) o.depth = proj(o.x, o.y + (o.dy || 0))[2] + (o.bb ? 0.3 : 0);
   list.sort((a, b) => a.depth - b.depth);
   // shadows: one mask, then the ground under it steps one palette shade darker
@@ -2109,7 +2122,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
+Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },

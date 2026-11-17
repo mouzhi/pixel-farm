@@ -32,7 +32,7 @@
       { cost: 130, label: '再开 4 格', desc: '田地 16 → 20 格' },
       { cost: 250, label: '开垦最后 4 格', desc: '田地 20 → 24 格' },
     ] },
-    { id: 'can', name: '水壶', icon: 'can', levels: [{ cost: 80, label: '铜水壶', desc: '装 8 格水' }, { cost: 600, label: '银水壶', desc: '装 16 格水' }, { cost: 2000, label: '金水壶', desc: '装 30 格水' }] },
+    { id: 'can', name: '水壶', icon: 'can', levels: [{ cost: 80, label: '铜水壶', desc: '装 8 格水' }, { cost: 600, label: '银水壶', desc: '装 16 格水' }, { cost: 2000, label: '金水壶', desc: '装 30 格水' }, { cost: 4500, label: '花洒水壶', desc: '装 40 格水；一次浇一片 3×3（每格还是用 1 格水）' }] },
     { id: 'shoe', name: '鞋子', icon: 'shoe', levels: [{ cost: 200, label: '布鞋', desc: '走路 ×1.25' }, { cost: 800, label: '皮靴', desc: '走路 ×1.5' }, { cost: 2500, label: '风行靴', desc: '走路 ×1.8' }] },
     { id: 'hoe', name: '锄头', icon: 'hoe', levels: [{ cost: 250, label: '钢锄头', desc: '开垦快一倍' }, { cost: 3000, label: '宽锄头', desc: '一锄翻 3×3' }] },
     { id: 'basket', name: '篮子', icon: 'basket', levels: [{ cost: 300, label: '大篮子', desc: '一次装 20 个' }, { cost: 1200, label: '手推车', desc: '一次装 40 个' }] },
@@ -78,7 +78,7 @@
     const lv = id => Math.min(shopItem(id).levels.length, Math.max(0, up[id] | 0));
     return {
       field: lv('field'),
-      waterMax: [WATER_MAX0, 8, 16, 30][lv('can')],
+      waterMax: [WATER_MAX0, 8, 16, 30, 40][lv('can')], water3: lv('can') >= 4, // v5.0: the sprinkler can waters a 3x3 patch
       walk: Math.round([1, 1.25, 1.5, 1.8][lv('shoe')] * (1 + 0.03 * lv('dog')) * 1000) / 1000, // v4.7: each dog +3%
       tillDur: lv('hoe') >= 1 ? 2 : 4, till3: lv('hoe') >= 2,
       basket: [BASKET, 20, 40][lv('basket')],
