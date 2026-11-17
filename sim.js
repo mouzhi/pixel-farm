@@ -2,6 +2,7 @@
 // Phase 1: day-based crops, one watering lasts the whole day, auto crop choice by profit, daily price drift, offline settlement.
 // Phase 2: shop (tools, basket, speed, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
 // Phase 3: the axe and four regions on the big map (geometry and tree rules live in world.js).
+// Phase 4: the north pasture, a coop and a shed, chickens / sheep / cows (care rules live in animals.js).
 'use strict';
 (function (root) {
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
@@ -43,6 +44,13 @@
     { id: 'east', name: '东田', icon: 'east', region: 1, levels: [{ cost: 1200, label: '东田', desc: '东边 24 格大田，满地杂物，带水桶' }] },
     { id: 'orchard', name: '果园坡', icon: 'orchard', region: 1, levels: [{ cost: 1500, label: '果园坡', desc: '3 棵苹果树（每 3 天 5 个），可以移植树苗' }] },
     { id: 'south', name: '南坡梯田', icon: 'south', region: 1, levels: [{ cost: 2500, label: '南坡梯田', desc: '南边 24 格坡地，带水桶' }] },
+    { id: 'pasture', name: '北牧场', icon: 'pasture', region: 1, levels: [{ cost: 2000, label: '北牧场', desc: '东北边的草场，带饲料槽和水桶，可以盖鸡舍、牛羊棚' }] },
+    // pasture (Phase 4): buildings, then animals; one level = one more animal
+    { id: 'coop', name: '鸡舍', icon: 'coop', farm: 1, needs: 'pasture', levels: [{ cost: 600, label: '鸡舍', desc: '能养 6 只鸡，鸡蛋下在窝里' }] },
+    { id: 'shed', name: '牛羊棚', icon: 'shed', farm: 1, needs: 'pasture', levels: [{ cost: 1500, label: '牛羊棚', desc: '能养 3 只羊和 2 头牛，旁边堆干草' }] },
+    { id: 'chicken', name: '鸡', icon: 'chicken', farm: 1, needs: 'coop', levels: [200, 220, 250, 280, 300, 340].map((cost, i) => ({ cost, label: `第 ${i + 1} 只鸡`, desc: '每天吃 1 份干草，下 1 个蛋（开心时 2 个）' })) },
+    { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'shed', levels: [800, 900, 1000].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' })) },
+    { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
@@ -60,6 +68,8 @@
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
       axe: lv('axe') > 0,
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
+      coop: lv('coop') > 0, shed: lv('shed') > 0,
+      animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow') },
     };
   }
   // what the next level of an item costs and whether it can be bought now
@@ -68,6 +78,7 @@
     const have = Math.max(0, (up && up[id]) | 0);
     if (have >= it.levels.length) return { id, maxed: true, have, item: it };
     const L = it.levels[have];
+    if (it.needs && !((up && up[it.needs]) > 0)) return { id, item: it, have, level: L, cost: L.cost, ok: false, locked: it.needs, short: 0 };
     return { id, item: it, have, level: L, cost: L.cost, ok: coins >= L.cost, short: Math.max(0, L.cost - coins) };
   }
   // 12 of the 24 home tiles are open at the start; each field upgrade opens 4 more tiles (12 → 16 → 20 → 24)

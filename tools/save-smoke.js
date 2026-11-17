@@ -1,7 +1,8 @@
 // Browser test for saving (used by CI):  node tools/save-smoke.js [--write-fixture]
 // Serves the repo root, then checks: save -> reload restores the same state; every fixture in tools/fixtures loads and
 // plays a day; a broken save falls back to the backup; a newer save is left alone; offline gold is 50% / 3-day capped;
-// export -> import round trip; reset starts over and keeps a copy; Phase 3: regions, chop and transplant orders, fruit.
+// export -> import round trip; reset starts over and keeps a copy; Phase 3: regions, chop and transplant orders, fruit;
+// Phase 4: pasture, buildings, animals cared for by the board, products sold, hunger, reload.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures'), SAVE = require('../save.js');
@@ -144,7 +145,7 @@ async function test(name, fn) {
     const p = await open(ctx);
     let r = await p.evaluate(() => { const S = __farm.S, T = __farm.tiles; S.coins = 2000; const before = T.filter(t => t.f === 'east' && t.open).length;
       const poor = __farm.buy('south'); const ok = __farm.buy('east').ok; return { before, ok, poor: poor.ok, open: T.filter(t => t.f === 'east' && t.open).length, coins: S.coins, regions: S.eff.regions.slice(), lab: document.querySelectorAll('.rlab').length }; });
-    assert.strictEqual(r.before, 0); assert(r.ok); assert(!r.poor); assert(r.open >= 12, 'east field opens tiles: ' + r.open); assert.strictEqual(r.coins, 2000 - 1200); assert.deepStrictEqual(r.regions, ['east']); assert.strictEqual(r.lab, 4);
+    assert.strictEqual(r.before, 0); assert(r.ok); assert(!r.poor); assert(r.open >= 12, 'east field opens tiles: ' + r.open); assert.strictEqual(r.coins, 2000 - 1200); assert.deepStrictEqual(r.regions, ['east']); assert.strictEqual(r.lab, require('../world.js').REGIONS.length);
     const junk = () => __farm.tiles.filter(t => t.f === 'east' && (t.debris || t.weed)).length, j0 = await p.evaluate(junk);
     await p.evaluate(() => { for (let i = 0; i < 66; i++) __farm.advance(10, 5); __farm.saveNow(); });
     const worked = j0 - await p.evaluate(junk) + await p.evaluate(() => __farm.tiles.filter(t => t.f === 'east' && (t.tilled || t.crop)).length);
@@ -190,6 +191,28 @@ async function test(name, fn) {
       return { id: t.id, x: c.left + s.x * c.width / 426, y: c.top + s.y * c.height / 266 }; });
     await p.mouse.click(tgt.x, tgt.y); const ord = await p.evaluate(() => __farm.S.orders.map(o => o.id));
     assert.deepStrictEqual(ord, [tgt.id]); await p.keyboard.press('Escape'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), null);
+    assert.deepStrictEqual(p.errs, []);
+  });
+  await test('pasture: shop section and locks, animals fed, watered, petted, products sold, survive reload', async ctx => {
+    const p = await open(ctx);
+    await p.evaluate(() => { __farm.S.coins = 9000; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
+    const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop h3, #shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent }));
+    assert(/牧场/.test(shop.head), 'pasture section: ' + shop.head); assert(/先买北牧场/.test(shop.txt), 'locked text');
+    await p.keyboard.press('Escape');
+    const r = await p.evaluate(() => { const S = __farm.S; S.coins = 1e5; for (const id of ['pasture', 'coop', 'shed', 'chicken', 'chicken', 'sheep', 'cow']) __farm.buy(id);
+      S.hay = 0; const before = S.coins; __farm.advance(1300, 10);
+      return { n: S.animals.length, views: __farm.AV.size, kinds: S.animals.map(a => a.kind), h: S.animals.map(a => a.h), gold: S.animalGold || 0, hay: S.hayGold || 0, coins: S.coins, before,
+        log: S.events.map(e => e.msg).join('\n') }; });
+    assert.strictEqual(r.n, 4); assert.strictEqual(r.views, 4); assert.deepStrictEqual(r.kinds.sort(), ['chicken', 'chicken', 'cow', 'sheep']);
+    assert(r.h.every(h => h >= 80), 'cared-for animals are happy: ' + r.h); assert(r.gold > 0, 'products sold'); assert(r.hay > 0, 'bought hay');
+    for (const w of ['饲料槽', '水槽', '鸡蛋', '牛奶']) assert(r.log.includes(w), 'log mentions ' + w);
+    const hungry = await p.evaluate(() => { const S = __farm.S; S.hay = 0; S.trough.feed = 0; S.coins = 0; const a = S.animals[0]; a.h = 40;
+      const r = window.PFAnimals.overnight([a], { feed: 0, water: 1 }); return { h: a.h, made: r.report.made }; });
+    assert(hungry.h < 30, 'hunger lowers happiness'); assert.deepStrictEqual(hungry.made, {});
+    await p.evaluate(() => __farm.saveNow()); const a = await core(p); await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    const b = await p.evaluate(() => ({ s: __farm.snapshot(), views: __farm.AV.size }));
+    assert.deepStrictEqual(b.s.animals, a.animals); assert.deepStrictEqual(b.s.trough, a.trough); assert.strictEqual(b.views, 4); assert.strictEqual(b.s.saveVersion, require('../save.js').CURRENT);
+    const mm = await p.evaluate(() => { const c = document.getElementById('minimap'); return c && c.width > 0; }); assert(mm);
     assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
