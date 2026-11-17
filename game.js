@@ -883,7 +883,7 @@ function transplantTask(o) {
 // ---- v4.5 / v4.7 animal tasks ----
 const animalSpot = a => { const v = AV.get(a.id), P = PENS[penOfKind(a.kind)]; return { x: v ? v.x : P.bld.x, y: v ? v.y : P.bld.y + 14, an: a }; };
 function feedTask(pen) { const P = PENS[pen];
-  return { label: `正在往${P.name}的饲料槽里添干草`, to: troughSpot(pen), tile: P.trough, dur: 6, fx: 'hay', pose: 'pull', done: () => {
+  return { label: `正在往${P.name}的饲料槽里添干草`, to: troughSpot(pen), tile: P.trough, sfx: AN.KINDS && Object.keys(AN.KINDS).find(k => AN.KINDS[k].home === pen), dur: 6, fx: 'hay', pose: 'pull', done: () => {
     const n = Math.min(S.hay, AN.penNeed(S.animals, pen) - S.troughs[pen].feed); if (n <= 0) return;
     S.hay -= n; S.troughs[pen].feed += n; burst(P.trough.x, P.trough.y, 4, [Ac[1], Wd[4], Ac[2]], 8, 'leaf'); log(`往${P.name}的饲料槽添了 ${n} 份干草（仓库还剩 ${S.hay} 份）`); } };
 }
@@ -916,7 +916,7 @@ function petTask(a) {
     if (v) { v.hold = 0; hearts(v.x, v.y); } a.pet = 1; } };
 }
 function patPetTask(p) { const v = petView(p), name = AN.PETS[p.kind].coats.find(c => c.id === p.coat).name; v.hold = 1;
-  return { label: `正在摸摸${name}`, to: { x: v.x - 7, y: v.y + 1 }, tile: v, dur: 4, pose: 'pull', done: () => { v.hold = 0; hearts(v.x, v.y); p.patted = 1; log(`摸了摸${name}，它很开心`); } };
+  return { label: `正在摸摸${name}`, to: { x: v.x - 7, y: v.y + 1 }, tile: v, sfx: p.kind, dur: 4, pose: 'pull', done: () => { v.hold = 0; hearts(v.x, v.y); p.patted = 1; log(`摸了摸${name}，它很开心`); } };
 }
 function hearts(x, y, z = 10) { burst(x, y, z, [Ac[3], Rf[3]], 3, 'heart'); } // fx.js draws them as little pixel hearts
 const PRODUCT_COL = { egg: [Ac[0], St[3]], wool: [Ac[0], St[3]], milk: [Ac[0], Wt[4]], truffle: [Wd[1], Wd[2]] };
@@ -1108,10 +1108,11 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
   if (dist > 0.5) { const st = Math.min(dist, WALK * S.eff.walk * (F.spd || 1) * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
+    if (!k.work && k.kind === 'fish') emit('task-start', { kind: 'fish' }); // v5.2: audio.js casts the line
     k.work += dm; F.act += dm; F.moving = false;
     if (k.tick) k.tick(k, dm);
     if (k.fx && Math.random() < dm * 0.5) fxTick(k);
-    if (k.work >= k.dur) { k.done && k.done(); F.task = null; if (k.kind !== 'idle') emit('task', { kind: k.kind }); }
+    if (k.work >= k.dur) { k.done && k.done(); F.task = null; if (k.kind !== 'idle') emit('task', { kind: k.kind, an: k.an ? k.an.kind : k.sfx }); }
   }
   if (me) noteLog('tick', dm, F.task && F.task.kind, F.task && F.task.label); else if (F.task && F.task.kind !== 'idle' && F.task.kind !== 'home') noteLog('work', F.id, dm);
 }
@@ -2181,7 +2182,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.1.2';
+const GAME_VERSION = '5.2';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2191,6 +2192,7 @@ function surpriseNote(ev, x, y) {
   if (!ev) return;
   say(ev.msg); log(ev.msg);
   noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
+  emit('surprise', { kind: ev.kind }); // v5.2: audio.js plays a jingle
   if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
 }
 
