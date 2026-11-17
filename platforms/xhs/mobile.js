@@ -39,21 +39,75 @@
     return { left: r.left, top: r.top, w: r.width, h: r.height };
   };
 
-  var toastEl = null, toastT = 0;
-  P.toast = function (msg) {
+  var toastEl = null, toastT = 0, toastFadeT = 0, lastToastSrc = '';
+  function fillToast(el) {
+    if (!el || el.querySelector('.xhs-toast-text')) return el;
+    el.textContent = '';
+    var back = doc.createElement('span');
+    back.className = 'xhs-toast-back';
+    back.setAttribute('aria-hidden', 'true');
+    var text = doc.createElement('span');
+    text.className = 'xhs-toast-text';
+    el.appendChild(back);
+    el.appendChild(text);
+    return el;
+  }
+  function ensureToast() {
+    if (toastEl && toastEl.parentNode) return fillToast(toastEl);
+    toastEl = doc.getElementById('xhs-toast');
     if (!toastEl) {
-      toastEl = doc.getElementById('xhs-toast');
-      if (!toastEl) {
-        toastEl = doc.createElement('div');
-        toastEl.id = 'xhs-toast';
-        doc.body.appendChild(toastEl);
-      }
+      toastEl = doc.createElement('div');
+      toastEl.id = 'xhs-toast';
+      (doc.body || doc.documentElement).appendChild(toastEl);
     }
-    toastEl.textContent = msg;
-    toastEl.hidden = false;
+    return fillToast(toastEl);
+  }
+  function placeToast() {
+    var el = ensureToast();
+    var hud = doc.getElementById('hud');
+    if (!el || !hud) return;
+    var r = hud.getBoundingClientRect();
+    if (r.height) el.style.top = Math.round(r.bottom + 14) + 'px';
+  }
+  P.toast = function (msg) {
+    if (!msg) return;
+    var el = ensureToast();
+    el.hidden = false;
+    var textEl = el.querySelector('.xhs-toast-text') || el;
+    textEl.textContent = msg;
+    placeToast();
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
     clearTimeout(toastT);
-    toastT = setTimeout(function () { toastEl.hidden = true; }, 2800);
+    clearTimeout(toastFadeT);
+    toastT = setTimeout(function () { el.classList.remove('show'); }, 3000);
   };
+  function toastLog(raw) {
+    var msg = String(raw || '').replace(/^\d{1,2}:\d{2}\s+/, '').trim();
+    if (!msg || msg === lastToastSrc) return;
+    lastToastSrc = msg;
+    P.toast(msg);
+  }
+  function wireLogToast() {
+    if (P._logToast) return;
+    P._logToast = true;
+    var lastLine = '';
+    root.addEventListener('pf:say', function (e) {
+      if (e && e.detail) toastLog(e.detail);
+    });
+    function check() {
+      var S = root.__farm && __farm.S;
+      var line = S && S.log && S.log[0];
+      if (line && line !== lastLine) {
+        lastLine = line;
+        toastLog(line);
+      }
+      placeToast();
+    }
+    setInterval(check, 400);
+    check();
+  }
 
   function ico(id, kind, title, fn) {
     var b = doc.createElement('button');
@@ -163,7 +217,7 @@
     var stage = doc.createElement('div'); stage.id = 'xhs-stage';
     var dockInv = doc.createElement('div'); dockInv.id = 'xhs-inv-dock'; dockInv.hidden = true;
     var bar = doc.createElement('div'); bar.id = 'xhs-bar';
-    var toast = doc.createElement('div'); toast.id = 'xhs-toast'; toast.hidden = true;
+    var toast = doc.createElement('div'); toast.id = 'xhs-toast';
     var wrap = doc.getElementById('wrap');
     var hud = doc.getElementById('hud');
     var inv = doc.getElementById('inv');
@@ -579,6 +633,7 @@
     if (root.__farm && __farm.fit) __farm.fit();
     compactHud();
     syncSpeedBtn();
+    wireLogToast();
     if (root.visualViewport) {
       visualViewport.addEventListener('resize', function () {
         applyWindowInsets();
