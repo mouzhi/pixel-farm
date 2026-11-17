@@ -916,7 +916,7 @@ function petTask(a) {
     if (v) { v.hold = 0; hearts(v.x, v.y); } a.pet = 1; } };
 }
 function patPetTask(p) { const v = petView(p), name = AN.PETS[p.kind].coats.find(c => c.id === p.coat).name; v.hold = 1;
-  return { label: `正在摸摸${name}`, to: { x: v.x - 7, y: v.y + 1 }, tile: v, dur: 4, pose: 'pull', done: () => { v.hold = 0; hearts(v.x, v.y); p.patted = 1; log(`摸了摸${name}，它很开心`); } };
+  return { label: `正在摸摸${name}`, to: { x: v.x - 7, y: v.y + 1 }, tile: v, sfx: p.kind, dur: 4, pose: 'pull', done: () => { v.hold = 0; hearts(v.x, v.y); p.patted = 1; log(`摸了摸${name}，它很开心`); } };
 }
 function hearts(x, y, z = 10) { burst(x, y, z, [Ac[3], Rf[3]], 3, 'heart'); } // fx.js draws them as little pixel hearts
 const PRODUCT_COL = { egg: [Ac[0], St[3]], wool: [Ac[0], St[3]], milk: [Ac[0], Wt[4]], truffle: [Wd[1], Wd[2]] };
@@ -1111,7 +1111,7 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
     k.work += dm; F.act += dm; F.moving = false;
     if (k.tick) k.tick(k, dm);
     if (k.fx && Math.random() < dm * 0.5) fxTick(k);
-    if (k.work >= k.dur) { k.done && k.done(); F.task = null; if (k.kind !== 'idle') emit('task', { kind: k.kind }); }
+    if (k.work >= k.dur) { k.done && k.done(); F.task = null; if (k.kind !== 'idle') emit('task', { kind: k.kind, an: k.an ? k.an.kind : k.sfx }); }
   }
   if (me) noteLog('tick', dm, F.task && F.task.kind, F.task && F.task.label); else if (F.task && F.task.kind !== 'idle' && F.task.kind !== 'home') noteLog('work', F.id, dm);
 }
@@ -2191,6 +2191,7 @@ function surpriseNote(ev, x, y) {
   if (!ev) return;
   say(ev.msg); log(ev.msg);
   noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
+  emit('surprise', { kind: ev.kind }); // v5.2: audio.js plays a jingle
   if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
 }
 
