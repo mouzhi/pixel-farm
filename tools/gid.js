@@ -1,0 +1,10 @@
+const { chromium } = require('playwright-core');
+(async () => { const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await p.addInitScript(() => { const o = CanvasRenderingContext2D.prototype.getImageData; window.__g = {};
+    CanvasRenderingContext2D.prototype.getImageData = function (x, y, w, h) { const st = new Error().stack.split('\n')[2].trim().split(' ')[1]; const t = performance.now(); const r = o.call(this, x, y, w, h); const e = window.__g[st] || (window.__g[st] = [0, 0, 0]); e[0]++; e[1] += w * h; e[2] += performance.now() - t; return r; }; });
+  await p.goto((process.env.PF_URL || 'http://127.0.0.1:8765') + '/index.html?manual'); await p.waitForFunction(() => window.__farm && __farm.spritesReady());
+  await p.evaluate(() => __farm.advance(1, 30)); await p.evaluate(() => { window.__g = {}; });
+  await p.evaluate(() => { const st = 2 * Math.PI / 256; for (let i = 0; i < 60; i++) { __farm.setAngle(0.22 + i * st); __farm.advance(1 / 30, 30); } });
+  console.log(await p.evaluate(() => Object.entries(window.__g).map(([k, v]) => k + ' calls=' + v[0] + ' px=' + v[1] + ' ms=' + v[2].toFixed(0)).join('\n')));
+  await b.close(); })();

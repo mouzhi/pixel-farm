@@ -1,0 +1,11 @@
+const { chromium } = require('playwright-core');
+(async () => { const b = await chromium.launch({ executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
+  const p = await b.newPage({ viewport: { width: 1280, height: 800 } });
+  await p.goto((process.env.PF_URL || 'http://127.0.0.1:8765') + '/index.html?manual'); await p.waitForFunction(() => window.__farm && __farm.spritesReady());
+  await p.evaluate(() => __farm.advance(1, 30));
+  const cdp = await p.context().newCDPSession(p); await cdp.send('Profiler.enable'); await cdp.send('Profiler.setSamplingInterval', { interval: 200 }); await cdp.send('Profiler.start');
+  await p.evaluate(mode => { const st = 2 * Math.PI / 256; for (let i = 0; i < 60; i++) { if (mode === 'rot') __farm.setAngle(0.22 + i * st); __farm.advance(1 / 30, 30); } }, process.argv[2] || 'static');
+  const { profile } = await cdp.send('Profiler.stop');
+  const self = {}; const dt = profile.timeDeltas; const byId = {}; profile.nodes.forEach(n => byId[n.id] = n);
+  profile.samples.forEach((s, i) => { const n = byId[s]; const k = n.callFrame.functionName + ':' + n.callFrame.lineNumber; self[k] = (self[k] || 0) + (dt[i] || 0); });
+  console.log(Object.entries(self).sort((a, b) => b[1] - a[1]).slice(0, 14).map(([k, v]) => k + ' ' + (v / 1000).toFixed(0) + 'ms').join('\n')); await b.close(); })();

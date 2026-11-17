@@ -1,0 +1,25 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Syntax check (node --check)
+        run: |
+          for f in game.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+      - name: Install playwright-core (no browser download; uses the runner's Chrome)
+        run: npm --prefix tools ci --no-audit --no-fund
+      - name: Headless smoke test
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: node tools/smoke.js

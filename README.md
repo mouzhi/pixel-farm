@@ -4,6 +4,11 @@
 
 v3 把整套美术按「风格 A」重做：参考 16-bit SNES/GBA 农场游戏（Stardew Valley、Fields of Mistria 那种精神）。另外借了 D 的两点：堆叠物体少细节、按面分级着色。
 
+## 在线试玩
+https://mouzhi.github.io/pixel-farm/ （`main` 分支即线上版本）
+
+![风格 A 和目标样图](docs/img/style_A_vs_mock.png)
+
 ## 运行
 - 直接双击 `index.html`，用 Chrome / Edge / Safari 打开就行。
 - 也可以在本目录运行 `python3 -m http.server 8000`，然后打开 http://localhost:8000 。
@@ -122,7 +127,7 @@ v3.1 的修复：
 - 加了一个看门狗：每 3 秒，以及标签页切回前台时，检查一次缓存。一旦发现缓存变空白，就从体素数据重建全部缓存，不用刷新页面。
 - 事件记录只保留最近 300 条。
 
-浸泡测试（`pf-tools/soak.js`）：15 分钟、12 倍速，大约相当于模拟 40 天，并且定时旋转镜头。canvas 数量和内存一直是平的，没有报错。
+浸泡测试（`tools/soak.js`）：15 分钟、12 倍速，大约相当于模拟 40 天，并且定时旋转镜头。canvas 数量和内存一直是平的，没有报错。
 
 ## 技术要点
 - 每个体素模型按 z 切成切片，逐层上移 1px，每层旋转相同角度，垂直压缩到 0.75。
@@ -140,13 +145,17 @@ v3.1 的修复：
     - 动画用 pixel-engine-v1.5 生成，每段 4 帧，28×28：三个方向的走路、锄地、拔草、浇水。
   - 市场老板：基础图另做，再加 4 帧招手动画，卖菜时播放。
   - 成熟的胡萝卜、卷心菜、南瓜：16×16 公告板精灵。
-  - 所有 SpriteCook 输出都由 `pf-tools/build_sprites_A.py` 量化到 32 色。原始文件在 `assets/src/`，文件名以 `A` 开头。
+  - 所有 SpriteCook 输出都由 `tools/build_sprites_A.py` 量化到 32 色。原始文件在 `assets/src/`，文件名以 `A` 开头。
 - 程序化生成、可旋转的部分：
   - 房子、仓库、摊位、水井、栅栏、道具、石头和树枝、耕地、树：体素堆叠或叶团圆盘。
   - 草丛、小花、睡莲、香蒲、杂草、种子和幼苗：手绘的小 2D 精灵，用同一调色板。
 - `hud_icons.png`：HUD 图标。
 
-## 截图（shots/）
+## 截图（shots/，不进 git）
+`shots/` 由 `tools/shots.js` 等脚本生成，体积大，不进仓库（见 [EXCLUDED.md](EXCLUDED.md)）。README 配图放在 `docs/img/`。
+
+![v3.1 → v3.2 树和水](docs/img/trees_water_before_after.png)
+
 - `style_A_vs_mock.png`：现在的游戏画面和目标样图 A_1 的并排对比。
 - `compare_v2_vs_v3.png`：v2 和 v3 的对比。
 - `trees_water_before_after.png`：v3.1 和 v3.2 的对比，包括全景、树特写和池塘特写。
@@ -156,3 +165,16 @@ v3.1 的修复：
 - `closeup_farmer.png`、`closeup_house.png`、`closeup_tree.png`、`closeup_market.png`、`closeup_sprite_sheet_x4.png`：特写。
 - 较早版本的对比图（`rotation_before_vs_after.gif` 等）保留作参考。
 - `preview.mp4` 和 `preview.gif`：从清晨到夜里的录屏，中间演示手动旋转镜头。
+
+## 仓库结构和协作
+```
+index.html  game.js  .nojekyll    游戏本体（GitHub Pages 直接发布 main 的根目录）
+assets/                          运行时素材：调色板、精灵表、HUD 图标
+assets/src/                      SpriteCook 原图和早期模型（构建用，游戏不加载）
+tools/                           测试、截图、构建脚本（见 tools/README.md）
+docs/img/                        README 配图
+.github/                         CI（语法检查和无头冒烟测试）、PR 模板
+CONTRIBUTING.md                  分支、worktree、PR 检查清单、存档兼容、部署
+EXCLUDED.md                      没有进仓库的大文件清单
+```
+分支、worktree 和 PR 流程见 [CONTRIBUTING.md](CONTRIBUTING.md)。

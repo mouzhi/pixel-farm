@@ -1,0 +1,16 @@
+# 运行产物 / 大文件（见 EXCLUDED.md）
+shots/
+*.mp4
+*.webm
+*.mov
+preview*.gif
+*.gif
+*.zip
+node_modules/
+raw/
+frames/
+*.raw.png
+tmp/
+.DS_Store
+*.log
+__pycache__/
