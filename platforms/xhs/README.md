@@ -61,7 +61,8 @@ redapp dev --dir /workspace/repos/pf-xhs/platforms/xhs/dist --agent
 - 兼容基线：Android 8.1 / Chrome 61，JS 交 ES2017；更新语法要转译。
 - Canvas 2D 完整支持；本游戏只用 2D。
 - 脚本必须外置经典 `<script src>`，禁止内联脚本、`onclick`、`type="module"`、`eval`、WASM。
-- 存储：客户端 9.46+ 用 `window.xhs.miniTool.setStorage/getStorage`（单 key ≤1MB，整工具 ≤10MB）。`localStorage` 只作旧版降级。9.51+ 云存储（内测）可做跨设备存档。
+- 存储：客户端 9.46+ 用 `window.xhs.miniTool.setStorage/getStorage`（单 key ≤1MB，整工具 ≤10MB）。`localStorage` 只作旧版降级。写入先写 `:bak` 再写主 key，加载时校验并回退备份；超配额会 toast，不会覆盖上一份好存档。游戏内每天早上、每 30 秒，以及 `visibilitychange` / `pagehide` / `freeze`（并探测是否有 `onHide`，官方 2026-11-13 清单里没有）会落盘。离线结算从 `savedAt` 起算，拒绝非有限/负间隔，未来时钟超过 60 秒不发离线金币，超长跨度封顶。手机端游玩记录收紧（30 天 / 200 事件 / 10 段会话），并关掉文件夹同步。
+- 云存储（9.51+，内测）：`add/update/query/removeCloudStorage`，单条 `content` JSON UTF-8 ≤64KB，批量非事务，未授权 errCode 1006 须降级。启动时只做方法存在性探测（`PFPlatform.cloud`），**不要作为存档唯一来源，本包也不依赖它**。合成后期存档约 39KB，理论上能塞进单条，但仍须本地 `setStorage` 为源。
 - 支付：禁用 `PaymentRequest`。买断走宿主支付墙，工具内无商品内购 API。赞赏用 `rewardAuthor`（成功回执不含金额）。排行榜 `submitScore/getRankList/getMyRank` 为 9.51+ 内测，上传时须勾选头像昵称授权。
 - 体积：zip 上限 10 MiB（建议 ≤2 MiB），解压 ≤30 MiB。
 
@@ -75,3 +76,7 @@ bash platforms/xhs/pack.sh
 ```
 
 适配层 `platform.js` 会在小红书容器里把官方 Storage 预热成同步 `syncStore`，再加载游戏；网页仍走 `localStorage`。文件夹同步（File System Access）在容器里不可用，会自动隐藏。整包买断不用改游戏内逻辑；赞赏入口和装饰类内购要等官方 API 稳定后再接，且避免付费才能通关。
+
+竖屏包（`mobile.css` / `mobile.js`，只打进小工具 zip，网页版不加载）：framebuffer 240×426，按设备像素取最大整数倍缩放（iPhone 14 / 常见 Android 上为 4×），舞台在顶栏和底栏之间，避免页面滚动和双指缩放整页。默认跟随农夫，拖动画布会暂时关掉跟随；底栏是商店 / 仓库 / 存档 / 倍速 / 菜单（菜单只开关小地图，默认关闭）。触控目标 ≥44px。横屏会压低顶栏并允许小于 1× 的 CSS 缩放，以免画布溢出，但小工具按竖屏来设计。
+
+存档测试：`node tools/xhs-save-test.js`（配额、损坏主档回退 `:bak`、后期存档体积）以及原有的 `node tools/save-test.js`。

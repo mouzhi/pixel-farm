@@ -3,7 +3,8 @@
 'use strict';
 (() => {
 // ---------- config ----------
-const W = 426, H = 266;          // low-res framebuffer, integer upscaled (3x on 1280x800)
+const FB = (window.PFPlatform && window.PFPlatform.framebuffer) || { w: 426, h: 266 };
+const W = FB.w, H = FB.h;          // low-res framebuffer, integer upscaled (3x on 1280x800); mobile may pass a portrait size
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
@@ -448,12 +449,21 @@ const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
 let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
 function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
-  const dpr = window.devicePixelRatio || 1, vw = Math.floor(innerWidth * dpr), vh = Math.floor(innerHeight * dpr);
-  const base = Math.max(1, Math.floor(Math.min(vw / W, vh / H))), s = base + zoom;
+  const dpr = window.devicePixelRatio || 1;
+  const box = (window.PFPlatform && typeof PFPlatform.stageBox === 'function' && PFPlatform.stageBox()) || { left: 0, top: 0, w: innerWidth, h: innerHeight };
+  const vw = Math.max(1, Math.floor(box.w * dpr)), vh = Math.max(1, Math.floor(box.h * dpr));
+  const zMax = (window.PFPlatform && PFPlatform.mobile) ? 4 : 3;
+  zoom = clamp(zoom, 0, zMax);
+  const fitMax = Math.min(vw / W, vh / H);
+  const base = Math.max(1, Math.floor(fitMax));
+  // zoom is extra integer steps, but never larger than the stage; if the stage is shorter than 1 device
+  // pixel per buffer pixel (landscape phone), allow a fractional CSS scale so the whole picture stays on screen
+  const s = fitMax < 1 ? fitMax : Math.max(1, Math.min(base + zoom, Math.floor(vw / W), Math.floor(vh / H)));
   const wrap = document.getElementById('wrap'), left = Math.floor((vw - W * s) / 2), top = Math.floor((vh - H * s) / 2);
-  wrap.style.left = left / dpr + 'px'; wrap.style.top = top / dpr + 'px';
+  wrap.style.left = (box.left + left / dpr) + 'px'; wrap.style.top = (box.top + top / dpr) + 'px';
   cv.style.width = W * s / dpr + 'px'; cv.style.height = H * s / dpr + 'px';
-  const css = base / dpr; document.getElementById('hud').style.fontSize = (css >= 4 ? 16 : css >= 3 ? 14 : 12) + 'px';
+  const css = base / dpr, hud = document.getElementById('hud');
+  if (hud && !(window.PFPlatform && PFPlatform.mobile)) hud.style.fontSize = (css >= 4 ? 16 : css >= 3 ? 14 : 12) + 'px';
 }
 addEventListener('resize', fit); fit();
 matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener?.('change', fit);
@@ -2129,7 +2139,8 @@ function advance(dt) {
   if (keyRot) cam.ta += keyRot * dt * 1.8;
   if (keyPan.size) { let x = 0, y = 0; for (const k of keyPan) { x += PAN_KEYS[k][0]; y += PAN_KEYS[k][1]; } panScreen(-x * 170 * dt, -y * 170 * dt); }
   cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;
-  // (no camera follow: a drifting camera shifted the whole map by a pixel every few frames)
+  // web stays locked off the farmer so the picture does not shimmer; mobile can opt in via PFPlatform.followFarmer
+  if (window.PFPlatform && PFPlatform.followFarmer && !drag) panTo(FARMER.x, FARMER.y);
   const mult = F.sleeping ? SIM.SLEEP_MULT : 1;
   let dm = dt * MIN_PER_SEC * SPEED * (S.speed || 1) * mult; // SPEED: ?speed= debug multiplier; S.speed: the bought 1x / 2x / 4x
   while (dm > 0) { const s = Math.min(dm, 1); stepSim(s); dm -= s; }
@@ -2239,9 +2250,14 @@ function restore(s) { // s has been migrated and validated by PFSave
 const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };
 function saveNow() {
   if (SAVE.off) return false;
-  const r = PFSave.write(snapshot()); SAVE.error = r.ok ? null : r.error; if (r.ok) { SAVE.at = Date.now(); noteLog('flush'); noteLog('syncSoon', 'autosave'); } return r.ok;
+  const r = PFSave.write(snapshot()); SAVE.error = r.ok ? null : r.error;
+  if (r.ok) { SAVE.at = Date.now(); noteLog('flush'); noteLog('syncSoon', 'autosave'); }
+  else window.dispatchEvent(new CustomEvent('pf:save-error', { detail: { error: r.error, bytes: r.bytes || 0 } }));
+  return r.ok;
 }
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; only gold changes
+  if (!Number.isFinite(sec) || sec < 0) return null; // clock went backwards or savedAt is in the future
+  if (sec > 7 * 24 * 3600) sec = 7 * 24 * 3600; // absurd jumps (bad clock / leftover timestamp) still cap in the sim
   const r = SIM.offlineSettle(sec, S.dayEarn); if (!r) return null;
   S.coins += r.gold; S.earned += r.gold; if (r.gold > 0) log(`离线期间赚了 ${r.gold} 金`);
   noteLog('offline', r, logSnap());
@@ -2255,8 +2271,12 @@ else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟
 OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); groundReady = true;
 if (!boot.blocked) saveNow();
 noteLog('boot', logSnap(), { getSave: snapshot });
-if (boot.state) settleOffline((Date.now() - boot.state.savedAt) / 1000);
-setInterval(saveNow, 15000);
+if (boot.state) {
+  const skew = Date.now() - boot.state.savedAt;
+  if (skew < -60 * 1000) { /* savedAt in the future: skip offline gold */ }
+  else settleOffline(skew / 1000);
+}
+setInterval(saveNow, (window.PFPlatform && PFPlatform.saveEveryMs) || 15000);
 let hiddenAt = 0;
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { saveNow(); noteLog('syncNow', 'hidden'); hiddenAt = Date.now(); } // the game pauses while hidden (no animation frames)
@@ -2267,6 +2287,7 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
+  fit, panScreen, clampCam, setZoom: z => { zoom = z | 0; fit(); return zoom; }, getZoom: () => zoom, homeCam: () => { cam.ta = DEFAULT_A; panTo(HOME_CAM.x, HOME_CAM.y); },
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },

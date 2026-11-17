@@ -55,6 +55,8 @@ def stage() -> None:
     for name in ASSETS:
         shutil.copy2(ROOT / "assets" / name, STAGE / "assets" / name)
     shutil.copy2(HERE / "platform.js", STAGE / "platform.js")
+    shutil.copy2(HERE / "mobile.js", STAGE / "mobile.js")
+    shutil.copy2(HERE / "mobile.css", STAGE / "mobile.css")
     shutil.copy2(HERE / "boot.js", STAGE / "boot.js")
 
     game = (STAGE / "game.js").read_text()
@@ -67,8 +69,15 @@ def stage() -> None:
     src = (ROOT / "index.html").read_text()
     out = re.sub(r'\s*<script src="[^"]+"></script>\s*', "\n", src)
     out = out.replace(
+        'content="width=device-width,initial-scale=1"',
+        'content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"',
+        1,
+    )
+    if "</head>" in out and 'mobile.css' not in out:
+        out = out.replace("</head>", '  <link rel="stylesheet" href="mobile.css">\n</head>', 1)
+    out = out.replace(
         "</body>",
-        "  <script src=\"platform.js\"></script>\n  <script src=\"boot.js\"></script>\n</body>",
+        "  <script src=\"platform.js\"></script>\n  <script src=\"mobile.js\"></script>\n  <script src=\"boot.js\"></script>\n</body>",
         1,
     )
     out = out.replace("像素堆叠 · 放置农场", "像素农场（小红书小工具预览）", 1)

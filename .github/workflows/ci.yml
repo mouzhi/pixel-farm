@@ -25,6 +25,8 @@ jobs:
         run: node tools/smoke.js
       - name: Save / sim unit tests
         run: node tools/save-test.js
+      - name: XHS save quota / corrupt-recovery tests
+        run: node tools/xhs-save-test.js
       - name: Save / load browser test
         env:
           CHROME: /usr/bin/google-chrome

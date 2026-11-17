@@ -1,0 +1,239 @@
+/* 小红书小工具竖屏壳：只在打包页（有 .xhs-mobile）生效，网页版 main 不受影响 */
+html.xhs-mobile, html.xhs-mobile body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  background: #1b2a24;
+  position: fixed;
+  inset: 0;
+}
+html.xhs-mobile body { padding: 0; }
+
+html.xhs-mobile #xhs-top,
+html.xhs-mobile #xhs-tabs,
+html.xhs-mobile #xhs-toast,
+html.xhs-mobile #xhs-fab[hidden] { display: none; }
+html.xhs-mobile #xhs-fab {
+  font-family: "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html.xhs-mobile #xhs-top {
+  position: fixed;
+  left: 0; right: 0; top: 0;
+  z-index: 20;
+  padding: calc(env(safe-area-inset-top, 0px) + 6px) 10px 8px;
+  background: rgba(40, 28, 22, .92);
+  border-bottom: 3px solid #e8c78a;
+  box-shadow: 0 3px 0 #3a2a20;
+  color: #fff6dc;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  box-sizing: border-box;
+}
+html.xhs-mobile #xhs-top #hud {
+  position: static;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  min-width: 0;
+  flex: 1;
+  font-size: 13px;
+  line-height: 1.25;
+}
+html.xhs-mobile #xhs-top #hud .row { gap: 8px; justify-content: flex-start; flex-wrap: wrap; }
+html.xhs-mobile #xhs-top #act,
+html.xhs-mobile #xhs-top #prices { display: none; }
+html.xhs-mobile #loveHud { margin-top: 2px; font-size: 12px; }
+html.xhs-mobile #loveTip {
+  left: 8px; right: 8px; top: auto;
+  width: auto; max-width: none; min-width: 0;
+  bottom: calc(var(--xhs-tab-h) + 8px);
+  transform: none;
+  z-index: 25;
+}
+
+html.xhs-mobile #xhs-stage {
+  position: fixed;
+  left: 0; right: 0;
+  top: var(--xhs-top-h, 56px);
+  bottom: var(--xhs-tab-h, 64px);
+  overflow: hidden;
+  touch-action: none;
+}
+
+html.xhs-mobile #title,
+html.xhs-mobile #syncHint,
+html.xhs-mobile #fakecursor { display: none !important; }
+
+html.xhs-mobile #inv {
+  left: 0; right: 0; bottom: calc(var(--xhs-tab-h, 64px) + 6px);
+  transform: none;
+  width: auto;
+  justify-content: center;
+  z-index: 15;
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px));
+}
+html.xhs-mobile #inv .slot { width: 52px; height: 52px; min-width: 44px; min-height: 44px; }
+
+html.xhs-mobile #log {
+  left: 8px; right: 8px; bottom: auto;
+  top: calc(var(--xhs-top-h, 56px) + 8px);
+  min-width: 0;
+  max-width: none;
+  font-size: 12px;
+  pointer-events: none;
+  z-index: 12;
+  max-height: 30vh;
+  overflow: hidden;
+}
+html.xhs-mobile #catches {
+  left: 8px; right: auto; bottom: auto;
+  top: calc(var(--xhs-top-h, 56px) + 8px);
+  max-width: 46vw;
+  z-index: 12;
+}
+
+html.xhs-mobile #menuBtn,
+html.xhs-mobile #shopBtn,
+html.xhs-mobile #storeBtn,
+html.xhs-mobile #mapBtn,
+html.xhs-mobile #speed { display: none !important; }
+
+html.xhs-mobile #shop,
+html.xhs-mobile #store,
+html.xhs-mobile #menu {
+  left: 0; right: 0; top: auto;
+  bottom: var(--xhs-tab-h, 64px);
+  width: auto;
+  max-height: min(72vh, calc(100dvh - var(--xhs-top-h, 56px) - var(--xhs-tab-h, 64px)));
+  transform: none;
+  border-radius: 16px 16px 0 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 22;
+  padding-bottom: 12px;
+}
+html.xhs-mobile #offline {
+  left: 8px; right: 8px; top: 20%;
+  width: auto; min-width: 0;
+  transform: none;
+  z-index: 30;
+}
+html.xhs-mobile #minimap {
+  right: 8px; left: auto;
+  top: calc(var(--xhs-top-h, 56px) + 8px);
+  width: 42vw; height: 26vw;
+  max-width: 180px; max-height: 112px;
+  z-index: 14;
+}
+html.xhs-mobile #tools {
+  left: 8px; right: auto; bottom: calc(var(--xhs-tab-h, 64px) + 66px);
+  display: flex; flex-wrap: wrap; gap: 6px;
+  z-index: 16;
+}
+html.xhs-mobile #tools .pbtn,
+html.xhs-mobile #xhs-tabs button,
+html.xhs-mobile #xhs-fab button,
+html.xhs-mobile .pbtn {
+  min-width: 44px;
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 13px;
+  touch-action: manipulation;
+}
+html.xhs-mobile .pbtn:hover { background: #e8c78a; } /* no hover reliance */
+html.xhs-mobile .pbtn:active, html.xhs-mobile #xhs-tabs button:active { background: #ffd76a; }
+
+html.xhs-mobile #xhs-tabs {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 24;
+  display: flex;
+  gap: 2px;
+  padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px));
+  background: rgba(40, 28, 22, .94);
+  border-top: 3px solid #e8c78a;
+  box-sizing: border-box;
+  --xhs-tab-h: 64px;
+}
+html.xhs-mobile #xhs-tabs button {
+  flex: 1;
+  color: #3a2a20;
+  background: #e8c78a;
+  border: 2px solid #3a2a20;
+  box-shadow: 1px 1px 0 #3a2a20;
+  border-radius: 8px;
+  font-weight: 700;
+}
+html.xhs-mobile #xhs-tabs button.on { background: #ffd76a; }
+html.xhs-mobile #xhs-tabs button:disabled { opacity: .45; }
+
+html.xhs-mobile #xhs-fab {
+  position: fixed;
+  right: 8px;
+  bottom: calc(var(--xhs-tab-h, 64px) + 66px);
+  z-index: 16;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+html.xhs-mobile #xhs-toast {
+  position: fixed;
+  left: 16px; right: 16px;
+  bottom: calc(var(--xhs-tab-h, 64px) + 16px);
+  z-index: 40;
+  background: rgba(40, 28, 22, .95);
+  color: #ffd76a;
+  border: 3px solid #e8c78a;
+  padding: 10px 12px;
+  text-align: center;
+  font-weight: 600;
+  font-size: 14px;
+  pointer-events: none;
+}
+html.xhs-mobile #xhs-toast[hidden] { display: none; }
+html.xhs-mobile #say { top: calc(var(--xhs-top-h, 56px) + 8px); z-index: 18; }
+
+html.xhs-mobile .rlab {
+  font-size: 11px;
+  padding: 4px 6px;
+  max-width: 42vw;
+  pointer-events: auto;
+  z-index: 13;
+}
+
+html.xhs-mobile #wrap { position: fixed; margin: 0; }
+html.xhs-mobile #inv {
+  right: 62px;
+  left: 8px;
+  transform: none;
+  width: auto;
+  justify-content: flex-start;
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+@media (orientation: landscape) {
+  html.xhs-mobile #xhs-top { padding: 2px 8px; min-height: 0; }
+  html.xhs-mobile #xhs-top #hud { font-size: 12px; }
+  html.xhs-mobile #loveHud { display: none; }
+  html.xhs-mobile #xhs-tabs { padding: 3px 4px; }
+  html.xhs-mobile #xhs-tabs button { min-height: 40px; }
+  html.xhs-mobile #inv { display: none; }
+  html.xhs-mobile #xhs-fab { bottom: calc(var(--xhs-tab-h, 44px) + 48px); flex-direction: row; right: 8px; }
+  html.xhs-mobile #log, html.xhs-mobile .rlab { display: none; }
+}

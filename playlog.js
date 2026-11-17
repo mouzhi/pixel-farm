@@ -6,7 +6,8 @@
   const PREFIX = 'mouzhi/pixel-farm:';
   const KEY = PREFIX + 'playlog';
   const SCHEMA = 1;
-  const MAX_DAYS = 365, MAX_EVENTS = 2000, MAX_SESSIONS = 60;
+  const MOBILE = typeof PFPlatform !== 'undefined' && PFPlatform.mobile;
+  const MAX_DAYS = MOBILE ? 30 : 365, MAX_EVENTS = MOBILE ? 200 : 2000, MAX_SESSIONS = MOBILE ? 10 : 60;
   const SYNC_MIN_MS = 60000;
   const IDB_NAME = 'mouzhi-pixel-farm', IDB_STORE = 'fs', IDB_KEY = 'dir';
   const SAVE_FILE = 'pixel-farm-save.json', LOG_FILE = 'pixel-farm-playlog.json';
@@ -235,7 +236,7 @@
   }
 
   // ---- folder sync (Chrome File System Access API); writeToDir is also used with OPFS or a mock handle in tests ----
-  function supported() { return typeof showDirectoryPicker === 'function'; }
+  function supported() { return !MOBILE && typeof showDirectoryPicker === 'function'; }
   function idbOpen() {
     return new Promise((resolve, reject) => {
       if (typeof indexedDB === 'undefined') return reject(new Error('no indexedDB'));
