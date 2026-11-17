@@ -1,12 +1,13 @@
 // Plays the real game headless for N days with a scripted player who buys shop items in a fixed order as soon as he can,
 // and prints what the farm earns, when each purchase happens (in real minutes at the bought speed), and how seeds flow.
 //   node tools/econ.js [days=20] [seed]   Phase 3: also chops, transplants and reports wood / fruit gold;
-//   Phase 4: then buys the pasture, buildings and animals and reports animal-product gold, hay spent and average happiness   (numbers on the design Page come from this script)
+//   Phase 4/v4.6: buys the home coop early and each region's pen + animals after the region and reports animal-product gold, hay spent and average happiness   (numbers on the design Page come from this script)
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 20, RNG = process.argv[3];
-const ORDER = ['field', 'can', 'field', 'shoe', 'hoe', 'basket', 'field', 'speed', 'can', 'axe', 'forest', 'strawberry', 'east', 'shoe', 'basket', 'orchard', 'watermelon', 'speed', 'south', 'hoe', 'can', 'shoe',
-  'rod', 'pasture', 'coop', 'chicken', 'chicken', 'chicken', 'shed', 'sheep', 'chicken', 'cow', 'sheep', 'chicken', 'chicken', 'sheep', 'cow', 'rod', 'coast', 'searod'];
+// v4.7: the home coop and a couple of chickens come right after the first tools; a cat and a dog early-ish; each bigger animal right after its region
+const ORDER = ['field', 'can', 'field', 'shoe', 'coop', 'chicken', 'hoe', 'chicken', 'basket', 'field', 'cat', 'speed', 'can', 'chicken', 'dog', 'axe', 'forest', 'sty', 'pig', 'strawberry', 'east', 'shoe', 'basket',
+  'chicken', 'pig', 'orchard', 'fold', 'sheep', 'watermelon', 'speed', 'south', 'hoe', 'sheep', 'can', 'shoe', 'rod', 'chicken', 'pig', 'pasture', 'shed', 'cow', 'sheep', 'chicken', 'cow', 'cow', 'rod', 'coast', 'searod'];
 // Phase 3 player: once he has the axe and the forest he marks 2 trees a day, and plants every sapling on the next free spot of a fixed list
 const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]); for (const [x, y] of [[20, 70], [30, 96], [176, 24], [184, 100], [12, 120]]) PLANT.push([x, y]);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png' };

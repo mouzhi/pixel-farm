@@ -194,25 +194,30 @@ async function test(name, fn) {
     assert.deepStrictEqual(ord, [tgt.id]); await p.keyboard.press('Escape'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), null);
     assert.deepStrictEqual(p.errs, []);
   });
-  await test('pasture: shop section and locks, animals fed, watered, petted, products sold, survive reload', async ctx => {
+  await test('animals: home coop early, pens unlock with their regions, cared for, products sold, survive reload', async ctx => {
     const p = await open(ctx);
-    await p.evaluate(() => { __farm.S.coins = 9000; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
-    const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop h3, #shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent }));
-    assert(/牧场/.test(shop.head), 'pasture section: ' + shop.head); assert(/先买北牧场/.test(shop.txt), 'locked text');
-    await p.keyboard.press('Escape');
-    const r = await p.evaluate(() => { const S = __farm.S; S.coins = 1e5; for (const id of ['pasture', 'coop', 'shed', 'chicken', 'chicken', 'sheep', 'cow']) __farm.buy(id);
-      S.hay = 0; const before = S.coins; __farm.advance(1300, 10);
-      return { n: S.animals.length, views: __farm.AV.size, kinds: S.animals.map(a => a.kind), h: S.animals.map(a => a.h), gold: S.animalGold || 0, hay: S.hayGold || 0, coins: S.coins, before,
-        log: S.events.map(e => e.msg).join('\n') }; });
-    assert.strictEqual(r.n, 4); assert.strictEqual(r.views, 4); assert.deepStrictEqual(r.kinds.sort(), ['chicken', 'chicken', 'cow', 'sheep']);
+    await p.evaluate(() => { __farm.S.coins = 350; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
+    const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent,
+      coop: !document.querySelector('#shop [data-buy="coop"]').disabled, look: !!document.querySelector('#shop [data-look="pen:coop"]') }));
+    assert(/动物/.test(shop.head) && /小伙伴/.test(shop.head), 'sections: ' + shop.head); assert(shop.coop, 'coop affordable with 350 gold and no region'); assert(shop.look);
+    for (const w of ['先买林场', '先买果园坡', '先买北牧场', '先买鸡舍']) assert(shop.txt.includes(w), 'locked text ' + w);
+    await p.click('#shop [data-buy="coop"]'); await p.keyboard.press('Escape');
+    const early = await p.evaluate(() => { const S = __farm.S; S.coins = 100; __farm.buy('chicken'); S.hay = 0; __farm.advance(1300, 10);
+      return { kinds: S.animals.map(a => a.kind), views: __farm.AV.size, eggs: S.events.some(e => /鸡蛋/.test(e.msg)), log: S.events.map(e => e.msg).join('\n') }; });
+    assert.deepStrictEqual(early.kinds, ['chicken']); assert.strictEqual(early.views, 1); assert(/鸡舍/.test(early.log), 'coop in the log');
+    const r = await p.evaluate(() => { const S = __farm.S; S.coins = 1e5; for (const id of ['chicken', 'forest', 'sty', 'pig', 'orchard', 'fold', 'sheep', 'pasture', 'shed', 'cow']) { const o = __farm.buy(id); if (!o.ok) return { fail: id }; }
+      S.hay = 0; __farm.advance(2 * 1440 + 200, 10);
+      return { n: S.animals.length, views: __farm.AV.size, kinds: S.animals.map(a => a.kind), h: S.animals.map(a => a.h), gold: S.animalGold || 0, hay: S.hayGold || 0,
+        troughs: Object.keys(S.troughs), log: S.events.map(e => e.msg).join('\n') }; });
+    assert(!r.fail, 'bought ' + r.fail); assert.strictEqual(r.n, 5); assert.strictEqual(r.views, 5); assert.deepStrictEqual(r.kinds.sort(), ['chicken', 'chicken', 'cow', 'pig', 'sheep']);
     assert(r.h.every(h => h >= 80), 'cared-for animals are happy: ' + r.h); assert(r.gold > 0, 'products sold'); assert(r.hay > 0, 'bought hay');
-    for (const w of ['饲料槽', '水槽', '鸡蛋', '牛奶']) assert(r.log.includes(w), 'log mentions ' + w);
-    const hungry = await p.evaluate(() => { const S = __farm.S; S.hay = 0; S.trough.feed = 0; S.coins = 0; const a = S.animals[0]; a.h = 40;
+    for (const w of ['猪圈的饲料槽', '羊圈的饲料槽', '牛棚的饲料槽', '鸡舍的饲料槽', '水槽', '鸡蛋', '牛奶', '松露']) assert(r.log.includes(w), 'log mentions ' + w);
+    const hungry = await p.evaluate(() => { const a = __farm.S.animals[0]; a.h = 40;
       const r = window.PFAnimals.overnight([a], { feed: 0, water: 1 }); return { h: a.h, made: r.report.made }; });
     assert(hungry.h < 30, 'hunger lowers happiness'); assert.deepStrictEqual(hungry.made, {});
     await p.evaluate(() => __farm.saveNow()); const a = await core(p); await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     const b = await p.evaluate(() => ({ s: __farm.snapshot(), views: __farm.AV.size }));
-    assert.deepStrictEqual(b.s.animals, a.animals); assert.deepStrictEqual(b.s.trough, a.trough); assert.strictEqual(b.views, 4); assert.strictEqual(b.s.saveVersion, require('../save.js').CURRENT);
+    assert.deepStrictEqual(b.s.animals, a.animals); assert.deepStrictEqual(b.s.troughs, a.troughs); assert.strictEqual(b.views, 5); assert.strictEqual(b.s.saveVersion, require('../save.js').CURRENT);
     const mm = await p.evaluate(() => { const c = document.getElementById('minimap'); return c && c.width > 0; }); assert(mm);
     assert.deepStrictEqual(p.errs, []);
   });
@@ -252,6 +257,33 @@ async function test(name, fn) {
     assert.strictEqual(b.s.upgrades.coast, 1); assert.strictEqual(b.s.upgrades.searod, 1);
     assert.deepStrictEqual(b.s.catches, a.catches);
     assert.deepStrictEqual(p.errs, []);
+  });
+  await test('pets: cats and dogs roam, follow, nap, can be petted; cats bring seeds; they come back after reload', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const S = __farm.S, f = __farm; S.coins = 2000; for (const id of ['cat', 'cat', 'dog']) f.buy(id);
+      const seeds0 = S.store.carrot; f.advance(240, 5); const F = f.F, dog = f.PV.get('dog0'), cat = f.PV.get('cat0');
+      const dogNear = Math.hypot(dog.x - F.x, dog.y - F.y), coats = f.PETS_LIVE.map(p => p.coat);
+      f.advance(1440, 10); const night = S.events.some(e => /猫咪在门口放了 2 颗胡萝卜种子/.test(e.msg));
+      f.advance(120, 5); const pt = f.PV.get('cat1'); const said = f.patPet(f.PETS_LIVE[1]);
+      return { n: f.PETS_LIVE.length, coats, dogNear, night, said, walk: S.eff.walk, patted: S.events.some(e => /摸了摸/.test(e.msg)) }; });
+    assert.strictEqual(r.n, 3); assert.deepStrictEqual(r.coats, ['ginger', 'black', 'shiba']); assert(r.dogNear < 40, 'dog stays near the farmer: ' + r.dogNear);
+    assert(r.night, 'cats left seeds'); assert.strictEqual(r.said, '黑猫'); assert.strictEqual(r.walk, 1.03); assert(r.patted, 'farmer pats them');
+    await p.evaluate(() => __farm.saveNow()); await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    assert.strictEqual(await p.evaluate(() => { __farm.advance(10, 5); return __farm.PETS_LIVE.length; }), 3);
+    assert.deepStrictEqual(p.errs, []);
+  });
+  await test('a v4.5 (v6) farm with the pasture loads in v8 with every animal and building, chickens at the home coop', async ctx => {
+    const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v5-day4.json'), 'utf8')));
+    const AN = require('../animals.js');
+    Object.assign(s, { saveVersion: 6, savedAt: Date.now(), upgrades: Object.assign({}, s.upgrades, { forest: 1, pasture: 1, coop: 1, shed: 1, chicken: 2, sheep: 1, cow: 1 }),
+      animals: [AN.animal('chicken0', 'chicken'), AN.animal('chicken1', 'chicken'), AN.animal('sheep0', 'sheep'), AN.animal('cow0', 'cow')], trough: { feed: 4, water: 1 } });
+    delete s.troughs; for (const k of ['sty', 'fold', 'pig', 'cat', 'dog']) delete s.upgrades[k];
+    const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
+    const r = await p.evaluate(() => { const S = __farm.S; return { kinds: S.animals.map(a => a.kind), up: S.up, troughs: S.troughs, views: __farm.AV.size, notes: __farm.SAVE.notes,
+      coop: __farm.AV.get('chicken0') && Math.hypot(__farm.AV.get('chicken0').x - __farm.PENS.coop.bld.x, __farm.AV.get('chicken0').y - __farm.PENS.coop.bld.y) }; });
+    assert.deepStrictEqual(r.kinds, ['chicken', 'chicken', 'sheep', 'cow']); assert.strictEqual(r.views, 4); assert(r.up.fold === 1 && r.up.orchard === 1 && r.up.shed === 1 && r.up.coop === 1);
+    assert.deepStrictEqual(r.troughs.shed, { feed: 4, water: 1 }); assert(r.coop < 60, 'chicken lives by the home coop: ' + r.coop); assert.deepStrictEqual(r.notes, []);
+    await p.evaluate(() => __farm.advance(1440, 10)); assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

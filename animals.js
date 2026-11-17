@@ -1,15 +1,25 @@
-// 像素农场 · 动物规则（第 4 阶段，v4.5）：纯函数，浏览器里是 window.PFAnimals，Node 里 require('./animals.js')。
+// 像素农场 · 动物规则（第 4 阶段 v4.5；v4.7 分散到各区域、加了猪和猫狗）：纯函数，浏览器里是 window.PFAnimals，Node 里 require('./animals.js')。
 // An animal eats hay from the pasture trough every night, drinks from it, likes being petted, and leaves a product
 // (egg, wool, milk) that the farmer collects and sells. Happiness (0..100) is the one care number: it decides how much it gives.
 (function (root) {
   const KINDS = {
     chicken: { name: '鸡', home: 'coop', eats: 1, product: 'egg', every: 1, n: 1 },
-    sheep: { name: '羊', home: 'shed', eats: 2, product: 'wool', every: 3, n: 1 },
+    sheep: { name: '羊', home: 'fold', eats: 2, product: 'wool', every: 3, n: 1 },
     cow: { name: '牛', home: 'shed', eats: 3, product: 'milk', every: 1, n: 1 },
+    pig: { name: '猪', home: 'sty', eats: 2, product: 'truffle', every: 2, n: 1 },   // v4.7: roots for truffles under the forest's oaks
   };
+  // v4.7 companions: they cost no hay and give no product. A dog walks with the farmer (a little faster), a cat brings a seed
+  // to the door every morning. Coats follow the order they are bought in.
+  const PETS = {
+    cat: { name: '猫', coats: [{ id: 'ginger', name: '橘猫' }, { id: 'black', name: '黑猫' }, { id: 'calico', name: '三花猫' }] },
+    dog: { name: '狗', coats: [{ id: 'shiba', name: '柴犬' }, { id: 'collie', name: '黑白狗' }, { id: 'brown', name: '棕色小狗' }] },
+  };
+  const PET_IDS = Object.keys(PETS);
+  const pet = (kind, i) => ({ id: kind + i, kind, coat: PETS[kind].coats[i % PETS[kind].coats.length].id });
+  const DOG_WALK = 0.03, CAT_SEEDS = 1;  // per dog: walking +3%; per cat: 1 carrot seed each morning
   const KIND_IDS = Object.keys(KINDS);
   // base prices; the merchant's multiplier drifts every morning like the crops' (0.8..1.2)
-  const PRODUCTS = { egg: { name: '鸡蛋', price: 10 }, wool: { name: '羊毛', price: 60 }, milk: { name: '牛奶', price: 35 } };
+  const PRODUCTS = { egg: { name: '鸡蛋', price: 10 }, wool: { name: '羊毛', price: 60 }, milk: { name: '牛奶', price: 35 }, truffle: { name: '松露', price: 45 } };
   const PRODUCT_IDS = Object.keys(PRODUCTS);
   const HAY = { price: 3, stock: 99 };     // a bale of hay at the stall; the barn keeps at most 99
   const START_H = 60, HAPPY = 80, SULKY = 30, MAX_READY = 3;
@@ -31,6 +41,17 @@
     }
     return { trough: { feed, water: 0 }, report: out };
   }
-  const api = { KINDS, KIND_IDS, PRODUCTS, PRODUCT_IDS, HAY, START_H, HAPPY, SULKY, MAX_READY, CARE, animal, need, yieldOf, mood, overnight };
+  // v4.7: every building has its own trough; one night for all of them (a pen with no animals keeps its trough as it is)
+  const PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
+  function overnightPens(animals, troughs) {
+    const out = { troughs: {}, report: { fed: 0, hungry: 0, made: {} } };
+    for (const pen of PEN_IDS) { const t = (troughs && troughs[pen]) || { feed: 0, water: 0 }, list = animals.filter(a => KINDS[a.kind].home === pen);
+      if (!list.length) { out.troughs[pen] = { feed: t.feed | 0, water: t.water ? 1 : 0 }; continue; }
+      const r = overnight(list, t); out.troughs[pen] = r.trough; out.report.fed += r.report.fed; out.report.hungry += r.report.hungry;
+      for (const k in r.report.made) out.report.made[k] = (out.report.made[k] || 0) + r.report.made[k]; }
+    return out;
+  }
+  const penNeed = (animals, pen) => need(animals.filter(a => KINDS[a.kind].home === pen));
+  const api = { PEN_IDS, overnightPens, penNeed, KINDS, KIND_IDS, PETS, PET_IDS, pet, DOG_WALK, CAT_SEEDS, PRODUCTS, PRODUCT_IDS, HAY, START_H, HAPPY, SULKY, MAX_READY, CARE, animal, need, yieldOf, mood, overnight };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFAnimals = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -14,18 +14,29 @@
     { id: 'east', name: '东田', rect: [216, 16, 344, 116], gate: { x: 216, y: 66 }, sign: { x: 212, y: 56 }, center: { x: 280, y: 66 },
       field: { c0: 30, r0: 7, cols: 8, rows: 3 }, barrel: { x: 232, y: 46 }, desc: '24 格大田，满地杂物' },
     { id: 'orchard', name: '果园坡', rect: [-150, -100, -40, 16], gate: { x: -40, y: 8 }, sign: { x: -36, y: 18 }, center: { x: -95, y: -42 },
-      apples: [[-120, -70], [-84, -78], [-104, -40]], desc: '3 棵苹果树，还有地方移植树苗' },
+      apples: [[-120, -70], [-84, -78], [-104, -40]], barrel: { x: -56, y: -10 }, desc: '3 棵苹果树，还有地方移植树苗' },
     { id: 'south', name: '南坡梯田', rect: [40, 150, 184, 204], gate: { x: 68, y: 150 }, sign: { x: 58, y: 148 }, center: { x: 112, y: 178 },
       field: { c0: 10, r0: 21, cols: 8, rows: 3 }, barrel: { x: 160, y: 164 }, desc: '24 格向阳坡地，适合草莓和西瓜' },
     // Phase 4: the pasture. coop / shed are where the buildings go once bought; roam: where each kind wanders
     { id: 'pasture', name: '北牧场', rect: [216, -100, 344, -8], gate: { x: 216, y: -40 }, sign: { x: 212, y: -50 }, center: { x: 280, y: -54 },
-      barrel: { x: 232, y: -22 }, trough: { x: 272, y: -24 }, coop: { x: 248, y: -78 }, shed: { x: 312, y: -76 }, hay: { x: 336, y: -46 },
-      roam: { chicken: [226, -62, 296, -14], sheep: [262, -56, 336, -14], cow: [262, -56, 336, -14] }, desc: '一片草场，能养鸡、羊和牛' },
+      barrel: { x: 232, y: -22 }, desc: '一片草场，盖了牛棚就能养牛' },
     // v4.6 seaside: a fenced beach south-east of the south terrace; the pier and open sea sit in `water` (still area 'coast')
     { id: 'coast', name: '海边', rect: [200, 212, 344, 256], gate: { x: 220, y: 212 }, sign: { x: 208, y: 208 }, center: { x: 272, y: 236 },
       pier: { x: 280, y: 256 }, water: [200, 248, 352, 288],
       fish: { stand: { x: 280, y: 268 }, hook: { x: 280, y: 278 } }, desc: '沙滩和码头，有海竿就能海钓' },
   ];
+  // v4.7: where each building, its trough and its animals' patch are. needs: the region that has to be bought first (the home
+  // coop needs none). bld: building centre; door: where eggs are laid / animals sleep; trough: its own trough; roam: x0,y0,x1,y1.
+  const PENS = {
+    coop: { name: '鸡舍', needs: null, bld: { x: 18, y: 64 }, door: { x: 19, y: 78 }, trough: { x: 46, y: 62 }, roam: [8, 60, 56, 86], water: 1 }, // inside the fenced yard west of the house
+    sty: { name: '猪圈', needs: 'forest', bld: { x: 76, y: -24 }, door: { x: 76, y: -11 }, trough: { x: 62, y: -6 }, roam: [58, -34, 94, -2], water: 2 }, // the clearing behind the house, west of the forest path
+    fold: { name: '羊圈', needs: 'orchard', bld: { x: -128, y: -14 }, door: { x: -126, y: 0 }, trough: { x: -96, y: -2 }, roam: [-144, -34, -60, 8], water: 2 },
+    shed: { name: '牛棚', needs: 'pasture', bld: { x: 312, y: -76 }, door: { x: 312, y: -58 }, trough: { x: 272, y: -24 }, roam: [244, -56, 336, -14], water: 2, hay: { x: 336, y: -46 } },
+  };
+  const PEN_IDS = Object.keys(PENS);
+  // pets: cats nap on these sunny spots (home ones always, region ones once bought); dogs follow the farmer
+  const NAP_SPOTS = [{ x: 60, y: 40 }, { x: 64, y: 104 }, { x: 128, y: 36 }, { x: 88, y: 30 }, { x: 140, y: 104 }, { x: 20, y: 46 },
+    { x: 120, y: -50, area: 'forest' }, { x: -90, y: -60, area: 'orchard' }, { x: 260, y: 40, area: 'east' }, { x: 120, y: 170, area: 'south' }, { x: 240, y: -30, area: 'pasture' }, { x: 252, y: 226, area: 'coast' }];
   const REGION_IDS = REGIONS.map(r => r.id);
   const region = id => REGIONS.find(r => r.id === id);
   const inRect = (x, y, [x0, y0, x1, y1], pad = 0) => x >= x0 - pad && x <= x1 + pad && y >= y0 - pad && y <= y1 + pad;
@@ -91,7 +102,7 @@
   // chopping a grown forest tree: wood plus one fruit sapling (apple 60% / orange 40%)
   function chopYield(rnd) { return { wood: WOOD.perChop, sapling: rnd() < 0.6 ? 'apple' : 'orange' }; }
   const choppable = (t, regions) => t.kind === 'wild' && t.stage === 'tree' && regions.includes('forest');
-  const api = { TILE, WORLD, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
+  const api = { PENS, PEN_IDS, NAP_SPOTS, TILE, WORLD, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
     MAX_ORDERS, fruitTree, defaultTrees, treeOvernight, pickFruit, chopYield, choppable };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorld = api;
 })(typeof window !== 'undefined' ? window : globalThis);
