@@ -69,9 +69,12 @@ function gableRoof(x, y, z, o) { // ridge along x; returns colour, 'fill' for ga
   if (!shell) return (x >= o.fx0 && x <= o.fx1) ? 'fill' : null;
   if (a + 2 >= b) return o.ridge;                           // ridge cap
   if (x <= o.x0 + 1 || x >= o.x1 - 1) return o.trim;       // barge boards
-  const row = Math.floor(k / 2), col = Math.floor((x + (row % 2) * 2) / 4);
-  if (k % 2 === 1) return o.dark;                           // shadow line under each course
-  return (col + row) % 5 === 0 ? o.alt : o.base;
+  // courses are 4 slices tall: the roof rises 1 slice per voxel, so each slice shows only ~0.75 screen px of roof and
+  // anything finer than ~3 px would alias into moire once rotated
+  const row = Math.floor(k / 4), col = Math.floor((x + (row % 2) * 3) / 6);
+  if (k % 4 === 3) return o.dark;                           // shadow line under each course
+  if (k % 4 === 0 && (x + (row % 2) * 3) % 6 === 0) return o.dark; // tile joints, staggered
+  return (col * 7 + row * 3) % 5 === 0 ? o.alt : o.base;
 }
 function houseModel() {
   const w = 56, d = 46, h = 52, X0 = 4, X1 = 51, Y0 = 6, Y1 = 39, ZW = 24;
@@ -506,19 +509,43 @@ let CA = Math.cos(cam.a), SA = Math.sin(cam.a);
 // The camera never drifts: it is fixed on the farm centre, and its screen offset is snapped to whole pixels once per frame.
 // Every object then keeps the same sub-pixel phase between frames, so nothing re-rounds and shimmers (v2's soft follow did).
 let CX = 0, CY = 0;
-function setCam() { CA = Math.cos(cam.a); SA = Math.sin(cam.a); CX = Math.round(W / 2 - (cam.x * CA - cam.y * SA) * RS); CY = Math.round(H / 2 + 10 - (cam.x * SA + cam.y * CA) * K * RS); }
+const ASTEP = Math.PI * 2 / 256; let AQ = 0; // the picture turns in 1.4 degree steps (under 1px of travel at a building's edge), so per-angle caches get reused
+function setCam() { AQ = Math.round(cam.a / ASTEP) * ASTEP; CA = Math.cos(AQ); SA = Math.sin(AQ); CX = Math.round(W / 2 - (cam.x * CA - cam.y * SA) * RS); CY = Math.round(H / 2 + 10 - (cam.x * SA + cam.y * CA) * K * RS); }
 function proj(x, y) { const rx = x * CA - y * SA, ry = x * SA + y * CA; return [CX + rx * RS, CY + ry * K * RS, ry]; }
-function stackCanvas(m, a) { // a static stack drawn once per camera angle (translation-invariant: everything snaps to whole pixels)
+// Rotated stacks are rendered at 3x and reduced with a majority (mode) filter: each screen pixel takes the colour that covers
+// most of it. Plain nearest-neighbour rotation picks one arbitrary texel per pixel, so 1px stripes (shingles, beams, planks)
+// broke up differently at every angle and the building textures seemed to crawl while turning. Results are cached per angle.
+const SS = 3, ssC = mk(8, 8), ssG = ssC.getContext('2d', { willReadFrequently: true });
+function stackCanvas(m, a) {
   const map = m._ck || (m._ck = new Map()); let k = map.get(a); if (k) return k;
-  if (map.size > 40) map.clear(); k = {}; map.set(a, k);
+  if (map.size > 300) map.clear(); k = {}; map.set(a, k);
   const ca = Math.cos(a), sa = Math.sin(a), r = Math.ceil(Math.hypot(m.w, m.d) / 2) + 1;
-  if (!k.c) { k.c = mk(2 * r, Math.ceil(2 * r * K) + m.h + 2); k.g = k.c.getContext('2d'); k.g.imageSmoothingEnabled = false; }
-  k.ox = r; k.oy = Math.ceil(r * K) + m.h; k.g.setTransform(1, 0, 0, 1, 0, 0); k.g.clearRect(0, 0, k.c.width, k.c.height);
-  for (let i = 0; i < m.h; i++) { const sl = m.slices[i]; if (!sl) continue; k.g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); k.g.drawImage(sl, -m.w / 2, -m.d / 2); }
-  k.g.setTransform(1, 0, 0, 1, 0, 0); return k;
+  if (m.w * m.d * m.h < 8000) { // small props: too little surface detail to crawl, plain nearest is fine (and fast)
+    k.c = mk(2 * r, Math.ceil(2 * r * K) + m.h + 2); const g = k.c.getContext('2d'); g.imageSmoothingEnabled = false; k.ox = r; k.oy = Math.ceil(r * K) + m.h;
+    for (let i = 0; i < m.h; i++) { const sl = m.slices[i]; if (!sl) continue; g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); g.drawImage(sl, -m.w / 2, -m.d / 2); }
+    return k;
+  }
+  const w = 2 * r, h = Math.ceil(2 * r * K) + m.h + 2, BW = w * SS, BH = h * SS;
+  k.c = mk(w, h); k.ox = r; k.oy = Math.ceil(r * K) + m.h;
+  if (ssC.width < BW || ssC.height < BH) { ssC.width = Math.max(ssC.width, BW); ssC.height = Math.max(ssC.height, BH); }
+  const g = ssG; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, BW, BH); g.imageSmoothingEnabled = false;
+  for (let i = 0; i < m.h; i++) { const sl = m.slices[i]; if (!sl) continue;
+    for (let t = SS - 1; t >= 0; t--) { g.setTransform(ca * SS, sa * K * SS, -sa * SS, ca * K * SS, k.ox * SS, (k.oy - i) * SS + t); g.drawImage(sl, -m.w / 2, -m.d / 2); } }
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const src = new Uint32Array(g.getImageData(0, 0, BW, BH).data.buffer), out = new ImageData(w, h), dst = new Uint32Array(out.data.buffer);
+  const v = new Uint32Array(SS * SS);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let n = 0; for (let yy = 0; yy < SS; yy++) { const row = (y * SS + yy) * BW + x * SS; for (let xx = 0; xx < SS; xx++) { const p = src[row + xx]; v[n++] = (p >>> 24) >= 128 ? p | 0xff000000 : 0; } }
+    const mid = v[(SS * SS) >> 1]; let same = true; for (let q = 0; q < n; q++) if (v[q] !== mid) { same = false; break; }
+    if (same) { dst[y * w + x] = mid >>> 0; continue; }
+    let best = mid, bc = 0; for (let q = 0; q < n; q++) if (v[q] === mid) bc++;
+    for (let q = 0; q < n; q++) { const c = v[q]; if (c === best) continue; let cnt = 0; for (let s = 0; s < n; s++) if (v[s] === c) cnt++; if (cnt > bc) { bc = cnt; best = c; } }
+    dst[y * w + x] = best >>> 0;
+  }
+  k.c.getContext('2d').putImageData(out, 0, 0); return k;
 }
 function drawStack(c, m, x, y, z, rot, sway) { // z and sway in screen px
-  const [sx, sy] = proj(x, y); const a = cam.a + rot, ca = Math.cos(a), sa = Math.sin(a);
+  const [sx, sy] = proj(x, y); const a = AQ + rot, ca = Math.cos(a), sa = Math.sin(a);
   const bx = Math.round(sx), by = Math.round(sy);
   if (!sway && m.h >= 6 && !m.noCache) { const k = stackCanvas(m, a); c.drawImage(k.c, bx - k.ox, by - Math.round(z) - k.oy); return; }
   for (let i = 0; i < m.h; i++) {
@@ -530,7 +557,7 @@ function drawStack(c, m, x, y, z, rot, sway) { // z and sway in screen px
   c.setTransform(1, 0, 0, 1, 0, 0);
 }
 function drawFoot(c, m, x, y, rot, ox, oy) {
-  const [sx, sy] = proj(x + ox, y + oy); const a = cam.a + rot, ca = Math.cos(a), sa = Math.sin(a);
+  const [sx, sy] = proj(x + ox, y + oy); const a = AQ + rot, ca = Math.cos(a), sa = Math.sin(a);
   c.setTransform(ca, sa * K, -sa, ca * K, Math.round(sx), Math.round(sy)); c.drawImage(m.foot, -m.w / 2, -m.d / 2); c.setTransform(1, 0, 0, 1, 0, 0);
 }
 function vnoise(x, y, s) { const h = (i, j) => { let n = i * 374761393 + j * 668265263 + s * 1442695; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967296; };
@@ -687,7 +714,7 @@ function drawTree(c, o, poseT) { // parts placed relative to the tree's whole-pi
   if (T.clumps) { const cl = T.clumps.map(p => [p, rel(p)[2]]).sort((a, b) => a[1] - b[1]);
     for (const [p] of cl) { const [dx, dz] = clumpPose(o.x + p.ox / RS, o.y + p.oy / RS, p.w, o.lean, poseT); items.push([p, dx, dz]); } }
   if (T.tiers) for (const p of T.tiers) { const bend = Math.round(o.lean * p.up * p.up * 1.6); const [dx, dz] = clumpPose(o.x, o.y, 0.35 + 0.65 * p.up, 0, poseT); items.push([p, bend + dx, Math.min(dz, 2)]); }
-  const key = cam.a + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
+  const key = AQ + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
   const k = o._ck || (o._ck = {});
   if (k.key !== key) {
     if (!T.R) { T.R = 0; for (const p of [...T.parts, ...(T.clumps || []), ...(T.tiers || []), ...(T.inside ? [T.inside] : [])]) T.R = Math.max(T.R, Math.hypot(p.ox, p.oy) + Math.hypot(p.m.w, p.m.d) / 2); T.R = Math.ceil(T.R) + 10; }
@@ -769,7 +796,7 @@ if (Q.has('cursor')) { // visible pointer for recordings
 function advance(dt) {
   realT += dt;
   if (keyRot) cam.ta += keyRot * dt * 1.8;
-  cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14));
+  cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;
   // (no camera follow: a drifting camera shifted the whole map by a pixel every few frames)
   const mult = F.sleeping ? 6 : 1;
   let dm = dt * MIN_PER_SEC * SPEED * mult;
@@ -782,6 +809,13 @@ function frame(now) {
   advance(dt); render(); hud(); requestAnimationFrame(frame);
 }
 window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, cropArt: v => { CROPI.on = v; } };
+// warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
+{ const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1;
+  const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
+  const work = dl => { while (n <= 128 && dl.timeRemaining() > 4) { const base = Math.round(cam.ta / ASTEP);
+      for (const s of [n, -n]) for (const p of big) stackCanvas(p.m, (base + s) * ASTEP + p.rot); n++; }
+    if (n <= 128) idle(work); };
+  if (!MANUAL) idle(work); }
 buildGroundBase();
 log('早上好！农场里乱糟糟的，先收拾一下');
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
