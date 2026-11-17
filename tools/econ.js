@@ -40,18 +40,21 @@ const server = http.createServer((req, res) => {
         else if (r.reason === 'maxed') i++; else break; }
       if (days.length < S.day - 1) days.push({ day: S.day - 1, earn: S.dayEarn[S.dayEarn.length - 1], coins: S.coins, earned: S.earned, open: __farm.tiles.filter(t => t.open).length,
         seeds: seeds(S.store) + seeds(F.bag) + F.gathered, min: Math.round(real / 6) / 10, idle: idleTiles, flow: Object.assign({}, S.flow), wood: S.woodGold || 0, fruit: S.fruitGold || 0, trees: S.trees.filter(t => t.kind !== 'wild' && t.stage === 'tree').length,
-        anim: S.animals.length, animG: S.animalGold || 0, hayG: S.hayGold || 0, happy: S.animals.length ? Math.round(S.animals.reduce((a, x) => a + x.h, 0) / S.animals.length) : '-', fishG: S.fishGold || 0, woodNow: F.wood, cut: S.woodCut || 0, love: S.family.love, people: 1 + S.members.length });
+        anim: S.animals.length, animG: S.animalGold || 0, hayG: S.hayGold || 0, happy: S.animals.length ? Math.round(S.animals.reduce((a, x) => a + x.h, 0) / S.animals.length) : '-', fishG: S.fishGold || 0, woodNow: F.wood, cut: S.woodCut || 0, love: S.family.love, people: 1 + S.members.length, surG: S.surpriseGold || 0, surN: (window.PFPlaylog && PFPlaylog.get().events.filter(e => e.type === 'surprise').length) || 0 });
       const fm = S.family; if (fm.met && !fam.met) fam.met = fm.met; if (fm.love >= 100 && !fam.love100) fam.love100 = S.day; if (fm.moved && !fam.moved) fam.moved = fm.moved;
       fm.kids.forEach((k, j) => { if (!fam['kid' + j]) fam['kid' + j] = k.born; });
       if (S.t % 1440 >= 12 * 60 && S.t % 1440 < 12 * 60 + 5) idleTiles = __farm.tiles.filter(t => t.open && !t.crop).length; // empty tiles at noon
     }
-    return { buys, days, up: S.up, flow: S.flow, fishG: S.fishGold || 0, earned: S.earned, coins: S.coins, fam, drops: S.drops || {}, wildLeft: S.trees.filter(t => t.kind === 'wild' && t.stage === 'tree').length };
+    const ev = (window.PFPlaylog && PFPlaylog.get().events.filter(e => e.type === 'surprise')) || [];
+    const kinds = {}; for (const e of ev) kinds[e.kind] = (kinds[e.kind] || 0) + 1;
+    return { buys, days, up: S.up, flow: S.flow, fishG: S.fishGold || 0, earned: S.earned, coins: S.coins, fam, drops: S.drops || {}, wildLeft: S.trees.filter(t => t.kind === 'wild' && t.stage === 'tree').length, surG: S.surpriseGold || 0, surprises: ev.length, kinds };
   }, { DAYS, ORDER, PLANT });
-  console.log('  day  earn coins earned  open seeds noonEmpty realMin woodG fruitG fruitTrees anim animG  hayG happy fishG  wood   cut  love  ppl');
-  for (const d of out.days) console.log([d.day, d.earn, d.coins, d.earned, d.open, d.seeds, d.idle, d.min, d.wood, d.fruit, d.trees, d.anim, d.animG, d.hayG, d.happy, d.fishG, d.woodNow, d.cut, d.love, d.people].map(v => String(v).padStart(5)).join(' '));
+  console.log('  day  earn coins earned  open seeds noonEmpty realMin woodG fruitG fruitTrees anim animG  hayG happy fishG  wood   cut  love  ppl  surG surN');
+  for (const d of out.days) console.log([d.day, d.earn, d.coins, d.earned, d.open, d.seeds, d.idle, d.min, d.wood, d.fruit, d.trees, d.anim, d.animG, d.hayG, d.happy, d.fishG, d.woodNow, d.cut, d.love, d.people, d.surG, d.surN].map(v => String(v).padStart(5)).join(' '));
   console.log('\nfamily (days):', JSON.stringify(out.fam), ' chop drops:', JSON.stringify(out.drops), ' wild trees standing:', out.wildLeft);
   console.log('\nseed flow (whole run):', JSON.stringify(out.flow));
-  console.log('totals: earned', out.earned, 'coins', out.coins, 'fishG', out.fishG);
+  console.log('totals: earned', out.earned, 'coins', out.coins, 'fishG', out.fishG, 'surpriseG', out.surG, 'surprises', out.surprises, JSON.stringify(out.kinds));
+  if (out.earned) console.log('surprise share of earned', (out.surG / out.earned * 100).toFixed(1) + '%');
   console.log('\npurchases:'); for (const b of out.buys) console.log(`  day ${b.day}  ${b.min} min  ${b.id} ${b.label}  ${b.cost}g`);
   if (errs.length) console.log('ERRORS', errs);
   await browser.close(); server.close();

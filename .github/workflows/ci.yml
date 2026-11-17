@@ -16,7 +16,7 @@ jobs:
           node-version: 20
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fx.js sim.js save.js world.js animals.js fish.js family.js playlog.js ui.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fx.js sim.js save.js world.js animals.js fish.js family.js surprise.js playlog.js ui.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
       - name: Headless smoke test
@@ -31,6 +31,12 @@ jobs:
         run: node tools/save-smoke.js
       - name: Playlog unit tests
         run: node tools/playlog-test.js
+      - name: Surprise unit tests
+        run: node tools/surprise-test.js
+      - name: Surprise browser test
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: node tools/surprise-smoke.js
       - name: Playlog folder-sync browser test
         env:
           CHROME: /usr/bin/google-chrome

@@ -9,6 +9,7 @@ const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // forest margin around the home farm (world units)
 const AN = window.PFAnimals; // v4.5: animal care rules
+const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
@@ -583,7 +584,7 @@ function fillYard(rnd, target) {
 // ---------- state ----------
 const FAM = window.PFFamily;
 const S = {
-  day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [],
+  day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [], surpriseGold: 0,
   store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
   up: SIM.emptyUpgrades(), eff: SIM.effects({}), speed: 1, // shop levels, what they add up to, chosen game speed (1 / 2 / 4)
   farmer: { x: DOOR.x, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null, bag: SIM.emptySeeds(), gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, act: 0, wood: 0, saplings: { apple: 0, orange: 0 } },
@@ -678,8 +679,8 @@ function board() {
   const shut = T < SHOP_OPEN || T >= SHOP_CLOSE - 20; // v5.0: no trips to a closed stall (crops wait in the basket until morning)
   const post = (kind, base, at, make, key) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key }); }; // at = null: every target is claimed
   const open = tiles.filter(t => t.open && !CLAIM.has(t));
-  const ripe = open.filter(t => t.crop && SIM.ripe(t.crop));
-  const dry = open.filter(t => t.crop && !SIM.ripe(t.crop) && !t.watered);
+  const ripe = open.filter(t => t.crop && SU.canHarvest(t.crop, SIM.ripe));
+  const dry = open.filter(t => t.crop && SU.canGrow(t.crop, SIM.ripe) && !t.watered);
   const debris = open.filter(t => t.debris), weeds = open.filter(t => t.weed);
   const tilledEmpty = open.filter(t => t.tilled && !t.crop && !t.weed);
   const tillable = open.filter(t => !t.tilled && !t.crop && !t.debris && !t.weed);
@@ -690,7 +691,7 @@ function board() {
     else { let t = rngNear(dry); // v5.0 sprinkler can: aim at the tile with the most thirsty crops around it
       if (t && E.water3) t = dry.reduce((b, u) => { const v = dry.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - travel(F, u); return v > b.v ? { t: u, v } : b; }, { t, v: -1e9 }).t;
       post('water', late ? 96 : 61, t, () => waterTask(t)); } }
-  if (tilledEmpty.length && bagN > 0) { const t = rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t)); }
+  if (tilledEmpty.length && bagN > 0) { const t = SU.pickPlantTile(tilledEmpty, tiles, F.bag, rand) || rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t)); }
   else if (tilledEmpty.length && (storeN > 0 || F.gathered > 0)) post('fetch', 68, BARN_DOOR, () => fetchTask(tilledEmpty.length + tillable.length));
   else if (tilledEmpty.length && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) post('buy', 55, STALL_SPOT, sellTask);
   if (weeds.length) { const t = rngNear(weeds); post('weed', 45, t, () => weedTask(t)); }
@@ -757,14 +758,22 @@ function chooseTask() {
   return { kind: 'idle', label: '坐在池塘边休息', to: F === FARMER ? BENCH_SPOT : { x: BENCH_SPOT.x + 5 + 4 * S.members.indexOf(F), y: BENCH_SPOT.y + 1 }, dur: 25, rest: true };
 }
 function harvestTask(t) {
-  return { label: '正在收获', to: standAt(t), tile: t, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
-    if (!t.crop || !SIM.ripe(t.crop) || F.crops.length >= BASK()) return;
-    const ty = t.crop.type, c = SIM.CROPS[ty]; F.crops.push(ty); groundDirty = true;
-    burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8, 'harvest'); popText(t.x, t.y, 12, '+1', '#ffffff');
-    if (c.regrow && (t.crop.n || 0) + 1 < c.harvests) { t.crop.n = (t.crop.n || 0) + 1; t.crop.age = c.days - c.regrow; t.crop.stage = SIM.stageOf(t.crop); log(`摘了一个${c.name}（第 ${t.crop.n} 次）`); return; }
-    t.crop = null;
-    const n = SIM.harvestSeeds(ty, rand); if (n) { F.bag[ty] += n; S.flow.harvest += n; popText(t.x + 3, t.y, 16, `+${n}种`, '#e6c35c'); }
-    log(`收获了一个${c.name}` + (n ? `，留下 ${n} 颗种子` : ''));
+  const origin = SU.originOf(t, tiles), giant = !!(origin.crop && origin.crop.giant);
+  const name = origin.crop ? SIM.CROPS[origin.crop.type].name : '';
+  return { label: giant ? `正在收获巨大的${name}` : '正在收获', to: standAt(origin), tile: origin, dur: giant ? 6 : 4, fx: 'leaf', pose: 'pull', done: () => {
+    const t0 = SU.originOf(origin, tiles);
+    if (!t0.crop || !SU.canHarvest(t0.crop, SIM.ripe) || F.crops.length >= BASK()) return;
+    const crop = t0.crop, ty = crop.type, c = SIM.CROPS[ty], item = SU.harvestItem(crop), big = !!crop.giant;
+    const cx = big ? t0.x + TILE / 2 : t0.x, cy = big ? t0.y + TILE / 2 : t0.y;
+    F.crops.push(item); groundDirty = true;
+    burst(cx, cy, big ? 12 : 4, ['#f0a030', '#8fd35a', '#ffffff', '#fff2a8'], big ? 16 : 8, big ? 'spark' : 'harvest');
+    popText(cx, cy, 12, big ? '巨大!' : '+1', '#ffffff');
+    if (big) { hearts(cx, cy, 16); say(F === FARMER ? `头顶着巨大的${c.name}，开心地去卖！` : `${F.name}头顶着巨大的${c.name}，开心地去卖！`); }
+    if (c.regrow && !big && (crop.n || 0) + 1 < c.harvests) { t0.crop.n = (crop.n || 0) + 1; t0.crop.age = c.days - c.regrow; t0.crop.stage = SIM.stageOf(t0.crop); if (crop.glow) t0.crop.glow = 1; log(`摘了一个${SU.itemName(item, cropNames())}（第 ${t0.crop.n} 次）`); return; }
+    if (big) SU.clearGiant(t0, tiles); else t0.crop = null;
+    let n = SIM.harvestSeeds(ty, rand); if (big) n += SIM.harvestSeeds(ty, rand);
+    if (n) { F.bag[ty] += n; S.flow.harvest += n; popText(cx + 3, cy, 16, `+${n}种`, '#e6c35c'); }
+    log(`收获了${SU.itemName(item, cropNames())}` + (n ? `，留下 ${n} 颗种子` : ''));
   } };
 }
 function refillTask(w = WELL_SPOT) { const well = w === WELL_SPOT; return { label: well ? '正在井边打水' : '正在水桶边打水', to: w, dur: well ? 8 : 6, fx: 'water', done: () => { F.water = S.waterMax; log(`在${well ? '井边' : '水桶边'}装满了水壶（${S.waterMax} 格）`); } }; }
@@ -776,8 +785,8 @@ function waterTask(t) {
   } };
 }
 function plantTask(t) {
-  const ty = SIM.pickFromBag(F.bag, S.prices);
-  return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
+  const ty = SU.pickSeed(t, tiles, F.bag, () => SIM.pickFromBag(F.bag, S.prices));
+  return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || !ty || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
 }
 function fetchTask(need) { // take the best seeds from the barn first
   return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => {
@@ -884,8 +893,9 @@ function troughTask(pen) { const P = PENS[pen];
 }
 function eggTask() {
   return { label: '正在鸡舍捡鸡蛋', to: COOP_DOOR, tile: PENS.coop.bld, dur: 6, fx: 'seed', pose: 'pull', done: () => {
-    let n = 0; for (const a of S.animals) if (a.kind === 'chicken') while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; F.crops.push('egg'); n++; }
-    if (n) { popText(COOP_DOOR.x, COOP_DOOR.y, 16, '+' + n, '#ffffff'); burst(COOP_DOOR.x, COOP_DOOR.y, 6, [Ac[0], '#fff2a8'], 5, 'spark'); log(`在鸡舍捡了 ${n} 个鸡蛋`); } } };
+    let n = 0, rare = []; for (const a of S.animals) if (a.kind === 'chicken') while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; const it = SU.rollProduct('egg', rand); F.crops.push(it); n++; const ev = SU.productToast(it); if (ev) rare.push(ev); }
+    if (n) { popText(COOP_DOOR.x, COOP_DOOR.y, 16, '+' + n, '#ffffff'); burst(COOP_DOOR.x, COOP_DOOR.y, 6, [Ac[0], '#fff2a8'], 5, 'spark'); log(`在鸡舍捡了 ${n} 个鸡蛋`); }
+    for (const ev of rare) surpriseNote(ev, COOP_DOOR.x, COOP_DOOR.y); } };
 }
 const WORK = { cow: ['正在挤牛奶', 10, 'milk', n => `挤了 ${n} 瓶牛奶`], sheep: ['正在剪羊毛', 12, 'wool', n => `剪了 ${n} 份羊毛`], pig: ['正在跟着猪找松露', 10, 'dirt', n => `猪在树下拱出了 ${n} 颗松露`] };
 function milkTask(a) {
@@ -894,10 +904,10 @@ function milkTask(a) {
   const at = v ? { x: v.x - 9 * (v.flip ? -1 : 1), y: v.y + 1 } : spot;
   return { label: W0[0], to: at, tile: v || spot, an: a, dur: W0[1], fx: W0[2], pose: 'pull', done: () => {
     if (v) v.hold = 0; let n = 0; const p = AN.KINDS[a.kind].product;
-    while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; F.crops.push(p); n++; }
+    let rare = []; while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; const it = SU.rollProduct(p, rand); F.crops.push(it); n++; const ev = SU.productToast(it); if (ev) rare.push(ev); }
     if (n) { const pv = v || spot; popText(pv.x, pv.y, 18, '+' + n, '#ffffff');
       if (a.kind === 'pig') burst(pv.x + 6, pv.y, 2, [Wd[1], Wd[2], '#6e452a'], 8, 'dirt'); else burst(pv.x, pv.y, 6, [Ac[0], St[3]], a.kind === 'cow' ? 8 : 10, a.kind === 'cow' ? 'drop' : 'leaf');
-      log(W0[3](n)); } } };
+      log(W0[3](n)); for (const ev of rare) surpriseNote(ev, pv.x, pv.y); } } };
 }
 function petTask(a) {
   const v = AV.get(a.id); if (v) v.hold = 1;
@@ -911,7 +921,8 @@ function patPetTask(p) { const v = petView(p), name = AN.PETS[p.kind].coats.find
 function hearts(x, y, z = 10) { burst(x, y, z, [Ac[3], Rf[3]], 3, 'heart'); } // fx.js draws them as little pixel hearts
 const PRODUCT_COL = { egg: [Ac[0], St[3]], wool: [Ac[0], St[3]], milk: [Ac[0], Wt[4]], truffle: [Wd[1], Wd[2]] };
 const FLOWER_PRICE = 5; // v5.0: a wildflower from a felled tree (a gift for 阿禾, or 5 gold at the stall)
-const priceOfAny = ty => ty === 'flower' ? FLOWER_PRICE : FS.isFish(ty) ? FS.priceOf(ty) : WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
+const basePrice = ty => ty === 'flower' ? FLOWER_PRICE : FS.isFish(ty) ? FS.priceOf(ty) : WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
+const priceOfAny = it => SU.priceOf(it, basePrice(SU.itemType(it)));
 // v5.0 the storehouse holds this much wood (a bigger house has a bigger woodshed)
 const woodCap = () => WD.HOUSE_TIERS[S.eff.house || 0].woodCap;
 // v5.0 family: 阿禾 keeps the stall. The first stop there each day is a chat (+3) and the best gift in the basket (a wildflower,
@@ -921,7 +932,8 @@ function giftAtStall() {
   const fam = S.family; if (fam.moved || S.day < FAM.MEET_DAY) return;
   const first = !fam.met, g = fam.chatDay !== S.day ? FAM.bestGift(F.crops) : null; if (g) F.crops.splice(F.crops.indexOf(g), 1);
   const add = FAM.visit(fam, S.day, g, F.crops.length); if (!add) return;
-  const name = g ? (g === 'flower' ? '一束野花' : FS.isFish(g) ? '一条' + FS.BY_ID[g].name : '一个' + (WD.FRUIT[g] ? WD.FRUIT[g].name : AN.PRODUCTS[g] ? AN.PRODUCTS[g].name : g)) : '';
+  const ty = g && SU.itemType(g);
+  const name = ty ? (ty === 'flower' ? '一束野花' : FS.isFish(ty) ? '一条' + FS.BY_ID[ty].name : '一个' + (WD.FRUIT[ty] ? WD.FRUIT[ty].name : AN.PRODUCTS[ty] ? AN.PRODUCTS[ty].name : ty)) : '';
   if (first) log('认识了集市的店主阿禾，聊了几句');
   log((g ? `送给阿禾${name}，` : add > FAM.SALE ? '和阿禾聊了一会儿，' : '把菜卖给阿禾，') + `好感 +${add}（${fam.love}/${FAM.LOVE_MAX}）`);
   hearts(STALL.x - 10, STALL.y + 4, 16);
@@ -935,7 +947,9 @@ function sellTask() {
     if (F === FARMER) giftAtStall();
     const n = F.crops.length, open = tiles.filter(t => t.open);
     let sum = 0, nFish = 0, by = { crops: 0, fruit: 0, animals: 0, fish: 0, wood: 0 };
-    for (const ty of F.crops) { const g = priceOfAny(ty); sum += g; if (WD.FRUIT[ty]) { S.fruitGold = (S.fruitGold || 0) + g; by.fruit += g; } else if (AN.PRODUCTS[ty]) { S.animalGold = (S.animalGold || 0) + g; by.animals += g; } else if (FS.isFish(ty)) { S.fishGold = (S.fishGold || 0) + g; by.fish += g; nFish++; } else by.crops += g; } F.crops.length = 0;
+    for (const it of F.crops) { const ty = SU.itemType(it), g = priceOfAny(it), base = basePrice(ty); sum += g;
+      if (SU.isSurpriseItem(it)) S.surpriseGold = (S.surpriseGold || 0) + Math.max(0, g - base);
+      if (WD.FRUIT[ty]) { S.fruitGold = (S.fruitGold || 0) + g; by.fruit += g; } else if (AN.PRODUCTS[ty]) { S.animalGold = (S.animalGold || 0) + g; by.animals += g; } else if (FS.isFish(ty)) { S.fishGold = (S.fishGold || 0) + g; by.fish += g; nFish++; } else by.crops += g; } F.crops.length = 0;
     const spare = F === FARMER ? FARMER.wood - woodCap() : 0; // v5.0: only wood the storehouse cannot hold is sold
     if (spare > 0) { const g = spare * WD.WOOD.price; sum += g; S.woodGold = (S.woodGold || 0) + g; by.wood += g; log(`仓库放不下，卖出多余木材 ${spare} 份，得 ${g} 金`); FARMER.wood -= spare; }
     const earn = () => { emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]); if (F !== FARMER) noteLog('work', F.id, 0, sum); };
@@ -979,11 +993,13 @@ function fishDone() {
 function overnight() {
   noteLog('closeDay', logSnap());
   S.day++; S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
-  let grew = 0;
+  let grew = 0; const justRipe = [];
   for (const t of tiles) { // a crop grows one day overnight, only if it was watered that day
-    if (t.crop && t.watered && !SIM.ripe(t.crop)) { t.crop.age++; grew++; const st = SIM.stageOf(t.crop); if (st === 3 && t.crop.stage !== 3) burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); t.crop.stage = st; }
+    if (t.crop && t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.crop.age++; grew++; const st = SIM.stageOf(t.crop); if (st === 3 && t.crop.stage !== 3) { justRipe.push(t); burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); } t.crop.stage = st; }
     t.watered = false;
   }
+  for (const t of SU.rollGlow(justRipe, SIM.ripe, rand)) { const ev = SU.glowToast(t, cropNames()); surpriseNote(ev, t.x, t.y); t.crop.stage = 3; }
+  for (const t of SU.rollGiant(tiles, SIM.ripe, rand)) { const ev = SU.giantToast(t, cropNames()); surpriseNote(ev, t.x + TILE / 2, t.y + TILE / 2); t.crop.stage = 3; groundDirty = true; }
   let n = 0; tiles.forEach(t => { if (t.open && !t.crop && spawnClutter(t, 0.1, 0.14)) n++; });
   const before = yard.length, add = 2 + Math.floor(yardRng(S.day * 668265263)() * 3); // 2..4, without consuming rand()
   if (yard.length < YARD_CAP) fillYard(yardRng(S.day * 2147483647), Math.min(YARD_CAP, yard.length + add));
@@ -996,7 +1012,10 @@ function overnight() {
   if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
     log((r.report.hungry ? `有 ${r.report.hungry} 只动物没吃饱，` : '') + (t ? `夜里产了：${t}` : '动物们夜里没有新产出')); }
   for (const p of PETS_LIVE) p.patted = 0;
-  const cats = (S.eff.pets || {}).cat || 0; if (cats) { S.store.carrot += cats * AN.CAT_SEEDS; log(`猫咪在门口放了 ${cats * AN.CAT_SEEDS} 颗胡萝卜种子`); }
+  const cats = (S.eff.pets || {}).cat || 0; if (cats) { const g = SU.catGifts(cats * AN.CAT_SEEDS, rand); for (const k of CROP_IDS) if (g.add[k]) S.store[k] = (S.store[k] || 0) + g.add[k];
+    const bits = []; if (g.add.carrot) bits.push(`${g.add.carrot} 颗胡萝卜种子`);
+    for (const k of g.rare) { const ev = SU.catToast(k, cropNames()); surpriseNote(ev, HOUSE.x, HOUSE.y + 6); bits.push(`一颗${SIM.CROPS[k].name}种子`); }
+    log(`猫咪在门口放了${bits.join('、')}`); }
   familyMorning();
   groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
   onMorning();
@@ -1473,10 +1492,15 @@ function famSheet(look, cut = 0) {
 const lookOf = m => m.id === 'partner' ? ['partner', 0] : [m.id, m.role === 'child' ? 6 : 3];
 const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
 const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', '.bbbbbbbbb.', 'b.........b']);
+function carryFields(actor) { // hide the hip basket while a giant crop is held overhead
+  const last = actor.crops.length ? actor.crops[actor.crops.length - 1] : null;
+  const carry = actor.crops.slice().reverse().find(it => SU.itemOf(it).giant) || null;
+  return { basket: carry ? null : last, carry };
+}
 function familyDraw(list, T) { // pushes the family into the depth-sorted list; returns the ones that get a ghost
   const out = [], fam = S.family;
   for (const m of S.members) { if (m.home) continue; const [look, cut] = lookOf(m), sh = famSheet(look, cut); if (!sh) continue;
-    const d = Object.assign({ bb: 1, x: m.x, y: m.y, basket: m.crops.length ? m.crops[m.crops.length - 1] : null, sheet: sh, member: m.id }, farmerPose(m)); list.push(d); out.push(d); }
+    const d = Object.assign({ bb: 1, x: m.x, y: m.y, sheet: sh, member: m.id }, carryFields(m), farmerPose(m)); list.push(d); out.push(d); }
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby');
   if (T >= WAKE && T < BEDTIME) babies.forEach((k, i) => list.push({ spr: CRADLE, x: DOOR.x + 11 + i * 7, y: DOOR.y - 3, w: 1 }));
   return out;
@@ -1514,13 +1538,31 @@ function drawBillboard(c, o, alpha = 1) {
   const sh = o.sheet || SPR, fw = SPR.fw, fh = SPR.fh, n = SPR.frames[o.row] || 4, fr = o.fr % n, src = o.flip ? sh.flip : sh.img, fx = o.flip ? SPR.img.width - (fr + 1) * fw : fr * fw;
   const dx = Math.round(sx) - (o.flip ? fw - 1 - SPR.ax : SPR.ax), dy = Math.round(sy) - SPR.ay - Math.round(o.z || 0);
   c.globalAlpha = alpha; c.drawImage(src, fx, r * fh, fw, fh, dx, dy, fw, fh);
-  if (o.basket && o.row !== 'walk_back') drawBasket(c, Math.round(sx), dy + SPR.ay, o);
+  if (o.carry) drawCarry(c, Math.round(sx), dy, o);
+  else if (o.basket && o.row !== 'walk_back') drawBasket(c, Math.round(sx), dy + SPR.ay, o);
   c.globalAlpha = 1;
+}
+function basketFill(it) {
+  const o = SU.itemOf(it), ty = o.type;
+  if (o.rare === 'gold') return '#ffd76a';
+  if (o.rare === 'white') return Ac[0];
+  if (o.glow) return '#fff2a8';
+  if (ty === 'flower') return Ac[3];
+  return CROPS[ty] ? CROPS[ty].top : (FRUIT_COL[ty] || PRODUCT_COL[ty] || FISH_COL[ty] || [Ac[0]])[0];
 }
 function drawBasket(c, fx, fy, o) { // little basket of the last crop, held at the hip (hidden from behind)
   const b = SPRITES.basket, bx = fx + (o.row === 'walk_front' ? 1 : o.flip ? -9 : 2), by = fy - 12;
-  c.fillStyle = CROPS[o.basket] ? CROPS[o.basket].top : o.basket === 'flower' ? Ac[3] : (FRUIT_COL[o.basket] || PRODUCT_COL[o.basket] || FISH_COL[o.basket] || [Ac[0]])[0]; c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
+  c.fillStyle = basketFill(o.basket); c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
   c.drawImage(b, bx, by);
+}
+function drawCarry(c, fx, fy, o) { // a giant crop held above the head, bouncing as he walks
+  const img = cropAtlas(); if (!img) return;
+  const ty = SU.itemType(o.carry), ci = CROP_IDS.indexOf(ty); if (ci < 0) return;
+  const bob = Math.round(Math.abs(Math.sin(realT * 8)) * 3), u = ci * 16;
+  const x = fx - 16, y = fy - 22 - bob;
+  c.imageSmoothingEnabled = false;
+  c.drawImage(img, u, 0, 16, 16, x, y, 32, 32);
+  if (SU.itemOf(o.carry).glow) { c.fillStyle = '#fff2a8'; c.fillRect(x + 8, y + 2, 3, 1); c.fillRect(x + 9, y + 1, 1, 3); }
 }
 function bbShadow(c, o, wide = 1) { const [sx, sy] = proj(o.x, o.y); const x = Math.round(sx), y = Math.round(sy); c.fillStyle = '#000';
   c.fillRect(x - 4 * wide, y - 1, 9 * wide, 3); c.fillRect(x - 6 * wide, y, 13 * wide, 1); }
@@ -1545,12 +1587,24 @@ function cropAtlas() { // built once the SpriteCook sheet has loaded
   CROP_IDS.forEach((k, i) => { if (RIPE_EXTRA[k]) g.drawImage(RIPE_EXTRA[k], i * 16, 0); });
   return CROPX.c = a;
 }
-function drawCrop(c, o, poseT) { // ripe crops are 16x16 billboards; the leafy top half sways with the trees' wind
+function drawCrop(c, o, poseT) { // ripe crops are 16x16 billboards; the leafy top half sways with the trees' wind. Giants are 2×.
   const img = cropAtlas(); if (!img) return;
-  const [sx, sy] = proj(o.x, o.y), x = Math.round(sx) - 8, y = Math.round(sy) - 13, u = o.ci * 16;
+  const sc = o.giant ? 2 : 1;
+  const [sx, sy] = proj(o.x, o.y), x = Math.round(sx) - 8 * sc, y = Math.round(sy) - 13 * sc, u = o.ci * 16;
   const [dx] = clumpPose(o.x, o.y, 0.45, 0, poseT);
-  if (o.flip) { c.save(); c.translate(x + 16, 0); c.scale(-1, 1); c.drawImage(img, u, 0, 16, 9, -dx, y, 16, 9); c.drawImage(img, u, 9, 16, 7, 0, y + 9, 16, 7); c.restore(); return; }
-  c.drawImage(img, u, 0, 16, 9, x + dx, y, 16, 9); c.drawImage(img, u, 9, 16, 7, x, y + 9, 16, 7);
+  c.imageSmoothingEnabled = false;
+  const top = (dx0, dy0, dw, dh, sy0, sh) => c.drawImage(img, u, sy0, 16, sh, dx0, dy0, dw, dh);
+  if (o.flip) { c.save(); c.translate(x + 16 * sc, 0); c.scale(-1, 1); top(-dx * sc, y, 16 * sc, 9 * sc, 0, 9); top(0, y + 9 * sc, 16 * sc, 7 * sc, 9, 7); c.restore(); }
+  else { top(x + dx * sc, y, 16 * sc, 9 * sc, 0, 9); top(x, y + 9 * sc, 16 * sc, 7 * sc, 9, 7); }
+  if (o.glow) { // gold rim + blinking plus-sparks so the plant itself looks lit, even when ?nofx turns particles off
+    c.fillStyle = '#fff2a8';
+    c.fillRect(x + 3 * sc, y - sc, 10 * sc, sc); c.fillRect(x + 2 * sc, y, sc, 2 * sc); c.fillRect(x + 13 * sc, y, sc, 2 * sc);
+    const ph = Math.abs(Math.floor((poseT || 0) * 5 + o.x + o.y)) % 6;
+    c.fillStyle = ph % 2 ? '#ffffff' : '#ffd76a';
+    c.fillRect(x + 2 * sc + (ph % 3) * sc, y + sc, sc, sc);
+    c.fillRect(x + 10 * sc - (ph % 2) * sc, y + 3 * sc, sc, sc);
+    c.fillRect(x + 6 * sc, y - 2 * sc, 5 * sc, sc); c.fillRect(x + 8 * sc, y - 3 * sc, sc, 5 * sc);
+  }
 }
 
 // ---------- render ----------
@@ -1740,8 +1794,10 @@ function render() {
   for (const t of tiles) { if (!onScreen(t.x, t.y, 30)) continue;
     if (t.debris) list.push({ m: debrisModel(t.debris), x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
     if (t.weed) list.push({ spr: weedSprite(t.weed), x: t.x, y: t.y, sway: 0.8, w: 1 });
-    if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: CROP_IDS.indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
-      else list.push({ spr: CROP_SPR[Math.min(2, t.crop.stage)], x: t.x, y: t.y, sway: t.crop.stage === 2 ? 0.5 : 0, flat: t.crop.stage === 0 }); }
+    if (t.crop) { if (SU.isPart(t.crop)) continue;
+      const glow = !!t.crop.glow, giant = !!t.crop.giant, cx = giant ? t.x + TILE / 2 : t.x, cy = giant ? t.y + TILE / 2 : t.y;
+      if ((t.crop.stage === 3 || giant) && CROPI.ok) list.push({ ci: CROP_IDS.indexOf(t.crop.type), x: cx, y: cy, flip: t.crop.rot > 3.14, glow, giant: giant ? 1 : 0 });
+      else list.push({ spr: CROP_SPR[Math.min(2, t.crop.stage)], x: t.x, y: t.y, sway: t.crop.stage === 2 ? 0.5 : 0, flat: t.crop.stage === 0, glow }); }
   }
   for (const c of yard) {
     if (c.type === 'weed') list.push({ spr: weedSprite(c), x: c.x, y: c.y, sway: 0.8, w: 1 });
@@ -1754,7 +1810,7 @@ function render() {
     for (let i = 0; i < eggs; i++) list.push({ spr: EGG, x: PENS.coop.bld.x - 6 + i * 4, y: PENS.coop.bld.y + 15 + (i % 2), flat: 1 }); }
   for (const p of PETS_LIVE) { const v = petView(p); if (!onScreen(v.x, v.y, 20)) continue; const sp = petSprite(p); list.push({ spr: (v.flip ? sp.l : sp.r)[v.pose], x: v.x, y: v.y, w: 1 }); }
   let farmerD = null;
-  if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y, basket: F.crops.length ? F.crops[F.crops.length - 1] : null }, farmerPose()); list.push(farmerD); }
+  if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y }, carryFields(F), farmerPose()); list.push(farmerD); }
   const familyD = familyDraw(list, T); // v5.0: 阿禾 (at her flower stall, or at home on the farm), the children, a cradle on the porch
   const selling = F.task && F.task.to === STALL_SPOT && !F.moving && !F.home;
   if (!shopOpen(T)) list.push({ spr: CLOSED, x: STALL.x, y: STALL_SPOT.y + 1, lift: 13 }); // v5.0: gone home; a little 'closed' board on the counter
@@ -2009,7 +2065,17 @@ function advance(dt) {
   const mult = F.sleeping ? SIM.SLEEP_MULT : 1;
   let dm = dt * MIN_PER_SEC * SPEED * (S.speed || 1) * mult; // SPEED: ?speed= debug multiplier; S.speed: the bought 1x / 2x / 4x
   while (dm > 0) { const s = Math.min(dm, 1); stepSim(s); dm -= s; }
+  glowTick(dt);
   updateFx(dt);
+}
+function glowTick(dt) {
+  for (const a of actors()) if (a.crops.some(it => SU.itemOf(it).giant) && a.moving && !a.home && Math.random() < dt * 0.7) hearts(a.x, a.y, 16);
+  if (!window.PF_FX || !PF_FX.enabled() || PF_FX.count() > 140) return;
+  for (const t of tiles) {
+    if (!t.crop || !t.crop.glow || SU.isPart(t.crop) || !onScreen(t.x, t.y, 24)) continue;
+    t._glowT = (t._glowT || 0) + dt;
+    if (t._glowT > 0.7) { t._glowT = 0; PF_FX.play('glow', t.crop.giant ? t.x + TILE / 2 : t.x, t.crop.giant ? t.y + TILE / 2 : t.y, t.crop.giant ? 16 : 10); }
+  }
 }
 let last = performance.now();
 function frame(now) {
@@ -2047,11 +2113,18 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.0';
+const GAME_VERSION = '5.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
 function noteLog(fn, a, b, c) { const L = window.PFPlaylog; if (L && L[fn]) try { return L[fn](a, b, c); } catch (e) {} }
+function cropNames() { return Object.fromEntries(CROP_IDS.map(k => [k, SIM.CROPS[k].name])); }
+function surpriseNote(ev, x, y) {
+  if (!ev) return;
+  say(ev.msg); log(ev.msg);
+  noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
+  if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
+}
 
 function snapshot() {
   return {
@@ -2061,7 +2134,7 @@ function snapshot() {
     prices: Object.assign({}, S.prices),
     inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay },
     farmer: { x: Math.round(FARMER.x * 100) / 100, y: Math.round(FARMER.y * 100) / 100, sleeping: FARMER.sleeping, home: FARMER.home },
-    tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot } })),
+    tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && SU.validCropExtras(t.crop, { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot }) })),
     upgrades: Object.assign({}, S.up), settings: { speed: S.speed },
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
@@ -2126,7 +2199,7 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
-  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog,
+  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });

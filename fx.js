@@ -100,6 +100,9 @@
     } else if (kind === 'seed') {
       const C = cols || [Wd[4], Ac[0], '#e8d9a0'];
       for (let i = 0; i < (o.n || 4); i++) spawn({ x, y, z, vx: R(-3, 3), vy: R(-2, 2), vz: R(4, 9), life: 0.4, c: pick(C), sh: 'px', s: 1, g: 30 });
+    } else if (kind === 'glow') { // v5.1: a quiet plus-sparkle on a glowing crop (few particles, reuses the pool cap)
+      const n = Math.min(3, o.n || 2);
+      for (let i = 0; i < n; i++) spawn({ x: x + R(-3, 3), y: y + R(-2, 2), z: z + R(4, 10), vx: R(-1.2, 1.2), vy: R(-0.4, 0.4), vz: R(2, 5), life: R(0.45, 0.8), c: pick([WHITE, CREAM, GOLD, '#fff2a8']), sh: 'spark', s: 1, blink: 1, g: 6 });
     } else {
       const C = cols || [Wd[3], G[3], WHITE], n = o.n || 6;
       for (let i = 0; i < n; i++) spawn({ x, y, z, vx: R(-6, 6), vy: R(-6, 6), vz: R(6, 14), life: R(0.4, 0.8), c: pick(C), sh: 'px', s: 1 });

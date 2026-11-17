@@ -17,7 +17,8 @@
   // light chores a child can do; a teen does everything an adult does except buying at the market
   const CHILD_KINDS = ['collect', 'pet', 'petpet', 'pick', 'feed', 'tidy', 'weed', 'store'];
   const empty = () => ({ love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [] });
-  const giftValue = item => GIFTS[item] || (/^(crucian|carp|grassc|bass|koi|sardine|seabass|snapper|tuna|sword)$/.test(item) ? GIFT_FISH : 0);
+  const itemType = it => (it && typeof it === 'object') ? it.type : it; // v5.1: a basket slot may be a surprise object
+  const giftValue = item => { const ty = itemType(item); return GIFTS[ty] || (/^(crucian|carp|grassc|bass|koi|sardine|seabass|snapper|tuna|sword)$/.test(ty) ? GIFT_FISH : 0); };
   // pick the gift worth the most love from a basket (null: nothing she would like)
   function bestGift(basket) { let best = null, bv = 0; for (const it of basket) { const v = giftValue(it); if (v > bv) { bv = v; best = it; } } return best; }
   // a visit to the stall: the first one each day is a chat and maybe one gift; a trip that sells something adds a little
