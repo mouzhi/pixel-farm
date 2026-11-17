@@ -3,6 +3,7 @@
 // day summaries aggregate yard gold and close on morning; OPFS (or a mock handle) receives both JSON files.
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
+const SAVE_CURRENT = require('../save.js').CURRENT;
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
@@ -27,7 +28,7 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('playlog boots into its own key; saveVersion stays 8', async ctx => {
+  await test('playlog boots into its own key; saveVersion is untouched by the log', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const raw = localStorage.getItem('mouzhi/pixel-farm:playlog');
@@ -36,8 +37,8 @@ async function test(name, fn) {
       const snap = __farm.snapshot();
       return { version: __farm.version, saveVersion: snap.saveVersion, hasPlaylogInSave: 'playlog' in snap, logSchema: log && log.schema, days: log && log.days.length, ev: log && log.events[0] && log.events[0].type, keys: Object.keys(localStorage).sort() };
     });
-    assert.strictEqual(r.version, '4.7.1');
-    assert.strictEqual(r.saveVersion, 8);
+    assert.match(r.version, /^\d+\.\d+(\.\d+)?$/);
+    assert.strictEqual(r.saveVersion, SAVE_CURRENT); // the log never bumps saveVersion
     assert.strictEqual(r.hasPlaylogInSave, false);
     assert.strictEqual(r.logSchema, 1);
     assert.ok(r.days >= 1);
@@ -91,8 +92,8 @@ async function test(name, fn) {
     assert.ok(r.play.days.length >= 1);
     assert.ok(r.play.events.some(e => e.type === 'session-start'));
     assert.strictEqual(r.save.meta.kind, 'pixel-farm-save');
-    assert.strictEqual(r.save.meta.saveVersion, 8);
-    assert.strictEqual(r.save.save.saveVersion, 8);
+    assert.strictEqual(r.save.meta.saveVersion, SAVE_CURRENT);
+    assert.strictEqual(r.save.save.saveVersion, SAVE_CURRENT);
     assert.strictEqual(r.save.save.clock.day, 1);
     assert.ok(r.playPretty && r.savePretty, 'files are pretty-printed');
     assert.deepStrictEqual(p.errs, []);

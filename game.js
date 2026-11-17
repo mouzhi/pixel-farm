@@ -938,7 +938,7 @@ function sellTask() {
     for (const ty of F.crops) { const g = priceOfAny(ty); sum += g; if (WD.FRUIT[ty]) { S.fruitGold = (S.fruitGold || 0) + g; by.fruit += g; } else if (AN.PRODUCTS[ty]) { S.animalGold = (S.animalGold || 0) + g; by.animals += g; } else if (FS.isFish(ty)) { S.fishGold = (S.fishGold || 0) + g; by.fish += g; nFish++; } else by.crops += g; } F.crops.length = 0;
     const spare = F === FARMER ? FARMER.wood - woodCap() : 0; // v5.0: only wood the storehouse cannot hold is sold
     if (spare > 0) { const g = spare * WD.WOOD.price; sum += g; S.woodGold = (S.woodGold || 0) + g; by.wood += g; log(`仓库放不下，卖出多余木材 ${spare} 份，得 ${g} 金`); FARMER.wood -= spare; }
-    const earn = () => { emit('income', { gold: sum, items: n, source: 'market', by }); S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]); if (F !== FARMER) noteLog('work', F.id, 0, sum); };
+    const earn = () => { emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]); if (F !== FARMER) noteLog('work', F.id, 0, sum); };
     if (kid) { if (sum) { earn(); popText(STALL.x + VR(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); log(`${F.name}卖出 ${n} 件收获，得 ${sum} 金`); } return; }
     const sp = SIM.surplusSeeds(F.bag, S.store, open.length);
     if (sp.gold) { for (const k of CROP_IDS) F.bag[k] -= sp.sell[k]; sum += sp.gold; by.crops += sp.gold; S.flow.sold += seedCount(sp.sell); S.flow.soldGold += sp.gold; log(`卖掉多余的种子：${seedText(sp.sell)}（${sp.gold} 金）`); }
