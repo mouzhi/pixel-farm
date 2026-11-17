@@ -216,7 +216,10 @@
     speed.hidden = true;
     bar.appendChild(speed);
 
+    var noteBtn = ico('xhs-btn-note', 'note', '发笔记', onPostNote);
+    doc.body.appendChild(noteBtn);
     setupFollow();
+    setupPostNote();
     applyWindowInsets();
     if (root.__farm && __farm.fit) __farm.fit();
   }
@@ -245,13 +248,99 @@
       topClear = Math.max(topClear, 96);
       leftClear = Math.max(leftClear, 72);
       rightClear = Math.max(rightClear, 108);
+      var cap = mb.back || mb.me;
+      var shareTop, shareRight;
+      if (cap) {
+        shareTop = (cap.bottom || 0) + 8;
+        shareRight = Math.max(8, w - (cap.right || w));
+      }
       var rootEl = doc.documentElement;
       rootEl.style.setProperty('--xhs-top-clear', Math.round(topClear) + 'px');
       rootEl.style.setProperty('--xhs-left-clear', Math.round(leftClear) + 'px');
       rootEl.style.setProperty('--xhs-right-clear', Math.round(rightClear) + 'px');
+      if (shareTop != null) rootEl.style.setProperty('--xhs-share-top', Math.round(shareTop) + 'px');
+      if (shareRight != null) rootEl.style.setProperty('--xhs-share-right', Math.round(shareRight) + 'px');
     }, function () {});
   }
   P.applyWindowInsets = applyWindowInsets;
+
+  function setupPostNote() {
+    var btn = doc.getElementById('xhs-btn-note');
+    var host = !!(root.xhs && root.xhs.miniTool);
+    var ok = P.postNoteAvailable ? P.postNoteAvailable() : !!(root.xhs && root.xhs.miniTool && typeof root.xhs.miniTool.postNote === 'function');
+    if (host && !ok && btn) btn.hidden = true;
+  }
+
+  function canvasToJpeg(cv, quality) {
+    if (!cv) return null;
+    try {
+      if (typeof cv.toDataURL === 'function') {
+        var url = cv.toDataURL('image/jpeg', quality || 0.82);
+        if (url && url.indexOf('data:image') === 0 && url.length > 100) return url;
+      }
+    } catch (e) {}
+    return null;
+  }
+
+  function loadImageJpeg(src) {
+    return new Promise(function (resolve) {
+      if (!src) { resolve(null); return; }
+      var img = new Image();
+      img.onload = function () {
+        try {
+          var c = doc.createElement('canvas');
+          c.width = img.naturalWidth || img.width;
+          c.height = img.naturalHeight || img.height;
+          if (!c.width || !c.height) { resolve(null); return; }
+          c.getContext('2d').drawImage(img, 0, 0);
+          resolve(canvasToJpeg(c, 0.85));
+        } catch (e) { resolve(null); }
+      };
+      img.onerror = function () { resolve(null); };
+      img.src = src;
+    });
+  }
+
+  function toNoteUrl(data) {
+    if (!data) return Promise.resolve(null);
+    if (P.writeTempFile) {
+      return P.writeTempFile(data).then(function (p) { return p || data; }, function () { return data; });
+    }
+    return Promise.resolve(data);
+  }
+
+  var noteBusy = false;
+  function onPostNote() {
+    if (noteBusy) return;
+    if (P.postNoteAvailable && !P.postNoteAvailable()) return;
+    if (!P.shareNote) return;
+    noteBusy = true;
+    var copy = root.PFNoteCopy || {};
+    var bundled = copy.images || [];
+    var live = canvasToJpeg(doc.getElementById('game'), 0.82);
+    var loads = bundled.map(loadImageJpeg);
+    Promise.all(loads).then(function (shots) {
+      var raw = [];
+      if (live) raw.push(live);
+      for (var i = 0; i < shots.length; i++) if (shots[i]) raw.push(shots[i]);
+      if (!raw.length) { noteBusy = false; return; }
+      var i2 = 0, urls = [];
+      function next() {
+        if (i2 >= raw.length) {
+          if (!urls.length) { noteBusy = false; return; }
+          P.shareNote({ mediaInfo: { image_resources: urls.map(function (u) { return { url: u }; }) } })
+            .then(function () { noteBusy = false; }, function () { noteBusy = false; });
+          return;
+        }
+        toNoteUrl(raw[i2++]).then(function (u) {
+          if (u) urls.push(u);
+          next();
+        }, function () { next(); });
+      }
+      next();
+    }, function () { noteBusy = false; });
+  }
+  P.onPostNote = onPostNote;
 
   var followBusy = false;
   P._followStatus = -1;

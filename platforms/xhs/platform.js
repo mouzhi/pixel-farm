@@ -489,16 +489,45 @@
     refreshCloudState();
   });
 
+  // postNote（官方 §3.3）：唤起笔记发布页。无单独客户端版本门槛，以方法是否注入为准。
+  // 字段：title≤20字，content≤1000字，pageType（photo_publish / video_publish / slides_edit 9.43+），
+  // mediaInfo 必填，image_resources 1–18 张（url 为 data: 或 writeTempFile 路径）。
+  // 文档没有话题/标签、也没有小工具卡片绑定字段；话题写入正文 #标签。
+  // 成功只表示发布页被唤起且用户点了发布，不代表笔记过审。用户取消按失败静默处理。
+  function postNoteAvailable() {
+    return !!(mini && typeof mini.postNote === 'function');
+  }
+  function writeTempFile(data) {
+    if (!mini || typeof mini.writeTempFile !== 'function' || !data) {
+      return Promise.resolve(data);
+    }
+    return callMini('writeTempFile', { data: data }).then(function (r) {
+      return (r && r.filePath) || data;
+    }, function () { return data; });
+  }
   function shareNote(opts) {
     opts = opts || {};
-    if (!mini || typeof mini.postNote !== 'function') {
-      return Promise.reject(new Error('当前环境不能发笔记'));
+    if (!postNoteAvailable()) {
+      return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
     }
-    return mini.postNote({
-      title: opts.title || '像素农场',
-      content: opts.content || '',
-      pageType: 'photo_publish',
-      mediaInfo: opts.mediaInfo || { image_resources: opts.images || [] }
+    var copy = root.PFNoteCopy || {};
+    var title = opts.title != null ? String(opts.title) : String(copy.title || '');
+    var content = opts.content != null ? String(opts.content) : String(copy.content || '');
+    if (title.length > 20) title = title.slice(0, 20);
+    if (content.length > 1000) content = content.slice(0, 1000);
+    var media = opts.mediaInfo;
+    var images = media && media.image_resources;
+    var hasImg = images && images.length;
+    var hasVid = media && media.video_resources;
+    var hasLive = media && (media.live_photo_resources || media.live_photo_sources);
+    if (!media || !(hasImg || hasVid || hasLive)) {
+      return Promise.reject({ errCode: 0, errMsg: 'mediaInfo required' });
+    }
+    return callMini('postNote', {
+      title: title,
+      content: content,
+      pageType: opts.pageType || copy.pageType || 'photo_publish',
+      mediaInfo: media
     });
   }
 
@@ -538,6 +567,8 @@
     ready: ready,
     store: function () { return syncStore; },
     shareNote: shareNote,
+    postNoteAvailable: postNoteAvailable,
+    writeTempFile: writeTempFile,
     tipAuthor: tipAuthor,
     creatorFollow: {
       available: creatorFollowAvailable(),

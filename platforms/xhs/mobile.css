@@ -28,6 +28,9 @@ html.xhs-mobile {
   --xhs-right-clear: max(108px, calc(var(--xhs-safe-right) + 88px));
   --xhs-bottom-clear: max(8px, var(--xhs-safe-bottom));
   --xhs-bar-h: 72px;
+  /* 👍 发笔记：紧贴系统返回/关闭胶囊下方，缺省按保守顶距，避免压到胶囊 */
+  --xhs-share-top: max(88px, calc(var(--xhs-safe-top) + 52px));
+  --xhs-share-right: max(8px, var(--xhs-safe-right));
 }
 
 html.xhs-mobile #xhs-stage {
@@ -186,7 +189,7 @@ html.xhs-mobile .xhs-ico i {
   height: 40px;
   flex: none;
   background: url(ui-icons.png) no-repeat;
-  background-size: 280px 40px;
+  background-size: 320px 40px;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
@@ -202,6 +205,27 @@ html.xhs-mobile .xhs-ico-follow i { background-position: -120px 0; }
 html.xhs-mobile .xhs-ico-board i { background-position: -160px 0; }
 html.xhs-mobile .xhs-ico-speed i { background-position: -200px 0; }
 html.xhs-mobile .xhs-ico-author i { background-position: -240px 0; }
+html.xhs-mobile .xhs-ico-note i { background-position: -280px 0; }
+html.xhs-mobile #xhs-btn-note {
+  position: fixed;
+  top: var(--xhs-share-top);
+  right: var(--xhs-share-right);
+  z-index: 21;
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  padding: 0;
+  margin: 0;
+  flex-direction: row;
+  pointer-events: auto;
+}
+html.xhs-mobile #xhs-btn-note i {
+  width: 32px;
+  height: 32px;
+  background-size: 256px 32px;
+  background-position: -224px 0;
+}
+html.xhs-mobile #xhs-btn-note .xhs-ico-lab { display: none; }
 html.xhs-mobile .xhs-board-hd .xhs-ico-author {
   width: 36px;
   height: 36px;

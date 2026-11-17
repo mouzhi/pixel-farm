@@ -60,6 +60,13 @@ def stage() -> None:
     shutil.copy2(HERE / "boot.js", STAGE / "boot.js")
     shutil.copy2(HERE / "leaderboard.js", STAGE / "leaderboard.js")
     shutil.copy2(HERE / "ui-icons.png", STAGE / "ui-icons.png")
+    shutil.copy2(HERE / "note-copy.js", STAGE / "note-copy.js")
+    note_dir = HERE / "note"
+    if note_dir.is_dir():
+        (STAGE / "note").mkdir(parents=True, exist_ok=True)
+        for img in sorted(note_dir.iterdir()):
+            if img.suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
+                shutil.copy2(img, STAGE / "note" / img.name)
 
     game = (STAGE / "game.js").read_text()
     if OPTIONAL_CHAIN in game:
@@ -79,7 +86,7 @@ def stage() -> None:
         out = out.replace("</head>", '  <link rel="stylesheet" href="mobile.css">\n</head>', 1)
     out = out.replace(
         "</body>",
-        "  <script src=\"platform.js\"></script>\n  <script src=\"mobile.js\"></script>\n  <script src=\"boot.js\"></script>\n</body>",
+        "  <script src=\"platform.js\"></script>\n  <script src=\"note-copy.js\"></script>\n  <script src=\"mobile.js\"></script>\n  <script src=\"boot.js\"></script>\n</body>",
         1,
     )
     out = out.replace("像素堆叠 · 放置农场", "像素农场（小红书小工具预览）", 1)
