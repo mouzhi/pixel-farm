@@ -20,7 +20,9 @@
        background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:0;width:100%;box-sizing:border-box;letter-spacing:.5px;flex:none}
   #hud .row{display:flex;gap:14px;justify-content:space-between}
   #hud .row.res{justify-content:flex-start;flex-wrap:wrap;gap:8px 14px}
-  #hud .row.res>span{display:inline-flex;align-items:center;white-space:nowrap}
+  #hud .row.res>span{display:inline-flex;align-items:center;gap:0;white-space:nowrap;line-height:24px}
+  #hud .row.res .ico{flex:none;margin:0 4px 0 0;vertical-align:0}
+  #hud .row.res b{font-variant-numeric:tabular-nums;min-width:1.5ch}
   #hud b{color:#ffd76a}
   #act{color:#bff0a0;margin:2px 0}
   #title{grid-area:mid;justify-self:end;align-self:start;color:#fff6dc;font:600 13px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:4px 10px;border:2px solid #e8c78a;max-width:min(420px,100%);box-sizing:border-box;z-index:3}
@@ -34,9 +36,11 @@
   #catches[hidden]{display:none}#catches b{color:#ffd76a;font-weight:600}#catches .h{opacity:.75;margin-bottom:2px}
   .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:120px 24px;image-rendering:pixelated}
   .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}.ico.wood{background-position:-96px 0}
-  .cost{display:inline-flex;align-items:center;gap:2px;white-space:nowrap;vertical-align:middle}
-  .cost .ico{width:16px;height:16px;margin:0 1px 0 0;vertical-align:middle;background-size:80px 16px}
+  .cost{display:inline-grid;grid-template-columns:16px max-content;column-gap:4px;align-items:center;white-space:nowrap;line-height:16px;vertical-align:middle}
+  .cost .ico{width:16px;height:16px;margin:0;padding:0;display:block;flex:none;vertical-align:0;background-size:80px 16px;background-repeat:no-repeat}
   .cost .ico.coin{background-position:0 0}.cost .ico.wood{background-position:-64px 0}
+  .cost .amt{font-variant-numeric:tabular-nums;line-height:16px;font-weight:600}
+  .price{display:inline-flex;flex-direction:column;align-items:stretch;gap:2px;vertical-align:middle}
   #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px;overflow-wrap:anywhere}
   .panel{position:absolute;color:#fff6dc;font:600 13px/1.5 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:rgba(40,28,22,.86);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35)}
   #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:6px 8px;max-width:100%;box-sizing:border-box}
@@ -55,17 +59,26 @@
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
   #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
-  #shop .shead .wallet{display:inline-flex;align-items:center;gap:10px;color:#ffd76a;font-weight:600}
+  #shop .shead .wallet{display:inline-flex;align-items:center;gap:10px;color:#ffd76a;font-weight:600;line-height:16px}
   #shop .shead .wallet .cost:last-child{color:#e0b880}
   #shop .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
   #shop .tabs .pbtn{padding:2px 8px;font-size:12px}
   #shop .cards{display:flex;flex-direction:column;gap:5px}
   #shop .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
   #shop .card.max{opacity:.6}
-  #shop .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
+  #shop .card>i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
   #shop .ct{flex:1;min-width:0}#shop .lv{font-weight:500;font-size:11px;opacity:.75}#shop .d{font-weight:500;font-size:12px;opacity:.85}
-  #shop .cb{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}#shop .short{font-size:11px;color:#f0a090;font-weight:500;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end}#shop .done{color:#8fd35a;font-size:18px}
-  #shop .cb .pbtn{display:inline-flex;align-items:center;gap:6px}
+  #shop .cb{display:flex;flex-direction:column;align-items:stretch;gap:2px;flex:none;min-width:6.5em}
+  #shop .cb .price,#shop .short .price{font:600 13px/16px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif}
+  #shop .cb .price .cost,#shop .short .price .cost{grid-template-columns:16px 40px}
+  #shop .cb .price .amt,#shop .short .price .amt{text-align:right}
+  #shop .card .cb>.pbtn,#shop .card .cb>.short{display:grid;grid-template-columns:1fr auto;column-gap:4px;align-items:start;box-sizing:border-box;width:100%;padding:4px 8px;border:2px solid transparent}
+  #shop .card .cb>.pbtn{border-color:#3a2a20}
+  #shop .card .cb>.pbtn .price,#shop .card .cb>.short .price{grid-column:2}
+  #shop .short{font-size:11px;color:#f0a090;font-weight:500;line-height:16px}
+  #shop .short .lab{grid-column:1;justify-self:end;align-self:start;line-height:16px}
+  #shop .short.lock{display:flex;justify-content:flex-end;align-items:center;border:0;padding:0 8px}
+  #shop .done{color:#8fd35a;font-size:18px;text-align:center}
   #menu{position:relative;right:auto;top:auto;width:min(320px,calc(100vw - 24px));padding:10px 12px}
   #syncHint{position:relative;right:auto;top:auto;font-size:11px;padding:2px 8px;z-index:3}
   #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
@@ -84,12 +97,12 @@
   #store .sec{font-size:12px;opacity:.7;margin:6px 0 4px}
   #store .cards{display:flex;flex-direction:column;gap:5px}
   #store .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
-  #store .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
+  #store .card>i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
   #store .ct{flex:1;min-width:0}#store .d{font-weight:500;font-size:12px;opacity:.85}
-  #store .cb{display:flex;flex-direction:column;align-items:flex-end;gap:0;flex:none;color:#ffd76a}#store .cb .u{font-size:11px;opacity:.8;font-weight:500;color:#fff6dc}
+  #store .cb{display:flex;flex-direction:column;align-items:flex-end;gap:0;flex:none;color:#ffd76a}#store .cb .u{font-size:11px;opacity:.8;font-weight:500;color:#fff6dc;display:inline-flex;align-items:center;gap:4px;line-height:16px}
   #store .empty{opacity:.7;font-weight:500;padding:4px 2px}
   #store .who{font-size:11px;opacity:.7;margin:2px 0 0}
-  .rlab{position:fixed;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0;z-index:1}.rlab b,.rlab .cost{color:#ffd76a}.rlab[hidden]{display:none}
+  .rlab{position:fixed;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0;z-index:1}.rlab b,.rlab .cost{color:#ffd76a}.rlab .cost{vertical-align:-2px}.rlab[hidden]{display:none}
   #say{position:fixed;left:50%;top:76px;transform:translateX(-50%);padding:4px 12px;pointer-events:none;z-index:3}#say[hidden]{display:none}
   #shop .sec{font-size:12px;opacity:.7;margin:6px 0 0}#shop .look{padding:0 6px;font-size:12px;margin-top:2px}
   #loveHud{margin-top:5px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:13px}

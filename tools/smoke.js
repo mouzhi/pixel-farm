@@ -4,7 +4,7 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
   if (!p.startsWith(ROOT) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
@@ -78,6 +78,30 @@ const fail = [];
           buyHasCoin: buyBtns.some(b => b.querySelector('.ico.coin')),
           goldWordOnBuy,
         };
+        const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, cy: r.top + r.height / 2, w: r.width, h: r.height }; };
+        const alignOf = root => {
+          const rows = [...root.querySelectorAll('.cost')].map(c => ({ ico: box(c.querySelector('.ico')), amt: box(c.querySelector('.amt')) }));
+          if (!rows.length) return { ok: false, why: 'no cost' };
+          const vCenter = rows.every(r => Math.abs(r.ico.cy - r.amt.cy) <= 2);
+          const icoSz = rows.every(r => Math.abs(r.ico.w - 16) <= 1 && Math.abs(r.ico.h - 16) <= 1);
+          const numsRight = rows.length < 2 || Math.abs(rows[0].amt.r - rows[1].amt.r) <= 1;
+          const icoLeft = rows.length < 2 || Math.abs(rows[0].ico.l - rows[1].ico.l) <= 1;
+          return { ok: vCenter && icoSz && numsRight && icoLeft, vCenter, icoSz, numsRight, icoLeft, n: rows.length };
+        };
+        const toolsBtn = shopEl.querySelector('[data-buy="can"]');
+        shopUi.singleAlign = toolsBtn ? alignOf(toolsBtn) : { ok: false, why: 'no can' };
+        const buildTab = shopEl.querySelector('[data-tab="build"]'); if (buildTab) buildTab.click();
+        const house = shopEl.querySelector('[data-item="house"]');
+        const houseBtn = house && house.querySelector('[data-buy="house"]');
+        const houseShort = house && house.querySelector('.short');
+        shopUi.dualAlign = houseBtn ? alignOf(houseBtn) : { ok: false, why: 'no house' };
+        if (houseBtn && houseShort && houseShort.querySelector('.amt')) {
+          const btnAmt = box(houseBtn.querySelector('.amt')); // first row; all share right edge
+          const shAmt = box(houseShort.querySelector('.amt'));
+          const btnIco = box(houseBtn.querySelector('.ico'));
+          const shIco = box(houseShort.querySelector('.ico'));
+          shopUi.shortAlign = { ok: Math.abs(btnAmt.r - shAmt.r) <= 2 && Math.abs(btnIco.l - shIco.l) <= 2, amt: Math.round(shAmt.r - btnAmt.r), ico: Math.round(shIco.l - btnIco.l) };
+        } else shopUi.shortAlign = { ok: false, why: 'no short' };
         const aniBtn = shopEl.querySelector('[data-tab="animals"]'); if (aniBtn) aniBtn.click();
         shopUi.teaser = /先买/.test(shopEl.textContent) && /猪圈/.test(shopEl.textContent);
         shopUi.savedTab = localStorage.getItem('mouzhi/pixel-farm:shop-tab');
@@ -92,7 +116,8 @@ const fail = [];
       const storeOk = ui.storeOpen && ui.hasGiant && ui.hasGold && ui.hasWood && ui.hasHay && ui.storeN >= 7 && ui.sellGold >= ui.basketGold;
       const loveOk = ui.mid && ui.mid.loveVal === '63/100' && ui.mid.tipOpen && /聊天 \+3/.test(ui.mid.tipTxt) && /野花/.test(ui.mid.tipTxt) && /好感满后/.test(ui.mid.hint) && ui.mid.fillW > 0 && /等待大木屋/.test(ui.fullHint) && /一家/.test(ui.movedVal) && /已经住在农场/.test(ui.movedHint);
       const shop = ui.shopUi || {};
-      const shopOk = shop.open && shop.woodHud === '25' && (shop.tabs || []).join() === 'tools,seeds,land,build,animals' && shop.coinIco && shop.woodIco && shop.buyHasCoin && !shop.goldWordOnBuy && shop.teaser && shop.savedTab === 'animals' && shop.reopenedAnimals;
+      const alignOk = shop.singleAlign && shop.singleAlign.ok && shop.dualAlign && shop.dualAlign.ok && shop.shortAlign && shop.shortAlign.ok;
+      const shopOk = shop.open && shop.woodHud === '25' && (shop.tabs || []).join() === 'tools,seeds,land,build,animals' && shop.coinIco && shop.woodIco && shop.buyHasCoin && !shop.goldWordOnBuy && shop.teaser && shop.savedTab === 'animals' && shop.reopenedAnimals && alignOk;
       const okUi = !bad.length && storeOk && loveOk && shopOk && ui.version === '5.2.1';
       console.log(okUi ? 'ok  ' : 'FAIL', 'meters+store+love+shop', JSON.stringify({ bad, storeOpen: ui.storeOpen, sellGold: ui.sellGold, love: { mid: ui.mid, fullHint: ui.fullHint, movedVal: ui.movedVal, movedHint: ui.movedHint }, shop, flags: { g: ui.hasGiant, e: ui.hasGold, w: ui.hasWood, h: ui.hasHay, f: ui.hasFish, n: ui.storeN, v: ui.version } }));
       if (!okUi) fail.push('meters+store+love+shop');

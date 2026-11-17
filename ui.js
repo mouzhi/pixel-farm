@@ -117,8 +117,8 @@
   const readShopTab = () => { try { const v = localStorage.getItem(SHOP_TAB_KEY); if (shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
   let shopTab = readShopTab();
   const setShopTab = id => { if (!shopTabs().some(t => t.id === id)) return; shopTab = id; try { localStorage.setItem(SHOP_TAB_KEY, id); } catch (e) {} };
-  const costChip = (n, kind) => `<span class="cost"><i class="ico ${kind}"></i>${n}</span>`;
-  const priceChips = (gold, wood) => costChip(gold, 'coin') + (wood ? costChip(wood, 'wood') : '');
+  const costChip = (n, kind) => `<span class="cost"><i class="ico ${kind}"></i><span class="amt">${n}</span></span>`;
+  const priceChips = (gold, wood) => `<span class="price">${costChip(gold, 'coin')}${wood ? costChip(wood, 'wood') : ''}</span>`;
   function sectionFor(it, tabId) {
     if (tabId === 'tools' && it.fish) return '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）';
     if (tabId === 'build' && it.home) return '房子（木材 + 金币；房子越大，能住的家人越多）';
@@ -141,7 +141,7 @@
       const s2 = sectionFor(it, tab.id); if (s2 && s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
       const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
-      const short = o.locked ? `<span class="short">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short">还差${o.short ? costChip(o.short, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span>`;
+      const short = o.locked ? `<span class="short lock">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${o.short ? costChip(o.short, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>`;
       h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';

@@ -2356,6 +2356,28 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
 const MM = { el: document.getElementById('minimap'), s: 0.5, base: null };
+// coin from the HUD sprite sheet, drawn beside region prices (same icon as the shop)
+const MM_HUD = new Image();
+let mmCoin = null;
+function mmCoinBadge() {
+  if (mmCoin) return mmCoin;
+  if (!MM_HUD.complete || !MM_HUD.naturalWidth) return null;
+  const s = 10, c = document.createElement('canvas'); c.width = s; c.height = s;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(MM_HUD, 0, 0, 32, 32, 0, 0, s, s);
+  return mmCoin = c;
+}
+function mmCoinReady() { mmCoin = null; MM.base = null; if (typeof minimapDraw === 'function') minimapDraw(); }
+MM_HUD.onload = mmCoinReady;
+MM_HUD.src = 'assets/hud_icons.png';
+if (MM_HUD.complete && MM_HUD.naturalWidth) mmCoinReady();
+function fillCoinPrice(g, n, cx, cy) {
+  const label = String(n), badge = mmCoinBadge(), ih = 10, gap = 2;
+  g.font = '600 10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  const tw = g.measureText(label).width, total = (badge ? ih + gap : 0) + tw, x = Math.round(cx - total / 2), y = Math.round(cy);
+  if (badge) g.drawImage(badge, x, y - (ih >> 1));
+  g.fillStyle = '#ffd76a'; g.fillText(label, x + (badge ? ih + gap : 0), y);
+}
 function minimapBase() {
   if (!MM.el) return; const w = Math.round((WORLD.x1 - WORLD.x0) * MM.s), h = Math.round((WORLD.y1 - WORLD.y0) * MM.s);
   MM.el.width = w; MM.el.height = h; const b = MM.base = MM.base || mkc(w, h), g = b.getContext('2d'); b.width = w; b.height = h;
@@ -2365,8 +2387,8 @@ function minimapBase() {
   for (const p of props) if (p.big) { const [x, y] = P(p.x, p.y); g.fillStyle = p.house ? Rf[2] : Wd[2]; g.fillRect(Math.round(x) - 5, Math.round(y) - 4, 10, 8); }
   for (const r of WD.REGIONS) if (!regionOpen(r.id)) { const [x0, y0] = P(r.rect[0], r.rect[1]), [x1, y1] = P(r.rect[2], r.rect[3]);
     g.fillStyle = 'rgba(20,14,10,0.45)'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = '#e8c78a'; g.setLineDash([3, 2]); g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); g.setLineDash([]);
-    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
-    g.fillStyle = '#ffd76a'; g.fillText(SIM.shopItem(r.id).levels[0].cost + ' 金', (x0 + x1) / 2, (y0 + y1) / 2 + 10); }
+    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
+    fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
 }
 function minimapDraw() {
   if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
