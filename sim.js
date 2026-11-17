@@ -1,6 +1,7 @@
 // 像素农场 · 节奏、经济与商店规则（纯函数，没有画面依赖；浏览器里是 window.PFSim，Node 里可以直接 require 做单元测试）
 // Phase 1: day-based crops, one watering lasts the whole day, auto crop choice by profit, daily price drift, offline settlement.
 // Phase 2: shop (tools, basket, speed, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
+// Phase 3: the axe and four regions on the big map (geometry and tree rules live in world.js).
 'use strict';
 (function (root) {
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
@@ -32,6 +33,12 @@
     { id: 'speed', name: '游戏倍速', icon: 'speed', levels: [{ cost: 600, label: '2× 速度', desc: '解锁 2× 按钮' }, { cost: 3000, label: '4× 速度', desc: '解锁 4× 按钮' }] },
     { id: 'strawberry', name: '草莓种子', icon: 'strawberry', levels: [{ cost: 800, label: '草莓', desc: '4 天结果，之后每天摘一次，共 10 次' }] },
     { id: 'watermelon', name: '西瓜种子', icon: 'watermelon', levels: [{ cost: 2500, label: '西瓜', desc: '6 天成熟，卖 220' }] },
+    { id: 'axe', name: '斧头', icon: 'axe', levels: [{ cost: 500, label: '斧头', desc: '能砍林场的树：木材 5 份 + 果树苗 1 棵' }] },
+    // regions (Phase 3): one level each; buying opens the fence
+    { id: 'forest', name: '林场', icon: 'forest', region: 1, levels: [{ cost: 800, label: '林场', desc: '北边的树林，能砍树（要斧头），树会长回来' }] },
+    { id: 'east', name: '东田', icon: 'east', region: 1, levels: [{ cost: 1200, label: '东田', desc: '东边 24 格大田，满地杂物，带水桶' }] },
+    { id: 'orchard', name: '果园坡', icon: 'orchard', region: 1, levels: [{ cost: 1500, label: '果园坡', desc: '3 棵苹果树（每 3 天 5 个），可以移植树苗' }] },
+    { id: 'south', name: '南坡梯田', icon: 'south', region: 1, levels: [{ cost: 2500, label: '南坡梯田', desc: '南边 24 格坡地，带水桶' }] },
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
@@ -47,6 +54,8 @@
       basket: [BASKET, 20, 40][lv('basket')],
       speedMax: [1, 2, 4][lv('speed')],
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
+      axe: lv('axe') > 0,
+      regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
     };
   }
   // what the next level of an item costs and whether it can be bought now

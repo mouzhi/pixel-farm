@@ -1,0 +1,1381 @@
+{
+ "saveVersion": 4,
+ "gameVersion": "4.3",
+ "createdAt": 1794918361896,
+ "savedAt": 1794918363824,
+ "rng": -1647111563,
+ "clock": {
+  "day": 2,
+  "t": 2107.499999999883
+ },
+ "coins": 53,
+ "stats": {
+  "totalSold": 10,
+  "cleared": 31,
+  "earned": 88,
+  "soldToday": 10,
+  "todayEarn": 85,
+  "dayEarn": [
+   3
+  ]
+ },
+ "prices": {
+  "carrot": 1.046,
+  "cabbage": 0.999,
+  "pumpkin": 0.972,
+  "strawberry": 0.955,
+  "watermelon": 0.997
+ },
+ "inventory": {
+  "water": 0,
+  "waterMax": 4,
+  "store": {
+   "carrot": 6,
+   "cabbage": 0,
+   "pumpkin": 0,
+   "strawberry": 0,
+   "watermelon": 0
+  },
+  "bag": {
+   "carrot": 0,
+   "cabbage": 0,
+   "pumpkin": 0,
+   "strawberry": 0,
+   "watermelon": 0
+  },
+  "gathered": 0,
+  "basket": [
+   "carrot",
+   "carrot"
+  ],
+  "wood": 0,
+  "saplings": {
+   "apple": 0,
+   "orange": 0
+  }
+ },
+ "farmer": {
+  "x": 160,
+  "y": 111,
+  "sleeping": false,
+  "home": false
+ },
+ "tiles": [
+  {
+   "f": "home",
+   "c": 0,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 5.744852474508807
+   }
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "cabbage",
+    "age": 0,
+    "n": 0,
+    "rot": 3.599306344501674
+   }
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 0,
+    "n": 0,
+    "rot": 4.277739189537242
+   }
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 5.194950250824913
+   }
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 0.34699438164010643
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 0,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 1.8846556314360352
+   }
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 5.92678866930306
+   }
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 5.360286659142003
+   }
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 0.00899554488249123
+   }
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 3.895600527115166
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 0.3885179671645165
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 0,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 6.114901730511337
+   }
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 1.8460332978703082
+   }
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 4.201575079569594
+   }
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 0.5556220020446927
+   }
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 0.14020773056894542
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.068523628264666
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 0,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.8234889362193645
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 1.150608870331198
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 3.934762383317575
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 6.261392728611827
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 2.453479003151879
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 3.0247702772077174
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 4.081849285578356
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 0.7079363590851426
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 2,
+    "rot": 0.43088354553096
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.001029148437083
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 6,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 5.781102492595092
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 7,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 4.249598242621869
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 3.7993598119635137
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 3.906256301701069
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 2.516662608124316
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 1,
+    "rot": 1.786456015110016
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 1.6332336786668749
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 6,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 3.2088196737319232
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 7,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 1.8828347699530423
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 0.9918391022644938
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 2.977355021322146
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 1,
+    "rot": 6.037682889802381
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 2.8953370309434834
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 0.5485585537180305
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 5.761237253788859
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 6,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 4.133425742089749
+   },
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 7,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 4.569113021213561
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 5.471830080132932
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 6.1264192680269485
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 0.1114106407482177
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 5.5870542510412635
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 4.417760732406751
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 6,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 4.533280470585451
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 7,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 2,
+    "rot": 1.6976592095196248
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 1.6615379989426584
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 2.2315547946840524
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 1,
+    "rot": 5.270378105239943
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 5.460878786528483
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 2.533726593218744
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 2,
+    "rot": 5.905018112240359
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 6,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 2.7868142018280926
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 7,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 2.93706525683403
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 2.6666476215887815
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 1.4106203303579241
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 2,
+    "rot": 2.5144088181294504
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 3.8680651259515435
+   },
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 5.263352774390951
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 6,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "rock",
+    "v": 2,
+    "rot": 5.459582445751876
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 7,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 1,
+    "rot": 1.3034435721021147
+   },
+   "weed": null,
+   "crop": null
+  }
+ ],
+ "upgrades": {
+  "field": 0,
+  "can": 0,
+  "shoe": 0,
+  "hoe": 0,
+  "basket": 0,
+  "speed": 0,
+  "strawberry": 0,
+  "watermelon": 0,
+  "axe": 0,
+  "forest": 0,
+  "east": 0,
+  "orchard": 0,
+  "south": 0
+ },
+ "settings": {
+  "speed": 1
+ },
+ "yard": [
+  {
+   "type": "branch",
+   "v": 0,
+   "rot": 0.9216997718904167,
+   "x": 151.4,
+   "y": 63.94
+  },
+  {
+   "type": "branch",
+   "v": 1,
+   "rot": 2.652257960131392,
+   "x": 30.66,
+   "y": 76.5
+  },
+  {
+   "type": "weed",
+   "v": 2,
+   "rot": 5.988110131165013,
+   "x": 133.66,
+   "y": 113.15
+  },
+  {
+   "type": "branch",
+   "v": 1,
+   "rot": 3.2111743846070024,
+   "x": 122.94,
+   "y": 113.5
+  }
+ ],
+ "trees": [
+  {
+   "id": "w0",
+   "x": 10,
+   "y": -93,
+   "kind": "wild",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w1",
+   "x": 60,
+   "y": -89,
+   "kind": "wild",
+   "v": 3,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w2",
+   "x": 83,
+   "y": -90,
+   "kind": "wild",
+   "v": 7,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w3",
+   "x": 100,
+   "y": -94,
+   "kind": "wild",
+   "v": 6,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w4",
+   "x": 120,
+   "y": -91,
+   "kind": "wild",
+   "v": 6,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w5",
+   "x": 165,
+   "y": -90,
+   "kind": "wild",
+   "v": 3,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w6",
+   "x": 24,
+   "y": -76,
+   "kind": "wild",
+   "v": 7,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w7",
+   "x": 65,
+   "y": -78,
+   "kind": "wild",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w8",
+   "x": 109,
+   "y": -75,
+   "kind": "wild",
+   "v": 6,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w9",
+   "x": 131,
+   "y": -78,
+   "kind": "wild",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w10",
+   "x": 152,
+   "y": -78,
+   "kind": "wild",
+   "v": 5,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w11",
+   "x": 178,
+   "y": -76,
+   "kind": "wild",
+   "v": 7,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w12",
+   "x": 39,
+   "y": -65,
+   "kind": "wild",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w13",
+   "x": 55,
+   "y": -65,
+   "kind": "wild",
+   "v": 5,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w14",
+   "x": 77,
+   "y": -63,
+   "kind": "wild",
+   "v": 4,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w15",
+   "x": 121,
+   "y": -61,
+   "kind": "wild",
+   "v": 5,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w16",
+   "x": 142,
+   "y": -63,
+   "kind": "wild",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "a0",
+   "x": -120,
+   "y": -70,
+   "kind": "apple",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 1,
+   "cd": 3
+  },
+  {
+   "id": "a1",
+   "x": -84,
+   "y": -78,
+   "kind": "apple",
+   "v": 1,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 1,
+   "cd": 3
+  },
+  {
+   "id": "a2",
+   "x": -104,
+   "y": -40,
+   "kind": "apple",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 1,
+   "cd": 3
+  }
+ ],
+ "orders": [],
+ "log": [
+  "11:07 读取存档：第 2 天，53 金",
+  "10:22 在井边装满了水壶（4 格）",
+  "09:45 在井边装满了水壶（4 格）",
+  "09:11 在井边装满了水壶（4 格）"
+ ]
+}

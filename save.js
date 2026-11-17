@@ -8,7 +8,7 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 3;
+  const CURRENT = 4;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -16,9 +16,13 @@
     // v4.2 yard clutter: { type, v, rot, x, y } around the farm. A missing yard is left unset so the game can seed one
     // without touching the saved RNG. An empty array means the yard was fully cleared and must stay empty.
     3: s => Object.assign({}, s, { yard: Array.isArray(s.yard) ? s.yard : undefined }),
+    // v4.3 big map: no region or axe bought, the default forest (trees: null), no orders, no wood or saplings; tiles are the home field
+    4: s => Object.assign({}, s, { upgrades: Object.assign({ axe: 0, forest: 0, east: 0, orchard: 0, south: 0 }, s.upgrades), trees: null, orders: [],
+      inventory: Object.assign({ wood: 0, saplings: { apple: 0, orange: 0 } }, s.inventory), tiles: (s.tiles || []).map(t => Object.assign({ f: 'home' }, t)) }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon']; // levels; max levels live in sim.js
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south']; // levels; max levels live in sim.js
+  const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -26,7 +30,7 @@
 
   function validTile(t) {
     t = obj(t);
-    const out = { c: int(t.c, 0, 0, 999), r: int(t.r, 0, 0, 999), open: t.open !== false, tilled: !!t.tilled, watered: !!t.watered, debris: null, weed: null, crop: null };
+    const out = { f: FIELD_IDS.includes(t.f) ? t.f : 'home', c: int(t.c, 0, 0, 999), r: int(t.r, 0, 0, 999), open: t.open !== false, tilled: !!t.tilled, watered: !!t.watered, debris: null, weed: null, crop: null };
     if (t.debris && (t.debris.type === 'rock' || t.debris.type === 'branch')) out.debris = { type: t.debris.type, v: int(t.debris.v, 0, 0, 99), rot: num(t.debris.rot, 0) };
     if (t.weed) out.weed = { v: int(t.weed.v, 0, 0, 99), rot: num(t.weed.rot, 0) };
     if (t.crop && CROP_IDS.includes(t.crop.type)) out.crop = { type: t.crop.type, age: int(t.crop.age, 0, 0, 99), n: int(t.crop.n, 0, 0, 99), rot: num(t.crop.rot, 0) };
@@ -36,6 +40,17 @@
     c = obj(c);
     if (!YARD_TYPES.includes(c.type)) return null;
     return { type: c.type, v: int(c.v, 0, 0, 99), rot: num(c.rot, 0), x: num(c.x, 0, -100, 400), y: num(c.y, 0, -100, 400) };
+  }
+  function validTree(t) {
+    t = obj(t); if (typeof t.id !== 'string' || !t.id || t.id.length > 40 || !TREE_KINDS.includes(t.kind)) return null;
+    return { id: t.id, x: num(t.x, 0, -400, 600), y: num(t.y, 0, -400, 600), kind: t.kind, v: int(t.v, 0, 0, 99), stage: TREE_STAGES.includes(t.stage) ? t.stage : 'tree',
+      age: int(t.age, 0, 0, 999), ripe: t.ripe ? 1 : 0, cd: int(t.cd, 0, 0, 99) };
+  }
+  function validOrder(o) {
+    o = obj(o);
+    if (o.type === 'chop' && typeof o.id === 'string' && o.id.length <= 40) return { type: 'chop', id: o.id };
+    if (o.type === 'plant' && FRUIT_IDS.includes(o.kind) && typeof o.x === 'number' && typeof o.y === 'number') return { type: 'plant', kind: o.kind, x: num(o.x, 0, -400, 600), y: num(o.y, 0, -400, 600) };
+    return null;
   }
   // fills defaults for everything, so a v1 save written before a field existed still loads
   function validate(s) {
@@ -57,13 +72,16 @@
       prices: Object.fromEntries(CROP_IDS.map(k => [k, num(prices[k], 1, 0.8, 1.2)])),
       inventory: {
         water: int(inv.water, 0, 0, 999), waterMax: int(inv.waterMax, 4, 1, 999), store: seeds(inv.store), bag: seeds(inv.bag),
-        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k)).slice(0, 200),
+        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k)).slice(0, 200),
+        wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])),
       },
       farmer: { x: num(f.x, 36, -100, 400), y: num(f.y, 40, -100, 400), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
       upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
       settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
+      trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
+      orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }
@@ -122,6 +140,6 @@
     if (sum(m[1]) !== m[2]) throw new Error('存档字符串不完整或被改动过');
     return migrate(JSON.parse(b64d(m[1])));
   }
-  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
+  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSave = api;
 })(typeof window !== 'undefined' ? window : globalThis);
