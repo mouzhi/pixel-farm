@@ -579,7 +579,7 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   if (!o || o.maxed) return { ok: false, reason: 'maxed' };
   if (!o.ok) return { ok: false, reason: 'short', short: o.short };
   S.coins -= o.cost; S.up[id] = o.have + 1; applyUpgrades();
-  log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金）`); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'spark');
+  log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金）`); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'coin');
   if (id === 'field') log('新的田地开放了，农夫会去清理');
   if (o.item.region) log(`${o.item.name}的篱笆门打开了`);
   return { ok: true, offer: o };
@@ -648,7 +648,7 @@ function harvestTask(t) {
   return { label: '正在收获', to: standAt(t), tile: t, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
     if (!t.crop || !SIM.ripe(t.crop) || F.crops.length >= S.eff.basket) return;
     const ty = t.crop.type, c = SIM.CROPS[ty]; F.crops.push(ty); groundDirty = true;
-    burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8); popText(t.x, t.y, 12, '+1', '#ffffff');
+    burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8, 'harvest'); popText(t.x, t.y, 12, '+1', '#ffffff');
     if (c.regrow && (t.crop.n || 0) + 1 < c.harvests) { t.crop.n = (t.crop.n || 0) + 1; t.crop.age = c.days - c.regrow; t.crop.stage = SIM.stageOf(t.crop); log(`摘了一个${c.name}（第 ${t.crop.n} 次）`); return; }
     t.crop = null;
     const n = SIM.harvestSeeds(ty, rand); if (n) { F.bag[ty] += n; S.flow.harvest += n; popText(t.x + 3, t.y, 16, `+${n}种`, '#e6c35c'); }
@@ -672,11 +672,11 @@ function fetchTask(need) { // take the best seeds from the barn first
   } };
 }
 function weedTask(t) {
-  return { label: '正在拔草收集种子', to: standAt(t), tile: t, dur: 6, fx: 'leaf', pose: 'pull', done: () => { if (!t.weed) return; t.weed = null; const n = RI(2, 3); F.gathered += n; S.flow.weed += n; burst(t.x, t.y, 3, ['#5a9a3a', '#e6c35c', '#3f7a32'], 10); popText(t.x, t.y, 10, '+' + n, '#e6c35c'); log(`拔掉杂草，收集到 ${n} 颗种子`); } };
+  return { label: '正在拔草收集种子', to: standAt(t), tile: t, dur: 6, fx: 'leaf', pose: 'pull', done: () => { if (!t.weed) return; t.weed = null; const n = RI(2, 3); F.gathered += n; S.flow.weed += n; burst(t.x, t.y, 3, ['#5a9a3a', '#e6c35c', '#3f7a32'], 10, 'weed'); popText(t.x, t.y, 10, '+' + n, '#e6c35c'); log(`拔掉杂草，收集到 ${n} 颗种子`); } };
 }
 function clearTask(t) {
   const rock = t.debris.type === 'rock';
-  return { label: '正在清理杂物', to: standAt(t), tile: t, dur: rock ? 8 : 6, fx: rock ? 'rock' : 'wood', pose: 'pull', done: () => { if (!t.debris) return; t.debris = null; S.cleared++; burst(t.x, t.y, 2, rock ? ['#9a9a92', '#b9b8ad', '#77776f'] : ['#a0703f', '#7a5230'], 10); log(rock ? '搬走了一块石头' : '清走了一根树枝'); groundDirty = true; } };
+  return { label: '正在清理杂物', to: standAt(t), tile: t, dur: rock ? 8 : 6, fx: rock ? 'rock' : 'wood', pose: 'pull', done: () => { if (!t.debris) return; t.debris = null; S.cleared++; burst(t.x, t.y, 2, rock ? ['#9a9a92', '#b9b8ad', '#77776f'] : ['#a0703f', '#7a5230'], 10, rock ? 'rock' : 'wood'); log(rock ? '搬走了一块石头' : '清走了一根树枝'); groundDirty = true; } };
 }
 function yardTask(c) {
   const labels = { weed: '正在清理院子的杂草', rock: '正在搬走院子里的石头', branch: '正在捡起院子里的枯枝', pebble: '正在清走小石子' };
@@ -697,7 +697,7 @@ function yardTask(c) {
       if (g) { S.coins += g; S.earned += g; S.todayEarn += g; popText(c.x, c.y, 12, '+' + g, '#ffd76a'); }
     }
     const col = c.type === 'weed' ? ['#5a9a3a', '#3f7a32'] : c.type === 'branch' ? ['#a0703f', '#7a5230'] : ['#9a9a92', '#b9b8ad', '#77776f'];
-    burst(c.x, c.y, 2, col, 10);
+    burst(c.x, c.y, 2, col, 10, c.type === 'weed' ? 'weed' : (c.type === 'rock' || c.type === 'pebble') ? 'rock' : 'wood');
     log(c.type === 'weed' ? '拔掉了院子里的杂草' : c.type === 'rock' ? '搬走了院子里的一块石头' : c.type === 'branch' ? '捡走了院子里的枯枝' : '清走了一颗小石子');
   } };
 }
@@ -705,7 +705,7 @@ function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 a
   const wide = S.eff.till3;
   return { label: wide ? '正在用宽锄头开垦' : '正在开垦土地', to: standAt(t), tile: t, dur: wide ? 5 : S.eff.tillDur, fx: 'dirt', pose: 'hoe', done: () => {
     const area = wide ? tiles.filter(u => u.f === t.f && Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1) : [t];
-    for (const u of area) if (u.open && !u.tilled && !u.crop && !u.debris && !u.weed) { u.tilled = true; burst(u.x, u.y, 1, ['#8b5a35', '#a06c43', '#6e452a'], 8); }
+    for (const u of area) if (u.open && !u.tilled && !u.crop && !u.debris && !u.weed) { u.tilled = true; burst(u.x, u.y, 1, ['#8b5a35', '#a06c43', '#6e452a'], 8, 'dirt'); }
     groundDirty = true;
   } };
 }
@@ -716,7 +716,7 @@ function pickTask(t) {
   return { label: `正在摘${fr.name}`, to: treeStand(t), tile: t, dur: 8, fx: 'leaf', pose: 'pull', done: () => {
     const n = Math.min(WD.pickFruit(t), S.eff.basket - F.crops.length); if (!n) return;
     for (let i = 0; i < n; i++) F.crops.push(t.kind); treeChanged(t);
-    burst(t.x, t.y, 20, t.kind === 'apple' ? [Rf[2], Rf[3]] : [Ac[2], Ac[1]], 8); popText(t.x, t.y, 30, '+' + n, '#ffffff'); log(`摘了 ${n} 个${fr.name}`);
+    burst(t.x, t.y, 20, t.kind === 'apple' ? [Rf[2], Rf[3]] : [Ac[2], Ac[1]], 8, 'harvest'); popText(t.x, t.y, 30, '+' + n, '#ffffff'); log(`摘了 ${n} 个${fr.name}`);
   } };
 }
 function chopTask(t) {
@@ -725,7 +725,7 @@ function chopTask(t) {
     if (t.stage !== 'tree' || t.kind !== 'wild') return;
     const y = WD.chopYield(rand); t.stage = 'stump'; t.age = 0; treeChanged(t);
     F.wood += y.wood; F.saplings[y.sapling]++;
-    burst(t.x, t.y, 6, [Wd[3], Wd[4], G[3]], 16); popText(t.x, t.y, 20, '+' + y.wood, '#e0b880');
+    burst(t.x, t.y, 6, [Wd[3], Wd[4], G[3]], 16, 'wood'); popText(t.x, t.y, 20, '+' + y.wood, '#e0b880');
     log(`砍倒一棵树：木材 ${y.wood} 份，${WD.FRUIT[y.sapling].name}树苗 1 棵`);
   } };
 }
@@ -747,7 +747,7 @@ function sellTask() {
     const sp = SIM.surplusSeeds(F.bag, S.store, open.length);
     if (sp.gold) { for (const k of CROP_IDS) F.bag[k] -= sp.sell[k]; sum += sp.gold; S.flow.sold += seedCount(sp.sell); S.flow.soldGold += sp.gold; log(`卖掉多余的种子：${seedText(sp.sell)}（${sp.gold} 金）`); }
     if (sum) { S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
-      popText(STALL.x + R(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'spark');
+      popText(STALL.x + R(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
       if (n) log(`卖出 ${n} 个作物和水果`); }
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
     if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops);
@@ -796,14 +796,15 @@ function stepSim(dm) {
 function fxTick(k) {
   const t = k.tile || { x: F.x, y: F.y - 4 };
   if (k.fx === 'water') burst(t.x, t.y, 7, ['#8cc6dc', '#5b9cc4'], 2, 'drop');
-  else if (k.fx === 'dirt') burst(t.x, t.y, 1, ['#8b5a35', '#a06c43'], 2);
-  else if (k.fx === 'leaf') burst(t.x, t.y, 2, ['#5a9a3a', '#8fd35a'], 2);
-  else if (k.fx === 'rock') burst(t.x, t.y, 2, ['#b9b8ad', '#9a9a92'], 2);
-  else if (k.fx === 'wood') burst(t.x, t.y, 2, ['#a0703f'], 2);
-  else if (k.fx === 'seed') burst(t.x, t.y, 4, ['#e8d9a0'], 1);
+  else if (k.fx === 'dirt') burst(t.x, t.y, 1, ['#8b5a35', '#a06c43'], 2, 'dirt');
+  else if (k.fx === 'leaf') burst(t.x, t.y, 2, ['#5a9a3a', '#8fd35a'], 2, 'leaf');
+  else if (k.fx === 'rock') burst(t.x, t.y, 2, ['#b9b8ad', '#9a9a92'], 2, 'rock');
+  else if (k.fx === 'wood') burst(t.x, t.y, 2, ['#a0703f'], 2, 'wood');
+  else if (k.fx === 'seed') burst(t.x, t.y, 4, ['#e8d9a0'], 1, 'seed');
+  else if (k.fx === 'coin') burst(F.x, F.y, 10, ['#ffd76a', '#fff2a8'], 2, 'spark');
 }
-function burst(x, y, z, cols, n, kind) {
-  for (let i = 0; i < n; i++) particles.push({ x, y, z, vx: R(-6, 6), vy: R(-6, 6), vz: kind === 'drop' ? R(-4, 2) : R(6, 16), c: pick(cols), life: R(0.5, 1.1), kind });
+function burst(x, y, z, cols, n, kind) { // short pixel VFX; ?nofx turns this off. Text pops and chimney smoke stay in `particles`.
+  if (window.PF_FX) PF_FX.play(kind || 'bits', x, y, z, { cols, n });
 }
 function popText(x, y, z, s, c) { particles.push({ x, y, z, vx: 0, vy: 0, vz: 10, c, life: 1.6, text: s }); }
 
@@ -1096,7 +1097,7 @@ function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip a
     for (let x = 0; x < sw; x++) { const p = src[row + x]; if (!(p >>> 24)) continue; const X = left + x + dx - bx; if (X < 0 || X >= bw) continue;
       const i = y * bw + X; if (!mask[i]) continue; const tn = RTONE.get(p >>> 0); if (tn !== undefined && tn < tone[i]) tone[i] = tn; } }
 }
-const pondLeaves = [];
+const pondLeaves = [], pondDecor = [];
 function waterPass(t) {
   const [bx, by, bw, bh] = waterBox(); if (bw <= 0 || bh <= 0) return;
   const img = ctx.getImageData(bx, by, bw, bh), d = new Uint32Array(img.data.buffer);
@@ -1139,6 +1140,15 @@ function waterPass(t) {
     const xs = a < 0.15 ? [0] : a < 0.3 ? [-1, 0, 1] : a < 0.65 ? [-2, -1, 0, 1, 2] : a < 0.85 ? [-2, -1, 1, 2] : [-2, 2];
     for (const dx of xs) put(x + dx, y, Math.abs(dx) <= (xs.length >= 5 ? 1 : 0) ? 6 : 5, 1); }
   if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1); ripple(x, y, lt - s0); }
+  // v4.4: asynkimo step 6 also has warm point glints (yellow/white pluses) and falling drips, not only dashes and leaves
+  pondDecor.length = 0;
+  if (Gm.sky.length) for (let g = 0; g < 10; g++) { const [x, y] = at(Gm.sky), s0 = rr() * (WLOOP - 0.45), a = (lt - s0) / 0.45; if (a < 0 || a >= 1) continue;
+    pondDecor.push([x + bx, y + by, g % 3 === 0 ? Ac[1] : Ac[0], a > 0.28 && a < 0.7 ? 1 : 0]); }
+  if (Gm.deep.length) for (let g = 0; g < 3; g++) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 0.4), a = (lt - s0) / 0.4; if (a < 0 || a >= 1) continue;
+    pondDecor.push([x + bx, y + by, Ac[0], a > 0.35 && a < 0.65 ? 1 : 0]); }
+  if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1.4), a = lt - s0;
+    if (a >= 0 && a < 0.85) pondDecor.push([x + bx, y + by - Math.round((0.85 - a) * 18), Wt[5], 2]);
+    else if (a >= 0.85 && a < 1.85) ripple(x, y, a - 0.85); }
   pondLeaves.length = 0;
   if (Gm.deep.length) for (let q = 0; q < 2; q++) { const [x, y] = at(Gm.deep), s0 = rr() * WLOOP, a = ((lt - s0) % WLOOP + WLOOP) % WLOOP, col = q ? Ac[1] : G[4];
     if (a < 1.2) pondLeaves.push([x + bx, y + by - Math.round((1.2 - a) * 16), col]);                 // falling
@@ -1152,7 +1162,10 @@ function waterPass(t) {
   for (let i = 0; i < N; i++) if (mask[i]) d[i] = WTONE[tone[i]];
   ctx.putImageData(img, bx, by);
 }
-function drawPondLeaves() { for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); } }
+function drawPondLeaves() {
+  for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); }
+  for (const [x, y, c, sh] of pondDecor) { ctx.fillStyle = c; if (sh === 1) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } else if (sh === 2) ctx.fillRect(x, y, 1, 2); else ctx.fillRect(x, y, 1, 1); }
+}
 
 let realT = 0;
 const leaves = [], fireflies = [];
@@ -1219,7 +1232,8 @@ function render() {
   tick('objects');
   if (farmerD) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
   drawMarks(); tick('marks');
-  for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); ctx.fillStyle = p.c; const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), p.kind === 'drop' ? 1 : s, p.kind === 'drop' ? 3 : s); }
+  if (window.PF_FX) PF_FX.draw(ctx, proj, RS);
+  for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); ctx.fillStyle = p.c; const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), s, s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
   drawPondLeaves();
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
@@ -1312,6 +1326,7 @@ function lighting(night, T) {
   lctx.putImageData(litImg, 0, 0); ctx.drawImage(litC, 0, 0);
 }
 function updateFx(dt) {
+  if (window.PF_FX) PF_FX.update(dt);
   for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; if (p.kind === 'smoke') continue; if (!p.text) { p.vz -= 40 * dt; if (p.z < 0) { p.z = 0; p.vx *= 0.5; p.vy *= 0.5; p.vz = 0; } } else p.vz *= 0.97; }
   windT += dt;
@@ -1440,7 +1455,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   advance(dt); render(); hud(); requestAnimationFrame(frame);
 }
-window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, cropArt: v => { CROPI.on = v; } };
+window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
 { const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
   const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
