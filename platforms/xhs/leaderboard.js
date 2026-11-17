@@ -196,17 +196,39 @@
     if (P._markTabs) P._markTabs();
   }
 
+  function followBtnHtml() {
+    return '<button type="button" class="xhs-ico xhs-ico-author" id="xhs-board-follow" title="关注作者" aria-label="关注作者"><i></i></button>';
+  }
+
+  function bindFollow(el) {
+    var b = el && el.querySelector('#xhs-board-follow');
+    if (!b) return;
+    var host = typeof window !== 'undefined' && window.xhs && window.xhs.miniTool;
+    if (host && !(P.creatorFollow && P.creatorFollow.available)) {
+      b.hidden = true;
+      return;
+    }
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (P.onFollowCreator) P.onFollowCreator();
+    });
+    if (typeof P.paintFollow === 'function' && typeof P._followStatus === 'number' && P._followStatus >= 0) {
+      P.paintFollow(P._followStatus);
+    }
+  }
+
   function render(force) {
     if (denied) return;
     var el = ensureSheet();
     el.hidden = false;
     if (P._markTabs) P._markTabs();
     var unit = currentBoard === 2 ? '农场天数' : '累计金币';
-    el.innerHTML = '<div class="xhs-board-hd"><b>排行榜</b><span>' + unit + '</span><button type="button" class="pbtn" data-x="1">×</button></div>' +
+    el.innerHTML = '<div class="xhs-board-hd"><b>排行榜</b><span>' + unit + '</span>' + followBtnHtml() + '<button type="button" class="pbtn" data-x="1">×</button></div>' +
       '<div class="xhs-board-tabs">' +
       '<button type="button" class="pbtn' + (currentBoard === 1 ? ' on' : '') + '" data-b="1">累计金币</button>' +
       '<button type="button" class="pbtn' + (currentBoard === 2 ? ' on' : '') + '" data-b="2">农场天数</button>' +
       '</div><div class="xhs-board-body">载入中…</div>';
+    bindFollow(el);
     loadBoard(currentBoard, 'all').then(function (data) {
       var body = el.querySelector('.xhs-board-body');
       if (!body) return;
@@ -239,9 +261,10 @@
     if (isHost && !hasApi) {
       var el = ensureSheet();
       el.hidden = false;
-      el.innerHTML = '<div class="xhs-board-hd"><b>排行榜</b><button type="button" class="pbtn" data-x="1">×</button></div>' +
+      el.innerHTML = '<div class="xhs-board-hd"><b>排行榜</b>' + followBtnHtml() + '<button type="button" class="pbtn" data-x="1">×</button></div>' +
         '<div class="xhs-board-body"><div class="note">当前客户端还不支持排行榜，请升级到 9.51 以上。</div></div>';
       el.querySelector('[data-x]').addEventListener('click', close);
+      bindFollow(el);
       if (P._markTabs) P._markTabs();
       return;
     }

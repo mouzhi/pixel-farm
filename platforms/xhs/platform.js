@@ -1,6 +1,7 @@
 /* 像素农场 · 平台适配层（网页 / 小红书小工具）
- * 网页里走 localStorage；小红书容器里优先用 window.xhs.miniTool 的 Storage API，
- * 并提供一份同步的 syncStore，给现有的 save.js / playlog.js / ui.js 用。
+ * 小红书容器里存档链路：云存储（§3.16，9.51+ 内测，跨设备）→ 本地 Storage JS API（§3.6/3.7）→ localStorage。
+ * 读取时比较 savedAt / 农场天数，永远用较新的那份，并回写到本地缓存。云写入节流。
+ * 网页里只走 localStorage。同步 syncStore 给 save.js / playlog.js / ui.js 用。
  * 买断付费由宿主支付墙处理，工具内没有商品内购 API；赞赏走 rewardAuthor。
  */
 (function (root) {
@@ -55,91 +56,438 @@
 
   var syncStore = null;
   var flushTimer = null;
+  var SAVE_KEY = 'mouzhi/pixel-farm:save';
+  var CLOUD_ID_KEY = 'mouzhi/pixel-farm:cloud:id';
+  var CLOUD_COLLECTION = 'farm';
+  var CLOUD_MAX = 65536;            // official §3.16: 64KB per content
+  var CLOUD_THROTTLE_MS = 3 * 60 * 1000;
 
-  function flushNow() {
-    flushTimer = null;
-    if (!mini || typeof mini.setStorage !== 'function' || !syncStore) return;
-    var dump = syncStore._dump();
+  function errCodeOf(e) {
+    if (!e) return 0;
+    if (typeof e.errCode === 'number') return e.errCode;
+    if (typeof e.code === 'number') return e.code;
+    return 0;
+  }
+  function isUnauthorized(e) {
+    var c = errCodeOf(e);
+    return c === 1005 || c === 1006;
+  }
+  function safeParse(raw) {
+    if (raw == null) return null;
+    if (typeof raw === 'object') return raw;
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
+  // Normalize a getStorage payload into the raw string we keep in the memory store.
+  function decodeStorageData(data) {
+    if (data == null) return null;
+    if (typeof data === 'object') {
+      try { return JSON.stringify(data); } catch (e) { return null; }
+    }
+    var s = String(data);
+    try {
+      var parsed = JSON.parse(s);
+      if (typeof parsed === 'string') return parsed;
+      if (parsed && typeof parsed === 'object') return s;
+      return s;
+    } catch (e) { return s; }
+  }
+  function stampOf(rawOrObj) {
+    var s = rawOrObj;
+    if (typeof s === 'string') s = safeParse(s);
+    if (!s || typeof s !== 'object') return { at: -1, day: -1, ok: false };
+    var at = +s.savedAt;
+    if (!isFinite(at) || at < 0) at = 0;
+    var day = 0;
+    if (s.clock && isFinite(+s.clock.day)) day = +s.clock.day;
+    else if (isFinite(+s.day)) day = +s.day;
+    return { at: at, day: day, ok: true };
+  }
+  // true if a is strictly newer than b. Missing/invalid b loses; missing a never wins.
+  function isNewer(a, b) {
+    var sa = (a && a.ok != null) ? a : stampOf(a);
+    var sb = (b && b.ok != null) ? b : stampOf(b);
+    if (!sa || !sa.ok) return false;
+    if (!sb || !sb.ok) return true;
+    if (sa.at !== sb.at) return sa.at > sb.at;
+    return sa.day > sb.day;
+  }
+
+  function readLocalStorageAll() {
+    var seed = {};
+    try {
+      var ls = root.localStorage;
+      if (!ls) return seed;
+      for (var i = 0, n = ls.length; i < n; i++) {
+        var k = ls.key(i);
+        if (k == null) continue;
+        try { seed[k] = ls.getItem(k); } catch (e) {}
+      }
+    } catch (e) { /* private mode */ }
+    return seed;
+  }
+  function writeLocalStorage(key, value) {
+    try {
+      if (root.localStorage) root.localStorage.setItem(key, value);
+    } catch (e) { /* quota / private */ }
+  }
+  function writeThroughLocalCache(key, value) {
+    writeLocalStorage(key, value);
+  }
+
+  function callMini(name, args) {
+    return new Promise(function (resolve, reject) {
+      try {
+        if (!mini || typeof mini[name] !== 'function') {
+          reject({ errCode: 0, errMsg: 'unsupported:' + name });
+          return;
+        }
+        Promise.resolve(mini[name](args)).then(resolve, reject);
+      } catch (e) { reject(e); }
+    });
+  }
+
+  var cloudOk = false;
+  var cloudDirty = false;
+  var cloudBusy = false;
+  var cloudTimer = null;
+  var lastCloudWriteAt = 0;
+  var cloudDisabledReason = '';
+  var oversizedToast = false;
+
+  function cloudMethodsPresent() {
+    return !!(mini &&
+      typeof mini.addCloudStorage === 'function' &&
+      typeof mini.updateCloudStorage === 'function' &&
+      typeof mini.queryCloudStorage === 'function');
+  }
+  function probeCloud() {
+    var out = {
+      usable: false,
+      present: false,
+      reason: '云存储是 9.51+ 内测；本包把它当作跨设备主存档，本地 Storage / localStorage 做缓存和降级，不单独依赖云。单条 content ≤64KB。',
+      methods: {},
+      collection: CLOUD_COLLECTION,
+      maxBytes: CLOUD_MAX,
+      throttleMs: CLOUD_THROTTLE_MS
+    };
+    var names = ['addCloudStorage', 'updateCloudStorage', 'queryCloudStorage', 'removeCloudStorage'];
+    names.forEach(function (m) { out.methods[m] = !!(mini && typeof mini[m] === 'function'); });
+    out.present = names.slice(0, 3).every(function (m) { return out.methods[m]; });
+    if (!mini) out.reason = '当前环境没有 window.xhs.miniTool';
+    else if (!out.present) out.reason = '当前容器未注入云存储 API（或客户端低于 9.51）';
+    if (cloudDisabledReason) out.reason = cloudDisabledReason;
+    out.usable = !!(out.present && !cloudDisabledReason);
+    return out;
+  }
+  function refreshCloudState() {
+    var snap = probeCloud();
+    snap.stamp = stampOf;
+    snap.isNewer = isNewer;
+    snap.flush = function () { return flushCloud(true); };
+    if (root.PFPlatform) root.PFPlatform.cloud = snap;
+    return snap;
+  }
+  function disableCloud(err) {
+    var c = errCodeOf(err);
+    cloudOk = false;
+    cloudDirty = false;
+    if (c === 1005 || c === 1006) cloudDisabledReason = '云存储未授权，已降级到本地缓存';
+    else if (c === 10003) cloudDisabledReason = '云存储未被容器开通，已降级到本地缓存';
+    else cloudDisabledReason = '云存储暂不可用，已降级到本地缓存';
+    refreshCloudState();
+  }
+
+  function newestCloudItem(items) {
+    var best = null;
+    if (!items || !items.length) return null;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || it.content == null) continue;
+      if (!best || isNewer(stampOf(it.content), stampOf(best.content))) best = it;
+    }
+    return best;
+  }
+  function rememberCloudId(id) {
+    if (!id || !syncStore) return;
+    try { syncStore.setItem(CLOUD_ID_KEY, String(id)); } catch (e) {}
+    writeThroughLocalCache(CLOUD_ID_KEY, String(id));
+  }
+  function rememberedCloudId() {
+    if (syncStore) {
+      try {
+        var id = syncStore.getItem(CLOUD_ID_KEY);
+        if (id) return id;
+      } catch (e) {}
+    }
+    try { return root.localStorage ? root.localStorage.getItem(CLOUD_ID_KEY) : null; } catch (e) { return null; }
+  }
+  function queryCloud() {
+    return callMini('queryCloudStorage', { collection: CLOUD_COLLECTION, limit: 20 }).then(function (page) {
+      if (!page) return [];
+      return page.items || [];
+    });
+  }
+
+  function flushCloud(force) {
+    if (!cloudOk || !syncStore) return Promise.resolve();
+    if (cloudBusy) return Promise.resolve();
+    if (!cloudDirty && !force) return Promise.resolve();
+    var raw;
+    try { raw = syncStore.getItem(SAVE_KEY); } catch (e) { return Promise.resolve(); }
+    if (!raw) return Promise.resolve();
+    var state = safeParse(raw);
+    if (!state) return Promise.resolve();
+    var bytes = utf8Bytes(JSON.stringify(state));
+    if (bytes > CLOUD_MAX) {
+      if (!oversizedToast) {
+        oversizedToast = true;
+        onStoreError('云存档超过 64KB，已只保存在本地');
+      }
+      cloudDirty = false;
+      return Promise.resolve();
+    }
+    cloudBusy = true;
+    return queryCloud().then(function (items) {
+      var best = newestCloudItem(items);
+      if (best && best.id) rememberCloudId(best.id);
+      if (best && isNewer(stampOf(best.content), stampOf(state))) {
+        // never overwrite a newer cloud save with an older local one
+        cloudDirty = false;
+        return;
+      }
+      var id = (best && best.id) || rememberedCloudId();
+      var req = id
+        ? callMini('updateCloudStorage', { collection: CLOUD_COLLECTION, items: [{ id: id, content: state }] })
+        : callMini('addCloudStorage', { collection: CLOUD_COLLECTION, items: [{ content: state }] });
+      return req.then(function (res) {
+        var row = res && res.data && res.data[0];
+        if (row && row.status === 'SUCCESS') {
+          if (row.id) rememberCloudId(row.id);
+          cloudDirty = false;
+          lastCloudWriteAt = Date.now();
+        } else if (row && row.status === 'UNKNOWN') {
+          // docs: query to reconcile, do not resend
+          return queryCloud().then(function (items2) {
+            var it = newestCloudItem(items2);
+            if (it && it.id) rememberCloudId(it.id);
+            if (it && !isNewer(stampOf(state), stampOf(it.content))) cloudDirty = false;
+          });
+        }
+        // FAILED: leave dirty for a later retry
+      });
+    }).then(function () { cloudBusy = false; }, function (err) {
+      cloudBusy = false;
+      var c = errCodeOf(err);
+      if (isUnauthorized(err) || c === 10003) disableCloud(err);
+      else if (c === 1003) {
+        if (!oversizedToast) {
+          oversizedToast = true;
+          onStoreError('云存档超过 64KB，已只保存在本地');
+        }
+        cloudDirty = false;
+      } else if (c === 2004) {
+        // unknown result: reconcile, do not resend
+        return queryCloud().then(function (items) {
+          var it = newestCloudItem(items);
+          if (it && it.id) rememberCloudId(it.id);
+        }, function () {});
+      } else if (c === 2009) {
+        lastCloudWriteAt = Date.now(); // back off a full throttle window
+      } else if (c === 2001 || c === 2999) {
+        // leave dirty, retry later; one quiet toast at most
+        if (!oversizedToast) { /* not size; stay silent, local cache is current */ }
+      }
+    });
+  }
+
+  function scheduleCloudFlush(soon) {
+    if (!cloudOk) return;
+    cloudDirty = true;
+    if (cloudTimer) clearTimeout(cloudTimer);
+    var wait = soon ? 1000 : Math.max(0, CLOUD_THROTTLE_MS - (Date.now() - lastCloudWriteAt));
+    cloudTimer = setTimeout(function () { flushCloud(false); }, wait);
+  }
+
+  function flushLocalLayers() {
+    if (!syncStore) return Promise.resolve();
+    var dump;
+    try { dump = syncStore._dump(); } catch (e) { return Promise.resolve(); }
     var keys = Object.keys(dump).sort(function (a, b) {
       var ab = /:bak$/.test(a), bb = /:bak$/.test(b);
       if (ab !== bb) return ab ? -1 : 1;
       return a < b ? -1 : a > b ? 1 : 0;
     });
-    var i = 0;
-    function next() {
-      if (i >= keys.length) return;
-      var key = keys[i++];
-      var data = JSON.stringify(dump[key]);
-      if (utf8Bytes(data) > KEY_MAX) { onStoreError('同步失败：' + key + ' 超过 1MB'); return next(); }
-      var req = mini.setStorage({ key: key, data: data });
-      if (req && typeof req.then === 'function') req.then(next, next);
-      else next();
+    // always write-through to localStorage as last-resort cache
+    for (var j = 0; j < keys.length; j++) {
+      try { writeThroughLocalCache(keys[j], dump[keys[j]]); } catch (e) {}
     }
-    next();
+    if (!mini || typeof mini.setStorage !== 'function') return Promise.resolve();
+    var i = 0;
+    return new Promise(function (resolve) {
+      function next() {
+        if (i >= keys.length) { resolve(); return; }
+        var key = keys[i++];
+        var data = JSON.stringify(dump[key]);
+        var n = utf8Bytes(data);
+        if (n > KEY_MAX) { onStoreError('同步失败：' + key + ' 超过 1MB'); return next(); }
+        callMini('setStorage', { key: key, data: data }).then(next, function (err) {
+          onStoreError('本地缓存没写上');
+          next();
+        });
+      }
+      next();
+    });
+  }
+
+  function flushNow(opts) {
+    opts = opts || {};
+    // Default (P.flush / pagehide) pushes a dirty cloud save immediately.
+    // The short local debounce must not bypass the cloud throttle.
+    var pushCloud = opts.cloud !== false;
+    if (opts.fromTimer) flushTimer = null;
+    var local = flushLocalLayers();
+    var cloud = (pushCloud && cloudOk && cloudDirty) ? flushCloud(true) : Promise.resolve();
+    return Promise.resolve(local).then(function () { return cloud; }, function () { return cloud; });
   }
 
   function scheduleFlush() {
-    if (!isXhs) return;
     if (flushTimer) clearTimeout(flushTimer);
-    flushTimer = setTimeout(flushNow, 400);
+    flushTimer = setTimeout(function () { flushNow({ cloud: false, fromTimer: true }); }, 400);
   }
 
   function wrapStore(store) {
     return {
       get length() { return store.length; },
       key: function (i) { return store.key(i); },
-      getItem: function (k) { return store.getItem(k); },
-      setItem: function (k, v) { store.setItem(k, v); scheduleFlush(); },
+      getItem: function (k) {
+        try { return store.getItem(k); } catch (e) { return null; }
+      },
+      setItem: function (k, v) {
+        try { store.setItem(k, v); }
+        catch (e) { throw e; }
+        try { writeThroughLocalCache(k, String(v)); } catch (err) {}
+        scheduleFlush();
+        if (String(k) === SAVE_KEY) scheduleCloudFlush(false);
+      },
       removeItem: function (k) { store.removeItem(k); scheduleFlush(); },
       clear: function () { store.clear(); scheduleFlush(); },
       _dump: function () { return store._dump ? store._dump() : {}; }
     };
   }
 
-  function hydrate() {
-    if (!isXhs || typeof mini.getStorageInfo !== 'function') {
-      syncStore = wrapStore(memoryStore());
-      // 网页或旧客户端：直接用 localStorage，并在内存里留一份空壳以免调用方判空
-      try {
-        if (root.localStorage) {
-          syncStore = wrapStore({
-            get length() { return root.localStorage.length; },
-            key: function (i) { return root.localStorage.key(i); },
-            getItem: function (k) { return root.localStorage.getItem(k); },
-            setItem: function (k, v) { root.localStorage.setItem(k, v); },
-            removeItem: function (k) { root.localStorage.removeItem(k); },
-            clear: function () { root.localStorage.clear(); },
-            _dump: function () { return {}; }
-          });
-        }
-      } catch (e) { /* private mode */ }
-      return Promise.resolve();
-    }
-    return mini.getStorageInfo().then(function (info) {
+  function loadXhsSeed() {
+    if (!mini || typeof mini.getStorageInfo !== 'function') return Promise.resolve({});
+    return callMini('getStorageInfo').then(function (info) {
       var keys = (info && info.keys) || [];
       var seed = {};
       var i = 0;
       function next() {
-        if (i >= keys.length) {
-          syncStore = wrapStore(memoryStore(seed));
-          return;
-        }
+        if (i >= keys.length) return seed;
         var key = keys[i++];
-        return mini.getStorage({ key: key }).then(function (res) {
-          if (res && typeof res.data === 'string') {
-            try { seed[key] = JSON.parse(res.data); }
-            catch (e) { seed[key] = res.data; }
-          }
+        return callMini('getStorage', { key: key }).then(function (res) {
+          var raw = decodeStorageData(res && res.data);
+          if (raw != null) seed[key] = raw;
           return next();
         }, function () { return next(); });
       }
       return next();
+    }, function () { return {}; });
+  }
+
+  function mergeSeeds(primary, secondary) {
+    var out = {};
+    var k;
+    if (secondary) for (k in secondary) if (Object.prototype.hasOwnProperty.call(secondary, k)) out[k] = secondary[k];
+    if (primary) for (k in primary) if (Object.prototype.hasOwnProperty.call(primary, k)) out[k] = primary[k];
+    // For the game save key, pick the newer of the two layers.
+    if (primary && secondary && primary[SAVE_KEY] && secondary[SAVE_KEY]) {
+      out[SAVE_KEY] = isNewer(stampOf(primary[SAVE_KEY]), stampOf(secondary[SAVE_KEY]))
+        ? primary[SAVE_KEY] : secondary[SAVE_KEY];
+      var bak = SAVE_KEY + ':bak';
+      // keep the older main as bak if bak is missing or older
+      var older = out[SAVE_KEY] === primary[SAVE_KEY] ? secondary[SAVE_KEY] : primary[SAVE_KEY];
+      if (older && (!out[bak] || isNewer(stampOf(older), stampOf(out[bak])))) out[bak] = older;
+    }
+    return out;
+  }
+
+  function adoptIntoLocal(json) {
+    if (!syncStore || json == null) return;
+    var raw = typeof json === 'string' ? json : JSON.stringify(json);
+    // Mutate the memory dump directly so we don't mark the cloud copy dirty.
+    try {
+      var dump = syncStore._dump && syncStore._dump();
+      if (dump) dump[SAVE_KEY] = raw;
+    } catch (e) {}
+    writeThroughLocalCache(SAVE_KEY, raw);
+  }
+
+  function hydrate() {
+    cloudOk = cloudMethodsPresent();
+    refreshCloudState();
+    return loadXhsSeed().then(function (xhsSeed) {
+      var lsSeed = {};
+      try { lsSeed = readLocalStorageAll(); } catch (e) { lsSeed = {}; }
+      // Prefer xhs Storage as the "local" layer, fill gaps from localStorage, pick newer save.
+      var seed = mergeSeeds(xhsSeed, lsSeed);
+      if (!Object.keys(seed).length && !isXhs) {
+        // web / no container: wrap localStorage directly if present
+        try {
+          if (root.localStorage) {
+            syncStore = wrapStore({
+              get length() { return root.localStorage.length; },
+              key: function (i) { return root.localStorage.key(i); },
+              getItem: function (k) { return root.localStorage.getItem(k); },
+              setItem: function (k, v) { root.localStorage.setItem(k, v); },
+              removeItem: function (k) { root.localStorage.removeItem(k); },
+              clear: function () { root.localStorage.clear(); },
+              _dump: function () { return readLocalStorageAll(); }
+            });
+            if (cloudOk) return mergeCloud();
+            return;
+          }
+        } catch (e) { /* private mode */ }
+      }
+      syncStore = wrapStore(memoryStore(seed));
+      if (cloudOk) return mergeCloud();
     }, function () {
-      syncStore = wrapStore(memoryStore());
+      var seed = {};
+      try { seed = readLocalStorageAll(); } catch (e) {}
+      syncStore = wrapStore(memoryStore(seed));
+      if (cloudOk) return mergeCloud();
     });
   }
 
-  var ready = hydrate();
+  function mergeCloud() {
+    return queryCloud().then(function (items) {
+      var best = newestCloudItem(items);
+      if (best && best.id) rememberCloudId(best.id);
+      if (!best || best.content == null) {
+        // empty cloud: if we have a local save, upload it (soon, not waiting the full throttle)
+        try {
+          if (syncStore && syncStore.getItem(SAVE_KEY)) scheduleCloudFlush(true);
+        } catch (e) {}
+        return;
+      }
+      var localRaw = null;
+      try { localRaw = syncStore.getItem(SAVE_KEY); } catch (e) {}
+      var cloudRaw = typeof best.content === 'string' ? best.content : JSON.stringify(best.content);
+      if (!localRaw || isNewer(stampOf(best.content), stampOf(localRaw))) {
+        adoptIntoLocal(cloudRaw);
+        scheduleFlush(); // write-through to local caches; not a cloud dirty write
+      } else if (isNewer(stampOf(localRaw), stampOf(best.content))) {
+        scheduleCloudFlush(true);
+      }
+    }, function (err) {
+      // query failure must NOT be treated as "no data"
+      if (isUnauthorized(err) || errCodeOf(err) === 10003) disableCloud(err);
+    });
+  }
+
+  var ready = hydrate().then(function () { refreshCloudState(); }, function () {
+    if (!syncStore) syncStore = wrapStore(memoryStore());
+    refreshCloudState();
+  });
 
   function shareNote(opts) {
     opts = opts || {};
@@ -161,18 +509,26 @@
     return mini.rewardAuthor();
   }
 
-  function probeCloud() {
-    var out = {
-      usable: false,
-      reason: '云存储是 9.51+ 内测，官方写明不要作为存档唯一依赖；单条 content 上限 64KB，完整后期存档可能超限，本游戏不以它为源。'
-    };
-    if (!mini) { out.reason = '当前环境没有 window.xhs.miniTool'; return out; }
-    var methods = ['addCloudStorage', 'updateCloudStorage', 'queryCloudStorage', 'removeCloudStorage'];
-    out.methods = {};
-    methods.forEach(function (m) { out.methods[m] = typeof mini[m] === 'function'; });
-    out.present = methods.some(function (m) { return out.methods[m]; });
-    if (!out.present) out.reason = '当前容器未注入云存储 API（或客户端低于 9.51）';
-    return out;
+  // 关注创作者：官方 3.15，客户端 9.51+（版本门槛 9510）。无业务参数，只能关注当前小工具作者。
+  // follow_status: -1 失败 / 0 未关注（含未登录） / 1 已关注（含互关） / 2 作者本人。
+  // followAuthor reject：20002 用户关闭确认或放弃登录；15404 当日确认次数达上限（10 次/账号/工具）；10003 已有确认框。
+  // 业务失败以 follow_status -1 resolve，不是 reject。查询失败也当作 -1，不要把失败结果当最终状态缓存。
+  function creatorFollowAvailable() {
+    return !!(mini && typeof mini.followAuthor === 'function' && typeof mini.getFollowStatus === 'function');
+  }
+  function getFollowStatus() {
+    if (!creatorFollowAvailable()) return Promise.resolve(-1);
+    return Promise.resolve(mini.getFollowStatus()).then(function (r) {
+      return r && typeof r.follow_status === 'number' ? r.follow_status : -1;
+    }, function () { return -1; });
+  }
+  function followAuthor() {
+    if (!creatorFollowAvailable()) {
+      return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
+    }
+    return Promise.resolve(mini.followAuthor()).then(function (r) {
+      return r && typeof r.follow_status === 'number' ? r.follow_status : -1;
+    });
   }
 
   var existing = root.PFPlatform || {};
@@ -183,12 +539,17 @@
     store: function () { return syncStore; },
     shareNote: shareNote,
     tipAuthor: tipAuthor,
+    creatorFollow: {
+      available: creatorFollowAvailable(),
+      getStatus: getFollowStatus,
+      follow: followAuthor
+    },
     // 整包买断由小红书支付墙处理，进入工具即视为已解锁。道具级内购官方能力清单（2026-11-13）尚未公开。
     iap: { hostBuyout: true, itemApi: false, tipsApi: !!(mini && mini.rewardAuthor) },
     flush: flushNow,
     keyMaxBytes: KEY_MAX,
     totalMaxBytes: TOTAL_MAX,
-    cloud: probeCloud(),
+    cloud: refreshCloudState(),
     mobile: existing.mobile || false,
     framebuffer: existing.framebuffer,
     saveEveryMs: existing.saveEveryMs,

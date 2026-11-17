@@ -55,7 +55,7 @@
     toastT = setTimeout(function () { toastEl.hidden = true; }, 2800);
   };
 
-  function ico(id, kind, title, fn) {
+  function ico(id, kind, title, fn, label) {
     var b = doc.createElement('button');
     b.type = 'button';
     b.id = id;
@@ -65,6 +65,12 @@
     var i = doc.createElement('i');
     i.setAttribute('aria-hidden', 'true');
     b.appendChild(i);
+    if (label) {
+      var lab = doc.createElement('span');
+      lab.className = 'xhs-ico-lab';
+      lab.textContent = label;
+      b.appendChild(lab);
+    }
     b.addEventListener('click', fn);
     return b;
   }
@@ -162,8 +168,7 @@
     if (doc.getElementById('xhs-stage')) return;
     var stage = doc.createElement('div'); stage.id = 'xhs-stage';
     var dockInv = doc.createElement('div'); dockInv.id = 'xhs-inv-dock'; dockInv.hidden = true;
-    var dock = doc.createElement('div'); dock.id = 'xhs-dock';
-    var corner = doc.createElement('div'); corner.id = 'xhs-corner';
+    var bar = doc.createElement('div'); bar.id = 'xhs-bar';
     var toast = doc.createElement('div'); toast.id = 'xhs-toast'; toast.hidden = true;
     var wrap = doc.getElementById('wrap');
     var hud = doc.getElementById('hud');
@@ -175,100 +180,273 @@
     if (hud && hud.parentNode !== doc.body) doc.body.appendChild(hud);
     if (inv) dockInv.appendChild(inv);
     doc.body.appendChild(dockInv);
-    doc.body.appendChild(dock);
-    doc.body.appendChild(corner);
+    doc.body.appendChild(bar);
     doc.body.appendChild(toast);
     toastEl = toast;
     reparentSheets();
 
-    dock.appendChild(ico('xhs-btn-bag', 'bag', '背包', function () {
+    bar.appendChild(ico('xhs-btn-bag', 'bag', '背包', function () {
       toggleEl(doc.getElementById('xhs-inv-dock'));
-    }));
-    dock.appendChild(ico('xhs-btn-store', 'store', '仓库', function () {
+    }, '包'));
+    bar.appendChild(ico('xhs-btn-store', 'store', '仓库', function () {
       var btn = doc.getElementById('storeBtn');
       closeSheets(doc.getElementById('store'));
       if (btn) btn.click();
       else toggleEl(doc.getElementById('store'));
       markIcons();
-    }));
-    dock.appendChild(ico('xhs-btn-shop', 'shop', '商店', function () {
+    }, '仓'));
+    bar.appendChild(ico('xhs-btn-shop', 'shop', '商店', function () {
       var btn = doc.getElementById('shopBtn');
       closeSheets(doc.getElementById('shop'));
       if (btn) btn.click();
       else toggleEl(doc.getElementById('shop'));
       markIcons();
-    }));
-
+    }, '店'));
     var follow = ico('xhs-follow', 'follow', '跟随农夫', function () {
       setFollow(!P.followFarmer);
-    });
+    }, '随');
     follow.classList.add('on');
-    doc.body.appendChild(follow);
-
-    corner.appendChild(ico('xhs-btn-board', 'board', '排行榜', function () {
+    bar.appendChild(follow);
+    bar.appendChild(ico('xhs-btn-author', 'author', '关注作者', onFollowCreator, '关'));
+    bar.appendChild(ico('xhs-btn-board', 'board', '排行榜', function () {
       if (P.leaderboard && typeof P.leaderboard.open === 'function') P.leaderboard.open();
       markIcons();
-    }));
-    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
+    }, '榜'));
+    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed, '倍');
     speed.hidden = true;
-    corner.appendChild(speed);
+    bar.appendChild(speed);
 
+    setupFollow();
+    applyWindowInsets();
     if (root.__farm && __farm.fit) __farm.fit();
   }
 
+  function applyWindowInsets() {
+    var mini = root.xhs && root.xhs.miniTool;
+    if (!mini || typeof mini.getWindowInfo !== 'function') return;
+    Promise.resolve(mini.getWindowInfo()).then(function (info) {
+      if (!info) return;
+      var w = info.windowWidth || (doc.documentElement && doc.documentElement.clientWidth) || root.innerWidth || 0;
+      var safe = info.safeArea || {};
+      var mb = info.menuButtons || {};
+      var topClear = Math.max(safe.top || 0, info.statusBarHeight || 0, 20) + 12;
+      var leftClear = Math.max(safe.left || 0, 8);
+      var rightClear = Math.max(w - (safe.right || w), 8);
+      var btns = [mb.back, mb.me, mb.share];
+      for (var i = 0; i < btns.length; i++) {
+        var b = btns[i];
+        if (!b) continue;
+        topClear = Math.max(topClear, (b.bottom || 0) + 12);
+        var cx = ((b.left || 0) + (b.right || 0)) / 2;
+        if (cx < w / 2) leftClear = Math.max(leftClear, (b.right || 0) + 12);
+        else rightClear = Math.max(rightClear, w - (b.left || 0) + 12);
+      }
+      // keep generous minima so we never sit under the capsule / share even if a rect is late or null
+      topClear = Math.max(topClear, 96);
+      leftClear = Math.max(leftClear, 72);
+      rightClear = Math.max(rightClear, 108);
+      var rootEl = doc.documentElement;
+      rootEl.style.setProperty('--xhs-top-clear', Math.round(topClear) + 'px');
+      rootEl.style.setProperty('--xhs-left-clear', Math.round(leftClear) + 'px');
+      rootEl.style.setProperty('--xhs-right-clear', Math.round(rightClear) + 'px');
+    }, function () {});
+  }
+  P.applyWindowInsets = applyWindowInsets;
+
+  var followBusy = false;
+  P._followStatus = -1;
+
+  function paintFollow(status) {
+    if (typeof status !== 'number' || status < 0) return;
+    P._followStatus = status;
+    var on = status === 1 || status === 2;
+    var title = status === 2 ? '你就是作者' : (on ? '已关注作者' : '关注作者');
+    ['xhs-btn-author', 'xhs-board-follow'].forEach(function (id) {
+      var b = doc.getElementById(id);
+      if (!b) return;
+      b.classList.toggle('on', on);
+      b.title = title;
+      b.setAttribute('aria-label', title);
+    });
+  }
+  P.paintFollow = paintFollow;
+
+  function onFollowCreator() {
+    var api = P.creatorFollow;
+    if (!api || !api.available) return;
+    if (followBusy) return;
+    followBusy = true;
+    api.follow().then(function (s) {
+      followBusy = false;
+      paintFollow(s);
+    }, function (err) {
+      followBusy = false;
+      var c = err && (err.errCode || err.code);
+      if (c === 20002 || c === 10003) return;
+      if (c === 15404) P.toast('今天关注次数用完了');
+    });
+  }
+  P.onFollowCreator = onFollowCreator;
+
+  function setupFollow() {
+    var api = P.creatorFollow;
+    var host = !!(root.xhs && root.xhs.miniTool);
+    var btn = doc.getElementById('xhs-btn-author');
+    if (host && !(api && api.available)) {
+      if (btn) btn.hidden = true;
+      return;
+    }
+    if (api && api.available) {
+      api.getStatus().then(paintFollow, function () {});
+    }
+  }
+
+  function wrapAngle(a) {
+    if (a > Math.PI) a -= Math.PI * 2;
+    if (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  }
+
   function wirePinch() {
-    var cv = doc.getElementById('game');
-    if (!cv || cv._xhsPinch) return;
-    cv._xhsPinch = true;
-    var pointers = {};
-    function count() { return Object.keys(pointers).length; }
+    var stage = doc.getElementById('xhs-stage') || doc.getElementById('game');
+    if (!stage || stage._xhsGest) return;
+    stage._xhsGest = true;
+    var pts = {};
+    var mode = null; // 'pinch' | 'rotate' | null (undecided)
+    var last = null, start = null, lastZoom = 0, rotUsed = 0;
+    var hasTouch = 'ontouchstart' in root;
+
     function pair() {
-      var ids = Object.keys(pointers);
+      var ids = Object.keys(pts);
       if (ids.length < 2) return null;
-      var a = pointers[ids[0]], b = pointers[ids[1]];
+      var a = pts[ids[0]], b = pts[ids[1]];
       return {
-        dist: Math.hypot(a.x - b.x, a.y - b.y),
-        angle: Math.atan2(b.y - a.y, b.x - a.x),
-        cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2
+        dist: Math.hypot(b.x - a.x, b.y - a.y),
+        angle: Math.atan2(b.y - a.y, b.x - a.x)
       };
     }
-    var last = null, lastZoom = 0;
-    function cancelFollow() { if (P.followFarmer) setFollow(false); }
-    cv.addEventListener('pointerdown', function (e) {
-      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (count() >= 2) {
-        last = pair();
-        lastZoom = root.__farm && __farm.getZoom ? __farm.getZoom() : 0;
-        cancelFollow();
-        // stop the game's one-finger drag from fighting the pinch/twist
-        if (root.__farm) try { doc.body.classList.remove('grab'); } catch (err) {}
+    function lockGame(on) {
+      P.gestureLock = !!on;
+      if (on) {
+        try { doc.body.classList.remove('grab'); } catch (err) {}
+        if (P.followFarmer) setFollow(false);
+        var G = root.__farm;
+        if (G && typeof G.cancelDrag === 'function') G.cancelDrag();
       }
-    }, true);
-    cv.addEventListener('pointermove', function (e) {
-      if (!pointers[e.pointerId]) return;
-      pointers[e.pointerId] = { x: e.clientX, y: e.clientY };
-      if (count() < 2 || !last) return;
-      e.stopPropagation();
-      var now = pair();
-      if (!now || now.dist < 8) return;
-      var G = root.__farm;
-      if (G && G.cam && isFinite(now.angle) && isFinite(last.angle)) {
-        var dAng = now.angle - last.angle;
-        if (dAng > Math.PI) dAng -= Math.PI * 2;
-        if (dAng < -Math.PI) dAng += Math.PI * 2;
-        G.cam.ta += dAng;
-      }
-      if (G && G.setZoom && last.dist > 8) {
-        var dz = Math.round(Math.log(now.dist / last.dist) / Math.log(1.25));
-        if (dz) G.setZoom(lastZoom + dz);
-      }
-    }, true);
-    function up(e) {
-      delete pointers[e.pointerId];
-      if (count() < 2) last = null;
     }
-    cv.addEventListener('pointerup', up, true);
-    cv.addEventListener('pointercancel', up, true);
+    function onStart(x, y, id) {
+      pts[id] = { x: x, y: y };
+      if (Object.keys(pts).length >= 2) {
+        last = pair();
+        start = last;
+        lastZoom = root.__farm && __farm.getZoom ? __farm.getZoom() : 0;
+        rotUsed = 0;
+        mode = null;
+        lockGame(true);
+      }
+    }
+    function onMove(x, y, id, ev) {
+      if (!pts[id]) return;
+      pts[id] = { x: x, y: y };
+      if (Object.keys(pts).length < 2 || !last) return;
+      if (ev) {
+        if (ev.cancelable && ev.preventDefault) ev.preventDefault();
+        if (ev.stopPropagation) ev.stopPropagation();
+      }
+      var now = pair();
+      if (!now || now.dist < 10 || !isFinite(now.angle) || !isFinite(last.angle)) return;
+      var dAng = wrapAngle(now.angle - last.angle);
+      var totScale = (start && start.dist > 8) ? now.dist / start.dist : 1;
+      var totAng = start ? wrapAngle(now.angle - start.angle) : 0;
+      var dScale = last.dist > 8 ? now.dist / last.dist : 1;
+
+      if (!mode) {
+        var scaleDev = Math.abs(Math.log(totScale) || 0);
+        var angDev = Math.abs(totAng);
+        if (scaleDev > 0.05 && scaleDev >= angDev * 0.65) mode = 'pinch';
+        else if (angDev > (10 * Math.PI / 180) && angDev > scaleDev * 1.1) mode = 'rotate';
+      }
+
+      var G = root.__farm;
+      // Pinch is applied from the gesture start (absolute steps) so a steady spread reliably changes zoom.
+      // Do not wait for mode lock if the fingers have clearly scaled (rotate must not swallow pinch).
+      var pinchLikely = !mode || mode === 'pinch' || Math.abs(Math.log(totScale) || 0) > 0.08;
+      if (pinchLikely && G && G.setZoom && start && start.dist > 8) {
+        var steps = Math.round(Math.log(totScale) / Math.log(1.18));
+        if (steps) G.setZoom(lastZoom + steps);
+      }
+      var rotateLikely = mode === 'rotate' || (!mode && Math.abs(dAng) > 0.02 && Math.abs(dScale - 1) < 0.015);
+      if (rotateLikely && G && G.cam) {
+        var apply = dAng * 0.25;
+        var cap = 3.5 * Math.PI / 180;
+        if (apply > cap) apply = cap;
+        if (apply < -cap) apply = -cap;
+        var remain = 48 * Math.PI / 180 - Math.abs(rotUsed);
+        if (remain < 0) remain = 0;
+        if (Math.abs(apply) > remain) apply = remain * (apply < 0 ? -1 : 1);
+        if (apply) {
+          G.cam.ta += apply;
+          rotUsed += apply;
+        }
+      }
+      last = now;
+    }
+    function onEnd(id) {
+      delete pts[id];
+      if (Object.keys(pts).length < 2) {
+        last = start = null;
+        mode = null;
+        rotUsed = 0;
+        lockGame(false);
+      }
+    }
+
+    var touchOpts = { passive: false, capture: true };
+    stage.addEventListener('touchstart', function (e) {
+      var list = e.changedTouches;
+      for (var i = 0; i < list.length; i++) {
+        onStart(list[i].clientX, list[i].clientY, 't' + list[i].identifier);
+      }
+      if (Object.keys(pts).length >= 2 && e.cancelable) e.preventDefault();
+    }, touchOpts);
+    stage.addEventListener('touchmove', function (e) {
+      if (Object.keys(pts).length >= 2 || (e.touches && e.touches.length >= 2)) {
+        if (e.cancelable) e.preventDefault();
+      }
+      var list = e.changedTouches;
+      for (var i = 0; i < list.length; i++) {
+        onMove(list[i].clientX, list[i].clientY, 't' + list[i].identifier, e);
+      }
+    }, touchOpts);
+    function touchUp(e) {
+      var list = e.changedTouches;
+      for (var i = 0; i < list.length; i++) onEnd('t' + list[i].identifier);
+    }
+    stage.addEventListener('touchend', touchUp, touchOpts);
+    stage.addEventListener('touchcancel', touchUp, touchOpts);
+
+    // Pointer path for mouse / emulator; skip touch pointers when native touch events also fire (avoid double-counting).
+    stage.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'touch' && hasTouch) return;
+      onStart(e.clientX, e.clientY, 'p' + e.pointerId);
+    }, true);
+    stage.addEventListener('pointermove', function (e) {
+      if (e.pointerType === 'touch' && hasTouch) return;
+      if (!pts['p' + e.pointerId]) return;
+      onMove(e.clientX, e.clientY, 'p' + e.pointerId, e);
+    }, true);
+    function pointerUp(e) {
+      if (e.pointerType === 'touch' && hasTouch) return;
+      onEnd('p' + e.pointerId);
+    }
+    stage.addEventListener('pointerup', pointerUp, true);
+    stage.addEventListener('pointercancel', pointerUp, true);
+
+    function killGesture(e) { if (e.cancelable) e.preventDefault(); }
+    ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (type) {
+      root.addEventListener(type, killGesture, { passive: false, capture: true });
+      doc.addEventListener(type, killGesture, { passive: false, capture: true });
+    });
   }
 
   function hookFollowPause() {
@@ -312,10 +490,12 @@
     syncSpeedBtn();
     if (root.visualViewport) {
       visualViewport.addEventListener('resize', function () {
+        applyWindowInsets();
         if (root.__farm && __farm.fit) __farm.fit();
       });
     }
     root.addEventListener('resize', function () {
+      applyWindowInsets();
       if (root.__farm && __farm.fit) __farm.fit();
     });
     root.addEventListener('orientationchange', function () {

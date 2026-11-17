@@ -123,4 +123,196 @@ ok('clock-skew: negative away time is ignored by the same rule as settleOffline'
   assert(okSettle && okSettle.gold >= 0);
 });
 
-console.log('passed', n, 'xhs-save tests; late-game bytes', globalThis.__LATE_GAME_SAVE_BYTES);
+ok('late-game compact JSON also stays under the 64KB cloud content cap', () => {
+  const bytes = globalThis.__LATE_GAME_SAVE_BYTES;
+  assert(bytes < 65536, 'late-game save must fit in one cloud content object');
+});
+
+const PLATFORM = fs.readFileSync(path.join(__dirname, '../platforms/xhs/platform.js'), 'utf8');
+
+function lsMock(init) {
+  const m = new Map(Object.entries(init || {}));
+  return {
+    get length() { return m.size; },
+    key(i) { return [...m.keys()][i] || null; },
+    getItem(k) { return m.has(k) ? m.get(k) : null; },
+    setItem(k, v) { m.set(String(k), String(v)); },
+    removeItem(k) { m.delete(k); },
+    clear() { m.clear(); },
+    _map: m
+  };
+}
+
+function loadPlatform(opts) {
+  opts = opts || {};
+  const xhsMem = new Map();
+  if (opts.xhs) {
+    for (const [k, v] of Object.entries(opts.xhs)) {
+      // container stores JSON.stringify(string)
+      xhsMem.set(k, typeof v === 'string' && v.startsWith('"') ? v : JSON.stringify(v));
+    }
+  }
+  const cloudItems = (opts.cloudItems || []).map(it => Object.assign({}, it));
+  const calls = { add: 0, update: 0, query: 0, setStorage: 0, getStorage: 0 };
+  let fail = opts.cloudFail || null;
+  const mini = {
+    setStorage({ key, data }) { calls.setStorage++; xhsMem.set(key, data); return Promise.resolve(); },
+    getStorage({ key }) { calls.getStorage++; return Promise.resolve({ data: xhsMem.has(key) ? xhsMem.get(key) : undefined }); },
+    getStorageInfo() { return Promise.resolve({ keys: [...xhsMem.keys()] }); }
+  };
+  if (!opts.noCloud) {
+    mini.addCloudStorage = ({ collection, items }) => {
+      calls.add++;
+      if (fail) return Promise.reject(typeof fail === 'function' ? fail('add') : fail);
+      const id = (items[0] && items[0].id) || 'cccccccccccccccccccccccc';
+      cloudItems.push({ id, collection, content: items[0].content });
+      return Promise.resolve({ data: [{ id, status: 'SUCCESS' }] });
+    };
+    mini.updateCloudStorage = ({ items }) => {
+      calls.update++;
+      if (fail) return Promise.reject(typeof fail === 'function' ? fail('update') : fail);
+      const it = cloudItems.find(x => x.id === items[0].id);
+      if (it) it.content = items[0].content;
+      else cloudItems.push({ id: items[0].id, collection: 'farm', content: items[0].content });
+      return Promise.resolve({ data: [{ id: items[0].id, status: 'SUCCESS' }] });
+    };
+    mini.queryCloudStorage = () => {
+      calls.query++;
+      if (fail && opts.failOnQuery !== false) {
+        const e = typeof fail === 'function' ? fail('query') : fail;
+        if (e) return Promise.reject(e);
+      }
+      return Promise.resolve({ items: cloudItems });
+    };
+    mini.removeCloudStorage = () => Promise.resolve({ data: [] });
+  }
+  const local = lsMock(opts.local || {});
+  const sandbox = {
+    console,
+    CustomEvent: class CustomEvent { constructor(type, init) { this.type = type; this.detail = init && init.detail; } },
+    unescape, encodeURIComponent, JSON, Date, Math, Object, String, Number, Array, Promise, Error,
+    setTimeout, clearTimeout
+  };
+  sandbox.globalThis = sandbox;
+  sandbox.window = sandbox;
+  sandbox.window.xhs = { miniTool: mini };
+  sandbox.window.localStorage = local;
+  sandbox.window.dispatchEvent = function () {};
+  vm.createContext(sandbox);
+  vm.runInContext(PLATFORM, sandbox);
+  return { P: sandbox.PFPlatform, calls, cloudItems, local, xhsMem, sandbox };
+}
+
+function saveObj(at, day, extra) {
+  return Object.assign({ savedAt: at, clock: { day: day, t: 360 }, coins: day, saveVersion: 10, tiles: [{ f: 'home', c: 0, r: 0 }] }, extra || {});
+}
+
+function waitReady(P) {
+  return Promise.resolve(P.ready);
+}
+
+ok('cloud stamp / isNewer: later savedAt wins; equal time uses larger day', () => {
+  // load a platform just for the helpers
+  const { P } = loadPlatform({ noCloud: true, local: {} });
+  const { stamp, isNewer } = P.cloud;
+  const a = stamp(saveObj(200, 1));
+  const b = stamp(saveObj(100, 9));
+  assert(isNewer(a, b), 'later savedAt should win even if day is smaller');
+  assert(!isNewer(b, a));
+  const c = stamp(saveObj(200, 8));
+  const d = stamp(saveObj(200, 3));
+  assert(isNewer(c, d), 'same savedAt, larger day wins');
+  assert(!isNewer(d, c));
+  assert(isNewer(a, null), 'valid beats missing');
+  assert(!isNewer(null, a), 'missing never beats valid');
+});
+
+function cloudCases() {
+  const KEY = SAVE.KEY;
+  return Promise.resolve()
+    .then(() => {
+      const { P, calls } = loadPlatform({ noCloud: true, local: { [KEY]: JSON.stringify(saveObj(50, 2)) } });
+      return waitReady(P).then(() => {
+        assert.strictEqual(P.cloud.present, false);
+        assert.strictEqual(P.cloud.usable, false);
+        const raw = P.store().getItem(KEY);
+        assert.strictEqual(JSON.parse(raw).clock.day, 2);
+        P.store().setItem(KEY, JSON.stringify(saveObj(60, 3)));
+        return new Promise(r => setTimeout(r, 50)).then(() => {
+          assert.strictEqual(calls.add, 0);
+          assert.strictEqual(calls.update, 0);
+          assert.strictEqual(calls.query, 0);
+          console.log('ok   cloud-missing: falls back to local, never calls cloud APIs');
+          n++;
+        });
+      });
+    })
+    .then(() => {
+      const localSave = saveObj(80, 4);
+      const { P, calls } = loadPlatform({
+        cloudFail: { errCode: 2001, errMsg: '存储读写失败' },
+        local: { [KEY]: JSON.stringify(localSave) }
+      });
+      return waitReady(P).then(() => {
+        assert.strictEqual(P.cloud.present, true, 'methods are present even when calls fail');
+        const raw = P.store().getItem(KEY);
+        assert(raw, 'query failure must not be treated as empty');
+        assert.strictEqual(JSON.parse(raw).clock.day, 4);
+        assert.strictEqual(JSON.parse(raw).savedAt, 80);
+        P.store().setItem(KEY, JSON.stringify(saveObj(90, 5)));
+        return P.cloud.flush().then(() => {
+          // flush may retry and fail; local cache must still hold the new save
+          assert.strictEqual(JSON.parse(P.store().getItem(KEY)).clock.day, 5);
+          assert(calls.query >= 1);
+          console.log('ok   cloud-fail: keeps local, does not wipe on query/write error');
+          n++;
+        });
+      });
+    })
+    .then(() => {
+      const localSave = saveObj(100, 3);
+      const cloudSave = saveObj(200, 9, { coins: 999 });
+      const { P } = loadPlatform({
+        local: { [KEY]: JSON.stringify(localSave) },
+        cloudItems: [{ id: 'aaaaaaaaaaaaaaaaaaaaaaaa', collection: 'farm', content: cloudSave }]
+      });
+      return waitReady(P).then(() => {
+        const got = JSON.parse(P.store().getItem(KEY));
+        assert.strictEqual(got.savedAt, 200, 'cloud-newer must be adopted');
+        assert.strictEqual(got.clock.day, 9);
+        assert.strictEqual(got.coins, 999);
+        // write-through cache
+        // (localStorage mock is the sandbox one; P.store already has it)
+        console.log('ok   cloud-newer: load picks the cloud save and caches it locally');
+        n++;
+      });
+    })
+    .then(() => {
+      const localSave = saveObj(300, 12, { coins: 77 });
+      const cloudSave = saveObj(150, 6, { coins: 1 });
+      const { P, cloudItems, calls } = loadPlatform({
+        local: { [KEY]: JSON.stringify(localSave) },
+        cloudItems: [{ id: 'bbbbbbbbbbbbbbbbbbbbbbbb', collection: 'farm', content: cloudSave }],
+        failOnQuery: false
+      });
+      return waitReady(P).then(() => {
+        const got = JSON.parse(P.store().getItem(KEY));
+        assert.strictEqual(got.savedAt, 300, 'local-newer must be kept');
+        assert.strictEqual(got.clock.day, 12);
+        assert.strictEqual(got.coins, 77);
+        return P.cloud.flush().then(() => {
+          assert(calls.update >= 1 || calls.add >= 1, 'newer local should be written through to cloud');
+          const onCloud = cloudItems[cloudItems.length - 1].content;
+          assert.strictEqual(onCloud.savedAt, 300);
+          assert.strictEqual(onCloud.clock.day, 12);
+          console.log('ok   local-newer: keeps local and write-through to cloud');
+          n++;
+        });
+      });
+    })
+    .then(() => {
+      console.log('passed', n, 'xhs-save tests; late-game bytes', globalThis.__LATE_GAME_SAVE_BYTES);
+    });
+}
+
+cloudCases().catch(err => { console.error(err); process.exit(1); });

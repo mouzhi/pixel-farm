@@ -29,7 +29,7 @@ https://creator.xiaohongshu.com/new/red-app
 1. **【用户】** 用自己的小红书账号完成实名；确认粉丝和注册时长是否达到当前页面要求。
 2. **【用户】** 打开 https://creator.xiaohongshu.com/new/red-app 确认能看到「小工具 / 部署小工具」。
 3. 本地打包（见下方），得到 `platforms/xhs/pixel-farm-xhs-tool.zip`。
-4. **【用户】** 在部署页上传 zip（≤10MB），填写版本号、权限，需要时勾选 AI / 排行榜等高级能力。本游戏首发不必勾选排行榜或 AI。
+4. **【用户】** 在部署页上传 zip（≤10MB），填写版本号、权限（本包勾选「用户头像和昵称」`apiCloudStore`），需要时勾选 AI / 排行榜 / 关注创作者等高级能力。`redapp submit` 的 `authorizations` 只有相册、相机、麦克风、位置、`apiCloudStore`，**没有**关注创作者的权限编码；若网页表单把「关注创作者」「排行榜」「云存储」列为高级能力，须在创服页面勾选；CLI 草稿改不了这些项。
 5. **【用户】** 手机扫码预览，确认 Android / iOS 都能玩、存档能留下。
 6. **【用户】** 提交审核。记录从几分钟到 1–3 个工作日都有；周末可能更慢。`submitted` 只表示已送审。
 7. **【用户】** 审核通过后，在 App 发笔记时通过「挂件 / 小工具」挂上，读者点开才能玩。未挂笔记的已发布工具，别人还是找不到。
@@ -62,8 +62,8 @@ redapp dev --dir /workspace/repos/pf-xhs/platforms/xhs/dist --agent
 - Canvas 2D 完整支持；本游戏只用 2D。
 - 脚本必须外置经典 `<script src>`，禁止内联脚本、`onclick`、`type="module"`、`eval`、WASM。
 - 存储：客户端 9.46+ 用 `window.xhs.miniTool.setStorage/getStorage`（单 key ≤1MB，整工具 ≤10MB）。`localStorage` 只作旧版降级。写入先写 `:bak` 再写主 key，加载时校验并回退备份；超配额会 toast，不会覆盖上一份好存档。游戏内每天早上、每 30 秒，以及 `visibilitychange` / `pagehide` / `freeze`（并探测是否有 `onHide`，官方 2026-11-13 清单里没有）会落盘。离线结算从 `savedAt` 起算，拒绝非有限/负间隔，未来时钟超过 60 秒不发离线金币，超长跨度封顶。手机端游玩记录收紧（30 天 / 200 事件 / 10 段会话），并关掉文件夹同步。
-- 云存储（9.51+，内测）：`add/update/query/removeCloudStorage`，单条 `content` JSON UTF-8 ≤64KB，批量非事务，未授权 errCode 1006 须降级。启动时只做方法存在性探测（`PFPlatform.cloud`），**不要作为存档唯一来源，本包也不依赖它**。合成后期存档约 39KB，理论上能塞进单条，但仍须本地 `setStorage` 为源。
-- 支付：禁用 `PaymentRequest`。买断走宿主支付墙，工具内无商品内购 API。赞赏用 `rewardAuthor`（成功回执不含金额）。排行榜 `submitScore/getRankList/getMyRank` 为 9.51+ 内测，上传时须勾选头像昵称授权。
+- 云存储（官方 §3.16，9.51+，内测）：`add/update/query/removeCloudStorage`，单条 `content` JSON UTF-8 ≤64KB（1003 超限），未授权 1005/1006 须降级。本包把它当作跨设备**主存档**：启动时同时读云和本地（Storage JS API §3.6/3.7，再降级 localStorage），按 `savedAt`（相同则比农场天数）取较新的一份，并回写到本地缓存；较新的本地会择机上传。云写入节流约 3 分钟，并在 `visibilitychange` / `pagehide` / `PFPlatform.flush` 时补写。查询失败不当作空档。后期存档约 39KB，低于 64KB 上限。CLI 的 `authorizations` 里 `apiCloudStore` 官方说明是「用户头像和昵称、用于排行榜」，**没有**单独的云存储权限编码；若创服网页把「云存储」列为高级能力或权限，须在表单上勾选，否则真机会 1006 降级到本地。
+- 支付：禁用 `PaymentRequest`。买断走宿主支付墙，工具内无商品内购 API。赞赏用 `rewardAuthor`（成功回执不含金额）。排行榜 `submitScore/getRankList/getMyRank` 为 9.51+ 内测，须勾选头像昵称授权 `apiCloudStore`。关注创作者用 `followAuthor` / `getFollowStatus`（官方能力清单 3.15，客户端 9.51+，版本门槛 9510），无业务参数，只能关注当前小工具作者；`follow_status` 为 -1 失败 / 0 未关注 / 1 已关注 / 2 作者本人。用户关闭确认（20002）或已有确认框（10003）保持静默；当日确认上限 10 次（15404）只轻提示一次。低版本或未注入 API 时隐藏入口，不打扰。CLI 草稿没有对应 authorization 字段。关注创作者入口已接 `followAuthor` / `getFollowStatus`（§3.15），放在底栏「关」和排行榜标题旁，不自动弹窗。未做「关注有礼」：小工具能力清单只把该 API 写成引导关注和刷新按钮状态；《小红书小程序管理规范》（2025-12-10）§7.6 明确禁止「关注立即获得利益」和用明示/暗示样式诱导关注，虚拟奖品（金币、优惠券、积分等）也在禁止之列；品牌号社区规范也将「关注就能领红包」列为诱导类作弊。因此只保留普通关注入口，不发放关注专属道具。
 - 体积：zip 上限 10 MiB（建议 ≤2 MiB），解压 ≤30 MiB。
 
 打包与官方审计：
@@ -77,6 +77,6 @@ bash platforms/xhs/pack.sh
 
 适配层 `platform.js` 会在小红书容器里把官方 Storage 预热成同步 `syncStore`，再加载游戏；网页仍走 `localStorage`。文件夹同步（File System Access）在容器里不可用，会自动隐藏。整包买断不用改游戏内逻辑；赞赏入口和装饰类内购要等官方 API 稳定后再接，且避免付费才能通关。
 
-竖屏包（`mobile.css` / `mobile.js`，只打进小工具 zip，网页版不加载）：framebuffer 240×426，按设备像素取最大整数倍缩放（iPhone 14 / 常见 Android 上为 4×），舞台在顶栏和底栏之间，避免页面滚动和双指缩放整页。默认跟随农夫，拖动画布会暂时关掉跟随；底栏是商店 / 仓库 / 存档 / 倍速 / 菜单（菜单只开关小地图，默认关闭）。触控目标 ≥44px。横屏会压低顶栏并允许小于 1× 的 CSS 缩放，以免画布溢出，但小工具按竖屏来设计。
+竖屏包（`mobile.css` / `mobile.js`，只打进小工具 zip，网页版不加载）：framebuffer 240×426，按设备像素取最大整数倍缩放（iPhone 14 / 常见 Android 上为 4×），舞台在顶栏和底栏之间，避免页面滚动和双指缩放整页。默认跟随农夫，拖动画布会暂时关掉跟随；底栏是商店 / 仓库 / 存档 / 倍速 / 菜单（菜单只开关小地图，默认关闭）。触控目标 ≥44px。顶部系统分享（左）和返回/关闭胶囊（右）完全留空：HUD 居中放在 `getWindowInfo().menuButtons`（9.49+，否则按 ≥96px 顶距保守避让）下方；跟随农夫和关注作者都在底栏，不进顶角。双指捏合用非被动 `touchmove` + `gesturestart` 拦截，缩放与旋转会先判别再各自生效；旋转有增益和每帧/每次手势角度上限，避免转太快。横屏会压低顶栏并允许小于 1× 的 CSS 缩放，以免画布溢出，但小工具按竖屏来设计。
 
 存档测试：`node tools/xhs-save-test.js`（配额、损坏主档回退 `:bak`、后期存档体积）以及原有的 `node tools/save-test.js`。

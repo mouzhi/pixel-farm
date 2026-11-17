@@ -2123,7 +2123,10 @@ addEventListener('blur', () => { keyPan.clear(); keyRot = 0; });
 cv.style.touchAction = 'none';
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, rot: e.button === 2 || e.shiftKey, moved: false }; cv.setPointerCapture(e.pointerId); });
-cv.addEventListener('pointermove', e => { hoverAt(e); if (!drag) return;
+function cancelDrag() { drag = null; document.body.classList.remove('grab'); }
+cv.addEventListener('pointermove', e => {
+  if (window.PFPlatform && PFPlatform.gestureLock) { if (drag) cancelDrag(); return; }
+  hoverAt(e); if (!drag) return;
   if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 5) { drag.moved = true; document.body.classList.add('grab'); }
   if (drag.moved) { const r = cv.getBoundingClientRect(), k = W / r.width;
     if (drag.rot) cam.ta += (e.clientX - drag.x) * 0.008; else panScreen((e.clientX - drag.x) * k, (e.clientY - drag.y) * k); }
@@ -2292,7 +2295,7 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
-  fit, panScreen, clampCam, setZoom: z => { zoom = z | 0; fit(); return zoom; }, getZoom: () => zoom, homeCam: () => { cam.ta = DEFAULT_A; panTo(HOME_CAM.x, HOME_CAM.y); },
+  fit, panScreen, clampCam, setZoom: z => { zoom = z | 0; fit(); return zoom; }, getZoom: () => zoom, homeCam: () => { cam.ta = DEFAULT_A; panTo(HOME_CAM.x, HOME_CAM.y); }, cancelDrag,
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },

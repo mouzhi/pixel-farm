@@ -16,6 +16,20 @@ html.xhs-mobile, html.xhs-mobile body {
 }
 html.xhs-mobile body { padding: 0; }
 
+/* 顶部系统分享（左）和返回/关闭胶囊（右）完全避让。
+   缺省按慷慨余量预留；客户端 9.49+ 再用 getWindowInfo().menuButtons 精修。 */
+html.xhs-mobile {
+  --xhs-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --xhs-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --xhs-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --xhs-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  --xhs-top-clear: max(96px, calc(var(--xhs-safe-top) + 64px));
+  --xhs-left-clear: max(72px, calc(var(--xhs-safe-left) + 56px));
+  --xhs-right-clear: max(108px, calc(var(--xhs-safe-right) + 88px));
+  --xhs-bottom-clear: max(8px, var(--xhs-safe-bottom));
+  --xhs-bar-h: 72px;
+}
+
 html.xhs-mobile #xhs-stage {
   position: fixed;
   inset: 0;
@@ -28,8 +42,11 @@ html.xhs-mobile #wrap { position: fixed; margin: 0; z-index: 0; }
 /* —— 顶栏：小像素框，不挡世界 —— */
 html.xhs-mobile #hud {
   position: fixed;
-  left: max(8px, env(safe-area-inset-left, 0px));
-  top: max(8px, env(safe-area-inset-top, 0px));
+  left: 50%;
+  right: auto;
+  top: var(--xhs-top-clear);
+  transform: translateX(-50%);
+  max-width: calc(100vw - 24px);
   z-index: 20;
   background: rgba(40, 28, 22, .86);
   border: 3px solid #e8c78a;
@@ -66,21 +83,23 @@ html.xhs-mobile #hud .ico.coin { background-position: 0 0; }
 html.xhs-mobile #loveHud { margin: 2px 0 0; font-size: 12px; gap: 4px; }
 html.xhs-mobile #loveVal { font-size: 12px; color: #ffd76a; }
 html.xhs-mobile #loveTip {
-  left: max(8px, env(safe-area-inset-left, 0px));
-  right: max(8px, env(safe-area-inset-right, 0px));
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
   top: auto;
   width: auto; max-width: none; min-width: 0;
-  bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 56px);
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
   transform: none;
   z-index: 25;
 }
 
 html.xhs-mobile #log {
   position: fixed;
-  left: max(8px, env(safe-area-inset-left, 0px));
-  right: max(88px, env(safe-area-inset-right, 0px));
-  top: max(8px, env(safe-area-inset-top, 0px));
-  margin-top: 58px;
+  left: 50%;
+  right: auto;
+  top: var(--xhs-top-clear);
+  margin-top: 52px;
+  transform: translateX(-50%);
+  width: min(72vw, 280px);
   min-width: 0;
   max-width: none;
   font-size: 11px;
@@ -98,10 +117,10 @@ html.xhs-mobile #tools {
   position: fixed;
   z-index: 13;
 }
-html.xhs-mobile #say { top: max(8px, env(safe-area-inset-top, 0px)); margin-top: 58px; left: max(8px, env(safe-area-inset-left, 0px)); }
+html.xhs-mobile #say { top: var(--xhs-top-clear); margin-top: 52px; left: 50%; right: auto; transform: translateX(-50%); }
 html.xhs-mobile #tools {
-  left: max(8px, env(safe-area-inset-left, 0px));
-  bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 56px);
+  left: max(8px, var(--xhs-safe-left));
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
   display: flex; flex-wrap: wrap; gap: 6px;
 }
 
@@ -120,45 +139,40 @@ html.xhs-mobile .rlab {
   pointer-events: auto;
 }
 
-/* —— 底部像素图标 —— */
-html.xhs-mobile #xhs-dock,
-html.xhs-mobile #xhs-corner {
+/* —— 底栏：大号可读像素图标 + 一字标签，避开顶部系统区 —— */
+html.xhs-mobile #xhs-bar {
   position: fixed;
+  left: max(6px, var(--xhs-safe-left));
+  right: max(6px, var(--xhs-safe-right));
+  bottom: var(--xhs-bottom-clear);
   z-index: 20;
   display: flex;
-  gap: 6px;
+  justify-content: space-evenly;
+  align-items: flex-end;
+  gap: 3px;
   pointer-events: none;
-}
-html.xhs-mobile #xhs-dock {
-  left: max(8px, env(safe-area-inset-left, 0px));
-  bottom: max(8px, env(safe-area-inset-bottom, 0px));
-}
-html.xhs-mobile #xhs-corner {
-  right: max(8px, env(safe-area-inset-right, 0px));
-  bottom: max(8px, env(safe-area-inset-bottom, 0px));
-  flex-direction: column;
-}
-html.xhs-mobile #xhs-follow {
-  position: fixed;
-  right: max(8px, env(safe-area-inset-right, 0px));
-  top: max(8px, env(safe-area-inset-top, 0px));
-  z-index: 20;
+  padding: 0 0 4px;
+  box-sizing: border-box;
 }
 html.xhs-mobile .xhs-ico {
   pointer-events: auto;
-  width: 44px;
-  height: 44px;
-  padding: 0;
+  width: 48px;
+  min-width: 44px;
+  height: 64px;
+  padding: 2px 0 1px;
   display: inline-flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
+  gap: 1px;
   background: #2a1d16;
   border: 3px solid #e8c78a;
   box-shadow: 0 0 0 3px #3a2a20;
   color: #fff6dc;
   image-rendering: pixelated;
   touch-action: manipulation;
-  flex: none;
+  flex: 0 0 auto;
+  position: relative;
 }
 html.xhs-mobile .xhs-ico.on {
   background: #4a3428;
@@ -168,35 +182,58 @@ html.xhs-mobile .xhs-ico:active { transform: translate(1px, 1px); }
 html.xhs-mobile .xhs-ico[hidden] { display: none !important; }
 html.xhs-mobile .xhs-ico i {
   display: block;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  flex: none;
   background: url(ui-icons.png) no-repeat;
-  background-size: 192px 32px;
+  background-size: 280px 40px;
   image-rendering: pixelated;
   image-rendering: crisp-edges;
 }
+html.xhs-mobile .xhs-ico-lab {
+  font: 700 11px/1 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  color: #ffe7a8;
+  letter-spacing: 0;
+}
 html.xhs-mobile .xhs-ico-bag i { background-position: 0 0; }
-html.xhs-mobile .xhs-ico-store i { background-position: -32px 0; }
-html.xhs-mobile .xhs-ico-shop i { background-position: -64px 0; }
-html.xhs-mobile .xhs-ico-follow i { background-position: -96px 0; }
-html.xhs-mobile .xhs-ico-board i { background-position: -128px 0; }
-html.xhs-mobile .xhs-ico-speed i { background-position: -160px 0; }
-html.xhs-mobile .xhs-ico-speed { font: 700 9px/1 "Noto Sans CJK SC",sans-serif; color: #ffd76a; flex-direction: column; gap: 0; }
+html.xhs-mobile .xhs-ico-store i { background-position: -40px 0; }
+html.xhs-mobile .xhs-ico-shop i { background-position: -80px 0; }
+html.xhs-mobile .xhs-ico-follow i { background-position: -120px 0; }
+html.xhs-mobile .xhs-ico-board i { background-position: -160px 0; }
+html.xhs-mobile .xhs-ico-speed i { background-position: -200px 0; }
+html.xhs-mobile .xhs-ico-author i { background-position: -240px 0; }
+html.xhs-mobile .xhs-board-hd .xhs-ico-author {
+  width: 36px;
+  height: 36px;
+  margin-left: auto;
+  flex: none;
+  padding: 0;
+}
+html.xhs-mobile .xhs-board-hd .xhs-ico-author i {
+  width: 24px;
+  height: 24px;
+  background-size: 168px 24px;
+  background-position: -144px 0;
+}
+html.xhs-mobile .xhs-board-hd .xhs-ico-author .xhs-ico-lab { display: none; }
 html.xhs-mobile .xhs-ico-speed em {
   font-style: normal;
   position: absolute;
-  bottom: 1px;
-  right: 2px;
+  top: 2px;
+  right: 1px;
   font-size: 9px;
+  font-weight: 700;
+  color: #ffd76a;
   text-shadow: 1px 1px 0 #1a120e;
+  line-height: 1;
 }
 
 /* 背包展开：贴在底栏图标上方，不改舞台尺寸 */
 html.xhs-mobile #xhs-inv-dock {
   position: fixed;
-  left: max(8px, env(safe-area-inset-left, 0px));
-  right: max(8px, env(safe-area-inset-right, 0px));
-  bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 52px);
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
   z-index: 19;
   box-sizing: border-box;
   background: rgba(40, 28, 22, .92);
@@ -233,12 +270,12 @@ html.xhs-mobile #menu,
 html.xhs-mobile #xhs-board,
 html.xhs-mobile #offline {
   position: fixed;
-  left: max(8px, env(safe-area-inset-left, 0px));
-  right: max(8px, env(safe-area-inset-right, 0px));
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
   top: auto;
-  bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 52px);
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
   width: auto;
-  max-height: min(72vh, calc(100dvh - env(safe-area-inset-top, 0px) - 68px));
+  max-height: min(72vh, calc(100dvh - var(--xhs-top-clear) - var(--xhs-bar-h) - 12px));
   transform: none;
   border-radius: 0;
   overflow: auto;
@@ -284,7 +321,7 @@ html.xhs-mobile .xhs-board-me { margin-top: 10px; color: #ffd76a; font-weight: 7
 html.xhs-mobile #xhs-toast {
   position: fixed;
   left: 16px; right: 16px;
-  bottom: calc(max(8px, env(safe-area-inset-bottom, 0px)) + 56px);
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
   z-index: 40;
   background: rgba(40, 28, 22, .95);
   color: #ffd76a;
