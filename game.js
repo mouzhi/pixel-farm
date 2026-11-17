@@ -216,6 +216,13 @@ function branchModel(seed) {
     return null;
   });
 }
+function pebbleModel(seed) { // a small stone, same palette and stacking path as the field rocks
+  const r = mulberry32(seed), cx = 3.2 + r() * 0.5, cy = 2.6 + r() * 0.3;
+  const rx = 3.0 + r() * 0.4, ry = 2.3 + r() * 0.3, rz = 2.5 + r() * 0.3;
+  const f = (x, y, z) => ell(x + 0.5, y + 0.5, z + 0.5, cx, cy, 0.1, rx, ry, rz) > 1 ? null : (z >= 2 && hash3(x, y, seed) > 0.55 ? St[3] : St[2]);
+  f.normal = ellN(cx, cy, 0.1, rx, ry, rz);
+  return buildModel(8, 6, 4, f);
+}
 const CROPS = {
   carrot: { name: '胡萝卜', price: 9, top: Ac[2] },
   cabbage: { name: '卷心菜', price: 13, top: G[4] },
@@ -424,7 +431,7 @@ const props = [];
 const addProp = (m, x, y, rot = 0, o = {}) => { const p = Object.assign({ m, x, y, rot, z: 0 }, o); props.push(p); return p; };
 const models = {
   house: houseModel(), barn: barnModel(), stallB: stallModel('back'), stallF: stallModel('front'), well: wellModel(), fence: fenceModel(),
-  rocks: [1, 2, 3].map(s => rockModel(s * 31)), branches: [1, 2].map(s => branchModel(s * 17)), weeds: SPRITES.weed,
+  rocks: [1, 2, 3].map(s => rockModel(s * 31)), branches: [1, 2].map(s => branchModel(s * 17)), pebbles: [1, 2].map(s => pebbleModel(s * 43)), weeds: SPRITES.weed,
   soil: [soilModel(false), soilModel(true)],
 };
 addProp(models.house, HOUSE.x, HOUSE.y, 0, { big: 1 });
@@ -483,6 +490,44 @@ function spawnClutter(t, pDebris, pWeed) {
   return false;
 }
 tiles.forEach(t => spawnClutter(t, 0.34, 0.42));
+// yard clutter lives off the field (grass and dirt around the farm). It is saved as { type, v, rot, x, y }.
+const YARD_CAP = 18, YARD_START = 26, YARD_TYPES = ['weed', 'weed', 'weed', 'rock', 'rock', 'branch', 'branch', 'pebble'];
+const yard = [];
+const clutterModel = d => { const a = d.type === 'rock' ? models.rocks : d.type === 'pebble' ? models.pebbles : models.branches; return a[d.v % a.length]; };
+function yardSpotOk(x, y) {
+  if (x < 10 || x > WW - 8 || y < 18 || y > WH + 6) return false;
+  if (Math.max(-x, x - WW, -y, y - WH, 0) > 8) return false;
+  if (groundAt(x, y)[1] === 'water') return false;
+  if (pathD(x, y) < 5.2) return false;
+  const fx0 = FIELD.c0 * TILE, fy0 = FIELD.r0 * TILE;
+  if (x > fx0 - 3 && x < fx0 + FIELD.cols * TILE + 3 && y > fy0 - 3 && y < fy0 + FIELD.rows * TILE + 3) return false;
+  const near = (px, py, r) => Math.hypot(x - px, (y - py) * 1.2) < r;
+  if (near(HOUSE.x, HOUSE.y, 22) || near(BARN.x, BARN.y, 20) || near(WELL.x, WELL.y, 12) || near(STALL.x, STALL.y, 16) || near(BENCH.x, BENCH.y, 10)) return false;
+  if (near(POND.x + 11, POND.y + 5, 8)) return false;
+  for (const p of props) {
+    if (p.tree && near(p.x, p.y, 10)) return false;
+    if ((p.m === hayModel || p.m === crateModel || p.m === logsModel || p.m === mailModel) && near(p.x, p.y, 8)) return false;
+  }
+  for (const c of yard) if (Math.hypot(c.x - x, c.y - y) < 8) return false;
+  return true;
+}
+// a private stream so yard spawn / loot never moves the simulation RNG (prices, harvest drops, field clutter)
+const yardRng = (salt) => mulberry32(((RNG.a ^ (salt | 0) ^ 0xC0FFEE) >>> 0) || 1);
+function fillYard(rnd, target) {
+  // prefer the visible grass around the pond, house, field and stall; fall back to the rest of the farm
+  const bands = [[20, 70, 52, 100], [70, 145, 92, 122], [124, 175, 48, 100], [12, 50, 50, 90], [10, WW - 8, 40, WH + 4]];
+  let tries = 0;
+  while (yard.length < target && tries < 800) {
+    tries++;
+    const prefer = yard.length < target * 0.85;
+    const b = bands[Math.floor(rnd() * (prefer ? bands.length - 1 : bands.length))];
+    const x = b[0] + rnd() * (b[1] - b[0]), y = b[2] + rnd() * (b[3] - b[2]);
+    if (!yardSpotOk(x, y)) continue;
+    const type = YARD_TYPES[Math.floor(rnd() * YARD_TYPES.length)];
+    const n = type === 'rock' ? models.rocks.length : type === 'branch' ? models.branches.length : type === 'pebble' ? models.pebbles.length : models.weeds.length;
+    yard.push({ type, v: Math.floor(rnd() * n), rot: rnd() * 6.28, x, y });
+  }
+}
 
 // ---------- state ----------
 const S = {
@@ -544,6 +589,7 @@ function board() {
   else if (tilledEmpty.length && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) post('buy', 55, STALL_SPOT, sellTask);
   if (weeds.length) { const t = rngNear(weeds); post('weed', 45, t, () => weedTask(t)); }
   if (debris.length) { const t = rngNear(debris); post('clear', 40, t, () => clearTask(t)); }
+  if (yard.length) { const c = rngNear(yard); post('tidy', 18, c, () => yardTask(c)); }
   if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
   if (tillable.length && T < 17 * 60) { // the wide hoe aims at the tile whose 3x3 has the most soil to turn
     const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
@@ -604,6 +650,21 @@ function clearTask(t) {
   const rock = t.debris.type === 'rock';
   return { label: '正在清理杂物', to: standAt(t), tile: t, dur: rock ? 8 : 6, fx: rock ? 'rock' : 'wood', pose: 'pull', done: () => { if (!t.debris) return; t.debris = null; S.cleared++; burst(t.x, t.y, 2, rock ? ['#9a9a92', '#b9b8ad', '#77776f'] : ['#a0703f', '#7a5230'], 10); log(rock ? '搬走了一块石头' : '清走了一根树枝'); groundDirty = true; } };
 }
+function yardTask(c) {
+  const labels = { weed: '正在清理院子的杂草', rock: '正在搬走院子里的石头', branch: '正在捡起院子里的枯枝', pebble: '正在清走小石子' };
+  const dur = c.type === 'rock' ? 10 : c.type === 'pebble' ? 5 : 8;
+  const fx = c.type === 'weed' ? 'leaf' : (c.type === 'rock' || c.type === 'pebble') ? 'rock' : 'wood';
+  return { kind: 'tidy', label: labels[c.type], to: standAt(c), tile: c, dur, fx, pose: 'pull', done: () => {
+    const i = yard.indexOf(c); if (i < 0) return;
+    yard.splice(i, 1); S.cleared++;
+    const yr = yardRng(S.cleared * 2654435761 + S.day * 374761393);
+    if (c.type === 'weed' && yr() < 0.7) { F.gathered++; S.flow.weed++; popText(c.x, c.y, 10, '+1', '#e6c35c'); }
+    else if ((c.type === 'rock' || c.type === 'branch') && yr() < 0.3) { S.coins++; S.earned++; S.todayEarn++; popText(c.x, c.y, 12, '+1', '#ffd76a'); }
+    const col = c.type === 'weed' ? ['#5a9a3a', '#3f7a32'] : c.type === 'branch' ? ['#a0703f', '#7a5230'] : ['#9a9a92', '#b9b8ad', '#77776f'];
+    burst(c.x, c.y, 2, col, 10);
+    log(c.type === 'weed' ? '拔掉了院子里的杂草' : c.type === 'rock' ? '搬走了院子里的一块石头' : c.type === 'branch' ? '捡走了院子里的枯枝' : '清走了一颗小石子');
+  } };
+}
 function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 around the target in one go
   const wide = S.eff.till3;
   return { label: wide ? '正在用宽锄头开垦' : '正在开垦土地', to: standAt(t), tile: t, dur: wide ? 5 : S.eff.tillDur, fx: 'dirt', pose: 'hoe', done: () => {
@@ -637,8 +698,11 @@ function overnight() {
     t.watered = false;
   }
   let n = 0; tiles.forEach(t => { if (t.open && !t.crop && spawnClutter(t, 0.1, 0.14)) n++; });
+  const before = yard.length, add = 2 + Math.floor(yardRng(S.day * 668265263)() * 3); // 2..4, without consuming rand()
+  if (yard.length < YARD_CAP) fillYard(yardRng(S.day * 2147483647), Math.min(YARD_CAP, yard.length + add));
+  const yn = yard.length - before;
   S.prices = SIM.driftPrices(S.prices, rand);
-  groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处杂草杂物`);
+  groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
   onMorning();
 }
 function stepSim(dm) {
@@ -974,6 +1038,10 @@ function render() {
     if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: CROP_IDS.indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
       else list.push({ spr: CROP_SPR[Math.min(2, t.crop.stage)], x: t.x, y: t.y, sway: t.crop.stage === 2 ? 0.5 : 0, flat: t.crop.stage === 0 }); }
   }
+  for (const c of yard) {
+    if (c.type === 'weed') list.push({ spr: weedSprite(c), x: c.x, y: c.y, sway: 0.8, w: 1 });
+    else list.push({ m: clutterModel(c), x: c.x, y: c.y, rot: c.rot, z: 0 });
+  }
   let farmerD = null;
   if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y, basket: F.crops.length ? F.crops[F.crops.length - 1] : null }, farmerPose()); list.push(farmerD); }
   const selling = F.task && F.task.to === STALL_SPOT && !F.moving && !F.home;
@@ -1160,7 +1228,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 buildGroundBase();
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '4.1';
+const GAME_VERSION = '4.2';
 function snapshot() {
   return {
     saveVersion: PFSave.CURRENT, gameVersion: GAME_VERSION, createdAt: S.createdAt, savedAt: Date.now(), rng: RNG.a,
@@ -1171,6 +1239,7 @@ function snapshot() {
     farmer: { x: Math.round(F.x * 100) / 100, y: Math.round(F.y * 100) / 100, sleeping: F.sleeping, home: F.home },
     tiles: tiles.map(t => ({ c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot } })),
     upgrades: Object.assign({}, S.up), settings: { speed: S.speed },
+    yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     log: S.log.slice(),
   };
 }
@@ -1185,6 +1254,9 @@ function restore(s) { // s has been migrated and validated by PFSave
     Object.assign(t, { open: o.open, tilled: o.tilled, watered: o.watered, debris: o.debris, weed: o.weed, crop: o.crop && Object.assign({}, o.crop) });
     if (t.crop) t.crop.stage = SIM.stageOf(t.crop); }
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; applyUpgrades(); // opens tiles a v1 save did not know about
+  yard.length = 0;
+  if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
+  else fillYard(mulberry32((s.rng || 1) ^ 0xC0FFEE), YARD_START); // old saves get a yard to tidy, without touching the sim RNG
   S.log = s.log.slice(); S.label = F.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
 }
 const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };
@@ -1201,7 +1273,7 @@ onMorning = saveNow;
 const boot = PFSave.read();
 SAVE.notes = boot.notes;
 if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); settleOffline((Date.now() - boot.state.savedAt) / 1000); }
-else log('早上好！农场里乱糟糟的，先收拾一下');
+else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); }
 if (!boot.blocked) saveNow();
 setInterval(saveNow, 15000);
 let hiddenAt = 0;
@@ -1210,7 +1282,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', saveNow);
-Object.assign(window.__farm, { SAVE, snapshot, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - Math.hypot(j.at.x - F.x, j.at.y - F.y) / 8) * 10) / 10 })),
+Object.assign(window.__farm, { SAVE, snapshot, yard, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - Math.hypot(j.at.x - F.x, j.at.y - F.y) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; saveNow(); return true; } return false; },
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out

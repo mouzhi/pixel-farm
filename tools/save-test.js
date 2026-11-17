@@ -13,6 +13,7 @@ for (const f of fixtures) ok(`fixture ${f} migrates to v${SAVE.CURRENT}`, () => 
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')));
   assert.strictEqual(s.saveVersion, SAVE.CURRENT); assert(s.tiles.length > 0); assert(s.clock.day >= 1);
   for (const t of s.tiles) { if (t.debris) assert(Number.isInteger(t.debris.v)); if (t.weed) assert(Number.isInteger(t.weed.v)); }
+  if (s.yard) for (const c of s.yard) { assert(['rock', 'branch', 'weed', 'pebble'].includes(c.type)); assert(Number.isInteger(c.v)); assert(typeof c.x === 'number' && typeof c.y === 'number'); }
 });
 ok('minimal (older) v1 save gets defaults', () => {
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
@@ -45,13 +46,24 @@ ok('reset keeps one copy of the old save', () => {
   const m = new Mem({ [SAVE.KEY]: 'x', [SAVE.BAK]: 'y' }); SAVE.reset(m);
   assert.strictEqual(m.getItem(SAVE.KEY), null); assert.strictEqual(m.getItem(SAVE.BAK), null); assert([...m.m.keys()].some(k => k.startsWith(SAVE.PREFIX + 'reset:')));
 });
-ok('v1 -> v2: nothing bought, 1x speed, farm and gold kept', () => {
+ok('v1 -> current: nothing bought, 1x speed, farm and gold kept, yard left to seed', () => {
   const v1 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), s = SAVE.migrate(v1);
-  assert.strictEqual(v1.saveVersion, 1); assert.strictEqual(s.saveVersion, 2);
+  assert.strictEqual(v1.saveVersion, 1); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert.deepStrictEqual(s.upgrades, SIM.emptyUpgrades()); assert.deepStrictEqual(s.settings, { speed: 1 });
   assert.strictEqual(s.coins, v1.coins); assert.strictEqual(s.clock.day, v1.clock.day); assert.strictEqual(s.tiles.length, v1.tiles.length);
   assert.deepStrictEqual(s.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]), v1.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]));
   assert.strictEqual(s.inventory.store.carrot, v1.inventory.store.carrot); assert.strictEqual(s.inventory.store.watermelon, 0);
+  assert.strictEqual(s.yard, undefined);
+});
+ok('v2 -> v3: bought levels kept, missing yard stays unset, junk yard items dropped', () => {
+  const raw = Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v2-day4.json'), 'utf8')), { yard: [{ type: 'weed', v: 1, rot: 0.2, x: 50, y: 80 }, { type: 'bogus', v: 0, x: 1, y: 1 }] });
+  const s = SAVE.migrate(raw);
+  assert.strictEqual(s.saveVersion, 3); assert.strictEqual(s.upgrades.can, raw.upgrades && raw.upgrades.can || 0);
+  assert.strictEqual(s.coins, raw.coins); assert.deepStrictEqual(s.yard, [{ type: 'weed', v: 1, rot: 0.2, x: 50, y: 80 }]);
+  const empty = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v2-day4.json'), 'utf8')), { yard: [] }));
+  assert.deepStrictEqual(empty.yard, []);
+  const missing = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v2-day4.json'), 'utf8')));
+  assert.strictEqual(missing.yard, undefined);
 });
 ok('v2 keeps bought levels and rejects junk', () => {
   const v2 = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), { saveVersion: 2, upgrades: { can: 2, speed: 1, bogus: 5, hoe: -3 }, settings: { speed: 3 } }));
