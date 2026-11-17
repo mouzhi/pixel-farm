@@ -42,7 +42,7 @@ function outlineCanvas(c) {
   g.putImageData(img, 0, 0); return c;
 }
 // tiny hand-drawn 2D sprites (decals and billboards): rows of legend characters
-const PIXK = { d: G[1], m: G[2], g: G[3], l: G[4], h: G[5], w: Wd[1], b: Wd[2], t: Wd[3], s: Wd[4], k: Wd[5], c: Ac[0], y: Ac[1], o: Ac[2], p: Ac[3], r: Rf[2], R: Rf[3], e: St[2], E: St[3], a: Wt[2], A: Wt[3], u: Wt[1], i: Ink[0] };
+const PIXK = { d: G[1], m: G[2], g: G[3], l: G[4], h: G[5], w: Wd[1], b: Wd[2], t: Wd[3], s: Wd[4], k: Wd[5], c: Ac[0], y: Ac[1], o: Ac[2], p: Ac[3], r: Rf[2], R: Rf[3], e: St[2], E: St[3], a: Wt[3], A: Wt[5], u: Wt[2], i: Ink[0] };
 function pix(rows, outline = true) { const h = rows.length, w = Math.max(...rows.map(r => r.length)), c = mkc(w + 2, h + 2), g = c.getContext('2d');
   rows.forEach((r, y) => [...r].forEach((ch, x) => { if (PIXK[ch]) { g.fillStyle = PIXK[ch]; g.fillRect(x + 1, y + 1, 1, 1); } }));
   return outline ? outlineCanvas(c) : c; }
@@ -111,7 +111,7 @@ function win(u, v, u0, v0, s = 10) { // window on a wall: u along the wall, v = 
   const du = u - u0, dv = v - v0; if (du < 0 || du >= s || dv < 0 || dv >= s) return null;
   if (du <= 1 || du >= s - 2 || dv <= 1 || dv >= s - 2) return Ac[0];
   if (du === (s >> 1)) return Ac[0];
-  return (du >= 2 && du <= 3 && dv >= s - 5) ? Wt[3] : Wt[2];
+  return (du >= 2 && du <= 3 && dv >= s - 5) ? Wt[5] : Wt[3];
 }
 const HOUSE_DIM = { w: 70, d: 58, chim: [53, 20, 74] }; // chimney top (model px) for the smoke
 function houseModel() {
@@ -184,7 +184,7 @@ function wellModel() {
   return buildModel(24, 24, 40, (x, y, z) => {
     const dd = Math.hypot(x - 11.5, y - 11.5);
     if (z <= 8 && dd >= 6.5 && dd <= 10.5) return (z === 8) ? St[3] : (z % 4 === 0 ? St[1] : St[2]);
-    if (z === 5 && dd < 6.5) return Wt[1];
+    if (z === 5 && dd < 6.5) return Wt[2];
     if ((x <= 2 || x >= 21) && y >= 11 && y <= 12 && z >= 9 && z <= 28) return Wd[2];
     if (z === 24 && y >= 11 && y <= 12 && x >= 2 && x <= 21) return Wd[3];
     if (x >= 10 && x <= 13 && y >= 10 && y <= 13 && z >= 13 && z <= 16) return Wd[4];               // bucket
@@ -238,58 +238,118 @@ const SPRITES = {
   basket: pix(['tttttt', 'sstsst', '.ssss.']),
 };
 
-// ---------- style-A trees: round canopies built from shaded leaf discs around a dark core, one outline per tree ----------
-// A sphere looks the same from every side, so each leaf clump is a flat disc with fixed 3-tone banding (light from the
-// upper left), and only the disc *positions* turn with the camera. That keeps canopies crisp: no voxel speckle, no crawl.
-// The trunk is a small voxel stack. Discs move by whole pixels in the wind; the whole tree is cached per pose.
+// ---------- trees (after @asynkimo's forest): lush canopies of many leaf clumps, light from the upper left ----------
+// Every clump is a small flat 2D sprite: a scalloped ball made of little leaf cells, each cell lit on its upper left and dark
+// on its lower right, with a deep separation edge along the clump's lower right. A dark "inside" copy of every clump sits
+// behind it and never moves, so a clump lifted by the wind never opens a hole. Only clump *positions* turn with the camera
+// (a ball looks the same from every side), so canopies stay crisp at every angle. Trunks are small voxel stacks.
+// Species: broad oak (green or sunlit olive), dark back-row oak, layered pine (tiers ride a bending trunk), birch, bush.
 function part(box, fn) { const [x0, x1, y0, y1, z0, z1] = box, f = (x, y, z) => fn(x + x0, y + y0, z + z0); if (fn.normal) f.normal = (x, y, z) => fn.normal(x + x0, y + y0, z + z0);
-  const m = buildModel(x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1, f);
+  const m = buildModel(x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1, f, { noOutline: true });
+  m.nearest = true;
   return { m, ox: x0 + m.w / 2, oy: y0 + m.d / 2, z: z0 }; }
+const TREE_RAMPS = { // cap, light, mid, shade, deep, deepest
+  oak:   [G[5], G[4], G[3], G[2], G[1], G[0]],
+  olive: [G[5], G[5], G[4], G[3], G[2], G[1]],
+  dark:  [G[4], G[3], G[2], G[1], G[0], G[0]],
+  pine:  [G[3], G[2], G[1], G[0], G[0], Ink[0]],
+  birch: [G[5], G[4], G[3], G[2], G[1], G[0]],
+};
 const discC = new Map();
-function discSprite(r, tone, berries) { // tone 0 = upper clump (bright), 1 = lower clump, 2 = core (flat dark)
-  const key = r + '|' + tone + '|' + berries; if (discC.has(key)) return discC.get(key);
-  const rx = r, ry = Math.round(r * 0.92), c = mkc(2 * rx + 1, 2 * ry + 1), g = c.getContext('2d'), img = g.createImageData(c.width, c.height), d = new Uint32Array(img.data.buffer);
-  const ramp = tone === 0 ? [G[4], G[3], G[2], G[1]] : [G[3], G[2], G[1], G[1]];
-  for (let j = 0; j < c.height; j++) for (let i = 0; i < c.width; i++) {
-    const u = (i - rx) / (rx + 0.5), v = (j - ry) / (ry + 0.5), q = u * u + v * v; if (q > 1) continue;
-    if (tone === 2) { d[j * c.width + i] = u32(G[1]); continue; }
-    const nz = Math.sqrt(1 - q), l = -0.5 * u - 0.62 * v + 0.6 * nz; // light from the upper left, a little toward the viewer
-    let b = l > 0.78 ? 0 : l > 0.42 ? 1 : l > 0.02 ? 2 : 3;
-    if (b === 0 && tone === 0 && q > 0.12) b = 1;                 // keep the brightest green to a small cap
-    let col = ramp[b];
-    if (berries && b <= 1 && hash3(i, j, r) < 0.05) col = Ac[3];
-    d[j * c.width + i] = u32(col);
+function leafSprite(r, ramp, seed, inside, berries, sh = 0) { // sh: how deep in the canopy the clump sits (0 top .. 2 underside)
+  const key = 'L' + r + ramp + seed + (inside ? 'i' : '') + (berries ? 'b' : '') + sh; let o = discC.get(key); if (o) return o;
+  const Rm = TREE_RAMPS[ramp], rx = r, ry = Math.max(2, Math.round(r * 0.84)), w = 2 * rx + 1, h = 2 * ry + 1;
+  const c = mkc(w, h), g = c.getContext('2d'), img = g.createImageData(w, h), d = new Uint32Array(img.data.buffer);
+  const rr = mulberry32(seed * 7919 + r * 31 + 3), p1 = rr() * 6.28, p2 = rr() * 6.28, nl = r >= 7 ? 6 : 5;
+  const inS = (i, j) => { if (i < 0 || j < 0 || i >= w || j >= h) return false;
+    const u = (i - rx) / (rx + 0.5), v = (j - ry) / (ry + 0.5), q = u * u + v * v, a = Math.atan2(v, u);
+    const lob = inside ? 0.86 : 0.87 + 0.08 * Math.cos(nl * a + p1) + 0.05 * Math.cos((2 * nl + 1) * a + p2); // scalloped, leafy rim
+    return q < lob * lob; };
+  const S = r >= 7 ? 3.3 : 2.7, cells = []; // leaf cells on a jittered, offset grid
+  for (let gy = -1; gy * S < h + S; gy++) for (let gx = -1; gx * S < w + S; gx++) cells.push([gx * S + (gy & 1) * S / 2 + (rr() - 0.5) * 1.3, gy * S + (rr() - 0.5) * 1.3]);
+  const light = (u, v) => -0.5 * u - 0.68 * v + 0.5 * Math.sqrt(Math.max(0, 1 - u * u - v * v));
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) {
+    if (!inS(i, j)) continue;
+    const u = (i - rx) / (rx + 0.5), v = (j - ry) / (ry + 0.5);
+    if (inside) { d[j * w + i] = u32(Rm[v > 0.05 ? 5 : 4]); continue; }
+    let b1 = 1e9, b2 = 1e9, cc = cells[0];
+    for (const ce of cells) { const dd = (i - ce[0]) ** 2 + (j - ce[1]) ** 2; if (dd < b1) { b2 = b1; b1 = dd; cc = ce; } else if (dd < b2) b2 = dd; }
+    let L = 0.6 * light((cc[0] - rx) / (rx + 0.5), (cc[1] - ry) / (ry + 0.5)) + 0.4 * light(u, v);
+    const side = ((i - cc[0]) * 0.6 + (j - cc[1]) * 0.8) / S;
+    if (side > 0.3) L -= 0.2; else if (side < -0.3) L += 0.07;    // each leaf cell: lit upper left, dark lower right
+    if (Math.sqrt(b2) - Math.sqrt(b1) < 0.6 && side > -0.1) L -= 0.1;
+    let t = L > 0.84 ? 0 : L > 0.6 ? 1 : L > 0.34 ? 2 : L > 0.08 ? 3 : 4;
+    if (t === 0 && (sh > 0 || u * u + v * v > 0.3)) t = 1;                // the brightest tone stays a small cap on top clumps
+    t = Math.min(4, t + sh);                    // the brightest tone stays a small cap
+    if (!inS(i + 1, j) || !inS(i, j + 1) || !inS(i + 1, j + 1)) { if (v > -0.25 || u > 0.3) t = Math.max(t, v > 0.35 ? 5 : 4); } // separation edge
+    let col = Rm[t]; if (berries && t <= 2 && hash3(i, j, r + seed) < 0.06) col = Ac[3];
+    d[j * w + i] = u32(col);
   }
-  g.putImageData(img, 0, 0); const o = { c, rx, ry }; discC.set(key, o); return o;
+  g.putImageData(img, 0, 0); o = { c, rx, ry }; discC.set(key, o); return o;
 }
+function pineTier(r, ramp, seed) { // one branch tier: a wide, drooping triangle with a jagged, needly lower edge
+  const key = 'P' + r + ramp + seed; let o = discC.get(key); if (o) return o;
+  const Rm = TREE_RAMPS[ramp], ht = Math.round(r * 0.6), w = 2 * r + 1, h = ht + 6;
+  const c = mkc(w, h), g = c.getContext('2d'), img = g.createImageData(w, h), d = new Uint32Array(img.data.buffer);
+  for (let x = -r; x <= r; x++) { const ax = Math.abs(x) / r, top = Math.round(ht * Math.pow(ax, 0.85)), ph = (x + seed + 99) % 3;
+    const bot = ht + 1 + Math.round(ax * ax * 2) + (ph === 0 ? 2 : ph === 1 ? 1 : 0) - (ax > 0.92 ? 1 : 0);
+    for (let y = top; y <= Math.min(h - 1, bot); y++) { const rel = (y - top) / Math.max(1, bot - top);
+      let L = 0.78 - rel * 0.85 - (x / r) * 0.4;
+      if (rel > 0.15 && ((Math.abs(x) + y) % 3 === 0)) L -= 0.2;      // needle streaks, sloping down and out
+      let t = L > 0.55 ? 0 : L > 0.3 ? 1 : L > 0.02 ? 2 : 3;
+      if (y >= bot - 0) t = Math.max(t, 3);
+      if (y === top && x <= 0) t = Math.min(t, 1);
+      d[y * w + x + r] = u32(Rm[t]); } }
+  g.putImageData(img, 0, 0); o = { c, rx: r, ry: ht }; discC.set(key, o); return o;
+}
+function clumpSprite(p) { return p.tier ? pineTier(p.r, p.ramp, p.seed) : leafSprite(p.r, p.ramp, p.seed, p.inside, p.berries, p.sh || 0); }
 function discFoot(ps) { // shadow footprint of the canopy (screen px, centred)
   let R = 4; for (const p of ps) R = Math.max(R, Math.hypot(p.ox, p.oy) + p.r);
   const w = Math.ceil(2 * R), foot = mkc(w, w), g = foot.getContext('2d'); g.fillStyle = '#000';
-  for (const p of ps) { g.beginPath(); g.arc(R + p.ox, R + p.oy, p.r * 0.95, 0, 7); g.fill(); }
+  for (const p of ps) { if (p.inside) continue; g.beginPath(); g.arc(R + p.ox, R + p.oy, p.r * 0.9, 0, 7); g.fill(); }
   return { w, d: w, h: 0, foot, slices: [], cx: 0, cy: 0 };
 }
-function oakDef(seed) {
-  const r = mulberry32(seed), parts = [], discs = [];
-  const T = 18 + Math.floor(r() * 4), CR = 22 + r() * 3, cz = T + 16;
-  parts.push(part([-5, 4, -5, 4, 0, T + 6], (x, y, z) => {
-    const inTrunk = x >= -3 && x <= 2 && y >= -3 && y <= 2;
-    const root = z <= 2 && Math.abs(x + 0.5) + Math.abs(y + 0.5) <= 6.5 - z * 1.4;
-    return (inTrunk || root) ? Wd[2] : null; }));
-  discs.push({ ox: 0, oy: 0, cz: cz - 1, r: Math.round(CR - 4), tone: 2, w: 0.3 });                 // dark core
-  const ring = (n, rad, z, size, tone) => { const a0 = r() * 6.28; for (let i = 0; i < n; i++) { const a = a0 + i / n * 6.28 + (r() - 0.5) * 0.35;
-    discs.push({ ox: Math.cos(a) * rad, oy: Math.sin(a) * rad, cz: z + (r() - 0.5) * 2, r: Math.round(size + r() * 2), tone }); } };
-  ring(6, CR - 10, cz - 5, 10, 1); ring(5, CR - 13, cz + 4, 10, 0);
-  discs.push({ ox: (r() - 0.5) * 3, oy: (r() - 0.5) * 3, cz: cz + 9, r: Math.round(11 + r() * 2), tone: 0 });  // crown
-  for (const p of discs) if (p.w === undefined) p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(p.ox, p.oy, (p.cz - cz) * 0.7) / (CR - 10));
-  return { kind: 'oak', parts, discs, push: 3.0, period: 2.2, damp: 0.35, h: cz + 24, union: discFoot(discs) };
+function finishTree(def, cz0, reach) { // weights for the wind, the inside layer, the shadow footprint
+  const out = [];
+  for (const p of def.discs) { if (p.w === undefined) p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(p.ox, p.oy, (p.cz - cz0) * 0.7) / reach);
+    if (!p.tier && !p.noInside && p.r >= 4) out.push({ ox: p.ox, oy: p.oy, cz: p.cz - 1, r: p.r - 1, ramp: p.ramp, seed: 0, inside: true, w: 0 }); }
+  def.discs = out.concat(def.discs); def.union = discFoot(def.discs); return def;
 }
-function bushDef(seed) {
+function oakDef(seed, ramp = 'oak', sc = 1) {
+  const r = mulberry32(seed), parts = [], discs = [];
+  const T = Math.round((14 + r() * 5) * sc), CR = (20 + r() * 4) * sc, CZ = (13 + r() * 3) * sc, cz0 = T + CZ * 0.8;
+  parts.push(part([-6, 5, -6, 5, 0, T + 8], (x, y, z) => {
+    const tr = Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= (z < 4 ? 3.6 - z * 0.25 : 2.6);
+    const root = z <= 2 && (Math.abs(x + 0.5) + Math.abs(y + 0.5) * 0.4 <= 4.6 - z * 1.6 || Math.abs(y + 0.5) + Math.abs(x + 0.5) * 0.4 <= 4.6 - z * 1.6);
+    return (tr || root) ? (((x + 13) % 4 === 0 && z > 3 && z % 6 !== 1) ? Wd[1] : Wd[2]) : null; }));
+  const n = Math.round((14 + r() * 5) * Math.min(1.1, sc));
+  for (let i = 0; i < n; i++) { const f = (i + 0.5) / n, zz = 1 - f * 1.4, rad = Math.sqrt(Math.max(0.04, 1 - zz * zz)), a = i * 2.39996 + r() * 0.4;
+    discs.push({ ox: Math.cos(a) * rad * CR * 0.74, oy: Math.sin(a) * rad * CR * 0.74, cz: cz0 + zz * CZ, r: Math.max(4, Math.round((zz > 0.55 ? 6 : 7.5) * sc + r() * 2)), ramp, seed: (seed + i) % 6, sh: zz > 0.35 ? 0 : zz > -0.1 ? 1 : 2 }); }
+  return finishTree({ kind: 'oak', parts, discs, push: 2.2, period: 2.2, damp: 0.35, h: Math.ceil(cz0 + CZ + 12) }, cz0, CR * 0.8);
+}
+function birchDef(seed, sc = 1) {
+  const r = mulberry32(seed), parts = [], discs = [], T = Math.round((32 + r() * 8) * sc), lean = (r() - 0.5) * 0.12;
+  parts.push(part([-3, 3, -3, 3, 0, T], (x, y, z) => { const ox = Math.round(z * lean); if (Math.max(Math.abs(x - ox + 0.5), Math.abs(y + 0.5)) > 1.6) return null;
+    return (z % 7 === 3 || (z % 11 === 6 && x - ox < 0)) ? Ink[1] : St[3]; }));
+  const n = Math.round(8 + r() * 3), cz0 = T * 0.78;
+  for (let i = 0; i < n; i++) { const f = (i + 0.5) / n, zz = 1 - f * 1.8, a = i * 2.39996 + r(), rad = (0.45 + 0.55 * Math.sqrt(Math.max(0, 1 - zz * zz * 0.6))) * 8 * sc;
+    discs.push({ ox: Math.cos(a) * rad + lean * cz0 * 0.5, oy: Math.sin(a) * rad * 0.8, cz: cz0 + zz * 12 * sc, r: Math.round(4 + r() * 2), ramp: 'birch', seed: (seed + i) % 6, sh: zz > 0.2 ? 0 : 1 }); }
+  return finishTree({ kind: 'birch', parts, discs, push: 2.0, period: 1.8, damp: 0.3, h: Math.ceil(cz0 + 14 * sc + 10) }, cz0, 9 * sc);
+}
+function pineDef(seed, ramp = 'pine', sc = 1) {
+  const r = mulberry32(seed), parts = [], discs = [], H = Math.round((62 + r() * 16) * sc), n = 5 + Math.floor(r() * 2), R0 = (16 + r() * 4) * sc;
+  parts.push(part([-2, 2, -2, 2, 0, H - 6], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? Wd[1] : null));
+  const base = 10 * sc, step = (H - 8 - base) / n;
+  for (let i = 0; i < n; i++) { const up = (i + 0.5) / n;
+    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(4, Math.round(R0 * (1 - i / (n + 0.6)) + 2)), ramp, seed: (seed + i) % 3, tier: 1, w: 0.25 + 0.6 * up, bend: (i / n) ** 2 }); }
+  discs.push({ ox: 0, oy: 0, cz: Math.round(base + n * step), r: 3, ramp, seed: 1, tier: 1, w: 0.9, bend: 1 });
+  return finishTree({ kind: 'pine', parts, discs, push: 3.6, period: 2.8, damp: 0.22, h: H + 8, bendTrunk: 1 }, 0, 1);
+}
+function bushDef(seed, ramp = 'oak') {
   const r = mulberry32(seed), discs = [], berries = seed % 2 === 1;
-  discs.push({ ox: 0, oy: 0, cz: 6, r: 9, tone: 2, w: 0.3 });
-  for (let i = 0; i < 4; i++) { const a = r() * 1.2 + i * 1.57; discs.push({ ox: Math.cos(a) * 4.5, oy: Math.sin(a) * 4.5, cz: 5, r: 6 + Math.round(r()), tone: 1, berries }); }
-  discs.push({ ox: 0, oy: 0, cz: 9, r: 7, tone: 0, berries });
-  for (const p of discs) if (p.w === undefined) p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(p.ox, p.oy) / 4.5);
-  return { kind: 'bush', parts: [], discs, push: 1.7, period: 1.0, damp: 0.35, h: 18, union: discFoot(discs) };
+  for (let i = 0; i < 5; i++) { const a = r() * 1.2 + i * 1.257; discs.push({ ox: Math.cos(a) * 5, oy: Math.sin(a) * 4, cz: 5 + r() * 2, r: 5 + Math.round(r()), ramp, seed: i, berries, sh: 1 }); }
+  discs.push({ ox: 0, oy: 0, cz: 9, r: 6, ramp, seed: 5, berries });
+  return finishTree({ kind: 'bush', parts: [], discs, push: 1.4, period: 1.0, damp: 0.35, h: 18 }, 6, 5);
 }
 // ---------- wind: gust patches crossing the map + a breeze around them (world units) ----------
 const GUSTS = [];
@@ -340,7 +400,7 @@ const CROPI = { ok: false, img: new Image() }; // SpriteCook ripe crops: carrot 
 if (window.PF_CROPS) { CROPI.img.onload = () => CROPI.ok = true; CROPI.img.src = window.PF_CROPS.src; }
 
 // ---------- world layout (world units; 1 tile = 8 units = 16 px) ----------
-const HOUSE = { x: 36, y: 24 }, BARN = { x: 158, y: 26 }, WELL = { x: 100, y: 22 }, STALL = { x: 160, y: 100 }, POND = { x: 34, y: 100, rx: 16, ry: 10 }, BENCH = { x: 64, y: 108 };
+const HOUSE = { x: 36, y: 24 }, BARN = { x: 158, y: 26 }, WELL = { x: 100, y: 22 }, STALL = { x: 160, y: 100 }, POND = { x: 34, y: 100, rx: 19, ry: 12 }, BENCH = { x: 64, y: 108 };
 const DOOR = { x: 36, y: 40 }, BARN_DOOR = { x: 158, y: 41 }, WELL_SPOT = { x: 100, y: 31 }, STALL_SPOT = { x: 160, y: 111 }, BENCH_SPOT = { x: 64, y: 112 };
 const KEEPER = { x: 160, y: 97.4 };
 const FIELD = { c0: 9, r0: 7, cols: 6, rows: 4 }; // tiles x 72..120, y 56..88
@@ -359,18 +419,36 @@ addProp(models.well, WELL.x, WELL.y, 0);
 addProp(benchModel, BENCH.x, BENCH.y, 0);
 addProp(hayModel, 182, 46, 0.3); addProp(crateModel, 134, 44, 0.2); addProp(logsModel, 64, 22, 0.15);
 addProp(mailModel, 16, 45, 0); addProp(crateModel, 178, 110, 0.1); addProp(hayModel, 140, 118, 1.2);
+const mossRock = buildModel(14, 11, 8, (x, y, z) => { const e = ell(x, y, z, 7, 5.5, 0, 6.5, 5, 7.5); if (e > 1) return null; return (z >= 5 && hash3(x, y, 5) > 0.45) || (z >= 6 && x < 8) ? G[3] : St[2]; }, {});
 const billboards = []; // small 2D sprites standing in the world (depth sorted with everything else)
-for (let i = 0; i < 6; i++) billboards.push({ spr: SPRITES.cattail, x: POND.x + Math.cos(i * 1.1 + 2) * (POND.rx + 1), y: POND.y + Math.sin(i * 1.1 + 2) * (POND.ry + 1), sway: 0.5, flip: i % 2 });
+const POND_SOLIDS = []; // things standing in the pond: they get lapping foam around their foot
+for (let i = 0; i < 6; i++) billboards.push({ spr: SPRITES.cattail, x: POND.x + Math.cos(i * 1.1 + 2) * (POND.rx + 0.5), y: POND.y + Math.sin(i * 1.1 + 2) * (POND.ry + 0.5), sway: 0.5, flip: i % 2, reed: 1 });
 for (let x = 4; x < 58; x += 8) if (x + 4 < 30 || x + 4 > 42) addProp(models.fence, x + 4, 50, 0); // gap for the path
 for (let x = 76; x < 130; x += 8) addProp(models.fence, x + 4, 124, 0);
 for (let y = 56; y < 120; y += 8) addProp(models.fence, 2, y + 4, Math.PI / 2);
 const postM = buildModel(3, 3, 13, () => Wd[3]); for (const [x, y] of [[60, 50], [28, 50], [132, 124], [2, 120]]) addProp(postM, x, y, 0); // posts closing each run
-const treeSpots = [[2, 2], [74, 6], [124, 4], [188, 4], [6, 62], [190, 66], [190, 124], [6, 128], [54, 134], [104, 138], [146, 134],
-  [-16, 30], [-16, 96], [210, 96], [80, -16], [160, -18], [30, -16], [210, 30], [214, 150], [24, 150], [-14, 150]];
-const treeDefs = { oak: [1, 2, 3, 4].map(s => oakDef(s * 77)), bush: [1, 2, 3].map(s => bushDef(s * 13)) };
-const addTree = (def, x, y) => props.push({ tree: def, m: def.union, x, y, rot: 0, z: 0, lean: 0, leanV: 0 });
-treeSpots.forEach(([x, y], i) => addTree(treeDefs.oak[i % 4], x, y));
+// trees: a proper forest edge around the farm (two staggered rows per side, big trees at the back, lower ones toward the
+// default camera), a few trees by the pond so it has something to mirror, and bushes on the farm
+const treeDefs = {
+  oak: [1, 2, 3].map(s => oakDef(s * 77, 'oak')), olive: [4, 5].map(s => oakDef(s * 77, 'olive')), dark: [6, 7, 8].map(s => oakDef(s * 77, 'dark', 1.1)),
+  pine: [1, 2, 3].map(s => pineDef(s * 53, 'pine')), birch: [1, 2, 3].map(s => birchDef(s * 41)), small: [9, 10].map(s => oakDef(s * 77, 'oak', 0.78)),
+  bush: [1, 2, 3].map(s => bushDef(s * 13, 'oak')), bushD: [4, 5].map(s => bushDef(s * 13, 'dark')),
+};
+let treeN = 0;
+const addTree = (def, x, y) => props.push({ tree: def, m: def.union, x, y, rot: 0, z: 0, lean: 0, leanV: 0, tick: (treeN++ % 6) / 6 });
+{ const fr = mulberry32(9090), P = a => a[Math.floor(fr() * a.length)];
+  const front = () => P([...treeDefs.oak, ...treeDefs.olive, ...treeDefs.pine, ...treeDefs.birch]), back = () => P([...treeDefs.dark, ...treeDefs.pine, ...treeDefs.dark, ...treeDefs.olive]);
+  for (let x = -34; x <= WW + 34; x += 15 + fr() * 4) addTree(front(), x + (fr() - 0.5) * 4, -9 - fr() * 4);            // back edge, row 1
+  for (let x = -42; x <= WW + 40; x += 16 + fr() * 4) addTree(back(), x + (fr() - 0.5) * 4, -24 - fr() * 5);           // back edge, row 2
+  for (let y = 6; y <= WH + 30; y += 15 + fr() * 4) { addTree(front(), -9 - fr() * 4, y); addTree(front(), WW + 9 + fr() * 4, y + 3); } // sides
+  for (let y = 0; y <= WH + 40; y += 16 + fr() * 4) { addTree(back(), -24 - fr() * 5, y + 7); addTree(back(), WW + 24 + fr() * 5, y); }
+  for (let x = -20; x <= WW + 20; x += 13 + fr() * 5) addTree(fr() < 0.6 ? P([...treeDefs.bush, ...treeDefs.bushD]) : P([...treeDefs.birch, ...treeDefs.small]), x, WH + 10 + fr() * 4); // front: low
+  for (let x = -30; x <= WW + 30; x += 17 + fr() * 4) addTree(back(), x, WH + 26 + fr() * 6);
+}
+addTree(treeDefs.oak[0], 22, 84); addTree(treeDefs.pine[1], 44, 82); addTree(treeDefs.birch[0], 8, 96); addTree(treeDefs.small[0], 6, 62); // by the pond
 [[58, 40], [12, 44], [134, 66], [56, 80], [182, 52], [112, 114], [86, 116], [132, 103]].forEach(([x, y], i) => addTree(treeDefs.bush[i % 3], x, y));
+POND_SOLIDS.push({ x: POND.x + 11, y: POND.y + 5, r: 6 });
+addProp(mossRock, POND.x + 11, POND.y + 5, 0.6);
 // ---------- field ----------
 const tiles = [];
 for (let r = 0; r < FIELD.rows; r++) for (let c = 0; c < FIELD.cols; c++) {
@@ -525,7 +603,7 @@ function stackCanvas(m, a) {
 function buildStack(m, a, k) {
   const sl = slicesAt(m, a), ca = Math.cos(a), sa = Math.sin(a), r = Math.ceil(Math.hypot(m.w, m.d) / 2) + 2;
   const w = 2 * r, h = Math.ceil(2 * r * K) + m.h + 4; k.ox = r; k.oy = Math.ceil(r * K) + m.h + 1;
-  if (m.w * m.d * m.h < 3000) { // small props: plain nearest is stable enough (and fast)
+  if (m.w * m.d * m.h < 3000 || m.nearest) { // small props and tree trunks: plain nearest is stable enough (and fast)
     k.c = mk(w, h); const g = k.c.getContext('2d'); g.imageSmoothingEnabled = false;
     for (let i = 0; i < m.h; i++) { if (!sl.has[i]) continue; g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); drawSlice(g, sl, i, -m.w / 2, -m.d / 2); }
     if (!m.noOutline) outlineCanvas(k.c); k.done(); return k;
@@ -567,15 +645,16 @@ const YARD = { x0: 68, x1: 124, y0: 52, y1: 92 }; // packed-dirt yard around the
 const inYard = (x, y, pad = 0) => x > YARD.x0 - pad && x < YARD.x1 + pad && y > YARD.y0 - pad && y < YARD.y1 + pad;
 // ground: flat palette areas only (grass, dirt, water). All texture lives in decals that never rotate, so nothing crawls.
 function groundAt(x, y) { // -> [palette colour, kind]
-  const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2;
-  if (e < 1) return [e > 0.72 ? Wt[1] : Wt[2], 'water'];
-  if (e < 1.18) return [Wd[3], 'shore'];
+  const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2 + (vnoise(x / 4, y / 4, 11) - 0.5) * 0.34;
+  if (e < 1) return [Wt[2], 'water'];           // one flat tone: the layered water is painted over it in screen space (waterPass)
+  if (e < 1.3) return [G[3], 'shore'];
   const wob = (vnoise(x / 3, y / 3, 7) - 0.5) * 1.6;
   const pd = pathD(x, y), pw = 4.2 + wob;
   const yd = Math.max(YARD.x0 - x, x - YARD.x1, YARD.y0 - y, y - YARD.y1) + wob * 0.6;
   if (pd < pw || yd < 0) return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt'];
   const out = Math.max(-x, x - WW, -y, y - WH, 0);
-  if (out > 14 + vnoise(x / 6, y / 6, 3) * 10) return [G[2], 'grass'];
+  if (out > 22 + vnoise(x / 7, y / 7, 5) * 12) return [G[1], 'grass']; // forest floor under the tree line
+  if (out > 6 + vnoise(x / 6, y / 6, 3) * 8) return [G[2], 'grass'];
   return [G[3], 'grass'];
 }
 function buildGroundBase() { // one ground pixel per screen pixel (world unit = RS px)
@@ -592,7 +671,7 @@ const decals = [];
     if (blocked(x, y)) continue;
     if (k === 'grass') { const v = r(); decals.push({ x, y, c: v < 0.12 ? SPRITES.flowers[Math.floor(r() * 4)] : SPRITES.tufts[Math.floor(r() * 4)] }); }
     else if (k === 'dirt' && r() < 0.25) decals.push({ x, y, c: SPRITES.dirtTufts[Math.floor(r() * 2)] }); }
-  for (let i = 0; i < 4; i++) decals.push({ x: POND.x - 9 + i * 6, y: POND.y - 3 + (i % 2) * 5, c: SPRITES.lily, lily: i });
+  [[-10, -3], [-4, 3], [3, -5], [8, 1], [-13, 4]].forEach(([dx, dy], i) => decals.push({ x: POND.x + dx, y: POND.y + dy, c: SPRITES.lily, lily: i, bob: 0 }));
 }
 const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111' };
 function pixText(s, x, y, col, sc = 1) {
@@ -647,6 +726,111 @@ function drawCrop(c, o, poseT) { // ripe crops are SpriteCook billboards; the le
 }
 
 // ---------- render ----------
+// ---------- layered pond (after @asynkimo's "boring water" thread and SpriteCook's pond guide) ----------
+// The ground draws the pond as one flat sentinel tone. Each frame, in screen space (so "near" and "far" follow the camera),
+// every water pixel gets a tone index, layers overwrite tones, and tones become palette colours once at the end, so the water
+// never blends into mush. Layers: 1 darker away from the shore, 2 sky light on the near half, 3 the trees behind the pond
+// flipped, squashed to 55% and cut to 3 dark tones with each row shifted by whole pixels, 4 shallow edge, damp ground and
+// lapping dashes, 5 the back bank mirrored dark with a creeping waterline, 6 drops, glints, floating leaves, bobbing pads.
+// Everything runs on one 5 s loop with whole cycles, so it never jumps.
+const WLOOP = 5, wph = (t, n) => 2 * Math.PI * n * t / WLOOP;
+const WSENT = u32(Wt[2]);
+const WTONE = [Wt[0], Wt[1], Wt[2], Wt[3], Wt[4], Wt[5], Ac[0], PAL.ramps.shallow[0], Wd[0], G[0]].map(u32);
+const LUM = c => 0.3 * (c & 255) + 0.59 * (c >>> 8 & 255) + 0.11 * (c >>> 16 & 255);
+const RTONE = new Map(); for (const c of [...PAL.colors, '#1c1626']) { const v = u32(c), l = LUM(v); RTONE.set(v, l < 70 ? 0 : l < 118 ? 1 : 2); }
+let WG = null;
+function waterBox() {
+  const pts = []; for (const [ux, uy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(proj(POND.x + ux * POND.rx * 1.3, POND.y + uy * POND.ry * 1.3));
+  const x0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[0]))) - 4), x1 = Math.min(W, Math.ceil(Math.max(...pts.map(p => p[0]))) + 4);
+  const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
+  return [x0, y0, x1 - x0, y1 - y0];
+}
+function waterGeom(d, bx, by, bw, bh) { // per camera angle: mask, distance to the shore, far row per column, zones
+  const N = bw * bh, mask = new Uint8Array(N), dist = new Float32Array(N); let n = 0, sx = 0, sy = 0, ys = [];
+  for (let i = 0; i < N; i++) if (d[i] === WSENT) { mask[i] = 1; n++; sx += i % bw; sy += (i / bw) | 0; ys.push((i / bw) | 0); }
+  if (!n) return { bx, by, bw, bh, n: 0, aq: AQ };
+  for (let i = 0; i < N; i++) dist[i] = mask[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
+    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : 1, y > 0 ? dist[i - bw] + 1 : 1, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : 1.414, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : 1.414); dist[i] = v; }
+  for (let y = bh - 1; y >= 0; y--) for (let x = bw - 1; x >= 0; x--) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
+    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : 1, y < bh - 1 ? dist[i + bw] + 1 : 1, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : 1.414, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : 1.414); dist[i] = v; }
+  const far = new Int16Array(bw).fill(-1), near = new Int16Array(bw).fill(-1);
+  for (let x = 0; x < bw; x++) for (let y = 0; y < bh; y++) if (mask[y * bw + x]) { if (far[x] < 0) far[x] = y; near[x] = y; }
+  ys.sort((a, b) => a - b); const midY = ys[ys.length >> 1], top = ys[0], pondH = ys[ys.length - 1] - top + 1, cx = sx / n, cy = sy / n;
+  const along = new Float32Array(N), sky = [], deep = [], damp = [], back = [];
+  for (let i = 0; i < N; i++) { const x = i % bw, y = (i / bw) | 0;
+    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if (y - far[x] >= pondH * 0.3 && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
+    if (y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
+  for (let x = 0; x < bw; x++) if (far[x] >= 2 && far[x] < midY) back.push(x);
+  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, tone: new Uint8Array(N), aq: AQ };
+}
+function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip about the foot row, squash to 55%, cut to 3 dark tones
+  const { bx, by, bw, bh, mask } = G2;
+  for (let r = 0; ; r++) { const sr = footRow - Math.floor(r / 0.55); if (sr < 0) break;
+    const y = footY + r - by; if (y >= bh) break; if (y < 0) continue;
+    const amp = r < 3 ? 0 : r < 30 ? 1 : 2, dx = Math.round(amp * Math.sin((footY + r) * 0.75 - wph(t, 2)));
+    const row = sr * sw;
+    for (let x = 0; x < sw; x++) { const p = src[row + x]; if (!(p >>> 24)) continue; const X = left + x + dx - bx; if (X < 0 || X >= bw) continue;
+      const i = y * bw + X; if (!mask[i]) continue; const tn = RTONE.get(p >>> 0); if (tn !== undefined && tn < tone[i]) tone[i] = tn; } }
+}
+const pondLeaves = [];
+function waterPass(t) {
+  const [bx, by, bw, bh] = waterBox(); if (bw <= 0 || bh <= 0) return;
+  const img = ctx.getImageData(bx, by, bw, bh), d = new Uint32Array(img.data.buffer);
+  if (!WG || WG.aq !== AQ || WG.bx !== bx || WG.by !== by || WG.bw !== bw || WG.bh !== bh) WG = waterGeom(d, bx, by, bw, bh);
+  const Gm = WG; if (!Gm.n) return;
+  const { mask, dist, far, midY, pondH, along, tone } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
+  // 1 + 2: depth and sky
+  for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
+    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
+  // 3: reflections of the trees and reeds behind the pond (their current wind pose)
+  for (const o of props) { if (!o.tree) continue; const [sx, sy] = proj(o.x, o.y), X = Math.round(sx) - bx, Y = Math.round(sy);
+    if (X < -40 || X > bw + 40 || Y < by - 70 || Y > by + bh) continue; const fx = clamp(X, 0, bw - 1); if (far[fx] < 0 || Y - by >= far[fx]) continue;
+    const k = treeCache(o, treePoseT(o));
+    reflectInto(Gm, tone, k.d32, k.c.width, k.c.height, k.oy, Math.round(sx) - k.ox, Y, t); }
+  for (const b of billboards) { if (!b.reed) continue; const [sx, sy] = proj(b.x, b.y), X = Math.round(sx) - bx, Y = Math.round(sy); if (X < 0 || X >= bw || far[X] < 0 || Y - by >= far[X]) continue;
+    const s = b.spr; spritePixels(s);
+    reflectInto(Gm, tone, s.d32, s.width, s.height, s.height - 3, Math.round(sx) - (s.width >> 1), Y, t); }
+  // 4: shallow edge on the near side, lapping dashes, foam where things stand in the water
+  const ring = Math.sin(wph(t, 2)) > 0.35 ? 3 : 2;
+  for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
+    if (dd < 1.5 && y > midY && tone[i] >= 3) tone[i] = 7;
+    if (Math.round(dd) === ring && tone[i] >= 2 && Math.sin(along[i] * 0.55 - wph(t, 2)) + 0.6 * Math.sin(along[i] * 0.23 + 1.3 - wph(t, 1)) > 0.55) tone[i] = 5; }
+  for (const s of POND_SOLIDS) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
+    for (let a = 0; a < 6.283; a += 0.12) { const x = Math.round(cx + Math.cos(a) * (s.r + 1)), y = Math.round(cy + Math.sin(a) * (s.r * 0.5 + 1)); if (x < 0 || y < 0 || x >= bw || y >= bh || y < cy) continue;
+      const i = y * bw + x; if (mask[i] && tone[i] >= 1 && Math.sin(x * 0.9 + y * 0.4 - wph(t, 2)) > 0.3) tone[i] = 5; } }
+  // 5: the back bank: a mud lip on land, mirrored dark in the water, faint ripples, a waterline that creeps
+  for (const x of Gm.back) { const f = far[x]; d[(f - 1) * bw + x] = u32(Wd[1]); if (f >= 2 && !mask[(f - 2) * bw + x]) d[(f - 2) * bw + x] = u32(Wd[2]); }
+  for (const x of Gm.back) { const f = far[x]; tone[f * bw + x] = 0;
+    for (const k of [1, 2, 3, 4, 6]) { const y = f + k; if (y >= bh || !mask[y * bw + x]) continue; const dx = k >= 4 ? Math.round(Math.sin((y + by) * 0.45 - wph(t, 2))) : 0;
+      const sy = f - k, sx = clamp(x + dx, 0, bw - 1); if (sy < 0) continue; const c = d[sy * bw + sx]; if (mask[sy * bw + sx]) continue;
+      const l = LUM(c), gr = (c >>> 8 & 255) > (c & 255) + 12; tone[y * bw + x] = l < 36 ? 0 : gr ? 9 : 8; }
+    for (let k = 2; k <= 5; k++) { const y = f + k; if (y >= bh) break; const i = y * bw + x; if (!mask[i]) continue;
+      const w = Math.sin((x + bx) * 0.6 - wph(t, 1) + k * 1.7) + 0.6 * Math.sin((x + bx) * 0.23 + k - wph(t, 1)); if (w > 0.95 && (tone[i] === 0 || tone[i] === 8 || tone[i] === 9)) tone[i] = tone[i] === 9 ? 0 : 1; } }
+  // 6: drops, glints, floating leaves, lily pad shadows (new random spots every loop)
+  const L = Math.floor(t / WLOOP), lt = t - L * WLOOP, rr = mulberry32(L * 7919 + 13), put = (x, y, tn, minT = 0) => { if (x < 0 || y < 0 || x >= bw || y >= bh) return; const i = y * bw + x; if (mask[i] && tone[i] >= minT) tone[i] = tn; };
+  const ripple = (cx, cy, age) => { const f = Math.floor(age / 0.2); if (f < 0 || f > 4) return; const [rx, ry] = [[1, 0], [2, 1], [3, 1], [5, 2], [6, 3]][f];
+    for (let a = 0; a < 6.283; a += 0.1) { const dx = Math.round(Math.cos(a) * rx), dy = Math.round(Math.sin(a) * ry); if (f >= 3 && Math.abs(dy) < ry / 2) continue; put(cx + dx, cy + dy, f < 3 ? 6 : 5, 1); } };
+  const at = arr => { const i = arr[Math.floor(rr() * arr.length)]; return [i % bw, (i / bw) | 0]; };
+  if (Gm.sky.length) for (let g = 0; g < 20; g++) { const [x, y] = at(Gm.sky), s0 = rr() * (WLOOP - 0.6), a = (lt - s0) / 0.6; if (a < 0 || a >= 1) continue;
+    const xs = a < 0.15 ? [0] : a < 0.3 ? [-1, 0, 1] : a < 0.65 ? [-2, -1, 0, 1, 2] : a < 0.85 ? [-2, -1, 1, 2] : [-2, 2];
+    for (const dx of xs) put(x + dx, y, Math.abs(dx) <= (xs.length >= 5 ? 1 : 0) ? 6 : 5, 1); }
+  if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1); ripple(x, y, lt - s0); }
+  pondLeaves.length = 0;
+  if (Gm.deep.length) for (let q = 0; q < 2; q++) { const [x, y] = at(Gm.deep), s0 = rr() * WLOOP, a = ((lt - s0) % WLOOP + WLOOP) % WLOOP, col = q ? Ac[1] : G[4];
+    if (a < 1.2) pondLeaves.push([x + bx, y + by - Math.round((1.2 - a) * 16), col]);                 // falling
+    else if (a < 4.2) { const fx = x + Math.round((a - 1.2) * 3); put(fx, y + 1, 0); put(fx - 1, y, 5, 1); pondLeaves.push([fx + bx, y + by, col]); ripple(x, y, a - 1.2); } // floating
+    else if (a < 4.8) { const fx = x + 9; if (a < 4.5) pondLeaves.push([fx + bx, y + by, col, 1]); } }  // sinking
+  for (const dcl of decals) { if (dcl.lily === undefined) continue; const [sx, sy] = proj(dcl.x, dcl.y); dcl.bob = Math.sin(wph(t, 1) + 1.7 * dcl.lily) > 0.4 ? 1 : 0;
+    const x0 = Math.round(sx) - (dcl.c.width >> 1) - bx, yb = Math.round(sy) + 1 + dcl.bob - by; for (let x = x0 + 2; x < x0 + dcl.c.width - 2; x++) put(x, yb, 0); }
+  // damp ground on the near shore, the creeping waterline, then tones -> colours
+  for (const i of Gm.damp) { const s = SHADE.get(d[i]); if (s) d[i] = s; }
+  for (const x of Gm.back) { if (Math.sin((x + bx) * 0.35 - wph(t, 1)) + 0.5 * Math.sin((x + bx) * 0.13 + 1 - wph(t, 1)) > 0.6) d[(far[x] - 1) * bw + x] = WTONE[0]; }
+  for (let i = 0; i < N; i++) if (mask[i]) d[i] = WTONE[tone[i]];
+  ctx.putImageData(img, bx, by);
+}
+function drawPondLeaves() { for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); } }
+
 let realT = 0;
 const leaves = [], fireflies = [];
 const SHADE = new Map(); for (const c of PAL.colors) SHADE.set(u32(c), u32(PAL.dark(c, 1)));
@@ -659,13 +843,14 @@ const PROF = Q.has('prof') ? (window.__prof = {}) : null; let _pt = 0; const tic
 function render() {
   setCam(); if (PROF) _pt = performance.now();
   const T = S.t % 1440, night = dayLight(T), warm = warmth(T), poseT = Math.floor(realT * 10) / 10;
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = G[2]; ctx.fillRect(0, 0, W, H);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = G[1]; ctx.fillRect(0, 0, W, H);
   const [gx, gy] = proj(-M, -M);
   ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy)); ctx.drawImage(groundBase, 0, 0); ctx.setTransform(1, 0, 0, 1, 0, 0);
   tick('ground');
+  waterPass(realT); tick('water');
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
   for (const t of tiles) if (t.tilled || t.crop) drawStack(ctx, models.soil[t.wetUntil >= S.t ? 1 : 0], t.x, t.y, 0, 0);
-  for (const d of decals) { const [sx, sy] = proj(d.x, d.y); const bob = d.lily !== undefined && Math.sin(realT * 1.5 + d.lily) > 0.6 ? 1 : 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
+  for (const d of decals) { const [sx, sy] = proj(d.x, d.y); const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
   tick('soil+decals');
   const list = [];
   for (const p of props) list.push(p);
@@ -692,7 +877,7 @@ function render() {
   tick('applyShadows');
   for (const o of list) {
     if (o.bb) { drawBillboard(ctx, o); continue; }
-    if (o.tree) { drawTree(ctx, o, poseT); tick('o.tree'); continue; }
+    if (o.tree) { drawTree(ctx, o); tick('o.tree'); continue; }
     if (o.ci !== undefined) { drawCrop(ctx, o, poseT); continue; }
     if (o.spr) { drawSpr(ctx, o, poseT); continue; }
     drawStack(ctx, o.m, o.x, o.y, o.z || 0, o.rot || 0); tick(o.m.w * o.m.d * o.m.h >= 3000 ? 'o.big' : 'o.small');
@@ -701,7 +886,7 @@ function render() {
   if (farmerD) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
   for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); ctx.fillStyle = p.c; const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), p.kind === 'drop' ? 1 : s, p.kind === 'drop' ? 3 : s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
-  for (let i = 0; i < 6; i++) { const a = i * 1.3 + Math.floor(realT * 0.8 + i) * 2.1; const gx2 = POND.x + Math.cos(a) * POND.rx * 0.6, gy2 = POND.y + Math.sin(a * 1.7) * POND.ry * 0.6; if ((Math.floor(realT * 3 + i * 1.7)) % 4 === 0) { const [sx, sy] = proj(gx2, gy2); ctx.fillStyle = Wt[3]; ctx.fillRect(Math.round(sx), Math.round(sy), 3, 1); } }
+  drawPondLeaves();
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (night > 0) lighting(night, T);
   if (night > 0.5) for (const f of fireflies) { const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
@@ -713,25 +898,48 @@ function render() {
     ctx.globalAlpha = 1;
   }
 }
-function drawTree(c, o, poseT) { // trunk stack + leaf discs placed relative to the tree's whole-pixel origin, cached per pose
+// Trees are composed in plain pixel arrays (trunk stack + clump sprites + outline), then put once: no canvas read-back per pose,
+// which matters with ~100 trees all re-posing at 10 Hz and every one re-laid while the camera turns.
+function spritePixels(c) { return c.d32 || (c.d32 = new Uint32Array(c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer)); }
+function stackPixels(m, a) { const k = stackCanvas(m, a); if (!k.d32) k.d32 = new Uint32Array(k.c.getContext('2d').getImageData(0, 0, k.c.width, k.c.height).data.buffer); return k; }
+function blit(dst, dw, dh, src, sw, sh, x0, y0, shiftOf) {
+  for (let y = 0; y < sh; y++) { const Y = y0 + y; if (Y < 0 || Y >= dh) continue; const sx0 = x0 + (shiftOf ? shiftOf(y) : 0), so = y * sw, dO = Y * dw;
+    for (let x = 0; x < sw; x++) { const p = src[so + x]; if (!(p >>> 24)) continue; const X = sx0 + x; if (X >= 0 && X < dw) dst[dO + X] = p; } }
+}
+let OBUF = new Uint32Array(0); // one shared scratch buffer for tree outlines
+function outlineBuf(d, w, h) { if (OBUF.length < d.length) OBUF = new Uint32Array(d.length); const o = OBUF; o.fill(0, 0, d.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (d[i] >>> 24) continue;
+    const n = (y < h - 1 && d[i + w] >>> 24) ? i + w : (x > 0 && d[i - 1] >>> 24) ? i - 1 : (x < w - 1 && d[i + 1] >>> 24) ? i + 1 : (y > 0 && d[i - w] >>> 24) ? i - w : -1;
+    if (n >= 0) o[i] = OUTL.get(d[n] | 0xff000000) || INK0; }
+  for (let i = 0; i < d.length; i++) if (o[i]) d[i] = o[i];
+}
+function treeCache(o, poseT) { // trunk stack + leaf clumps placed relative to the tree's whole-pixel origin, cached per pose
   const T = o.tree, items = [];
-  for (const p of T.discs) { const [dx, dz] = clumpPose(o.x + p.ox / RS, o.y + p.oy / RS, p.w, o.lean, poseT); items.push([p, dx, dz, p.ox * SA + p.oy * CA]); }
-  items.sort((a, b) => (a[0].tone === 2 ? -1e3 : a[3]) - (b[0].tone === 2 ? -1e3 : b[3]) || a[0].cz - b[0].cz); // dark core first
-  const key = AQ + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
+  for (const p of T.discs) { let dx = 0, dz = 0;
+    if (p.w > 0) { const q = clumpPose(o.x + p.ox / RS, o.y + p.oy / RS, p.w, 0, poseT); dx = q[0] + Math.round(o.lean * (p.bend ?? p.w)); dz = q[1]; }
+    items.push([p, dx, dz, p.inside ? -1e3 + p.cz * 0.01 : (p.ox * SA + p.oy * CA) * K + p.cz * 0.6]); }
+  items.sort((a, b) => a[3] - b[3]); // inside layer first, then back to front and low to high
+  const bend = T.bendTrunk ? Math.round(o.lean) : 0;
+  const key = AQ + '|' + bend + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
   const k = o._ck || (o._ck = {});
   if (k.key !== key) {
-    if (!T.R) { T.R = 8; for (const p of T.discs) T.R = Math.max(T.R, Math.hypot(p.ox, p.oy) + p.r); T.R = Math.ceil(T.R) + 12; }
-    if (!k.c) { k.c = mk(2 * T.R, Math.ceil(2 * T.R * K) + T.h + 14); k.g = k.c.getContext('2d', { willReadFrequently: true }); k.g.imageSmoothingEnabled = false; }
-    const g = k.g; k.ox = T.R; k.oy = Math.ceil(T.R * K) + T.h + 8; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, k.c.width, k.c.height);
-    for (const p of T.parts) { const m = p.m, sl = slicesAt(m, AQ), bx = k.ox + Math.round(p.ox * CA - p.oy * SA), by = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - p.z;
-      for (let i = 0; i < m.h; i++) { if (!sl.has[i]) continue; g.setTransform(CA, SA * K, -SA, CA * K, bx, by - i); drawSlice(g, sl, i, -m.w / 2, -m.d / 2); } }
-    g.setTransform(1, 0, 0, 1, 0, 0);
-    for (const [p, dx, dz] of items) { const s = discSprite(p.r, p.tone, !!p.berries);
-      const x = k.ox + Math.round(p.ox * CA - p.oy * SA) + dx, y = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - Math.round(p.cz + dz);
-      g.drawImage(s.c, x - s.rx, y - s.ry); }
-    outlineCanvas(k.c); k.key = key;
+    if (!T.R) { T.R = 8; for (const p of T.discs) T.R = Math.max(T.R, Math.hypot(p.ox, p.oy) + p.r + 2); T.R = Math.ceil(T.R) + 6; }
+    if (!k.c) { k.c = mk(2 * T.R, Math.ceil(2 * T.R * K) + T.h + 14); k.g = k.c.getContext('2d'); const n = k.c.width * k.c.height;
+      k.buf = new Uint32Array(n); k.img = new ImageData(new Uint8ClampedArray(k.buf.buffer), k.c.width, k.c.height); }
+    const cw = k.c.width, ch = k.c.height, d = k.buf; k.ox = T.R; k.oy = Math.ceil(T.R * K) + T.h + 8; d.fill(0);
+    for (const p of T.parts) { const s = stackPixels(p.m, AQ), bx = k.ox + Math.round(p.ox * CA - p.oy * SA) - s.ox, by = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - p.z - s.oy;
+      blit(d, cw, ch, s.d32, s.c.width, s.c.height, bx, by, bend ? y => Math.round(o.lean * clamp((s.oy - y) / p.m.h, 0, 1) ** 2) : null); } // a pine trunk bends: lean * up^2
+    for (const [p, dx, dz] of items) { const s = clumpSprite(p), px = spritePixels(s.c);
+      blit(d, cw, ch, px, s.c.width, s.c.height, k.ox + Math.round(p.ox * CA - p.oy * SA) + dx - s.rx, k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - Math.round(p.cz + dz) - s.ry); }
+    outlineBuf(d, cw, ch); k.g.putImageData(k.img, 0, 0); k.key = key; k.d32 = d;
   }
-  const [sx, sy] = proj(o.x, o.y); c.drawImage(k.c, Math.round(sx) - k.ox, Math.round(sy) - k.oy);
+  return k;
+}
+function treePoseT(o) { return Math.floor(realT * 10 + o.tick) / 10; } // 10 poses a second; trees tick on staggered frames
+function treeOnScreen(o) { const [sx, sy] = proj(o.x, o.y), T = o.tree, R = (T.R || 40); return sx > -R && sx < W + R && sy - T.h - R < H && sy + R > 0; }
+function drawTree(c, o) {
+  if (!treeOnScreen(o)) return;
+  const k = treeCache(o, treePoseT(o)), [sx, sy] = proj(o.x, o.y); c.drawImage(k.c, Math.round(sx) - k.ox, Math.round(sy) - k.oy);
 }
 function lighting(night, T) {
   const lights = [];
@@ -824,7 +1032,7 @@ function cacheBlank() { // the ground is fully painted, and a weed sprite always
 function rebuildCaches(why) {
   for (const [k, m] of STK) { m._ck.delete(k.a); } STK.clear(); stkPx = 0;
   for (const m of ALLM) { m._ck = null; m.secs = new Array(NSEC); m.slices = sliceSet(m, 0); }
-  for (const p of props) if (p.tree) p._ck = null; discC.clear(); buildGroundBase();
+  for (const p of props) if (p.tree) p._ck = null; discC.clear(); WG = null; buildGroundBase();
   console.warn('[farm] caches rebuilt:', why); window.__farm.rebuilds = (window.__farm.rebuilds || 0) + 1;
   if (cacheBlank()) location.reload(); // hand-drawn sprites were lost too: start fresh
 }
