@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:,">
+<title>像素堆叠 · 放置农场 v2</title>
+<style>
+  html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
+  #wrap{position:absolute;left:0;top:0}
+  canvas#game{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+  #hud{position:absolute;left:12px;top:12px;color:#fff6dc;font:600 15px/1.45 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Noto Serif CJK SC",sans-serif;
+       background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:220px;letter-spacing:.5px}
+  #hud .row{display:flex;gap:14px;justify-content:space-between}
+  #hud b{color:#ffd76a}
+  #act{color:#bff0a0;margin:2px 0}
+  #title{position:absolute;right:12px;top:12px;color:#fff6dc;font:600 13px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:4px 10px;border:2px solid #e8c78a}
+  #log{position:absolute;left:12px;bottom:12px;color:#fff6dc;font:500 13px/1.5 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:6px 10px;border:2px solid #b89a66;min-width:240px}
+  #log div{opacity:.95}
+  canvas#game{cursor:grab} body.grab canvas#game{cursor:grabbing}
+  #fakecursor{position:fixed;left:-50px;top:-50px;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid #fff6dc;background:rgba(255,215,106,.35);box-shadow:0 0 0 2px #3a2a20;pointer-events:none;z-index:9}
+  body.grab #fakecursor{background:rgba(255,215,106,.8);transform:scale(.8)}
+  #log div:nth-child(2){opacity:.75}#log div:nth-child(3){opacity:.55}#log div:nth-child(4){opacity:.4}
+  .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:96px 24px;image-rendering:pixelated}
+  .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game"></canvas>
+  <div id="hud">
+    <div class="row"><span id="day">第 1 天</span><span id="clock">06:00</span></div>
+    <div id="act">当前：起床</div>
+    <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
+    <div><i class="ico carrot"></i><span id="bag">背包：空</span></div>
+  </div>
+  <div id="title">像素堆叠 · 放置农场 v2（自动运行）<br><span style="font-weight:400;opacity:.8">拖动画面 / Q E / ← → 旋转镜头 · R 复位 · 滚轮缩放</span></div>
+  <div id="log"></div>
+</div>
+<script src="assets/models.js"></script>
+<script src="assets/sprites.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
