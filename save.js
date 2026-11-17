@@ -7,6 +7,7 @@
 'use strict';
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
+  const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 9;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -64,13 +65,24 @@
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const seeds = v => { const o = obj(v), out = {}; for (const k of CROP_IDS) out[k] = int(o[k], 0, 0, 1e6); return out; };
+  const itemOk = ty => CROP_IDS.includes(ty) || FRUIT_IDS.includes(ty) || PRODUCT_IDS.includes(ty) || FISH_IDS.includes(ty) || ty === 'flower';
+  // v5.1: a basket slot can be a string (including a wildflower) or a surprise item {type, glow, giant, rare}
+  function validBasket(list) {
+    return (Array.isArray(list) ? list : []).map(k => {
+      if (SU && SU.validBasketItem) return SU.validBasketItem(k, itemOk);
+      return (typeof k === 'string' && itemOk(k)) ? k : null;
+    }).filter(Boolean).slice(0, 200);
+  }
 
   function validTile(t) {
     t = obj(t);
     const out = { f: FIELD_IDS.includes(t.f) ? t.f : 'home', c: int(t.c, 0, 0, 999), r: int(t.r, 0, 0, 999), open: t.open !== false, tilled: !!t.tilled, watered: !!t.watered, debris: null, weed: null, crop: null };
     if (t.debris && (t.debris.type === 'rock' || t.debris.type === 'branch')) out.debris = { type: t.debris.type, v: int(t.debris.v, 0, 0, 99), rot: num(t.debris.rot, 0) };
     if (t.weed) out.weed = { v: int(t.weed.v, 0, 0, 99), rot: num(t.weed.rot, 0) };
-    if (t.crop && CROP_IDS.includes(t.crop.type)) out.crop = { type: t.crop.type, age: int(t.crop.age, 0, 0, 99), n: int(t.crop.n, 0, 0, 99), rot: num(t.crop.rot, 0) };
+    if (t.crop && CROP_IDS.includes(t.crop.type)) {
+      out.crop = { type: t.crop.type, age: int(t.crop.age, 0, 0, 99), n: int(t.crop.n, 0, 0, 99), rot: num(t.crop.rot, 0) };
+      if (SU && SU.validCropExtras) SU.validCropExtras(t.crop, out.crop);
+    }
     return out;
   }
   function validYard(c) {
@@ -117,7 +129,7 @@
       prices: Object.fromEntries([...CROP_IDS, ...PRODUCT_IDS].map(k => [k, num(prices[k], 1, 0.8, 1.2)])),
       inventory: {
         water: int(inv.water, 0, 0, 999), waterMax: int(inv.waterMax, 4, 1, 999), store: seeds(inv.store), bag: seeds(inv.bag),
-        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k) || PRODUCT_IDS.includes(k) || FISH_IDS.includes(k) || k === 'flower').slice(0, 200),
+        gathered: int(inv.gathered, 0, 0, 1e6), basket: validBasket(inv.basket),
         wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
       },
       farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
@@ -145,7 +157,7 @@
   function validMember(m) {
     if (!m || typeof m.id !== 'string' || !/^(partner|kid[01])$/.test(m.id)) return null;
     return { id: m.id, water: int(m.water, 0, 0, 999), bag: seeds(m.bag), gathered: int(m.gathered, 0, 0, 1e6),
-      basket: (Array.isArray(m.basket) ? m.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k) || PRODUCT_IDS.includes(k) || FISH_IDS.includes(k) || k === 'flower').slice(0, 200) };
+      basket: validBasket(m.basket) };
   }
   function migrate(s) {
     if (!s || typeof s !== 'object' || !Number.isInteger(s.saveVersion) || s.saveVersion < 1) throw new Error('not a pixel-farm save');

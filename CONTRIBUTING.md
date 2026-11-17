@@ -82,6 +82,9 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
 
 游玩记录和本机文件夹同步在 `playlog.js`，**不进存档，也不升 `saveVersion`**。数据放在 `localStorage` 的 `mouzhi/pixel-farm:playlog`（独立 schema，目前为 1），最多 365 天摘要 + 2000 条事件。改记录的字段或文件格式时：更新 `playlog.js` 的 `SCHEMA`（或做向后兼容的 `normalize()`）、`tools/playlog-test.js`（聚合）和 `tools/playlog-smoke.js`（浏览器里写到 OPFS / 模拟目录），并在 README「游玩记录和本地同步」里改 schema 说明。目录句柄存在 IndexedDB 的 `mouzhi-pixel-farm` / `fs` / `dir`。写到用户文件夹里的文件是 `pixel-farm-save.json` 和 `pixel-farm-playlog.json`，格式见 README。
 
+
+v5.1 的田里惊喜**不升 `saveVersion`**（仍为 9，v5.0 已经占用了这次升级）。作物对象可有可选字段 `glow`、`giant`、`giantOf`，篮子条目可以是原来的类型字符串（包括野花），也可以是带 `glow` / `giant` / `rare` 的对象；`validate()` 会保留这些字段，缺了就当没有。家人各自的篮子也走同一套校验。后续改存档时，请继续走 `PFSurprise.validCropExtras` / `validBasketItem`，不要只抄 `{ type, age, n, rot }` 或把篮子重新滤成纯字符串，否则发光、巨大作物和金蛋会在读档时丢掉。
+
 ## 部署
 
 - 线上地址：https://mouzhi.github.io/pixel-farm/
