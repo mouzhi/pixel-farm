@@ -1,0 +1,14 @@
+<!doctype html><html><body style="margin:0;background:#7fb24a"><canvas id="c" width="320" height="120" style="image-rendering:pixelated;width:1280px;height:480px"></canvas>
+<script src="../assets/models.js"></script>
+<script>
+const names = (new URLSearchParams(location.search).get('m') || 'farmer,farmer2').split(',');
+const c = document.getElementById('c'), x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+function slices(a) { const out = []; for (let z = 0; z < a.h; z++) { const cv = document.createElement('canvas'); cv.width = a.w; cv.height = a.d; const g = cv.getContext('2d'), im = g.createImageData(a.w, a.d);
+  for (let y = 0; y < a.d; y++) for (let xx = 0; xx < a.w; xx++) { const v = a.vox[(z * a.d + y) * a.w + xx]; if (!v) continue; const n = parseInt(a.pal[v - 1].slice(1), 16), p = (y * a.w + xx) * 4;
+    const top = z === a.h - 1 || !a.vox[((z + 1) * a.d + y) * a.w + xx]; const f = top ? 1.05 : 0.88;
+    im.data[p] = Math.min(255, (n >> 16 & 255) * f); im.data[p + 1] = Math.min(255, (n >> 8 & 255) * f); im.data[p + 2] = Math.min(255, (n & 255) * f); im.data[p + 3] = 255; }
+  g.putImageData(im, 0, 0); out.push(cv); } return out; }
+names.forEach((nm, row) => { const a = PF_ASSETS[nm]; if (!a) return; const s = slices(a);
+  const sp = Math.max(38, Math.hypot(a.w, a.d) + 4), n = Math.min(8, Math.floor(310 / sp)); for (let k = 0; k < n; k++) { const ang = k * Math.PI * 2 / n + 0.3, ca = Math.cos(ang), sa = Math.sin(ang); const bx = sp / 2 + 4 + k * sp, by = (a.h > 25 ? 80 : 50) + row * 60;
+    for (let i = 0; i < a.h; i++) { x.setTransform(ca, sa * 0.75, -sa, ca * 0.75, bx, by - i); x.drawImage(s[i], -a.w / 2, -a.d / 2); } x.setTransform(1, 0, 0, 1, 0, 0); } });
+</script></body></html>
