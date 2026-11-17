@@ -2092,6 +2092,7 @@ function hud() {
   document.getElementById('clock').textContent = fmtT(S.t);
   document.getElementById('act').textContent = '当前：' + S.label;
   document.getElementById('coins').textContent = S.coins;
+  const woodEl = document.getElementById('wood'); if (woodEl) woodEl.textContent = FARMER.wood;
   document.getElementById('seeds').textContent = seedCount(S.store);
   const arrow = m => m > 1.02 ? '↑' : m < 0.98 ? '↓' : '';
   const pr = S.eff.crops.map(k => `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${arrow(S.prices[k])}`).concat(AN.PRODUCT_IDS.filter(k => S.animals.some(a => AN.KINDS[a.kind].product === k)).map(k => `${AN.PRODUCTS[k].name} ${priceOfAny(k)}${arrow(S.prices[k])}`)).join(' · ');

@@ -297,6 +297,12 @@ ok('chop drops: about 60% of chops drop something; fruit, flower, rare seed, coi
   for (const d of WD.DROPS) assert(Math.abs(n[d.id] / N - d.p) < 0.02, d.id); assert(Math.abs(n.none / N - 0.4) < 0.02);
 });
 ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
+ok('shop tabs cover every item once', () => {
+  const ids = SIM.SHOP_TABS.flatMap(t => t.ids);
+  assert.deepStrictEqual(ids.slice().sort(), SIM.SHOP_IDS.slice().sort());
+  assert.strictEqual(new Set(ids).size, ids.length);
+  for (const t of SIM.SHOP_TABS) assert(t.name && t.ids.length, t.id);
+});
 ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
   assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);

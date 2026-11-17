@@ -71,6 +71,14 @@
     { id: 'searod', name: '海竿', icon: 'searod', fish: 1, needs: 'coast', levels: [{ cost: 2000, label: '大海竿', desc: '能在码头上钓海鱼' }] },
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
+  // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
+  const SHOP_TABS = [
+    { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'speed', 'rod', 'searod'] },
+    { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
+    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast'] },
+    { id: 'build', name: '建筑', ids: ['house', 'fence', 'coop', 'sty', 'fold', 'shed'] },
+    { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
+  ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
   const shopItem = id => SHOP.find(s => s.id === id);
   function effects(up) {
@@ -186,7 +194,7 @@
     return { awaySec, days: Math.round(days * 100) / 100, capped: awaySec / DAY_REAL_SEC * OFFLINE_RATE > OFFLINE_CAP_DAYS, avg: Math.round(avg), gold: Math.floor(avg * days) };
   }
   const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC,
-    CROPS, IDS, SHOP, SHOP_IDS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
+    CROPS, IDS, SHOP, SHOP_IDS, SHOP_TABS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
     ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -27,6 +27,12 @@ async function seed(p, items) {
   await p.reload(); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.SAVE, null, { timeout: 15000 });
 }
 const core = p => p.evaluate(() => { const s = __farm.snapshot(); delete s.savedAt; return s; });
+async function openShop(p, tab) {
+  if (await p.evaluate(() => document.getElementById('shop').hidden)) {
+    await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
+  }
+  if (tab) { await p.click('#shop [data-tab="' + tab + '"]'); await p.waitForSelector('#shop [data-tab="' + tab + '"].on'); }
+}
 async function test(name, fn) {
   if (process.env.PF_ONLY && !new RegExp(process.env.PF_ONLY).test(name)) return; // run a subset: PF_ONLY=regex
   const ctx = await browser.newContext();
@@ -113,8 +119,9 @@ async function test(name, fn) {
   });
   await test('shop: buy from the panel, upgrades survive reload, speed buttons work', async ctx => {
     const p = await open(ctx);
-    await p.evaluate(() => { __farm.S.coins = 1000; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden]) [data-buy="field"]');
-    await p.click('#shop [data-buy="field"]'); await p.click('#shop [data-buy="speed"]');
+    await p.evaluate(() => { __farm.S.coins = 1000; });
+    await openShop(p, 'land'); await p.waitForSelector('#shop:not([hidden]) [data-buy="field"]'); await p.click('#shop [data-buy="field"]');
+    await openShop(p, 'tools'); await p.click('#shop [data-buy="speed"]');
     let r = await p.evaluate(() => ({ coins: __farm.S.coins, up: Object.assign({}, __farm.S.up), open: __farm.tiles.filter(t => t.open).length, poor: __farm.buy('watermelon') }));
     assert.strictEqual(r.coins, 1000 - 60 - 600); assert.strictEqual(r.up.field, 1); assert.strictEqual(r.up.speed, 1); assert.strictEqual(r.open, 16);
     assert.deepStrictEqual(r.poor, { ok: false, reason: 'short', short: 2500 - 340 });
@@ -197,12 +204,17 @@ async function test(name, fn) {
   });
   await test('animals: home coop early, pens unlock with their regions, cared for, products sold, survive reload', async ctx => {
     const p = await open(ctx);
-    await p.evaluate(() => { __farm.S.coins = 350; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
-    const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent,
+    await p.evaluate(() => { __farm.S.coins = 350; });
+    await openShop(p, 'build');
+    const build = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent,
       coop: !document.querySelector('#shop [data-buy="coop"]').disabled, look: !!document.querySelector('#shop [data-look="pen:coop"]') }));
-    assert(/动物/.test(shop.head) && /小伙伴/.test(shop.head), 'sections: ' + shop.head); assert(shop.coop, 'coop affordable with 350 gold and no region'); assert(shop.look);
-    for (const w of ['先买林场', '先买果园坡', '先买北牧场', '先买鸡舍']) assert(shop.txt.includes(w), 'locked text ' + w);
-    await p.click('#shop [data-buy="coop"]'); await p.keyboard.press('Escape');
+    assert(build.coop, 'coop affordable with 350 gold and no region'); assert(build.look);
+    for (const w of ['先买林场', '先买果园坡', '先买北牧场']) assert(build.txt.includes(w), 'locked text ' + w);
+    await openShop(p, 'animals');
+    const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent }));
+    assert(/养殖/.test(shop.head) && /小伙伴/.test(shop.head), 'sections: ' + shop.head);
+    assert(shop.txt.includes('先买鸡舍'), 'locked text 先买鸡舍');
+    await openShop(p, 'build'); await p.click('#shop [data-buy="coop"]'); await p.keyboard.press('Escape');
     const early = await p.evaluate(() => { const S = __farm.S; S.coins = 100; __farm.buy('chicken'); S.hay = 0; __farm.advance(1300, 10);
       return { kinds: S.animals.map(a => a.kind), views: __farm.AV.size, eggs: S.events.some(e => /鸡蛋/.test(e.msg)), log: S.events.map(e => e.msg).join('\n') }; });
     assert.deepStrictEqual(early.kinds, ['chicken']); assert.strictEqual(early.views, 1); assert(/鸡舍/.test(early.log), 'coop in the log');
@@ -224,7 +236,7 @@ async function test(name, fn) {
   });
   await test('fishing: starter rod in the shop, pond fishing when idle, catch log, coast and sea rod, survives reload', async ctx => {
     const p = await open(ctx);
-    await p.evaluate(() => { __farm.S.coins = 500; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
+    await p.evaluate(() => { __farm.S.coins = 500; }); await openShop(p, 'tools');
     const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop h3, #shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent, inv: document.getElementById('inv').textContent }));
     assert(/钓鱼/.test(shop.head), 'fishing section: ' + shop.head);
     assert(/竹竿/.test(shop.txt), 'starter rod shown as owned');

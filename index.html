@@ -19,6 +19,8 @@
   #hud{color:#fff6dc;font:600 15px/1.45 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Noto Serif CJK SC",sans-serif;
        background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:0;width:100%;box-sizing:border-box;letter-spacing:.5px;flex:none}
   #hud .row{display:flex;gap:14px;justify-content:space-between}
+  #hud .row.res{justify-content:flex-start;flex-wrap:wrap;gap:8px 14px}
+  #hud .row.res>span{display:inline-flex;align-items:center;white-space:nowrap}
   #hud b{color:#ffd76a}
   #act{color:#bff0a0;margin:2px 0}
   #title{grid-area:mid;justify-self:end;align-self:start;color:#fff6dc;font:600 13px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:4px 10px;border:2px solid #e8c78a;max-width:min(420px,100%);box-sizing:border-box;z-index:3}
@@ -30,8 +32,11 @@
   #log div:nth-child(2){opacity:.75}#log div:nth-child(3){opacity:.55}#log div:nth-child(4){opacity:.4}
   #catches{color:#fff6dc;font:500 12px/1.45 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:5px 10px;border:2px solid #b89a66;min-width:0;max-width:100%;box-sizing:border-box}
   #catches[hidden]{display:none}#catches b{color:#ffd76a;font-weight:600}#catches .h{opacity:.75;margin-bottom:2px}
-  .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:96px 24px;image-rendering:pixelated}
-  .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}
+  .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:120px 24px;image-rendering:pixelated}
+  .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}.ico.wood{background-position:-96px 0}
+  .cost{display:inline-flex;align-items:center;gap:2px;white-space:nowrap;vertical-align:middle}
+  .cost .ico{width:16px;height:16px;margin:0 1px 0 0;vertical-align:middle;background-size:80px 16px}
+  .cost .ico.coin{background-position:0 0}.cost .ico.wood{background-position:-64px 0}
   #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px;overflow-wrap:anywhere}
   .panel{position:absolute;color:#fff6dc;font:600 13px/1.5 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:rgba(40,28,22,.86);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35)}
   #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:6px 8px;max-width:100%;box-sizing:border-box}
@@ -49,13 +54,18 @@
   #speed{position:relative;display:flex;gap:4px}#speed[hidden]{display:none}
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
   #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
-  #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
+  #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
+  #shop .shead .wallet{display:inline-flex;align-items:center;gap:10px;color:#ffd76a;font-weight:600}
+  #shop .shead .wallet .cost:last-child{color:#e0b880}
+  #shop .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
+  #shop .tabs .pbtn{padding:2px 8px;font-size:12px}
   #shop .cards{display:flex;flex-direction:column;gap:5px}
   #shop .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
   #shop .card.max{opacity:.6}
   #shop .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
   #shop .ct{flex:1;min-width:0}#shop .lv{font-weight:500;font-size:11px;opacity:.75}#shop .d{font-weight:500;font-size:12px;opacity:.85}
-  #shop .cb{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}#shop .short{font-size:11px;color:#f0a090;font-weight:500}#shop .done{color:#8fd35a;font-size:18px}
+  #shop .cb{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}#shop .short{font-size:11px;color:#f0a090;font-weight:500;display:inline-flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end}#shop .done{color:#8fd35a;font-size:18px}
+  #shop .cb .pbtn{display:inline-flex;align-items:center;gap:6px}
   #menu{position:relative;right:auto;top:auto;width:min(320px,calc(100vw - 24px));padding:10px 12px}
   #syncHint{position:relative;right:auto;top:auto;font-size:11px;padding:2px 8px;z-index:3}
   #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
@@ -69,7 +79,8 @@
   #tools{position:relative;display:flex;gap:4px}#tools[hidden]{display:none}
   #shop,#menu,#store{z-index:3}
   #store{position:relative;right:auto;top:auto;bottom:auto;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
-  #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
+  #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
+  #store .shead .wallet{display:inline-flex;align-items:center;gap:4px;color:#ffd76a}
   #store .sec{font-size:12px;opacity:.7;margin:6px 0 4px}
   #store .cards{display:flex;flex-direction:column;gap:5px}
   #store .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
@@ -78,7 +89,7 @@
   #store .cb{display:flex;flex-direction:column;align-items:flex-end;gap:0;flex:none;color:#ffd76a}#store .cb .u{font-size:11px;opacity:.8;font-weight:500;color:#fff6dc}
   #store .empty{opacity:.7;font-weight:500;padding:4px 2px}
   #store .who{font-size:11px;opacity:.7;margin:2px 0 0}
-  .rlab{position:fixed;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0;z-index:1}.rlab b{color:#ffd76a}.rlab[hidden]{display:none}
+  .rlab{position:fixed;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0;z-index:1}.rlab b,.rlab .cost{color:#ffd76a}.rlab[hidden]{display:none}
   #say{position:fixed;left:50%;top:76px;transform:translateX(-50%);padding:4px 12px;pointer-events:none;z-index:3}#say[hidden]{display:none}
   #shop .sec{font-size:12px;opacity:.7;margin:6px 0 0}#shop .look{padding:0 6px;font-size:12px;margin-top:2px}
   #loveHud{margin-top:5px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:13px}
@@ -90,6 +101,11 @@
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip b, #loveVal{color:#ffd76a}
   #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
+  @media (max-width:720px){
+    #shop,#store,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
+    #hud .row.res{gap:6px 10px}
+  }
 </style>
 </head>
 <body>
@@ -102,7 +118,7 @@
     <div id="hud">
       <div class="row"><span id="day">第 1 天</span><span id="clock">06:00</span></div>
       <div id="act">当前：起床</div>
-      <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span id="storeHud" title="查看仓库（I）" style="cursor:pointer"><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
+      <div class="row res"><span title="金币"><i class="ico coin"></i>金币 <b id="coins">0</b></span><span id="woodHud" title="仓库里的木材：扩建房子、给动物棚子围篱笆要用。点开仓库看容量。" style="cursor:pointer"><i class="ico wood"></i>木材 <b id="wood">0</b></span><span id="storeHud" title="查看仓库（I）" style="cursor:pointer"><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
       <div id="prices">今日行情：</div>
       <div id="loveHud" title="去集市逛逛，就能认识店主阿禾。">
         <i id="loveIco"></i><span id="loveLab">阿禾</span><b id="loveVal">0/100</b>
