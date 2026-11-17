@@ -1,4 +1,4 @@
-// 像素农场 · 界面：背包栏、商店、倍速、存档菜单、离线收益小结（HTML 叠在画布上，不进画布，不影响逐像素稳定）
+// 像素农场 · 界面：背包栏、商店、倍速、小地图开关、砍树种树工具条、存档菜单、离线收益小结（HTML 叠在画布上，不进画布，不影响逐像素稳定）
 'use strict';
 (() => {
   const G = window.__farm, SIM = window.PFSim, SAVE = window.PFSave;
@@ -34,7 +34,17 @@
       { k: ink, b: wd[1], t: wd[2], g: gr[3], l: gr[4] }),
     speed: pixIcon(['', '', '   kkkkkkkk', '  kyyyyyyyyk', ' kyyykkkkyyyk', ' kyykwwwwkyyk', ' kyykwwkwkyyk', ' kyykwwkkkyyk', ' kyykwwwwkyyk', ' kyyykkkkyyyk', '  kyyyyyyyyk', '   kkkkkkkk', '      kk', '     kkkk'].map(r => r.padEnd(16)),
       { k: ink, y: '#e8c78a', w: '#fff6dc' }),
+    axe: pixIcon(['', '', '    kkkkk', '   kssssk', '  ksseeek', '  ksseekk', '   kssk b', '    kk kb', '      kb', '     kb', '    kb', '   kb', '  kb', '  k'].map(r => r.padEnd(16)),
+      { k: ink, s: st[3], e: st[4], b: wd[3] }),
+    forest: pixIcon(['', '      kk', '     kggk', '    kgllgk', '   kgglggk', '    kggggk', '   kgglgggk', '  kggggglgk', '   kkkbbkkk', '      bb', '      bb', '     kbbk', '     kkkk'].map(r => r.padEnd(16)),
+      { k: ink, g: gr[2], l: gr[4], b: wd[2] }),
+    orchard: pixIcon(['', '     kkkkk', '   kkgggggkk', '  kggrgggrggk', '  kgggglgggk', '  kgrggggrggk', '   kggrgggkk', '    kkkbkk', '       bb', '       bb', '      kbbk', '      kkkk'].map(r => r.padEnd(16)),
+      { k: ink, g: gr[3], l: gr[4], r: rf[2], b: wd[2] }),
   };
+  ICONS.east = ICONS.field; ICONS.south = ICONS.field;
+  const FRUIT_ICON = { apple: pixIcon(['', '', '', '      kk', '     kgk', '   kkkbkkk', '  krrrrrrrk', '  krwrrrrrk', '  krrrrrrrk', '  krrrrrrrk', '   krrrrrk', '    kkkkk'].map(r => r.padEnd(16)), { k: ink, g: gr[3], b: wd[2], r: rf[2], w: '#fff6dc' }),
+    orange: pixIcon(['', '', '', '      kg', '     kgk', '   kkkkkkk', '  koooooook', '  koyoooook', '  koooooook', '  koooooook', '   koooook', '    kkkkk'].map(r => r.padEnd(16)), { k: ink, g: gr[3], o: '#e8862a', y: '#ffd76a' }),
+    wood: pixIcon(['', '', '', '', '  kkkkkkkkkk', ' kbbbbbbbbbbk', ' ktbbbbbbbbtk', '  kkkkkkkkkk', '  kkkkkkkkkk', ' kbbbbbbbbbbk', ' ktbbbbbbbbtk', '  kkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, b: wd[2], t: wd[4] }) };
   // crop icons come from the game's ripe-crop atlas (SpriteCook sheet + hand-drawn strawberry / watermelon), shown at 2x
   let atlas = null;
   const cropIcon = k => { atlas = atlas || (G.cropAtlasURL && G.cropAtlasURL());
@@ -44,13 +54,15 @@
   let invKey = '';
   function inv() {
     const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
-    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, F.gathered, !!atlas].join(',');
+    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, F.gathered, !!atlas, F.wood, F.saplings.apple, F.saplings.orange].join(',');
     if (key === invKey) return; invKey = key;
     const pips = Array.from({ length: Math.min(S.waterMax, 30) }, (_, i) => `<b class="${i < F.water ? 'on' : ''}"></b>`).join('');
     let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i><div class="pips">${pips}</div><span class="k">水壶 ${F.water}/${S.waterMax}</span></div>`;
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0);
       h += `<div class="slot${n ? '' : ' dim'}" title="${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟">${cropIcon(k)}<span class="k">${SIM.CROPS[k].name}种</span><span class="n">${n}</span></div>`; }
     h += `<div class="slot${F.crops.length ? '' : ' dim'}" title="篮子：装满 ${E.basket} 个就去集市"><i style="background:url(${BASKET});background-size:32px"></i><span class="k">篮子</span><span class="n">${F.crops.length}/${E.basket}</span></div>`;
+    if (F.wood) h += `<div class="slot" title="木材：去集市卖，每份 ${PFWorld.WOOD.price} 金"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}</span></div>`;
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<div class="slot" title="${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置"><i style="background:url(${FRUIT_ICON[k]});background-size:32px"></i><span class="k">${PFWorld.FRUIT[k].name}苗</span><span class="n">${F.saplings[k]}</span></div>`;
     $('inv').innerHTML = h;
   }
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
@@ -59,18 +71,22 @@
     const S = G.S, key = [S.coins, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
     if (!force && key === shopKey) return; shopKey = key;
     let h = `<div class="shead"><b>商店</b><span>金币 <b style="color:#ffd76a">${S.coins}</b></span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="cards">`;
+    let sec = '';
     for (const id of SIM.SHOP_IDS) {
       const o = SIM.offer(S.up, S.coins, id), it = o.item, n = it.levels.length, lv = o.have;
+      const s2 = it.region ? '区域（大地图上用篱笆围着的地方）' : '工具和解锁'; if (s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
+      const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : '';
       const now = lv ? it.levels[lv - 1].label : '未购买';
       h += `<div class="card${o.maxed ? ' max' : ''}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
-          `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div></div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${o.cost} 金</button>${o.ok ? '' : `<span class="short">还差 ${o.short}</span>`}</div>`) + '</div>';
+          `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${o.cost} 金</button>${o.ok ? '' : `<span class="short">还差 ${o.short}</span>`}</div>`) + '</div>';
     }
     shop.innerHTML = h + '</div>';
   }
   const toggleShop = v => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; drawShop(true); } };
   shop.addEventListener('click', e => { const d = e.target && e.target.dataset; if (!d) return;
     if (d.a === 'close') toggleShop(false);
+    if (d.look) { const r = PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); speedBar(); if (!r.ok) e.target.classList.add('shake'); } });
   $('shopBtn').addEventListener('click', () => toggleShop());
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
@@ -83,6 +99,35 @@
     bar.innerHTML = [1, 2, 4].filter(v => v <= S.eff.speedMax).map(v => `<button class="pbtn${S.speed === v ? ' on' : ''}" data-v="${v}">${v}×</button>`).join('');
   }
   $('speed').addEventListener('click', e => { const v = +(e.target.dataset && e.target.dataset.v); if (v) { G.setGameSpeed(v); speedBar(); } });
+  // ---- big map: minimap toggle, chop / transplant tools, short messages ----
+  const mm = $('minimap'); if (localStorage.getItem('mouzhi/pixel-farm:ui:map') === '0') mm.hidden = true;
+  const toggleMap = () => { mm.hidden = !mm.hidden; try { localStorage.setItem('mouzhi/pixel-farm:ui:map', mm.hidden ? '0' : '1'); } catch (e) {} G.minimapDraw(); };
+  $('mapBtn').addEventListener('click', toggleMap);
+  let toolKey = '';
+  function tools() {
+    const S = G.S, F = G.F, m = G.input, chop = S.eff.axe && S.eff.regions.includes('forest');
+    const key = [chop, F.saplings.apple, F.saplings.orange, m.mode, m.kind, S.orders.length].join(',');
+    if (key === toolKey) return; toolKey = key;
+    let h = '';
+    if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点林场里的树标记要砍，再点一次取消（Esc 退出）">砍树</button>`;
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}" data-m="plant" data-k="${k}" title="点一块空草地，农夫会去种（Esc 退出）">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}</button>`;
+    const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树和种树指令">指令 ${n} ✕</button>`;
+    $('tools').innerHTML = h; $('tools').hidden = !h;
+  }
+  $('tools').addEventListener('click', e => { const d = e.target.dataset; if (!d || !d.m) return;
+    if (d.m === 'clear') { G.S.orders.length = 0; G.setMode(null); G.saveNow(); }
+    else if (G.input.mode === d.m && (d.m !== 'plant' || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
+  let sayT = 0; addEventListener('pf:say', e => { const b = $('say'); b.textContent = e.detail; b.hidden = false; clearTimeout(sayT); sayT = setTimeout(() => { b.hidden = true; }, 2200); });
+  addEventListener('pf:mode', () => tools());
+  addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return; if (e.key === 'm' || e.key === 'M') toggleMap(); });
+  // locked regions get a crisp label over their sign: name, price, and a click opens the shop
+  const labs = {}; for (const r of PFWorld.REGIONS) { const d = document.createElement('div'); d.className = 'rlab panel'; d.hidden = true;
+    d.innerHTML = `未解锁 · ${esc(r.name)}<br><b>${SIM.shopItem(r.id).levels[0].cost} 金</b> · 商店购买`; d.title = r.desc; d.addEventListener('click', () => toggleShop(true)); $('rlabs').appendChild(d); labs[r.id] = d; }
+  (function place() { const S = G.S, vw = innerWidth, vh = innerHeight;
+    for (const r of PFWorld.REGIONS) { const d = labs[r.id]; if (S.eff.regions.includes(r.id)) { d.hidden = true; continue; }
+      const c = G.toClient(r.sign.x, r.sign.y), on = c.x > -60 && c.x < vw + 60 && c.y > 0 && c.y < vh + 80;
+      d.hidden = !on; if (on) { d.style.left = Math.round(c.x) + 'px'; d.style.top = Math.round(c.y - 52) + 'px'; } }
+    requestAnimationFrame(place); })();
   // ---- save menu ----
   const menu = $('menu');
   let resetArm = 0, mode = '';
@@ -125,5 +170,5 @@
   }
   addEventListener('pf:offline', e => showOffline(e.detail));
   showOffline(G.SAVE.offline);
-  setInterval(() => { inv(); speedBar(); if (!shop.hidden) drawShop(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); }, 250); inv(); speedBar();
+  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); }, 250); inv(); speedBar();
 })();

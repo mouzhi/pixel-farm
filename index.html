@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v4.2</title>
+<title>像素堆叠 · 放置农场 v4.3</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -53,6 +53,13 @@
   #menu .bad{color:#ffb39a}
   #offline{left:50%;top:40%;transform:translate(-50%,-50%);padding:14px 18px;min-width:280px;text-align:center;font-size:14px}
   #offline h3{margin:0 0 6px;font-size:16px;color:#ffd76a}
+  #minimap{right:12px;top:100px;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto}#minimap[hidden]{display:none}
+  #mapBtn{position:absolute;right:12px;bottom:12px}
+  #tools{position:absolute;right:76px;bottom:12px;display:flex;gap:4px}#tools[hidden]{display:none}
+  #shop,#menu{z-index:3}
+  .rlab{position:absolute;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0}.rlab b{color:#ffd76a}.rlab[hidden]{display:none}
+  #say{left:50%;top:76px;transform:translateX(-50%);padding:4px 12px;pointer-events:none}#say[hidden]{display:none}
+  #shop .sec{font-size:12px;opacity:.7;margin:6px 0 0}#shop .look{padding:0 6px;font-size:12px;margin-top:2px}
 </style>
 </head>
 <body>
@@ -64,7 +71,7 @@
     <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
     <div id="prices">今日行情：</div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v4.2 · 院子闲时清扫（自动运行）<br><span style="font-weight:400;opacity:.8">拖动画面 / Q E / ← → 旋转镜头 · R 复位 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v4.3 · 大地图和区域（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · 滚轮缩放</span></div>
   <div id="log"></div>
   <div id="inv" class="panel"></div>
   <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
@@ -73,10 +80,16 @@
   <div id="shop" class="panel" hidden></div>
   <div id="menu" class="panel" hidden></div>
   <div id="offline" class="panel" hidden></div>
+  <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
+  <button id="mapBtn" class="pbtn" title="小地图（M）">地图 M</button>
+  <div id="tools" hidden></div>
+  <div id="say" class="panel" hidden></div>
+  <div id="rlabs"></div>
 </div>
 <script src="assets/palette.js"></script>
 <script src="assets/sprites.js"></script>
 <script src="sim.js"></script>
+<script src="world.js"></script>
 <script src="save.js"></script>
 <script src="game.js"></script>
 <script src="ui.js"></script>

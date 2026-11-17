@@ -7,7 +7,9 @@ const W = 426, H = 266;          // low-res framebuffer, integer upscaled (3x on
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
-const M = 40;                    // ground margin around the world (world units)
+const M = 40;                    // forest margin around the home farm (world units)
+const WD = window.PFWorld, WORLD = WD.WORLD; // v4.3: the big map (64 x 40 tiles); the farm keeps its 0..192 x 0..128 coordinates
+const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
 let SPEED = +Q.get('speed') || 1;
 const MANUAL = Q.has('manual');
@@ -293,7 +295,9 @@ function leafSprite(r, ramp, seed, inside, berries, sh = 0) { // sh: how deep in
     if (t === 0 && (sh > 0 || u * u + v * v > 0.3)) t = 1;                // the brightest tone stays a small cap on top clumps
     t = Math.min(4, t + sh);                    // the brightest tone stays a small cap
     if (!inS(i + 1, j) || !inS(i, j + 1) || !inS(i + 1, j + 1)) { if (v > -0.25 || u > 0.3) t = Math.max(t, v > 0.35 ? 5 : 4); } // separation edge
-    let col = Rm[t]; if (berries && t <= 2 && hash3(i, j, r + seed) < 0.06) col = Ac[3];
+    let col = Rm[t];
+    if (berries === true) { if (t <= 2 && hash3(i, j, r + seed) < 0.06) col = Ac[3]; }
+    else if (berries && t <= 3 && hash3(i >> 1, j >> 1, r + seed + 7) < 0.14) { const fc = FRUIT_COL[berries]; col = (i & 1) || (j & 1) ? fc[0] : fc[1]; } // 2x2 fruit, lit corner
     d[j * w + i] = u32(col);
   }
   g.putImageData(img, 0, 0); o = { c, rx, ry }; discC.set(key, o); return o;
@@ -399,7 +403,7 @@ const mk = mkc;
 const shMask = new Uint32Array(W * H);
 const shC = mk(W, H), sctx = shC.getContext('2d');
 const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H);
-const GW = Math.ceil((WW + 2 * M) * RS), GH = Math.ceil((WH + 2 * M) * RS);
+const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
 let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
@@ -476,9 +480,12 @@ addProp(mossRock, POND.x + 11, POND.y + 5, 0.6);
 // Pacing, economy, shop and save rules live in sim.js and save.js (pure, unit-tested); this block is the farm's state machine.
 const SIM = window.PFSim, CROP_IDS = SIM.IDS;
 const tiles = [];
-for (let r = 0; r < FIELD.rows; r++) for (let c = 0; c < FIELD.cols; c++) {
-  tiles.push({ c, r, x: (FIELD.c0 + c) * TILE + TILE / 2, y: (FIELD.r0 + r) * TILE + TILE / 2, open: SIM.isOpen(c, r, 0), debris: null, weed: null, tilled: false, crop: null, watered: false });
+// fields: the home field plus one per farming region (v4.3); c / r are local to their field, f names the field
+const FIELDS = [Object.assign({ id: 'home' }, FIELD), ...WD.REGIONS.filter(r => r.field).map(r => Object.assign({ id: r.id }, r.field))];
+for (const fd of FIELDS) for (let r = 0; r < fd.rows; r++) for (let c = 0; c < fd.cols; c++) {
+  tiles.push({ f: fd.id, c, r, x: (fd.c0 + c) * TILE + TILE / 2, y: (fd.r0 + r) * TILE + TILE / 2, open: fd.id === 'home' && SIM.isOpen(c, r, 0), debris: null, weed: null, tilled: false, crop: null, watered: false });
 }
+const tileOpen = (t, eff) => t.f === 'home' ? SIM.isOpen(t.c, t.r, eff.field) : eff.regions.includes(t.f);
 // clutter is stored as plain data (kind + variant index), so it can be saved; the model is looked up when drawing
 const debrisModel = d => { const a = d.type === 'rock' ? models.rocks : models.branches; return a[d.v % a.length]; };
 const weedSprite = w => models.weeds[w.v % models.weeds.length];
@@ -489,7 +496,7 @@ function spawnClutter(t, pDebris, pWeed) {
   if (v < pDebris + pWeed) { t.weed = { v: RI(0, models.weeds.length - 1), rot: R(0, 6.28) }; return true; } // weeds no longer undo tilling
   return false;
 }
-tiles.forEach(t => spawnClutter(t, 0.34, 0.42));
+tiles.forEach(t => spawnClutter(t, t.f === 'home' ? 0.34 : 0.5, t.f === 'home' ? 0.42 : 0.4)); // the new fields start overgrown
 // yard clutter lives off the field (grass and dirt around the farm). It is saved as { type, v, rot, x, y }.
 const YARD_CAP = 18, YARD_START = 26, YARD_TYPES = ['weed', 'weed', 'weed', 'rock', 'rock', 'branch', 'branch', 'pebble'];
 const yard = [];
@@ -509,6 +516,7 @@ function yardSpotOk(x, y) {
     if ((p.m === hayModel || p.m === crateModel || p.m === logsModel || p.m === mailModel) && near(p.x, p.y, 8)) return false;
   }
   for (const c of yard) if (Math.hypot(c.x - x, c.y - y) < 8) return false;
+  if (typeof S !== 'undefined' && S.trees) { for (const t of S.trees) if (near(t.x, t.y, 9)) return false; for (const o of S.orders) if (o.type === 'plant' && near(o.x, o.y, 9)) return false; }
   return true;
 }
 // a private stream so yard spawn / loot never moves the simulation RNG (prices, harvest drops, field clutter)
@@ -534,25 +542,37 @@ const S = {
   day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [],
   store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
   up: SIM.emptyUpgrades(), eff: SIM.effects({}), speed: 1, // shop levels, what they add up to, chosen game speed (1 / 2 / 4)
-  farmer: { x: DOOR.x, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null, bag: SIM.emptySeeds(), gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, act: 0 },
+  farmer: { x: DOOR.x, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null, bag: SIM.emptySeeds(), gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, act: 0, wood: 0, saplings: { apple: 0, orange: 0 } },
   log: [], events: [], label: '起床',
   flow: { weed: 0, harvest: 0, bought: 0, boughtGold: 0, sold: 0, soldGold: 0 }, // seed flow since the page opened (diagnostics, not saved)
+  trees: WD.defaultTrees(), orders: [], // v4.3: forest / fruit trees with their state; the player's chop and transplant orders
 };
 const F = S.farmer;
 const particles = [];
 let groundDirty = true;
 const fmtT = t => { const m = ((Math.floor(t) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
 function log(msg) { S.log.unshift(fmtT(S.t) + ' ' + msg); S.log.length = Math.min(S.log.length, 4); S.events.push({ day: S.day, t: Math.floor(S.t), msg }); if (S.events.length > 300) S.events.splice(0, S.events.length - 300); }
-const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { const d = Math.hypot(t.x - F.x, t.y - F.y + 6); if (d < bd) { bd = d; best = t; } } return best; };
+// routes: inside one area the farmer walks straight; between areas he follows the road through the region's gate
+const areaOf = p => WD.areaAt(p.x, p.y) || 'home';
+function routeVia(a, b) {
+  const A = areaOf(a), B = areaOf(b); if (A === B) return [];
+  const out = A !== 'home' && WD.ROUTES[A] ? WD.ROUTES[A].slice().reverse() : [];
+  if (B !== 'home' && WD.ROUTES[B]) out.push(...WD.ROUTES[B]);
+  return out.map(p => ({ x: p.x, y: p.y }));
+}
+function travel(a, b) { let d = 0, p = a; for (const q of routeVia(a, b)) { d += Math.hypot(q.x - p.x, q.y - p.y); p = q; } return d + Math.hypot(b.x - p.x, b.y - p.y); }
+const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01; if (d < bd) { bd = d; best = t; } } return best; };
+const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 }))];
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
 const seedCount = o => CROP_IDS.reduce((n, k) => n + (o[k] || 0), 0);
 const seedText = o => CROP_IDS.filter(k => o[k] > 0).map(k => `${SIM.CROPS[k].name}×${o[k]}`).join('、');
 let onMorning = () => {};
 function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   S.eff = SIM.effects(S.up); S.waterMax = S.eff.waterMax;
-  for (const t of tiles) if (!t.open && SIM.isOpen(t.c, t.r, S.eff.field)) t.open = true;
+  for (const t of tiles) if (!t.open && tileOpen(t, S.eff)) t.open = true;
   if (S.speed > S.eff.speedMax) S.speed = S.eff.speedMax;
   groundDirty = true;
+  if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(); }
 }
 function buy(id) { // the player's one action: spend gold on the next level of a shop item
   const o = SIM.offer(S.up, S.coins, id);
@@ -561,6 +581,7 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   S.coins -= o.cost; S.up[id] = o.have + 1; applyUpgrades();
   log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金）`); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'spark');
   if (id === 'field') log('新的田地开放了，农夫会去清理');
+  if (o.item.region) log(`${o.item.name}的篱笆门打开了`);
   return { ok: true, offer: o };
 }
 
@@ -582,7 +603,7 @@ function board() {
   const bagN = seedCount(F.bag), storeN = seedCount(S.store), full = F.crops.length >= E.basket;
   if (ripe.length && !full) { const t = rngNear(ripe); post('harvest', 90, t, () => harvestTask(t)); }
   if (dry.length) { const late = T >= 15 * 60;
-    if (F.water <= 0) post('refill', late ? 95 : 60, WELL_SPOT, refillTask);
+    if (F.water <= 0) { const w = rngNear(waterSpots()); post('refill', late ? 95 : 60, w, () => refillTask(w)); }
     else { const t = rngNear(dry); post('water', late ? 96 : 61, t, () => waterTask(t)); } }
   if (tilledEmpty.length && bagN > 0) { const t = rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t)); }
   else if (tilledEmpty.length && (storeN > 0 || F.gathered > 0)) post('fetch', 68, BARN_DOOR, () => fetchTask(tilledEmpty.length + tillable.length));
@@ -592,11 +613,18 @@ function board() {
   if (yard.length) { const c = rngNear(yard); post('tidy', 18, c, () => yardTask(c)); }
   if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
   if (tillable.length && T < 17 * 60) { // the wide hoe aims at the tile whose 3x3 has the most soil to turn
-    const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
+    const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
     post('till', 35, t, () => tillTask(t)); }
-  if (F.crops.length) {
+  // v4.3: fruit to pick, and the player's orders (chop a marked tree, transplant a sapling where he pointed)
+  const ripeTrees = S.trees.filter(t => t.stage === 'tree' && t.ripe && WD.FRUIT[t.kind] && treeReachable(t));
+  if (ripeTrees.length && F.crops.length + WD.FRUIT.apple.n <= E.basket) { const t = rngNear(ripeTrees); post('pick', 75, t, () => pickTask(t)); }
+  const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
+  if (chop.length) { const t = rngNear(chop); post('chop', 64, t, () => chopTask(t)); }
+  const plant = S.orders.filter(o => o.type === 'plant' && F.saplings[o.kind] > 0);
+  if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
+  if (F.crops.length || F.wood) {
     const busy = ripe.length || dry.length || (tilledEmpty.length && bagN);
-    const base = full ? 100 : T >= 17.5 * 60 ? 80 : F.crops.length >= E.basket * 0.6 ? 58 : !busy ? 30 : 0;
+    const base = full ? 100 : T >= 17.5 * 60 ? 80 : F.crops.length >= E.basket * 0.6 || F.wood >= 20 ? 58 : !busy ? 30 : 0;
     if (base) post('sell', base, STALL_SPOT, sellTask);
   }
   return out;
@@ -609,7 +637,7 @@ function chooseTask() {
     return homeTask();
   }
   let best = null, bs = -Infinity;
-  for (const j of board()) { const s = j.base - Math.hypot(j.at.x - F.x, j.at.y - F.y) / 8; if (s > bs) { bs = s; best = j; } }
+  for (const j of board()) { const s = j.base - travel(F, j.at) / 8; if (s > bs) { bs = s; best = j; } }
   if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
   // nothing on the board: rest or stroll
   F.idleCount++;
@@ -627,7 +655,7 @@ function harvestTask(t) {
     log(`收获了一个${c.name}` + (n ? `，留下 ${n} 颗种子` : ''));
   } };
 }
-function refillTask() { return { label: '正在井边打水', to: WELL_SPOT, dur: 8, fx: 'water', done: () => { F.water = S.waterMax; log(`在井边装满了水壶（${S.waterMax} 格）`); } }; }
+function refillTask(w = WELL_SPOT) { const well = w === WELL_SPOT; return { label: well ? '正在井边打水' : '正在水桶边打水', to: w, dur: well ? 8 : 6, fx: 'water', done: () => { F.water = S.waterMax; log(`在${well ? '井边' : '水桶边'}装满了水壶（${S.waterMax} 格）`); } }; }
 function waterTask(t) {
   return { label: '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => { if (t.watered || F.water <= 0 || !t.crop) return; F.water--; t.watered = true; groundDirty = true; burst(t.x, t.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop'); } };
 }
@@ -668,21 +696,51 @@ function yardTask(c) {
 function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 around the target in one go
   const wide = S.eff.till3;
   return { label: wide ? '正在用宽锄头开垦' : '正在开垦土地', to: standAt(t), tile: t, dur: wide ? 5 : S.eff.tillDur, fx: 'dirt', pose: 'hoe', done: () => {
-    const area = wide ? tiles.filter(u => Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1) : [t];
+    const area = wide ? tiles.filter(u => u.f === t.f && Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1) : [t];
     for (const u of area) if (u.open && !u.tilled && !u.crop && !u.debris && !u.weed) { u.tilled = true; burst(u.x, u.y, 1, ['#8b5a35', '#a06c43', '#6e452a'], 8); }
     groundDirty = true;
+  } };
+}
+const treeReachable = t => { const a = WD.areaAt(t.x, t.y); return a === 'home' || S.eff.regions.includes(a); };
+const treeStand = t => ({ x: t.x - 8, y: t.y + 2 });
+function pickTask(t) {
+  const fr = WD.FRUIT[t.kind];
+  return { label: `正在摘${fr.name}`, to: treeStand(t), tile: t, dur: 8, fx: 'leaf', pose: 'pull', done: () => {
+    const n = Math.min(WD.pickFruit(t), S.eff.basket - F.crops.length); if (!n) return;
+    for (let i = 0; i < n; i++) F.crops.push(t.kind); treeChanged(t);
+    burst(t.x, t.y, 20, t.kind === 'apple' ? [Rf[2], Rf[3]] : [Ac[2], Ac[1]], 8); popText(t.x, t.y, 30, '+' + n, '#ffffff'); log(`摘了 ${n} 个${fr.name}`);
+  } };
+}
+function chopTask(t) {
+  return { label: '正在砍树', to: treeStand(t), tile: t, dur: 20, fx: 'wood', pose: 'hoe', done: () => {
+    S.orders = S.orders.filter(o => !(o.type === 'chop' && o.id === t.id));
+    if (t.stage !== 'tree' || t.kind !== 'wild') return;
+    const y = WD.chopYield(rand); t.stage = 'stump'; t.age = 0; treeChanged(t);
+    F.wood += y.wood; F.saplings[y.sapling]++;
+    burst(t.x, t.y, 6, [Wd[3], Wd[4], G[3]], 16); popText(t.x, t.y, 20, '+' + y.wood, '#e0b880');
+    log(`砍倒一棵树：木材 ${y.wood} 份，${WD.FRUIT[y.sapling].name}树苗 1 棵`);
+  } };
+}
+function transplantTask(o) {
+  return { label: `正在移植${WD.FRUIT[o.kind].name}树苗`, to: { x: o.x - 7, y: o.y + 1 }, tile: o, dur: 12, fx: 'dirt', pose: 'hoe', done: () => {
+    if (F.saplings[o.kind] <= 0 || !S.orders.includes(o)) return;
+    S.orders = S.orders.filter(q => q !== o); F.saplings[o.kind]--;
+    const t = { id: 'p' + S.day + '_' + Math.floor(S.t % 1440) + '_' + S.trees.length, x: o.x, y: o.y, kind: o.kind, v: S.trees.length % 3, stage: 'sapling', age: 0, ripe: 0, cd: 0 };
+    S.trees.push(t); treeChanged(t); burst(o.x, o.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop');
+    log(`种下一棵${WD.FRUIT[o.kind].name}树苗，浇了第一次水（${WD.SAPLING_DAYS} 天后结果）`);
   } };
 }
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
   return { label: F.crops.length ? '正在去市场卖菜' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
     const n = F.crops.length, open = tiles.filter(t => t.open);
-    let sum = 0; for (const ty of F.crops) sum += SIM.priceOf(ty, S.prices); F.crops.length = 0;
+    let sum = 0; for (const ty of F.crops) { const g = WD.FRUIT[ty] ? WD.FRUIT[ty].price : SIM.priceOf(ty, S.prices); sum += g; if (WD.FRUIT[ty]) S.fruitGold = (S.fruitGold || 0) + g; } F.crops.length = 0;
+    if (F.wood) { const g = F.wood * WD.WOOD.price; sum += g; S.woodGold = (S.woodGold || 0) + g; log(`卖出木材 ${F.wood} 份，得 ${g} 金`); F.wood = 0; }
     const sp = SIM.surplusSeeds(F.bag, S.store, open.length);
     if (sp.gold) { for (const k of CROP_IDS) F.bag[k] -= sp.sell[k]; sum += sp.gold; S.flow.sold += seedCount(sp.sell); S.flow.soldGold += sp.gold; log(`卖掉多余的种子：${seedText(sp.sell)}（${sp.gold} 金）`); }
     if (sum) { S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
       popText(STALL.x + R(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'spark');
-      if (n) log(`卖出 ${n} 个作物，得 ${sum - sp.gold} 金`); }
+      if (n) log(`卖出 ${n} 个作物和水果`); }
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
     if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops);
       if (p.cost > 0) { S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
@@ -701,6 +759,7 @@ function overnight() {
   const before = yard.length, add = 2 + Math.floor(yardRng(S.day * 668265263)() * 3); // 2..4, without consuming rand()
   if (yard.length < YARD_CAP) fillYard(yardRng(S.day * 2147483647), Math.min(YARD_CAP, yard.length + add));
   const yn = yard.length - before;
+  for (const t of S.trees) { const before = t.stage + t.ripe; WD.treeOvernight(t); if (t.stage + t.ripe !== before) treeChanged(t); }
   S.prices = SIM.driftPrices(S.prices, rand);
   groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
   onMorning();
@@ -713,7 +772,7 @@ function stepSim(dm) {
     overnight(); log('起床啦，开始干活');
   }
   if (F.sleeping) { S.label = '睡觉中 Zzz'; return; }
-  if (!F.task) { F.task = chooseTask(); F.task.work = 0; S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (!F.task) { F.task = chooseTask(); F.task.work = 0; F.task.via = routeVia(F, F.task.to).concat(F.task.via || []); S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   const k = F.task;
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
@@ -743,7 +802,8 @@ function popText(x, y, z, s, c) { particles.push({ x, y, z, vx: 0, vy: 0, vz: 10
 
 // ---------- rendering helpers ----------
 const DEFAULT_A = Q.has('angle') ? +Q.get('angle') : 0.22;
-const cam = { x: WW / 2, y: WH / 2 + 2, a: DEFAULT_A, ta: DEFAULT_A };
+const HOME_CAM = { x: WW / 2, y: WH / 2 + 2 };
+const cam = { x: HOME_CAM.x, y: HOME_CAM.y, a: DEFAULT_A, ta: DEFAULT_A };
 let CA = Math.cos(cam.a), SA = Math.sin(cam.a);
 // The camera never drifts: it is fixed on the farm centre, and its screen offset is snapped to whole pixels once per frame.
 // Every object then keeps the same sub-pixel phase between frames, so nothing re-rounds and shimmers.
@@ -802,7 +862,16 @@ function vnoise(x, y, s) { const h = (i, j) => { let n = i * 374761393 + j * 668
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16);
 const pathSegs = [[DOOR.x, DOOR.y, DOOR.x, 54], [DOOR.x, 54, 68, 54], [68, 54, 124, 54], [124, 54, 124, 92], [68, 54, 68, 92], [68, 92, 124, 92], [124, 54, 158, 54], [158, 54, BARN_DOOR.x, BARN_DOOR.y], [100, 54, WELL_SPOT.x, WELL_SPOT.y], [124, 92, 140, 92], [140, 92, 140, STALL_SPOT.y], [140, STALL_SPOT.y, STALL_SPOT.x + 6, STALL_SPOT.y], [68, 92, 68, BENCH_SPOT.y], [68, BENCH_SPOT.y, BENCH_SPOT.x, BENCH_SPOT.y], [DOOR.x, 54, DOOR.x, 66]];
 function segDist(px, py, [x1, y1, x2, y2]) { const dx = x2 - x1, dy = y2 - y1, l = dx * dx + dy * dy || 1; let t = ((px - x1) * dx + (py - y1) * dy) / l; t = clamp(t, 0, 1); return Math.hypot(px - x1 - t * dx, py - y1 - t * dy); }
-const pathD = (x, y) => { let pd = 99; for (const s of pathSegs) pd = Math.min(pd, segDist(x, y, s)); return pd; };
+// v4.3: dirt roads from the farm to each region's gate, and a short lane inside each region
+for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) pathSegs.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
+const LANES = { forest: [[100, -38, 100, -60]], east: [[216, 66, 238, 66]], orchard: [[-40, 8, -70, -14]], south: [[68, 150, 68, 176], [68, 176, 78, 176]] };
+for (const k in LANES) for (const l of LANES[k]) pathSegs.push(l.concat(k)); // tagged: only painted once the region is open
+const routeSegs = []; for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) routeSegs.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
+const nearRoute = (x, y, d) => routeSegs.some(s => segDist(x, y, s) < d) || Object.values(LANES).some(ls => ls.some(l => segDist(x, y, l) < d));
+const pathD = (x, y) => { let pd = 99; for (const s of pathSegs) { if (s[4] && !regionOpen(s[4])) continue; if (Math.abs(x - (s[0] + s[2]) / 2) > Math.abs(s[2] - s[0]) / 2 + 12 || Math.abs(y - (s[1] + s[3]) / 2) > Math.abs(s[3] - s[1]) / 2 + 12) continue; pd = Math.min(pd, segDist(x, y, s)); } return pd; };
+const rectOut = (x, y, [x0, y0, x1, y1]) => Math.max(x0 - x, x - x1, y0 - y, y - y1, 0);
+let OPEN_REGIONS = []; const regionOpen = id => OPEN_REGIONS.includes(id); // copied from the shop state (S.eff.regions) before the ground is rebuilt
+const fieldYard = r => r.field && [r.field.c0 * TILE - 6, r.field.r0 * TILE - 6, (r.field.c0 + r.field.cols) * TILE + 6, (r.field.r0 + r.field.rows) * TILE + 6];
 const YARD = { x0: 68, x1: 124, y0: 52, y1: 92 }; // packed-dirt yard around the field (like the mock)
 const inYard = (x, y, pad = 0) => x > YARD.x0 - pad && x < YARD.x1 + pad && y > YARD.y0 - pad && y < YARD.y1 + pad;
 // ground: flat palette areas only (grass, dirt, water). All texture lives in decals that never rotate, so nothing crawls.
@@ -814,15 +883,24 @@ function groundAt(x, y) { // -> [palette colour, kind]
   const pd = pathD(x, y), pw = 4.2 + wob;
   const yd = Math.max(YARD.x0 - x, x - YARD.x1, YARD.y0 - y, y - YARD.y1) + wob * 0.6;
   if (pd < pw || yd < 0) return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt'];
-  const out = Math.max(-x, x - WW, -y, y - WH, 0);
+  // regions: an open region is farm grass (with a packed-dirt yard round its field); a locked one stays a wild meadow
+  for (const r of WD.REGIONS) if (WD.inRect(x, y, r.rect)) {
+    if (!regionOpen(r.id)) return [vnoise(x / 9, y / 9, 13) > 0.62 ? G[3] : G[2], 'wild'];
+    const fy = fieldYard(r); if (fy && rectOut(x, y, fy) === 0) return [Wd[4], 'dirt'];
+    return [G[3], 'grass'];
+  }
+  let out = Math.max(-x, x - WW, -y, y - WH, 0);
+  for (const r of WD.REGIONS) out = Math.min(out, rectOut(x, y, r.rect) + 2);
+  if (pd < pw + 8) out = Math.min(out, 4);                             // roads keep a strip of open grass beside them
   if (out > 22 + vnoise(x / 7, y / 7, 5) * 12) return [G[1], 'grass']; // forest floor under the tree line
   if (out > 6 + vnoise(x / 6, y / 6, 3) * 8) return [G[2], 'grass'];
   return [G[3], 'grass'];
 }
 function buildGroundBase() { // one ground pixel per screen pixel (world unit = RS px)
   const g = groundBase.getContext('2d'), img = g.createImageData(GW, GH), d = new Uint32Array(img.data.buffer);
-  for (let py = 0; py < GH; py++) for (let px = 0; px < GW; px++) d[py * GW + px] = u32(groundAt(px / RS - M, py / RS - M)[0]);
+  for (let py = 0; py < GH; py++) for (let px = 0; px < GW; px++) d[py * GW + px] = u32(groundAt(px / RS + GX0, py / RS + GY0)[0]);
   g.putImageData(img, 0, 0);
+  if (window.__farm && window.__farm.onGround) window.__farm.onGround(); // the minimap copies it
 }
 function buildGround() { groundDirty = false; }
 // decals: grass tufts, flowers, pebbles; placed in the world but drawn upright, like billboards lying on the ground
@@ -834,6 +912,66 @@ const decals = [];
     if (k === 'grass') { const v = r(); decals.push({ x, y, c: v < 0.12 ? SPRITES.flowers[Math.floor(r() * 4)] : SPRITES.tufts[Math.floor(r() * 4)] }); }
     else if (k === 'dirt' && r() < 0.25) decals.push({ x, y, c: SPRITES.dirtTufts[Math.floor(r() * 2)] }); }
   [[-10, -3], [-4, 3], [3, -5], [8, 1], [-13, 4]].forEach(([dx, dy], i) => decals.push({ x: POND.x + dx, y: POND.y + dy, c: SPRITES.lily, lily: i, bob: 0 }));
+  // v4.3: the rest of the big map (same density); locked meadows get extra flowers so they look worth buying
+  const r2 = mulberry32(778), area = (WORLD.x1 - WORLD.x0) * (WORLD.y1 - WORLD.y0);
+  for (let i = 0; i < area / 60; i++) { const x = WORLD.x0 + r2() * (WORLD.x1 - WORLD.x0), y = WORLD.y0 + r2() * (WORLD.y1 - WORLD.y0);
+    if (x > -M * 0.8 && x < WW + M * 0.8 && y > -M * 0.8 && y < WH + M * 0.8) continue;
+    const k = groundAt(x, y)[1], v = r2();
+    if (k === 'wild') { if (v < 0.75) decals.push({ x, y, c: v < 0.3 ? SPRITES.flowers[Math.floor(r2() * 4)] : SPRITES.tufts[Math.floor(r2() * 4)] }); }
+    else if (k === 'grass' && v < 0.35) decals.push({ x, y, c: v < 0.04 ? SPRITES.flowers[Math.floor(r2() * 4)] : SPRITES.tufts[Math.floor(r2() * 4)] });
+    else if (k === 'dirt' && v < 0.1) decals.push({ x, y, c: SPRITES.dirtTufts[Math.floor(r2() * 2)] }); }
+}
+// ---------- the big map (v4.3): roads cut through the forest rim, wild forest between the clearings, fenced regions ----------
+for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) continue;
+  if (nearRoute(p.x, p.y, 14) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10))) props.splice(i, 1); }
+{ const fr = mulberry32(5150), P = a => a[Math.floor(fr() * a.length)];
+  const kinds = () => P([...treeDefs.dark, ...treeDefs.pine, ...treeDefs.oak, ...treeDefs.olive, ...treeDefs.dark, ...treeDefs.birch]);
+  for (let y = WORLD.y0 - 8; y <= WORLD.y1 + 14; y += 17) for (let x = WORLD.x0 - 8; x <= WORLD.x1 + 10; x += 18) {
+    const tx = x + (fr() - 0.5) * 9 + ((Math.round(y / 17) & 1) ? 9 : 0), ty = y + (fr() - 0.5) * 7;
+    if (tx > -46 && tx < WW + 46 && ty > -46 && ty < WH + 46) continue;                    // the farm's own rim is already there
+    if (WD.REGIONS.some(r => WD.inRect(tx, ty, r.rect, 12)) || nearRoute(tx, ty, 13)) continue;
+    let d = 1e9; for (const r of WD.REGIONS) d = Math.min(d, rectOut(tx, ty, r.rect)); d = Math.min(d, Math.max(-tx, tx - WW, -ty, ty - WH, 0));
+    if (fr() < (d < 50 ? 0.9 : 0.55)) addTree(kinds(), tx, ty);
+  }
+}
+// region fences (gate segments open when the region is bought), a sign with a padlock at each gate, water barrels
+const barrelModel = buildModel(10, 10, 12, Object.assign((x, y, z) => { const e = Math.hypot(x + 0.5 - 5, y + 0.5 - 5); if (e > 4.6) return null;
+  if (z === 11) return e < 3.6 ? Wt[3] : Wd[3]; return (z === 2 || z === 8) ? St[1] : (e > 3.6 ? Wd[2] : null); }, {}));
+const stumpModel = buildModel(10, 10, 6, Object.assign((x, y, z) => { const e = Math.hypot(x + 0.5 - 5, y + 0.5 - 5); if (e > 4.4 - (z === 0 ? -0.6 : 0)) return null;
+  if (z === 5) return e < 1.4 ? Wd[3] : e < 3.2 ? Wd[4] : Wd[2]; return Wd[2]; }, {}));
+const SIGN = pix(['.bbbbbbbbbbb.', 'bsssssssssssb', 'bsttsssttsssb', 'bsssssssssssb', 'bssttsssttssb', 'bsssssssssssb', '.bbbbbbbbbbb.', '......w......', '......w......', '......w......', '.....www.....']);
+const LOCK = pix(['.eee.', 'e...e', 'e...e', 'yyyyy', 'yyiyy', 'yyiyy', 'yyyyy']);
+const regionProps = {};
+for (const r of WD.REGIONS) { const [x0, y0, x1, y1] = r.rect, list = regionProps[r.id] = [];
+  const nearGate = (x, y) => Math.hypot(x - r.gate.x, y - r.gate.y) < 12;
+  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); list.push(p); }
+  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); list.push(p); }
+  const sign = { spr: SIGN, x: r.sign.x, y: r.sign.y, region: r.id, sign: 1 }; billboards.push(sign); list.push(sign);
+  if (r.barrel) addProp(barrelModel, r.barrel.x, r.barrel.y, 0);
+}
+// ---------- trees with a state (v4.3): forest trees to chop, stumps that grow back, transplanted saplings, fruit trees ----------
+const FRUIT_COL = { apple: [Rf[2], Rf[3]], orange: [Ac[2], Ac[1]] };
+const WILD = [treeDefs.oak[0], treeDefs.oak[1], treeDefs.olive[0], treeDefs.birch[0], treeDefs.pine[0], treeDefs.oak[2], treeDefs.olive[1], treeDefs.birch[1]];
+const FDEF = new Map();
+function fruitDef(kind, v, ripe) { const key = kind + v + (ripe ? 'r' : ''); let d = FDEF.get(key); if (d) return d;
+  const bare = FDEF.get(kind + v) || oakDef(301 + v * 19 + (kind === 'orange' ? 50 : 0), kind === 'orange' ? 'olive' : 'oak', 0.72); FDEF.set(kind + v, bare);
+  d = ripe ? Object.assign({}, bare, { discs: bare.discs.map(p => p.inside ? p : Object.assign({}, p, { berries: kind })) }) : bare; FDEF.set(key, d); return d; }
+const SAPLING = [pix(['..g.g..', '.gmgmg.', '..mgm..', '...w...', '...w...', '..www..']),
+  pix(['...g.g...', '.gglgmg..', 'gmgmgmgg.', '.gmmgmmg.', '..mdwdm..', '....w....', '....w....', '....w....', '...www...'])];
+const TV = new Map();
+function setView(o, t) {
+  if (o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; o._ck = null; o.tree = o.m = o.spr = undefined; o.sway = 0;
+  if (t.stage === 'tree') { o.tree = t.kind === 'wild' ? WILD[t.v % WILD.length] : fruitDef(t.kind, t.v % 3, t.ripe); o.m = o.tree.union; }
+  else if (t.stage === 'stump') { o.m = stumpModel; o.rot = (t.x * 7) % 6; }
+  else { o.spr = t.age >= (t.kind === 'wild' ? 5 : 3) ? SAPLING[1] : SAPLING[0]; o.sway = 0.6; }
+}
+function treeView(t) { let o = TV.get(t.id); if (!o) { o = { x: t.x, y: t.y, rot: 0, z: 0, lean: 0, leanV: 0, tick: (treeN++ % 6) / 6, sim: t }; TV.set(t.id, o); setView(o, t); } return o; }
+function treeChanged(t) { const o = TV.get(t.id); if (o) { o.sim = t; setView(o, t); } }
+function resetTreeViews() { for (const o of TV.values()) if (o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.clear(); }
+function syncRegionProps() { // open gates and take the signs down for bought regions
+  for (const id in regionProps) { const open = regionOpen(id);
+    for (const p of regionProps[id]) { const want = !(open && (p.gate || p.sign)), arr = p.sign ? billboards : props, i = arr.indexOf(p);
+      if (want && i < 0) arr.push(p); else if (!want && i >= 0) arr.splice(i, 1); } }
 }
 const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111' };
 function pixText(s, x, y, col, sc = 1) {
@@ -868,7 +1006,7 @@ function drawBillboard(c, o, alpha = 1) {
 }
 function drawBasket(c, fx, fy, o) { // little basket of the last crop, held at the hip (hidden from behind)
   const b = SPRITES.basket, bx = fx + (o.row === 'walk_front' ? 1 : o.flip ? -9 : 2), by = fy - 12;
-  c.fillStyle = CROPS[o.basket].top; c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
+  c.fillStyle = CROPS[o.basket] ? CROPS[o.basket].top : FRUIT_COL[o.basket][0]; c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
   c.drawImage(b, bx, by);
 }
 function bbShadow(c, o, wide = 1) { const [sx, sy] = proj(o.x, o.y); const x = Math.round(sx), y = Math.round(sy); c.fillStyle = '#000';
@@ -1021,18 +1159,25 @@ function render() {
   setCam(); if (PROF) _pt = performance.now();
   const T = S.t % 1440, night = dayLight(T), warm = warmth(T), poseT = Math.floor(realT * 10) / 10;
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = G[1]; ctx.fillRect(0, 0, W, H);
-  const [gx, gy] = proj(-M, -M);
-  ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy)); ctx.drawImage(groundBase, 0, 0); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const [gx, gy] = proj(GX0, GY0);
+  { // only the part of the (big) ground canvas under the screen: invert the four screen corners into ground pixels
+    let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+    for (const [px, py] of [[0, 0], [W, 0], [0, H], [W, H]]) { const rx = (px - CX) / RS, ry = (py - CY) / (K * RS), wx = rx * CA + ry * SA, wy = -rx * SA + ry * CA;
+      const u = (wx - GX0) * RS, v = (wy - GY0) * RS; x0 = Math.min(x0, u); y0 = Math.min(y0, v); x1 = Math.max(x1, u); y1 = Math.max(y1, v); }
+    x0 = clamp(Math.floor(x0) - 4, 0, GW); y0 = clamp(Math.floor(y0) - 4, 0, GH); x1 = clamp(Math.ceil(x1) + 4, 0, GW); y1 = clamp(Math.ceil(y1) + 4, 0, GH);
+    ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
+    if (x1 > x0 && y1 > y0) ctx.drawImage(groundBase, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); ctx.setTransform(1, 0, 0, 1, 0, 0); }
   tick('ground');
   waterPass(realT); tick('water');
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
-  for (const t of tiles) if (t.tilled || t.crop) drawStack(ctx, models.soil[t.watered ? 1 : 0], t.x, t.y, 0, 0);
-  for (const d of decals) { const [sx, sy] = proj(d.x, d.y); const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
+  for (const t of tiles) if ((t.tilled || t.crop) && onScreen(t.x, t.y, 20)) drawStack(ctx, models.soil[t.watered ? 1 : 0], t.x, t.y, 0, 0);
+  for (const d of decals) { const [sx, sy] = proj(d.x, d.y); if (sx < -8 || sx > W + 8 || sy < -4 || sy > H + 12) continue; const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
   tick('soil+decals');
   const list = [];
-  for (const p of props) list.push(p);
-  for (const b of billboards) list.push(b);
-  for (const t of tiles) {
+  for (const p of props) if (onScreen(p.x, p.y, p.tree ? 70 : 50)) list.push(p);
+  for (const b of billboards) if (onScreen(b.x, b.y, 30)) list.push(b);
+  for (const t of S.trees) if (onScreen(t.x, t.y, 70)) list.push(treeView(t));
+  for (const t of tiles) { if (!onScreen(t.x, t.y, 30)) continue;
     if (t.debris) list.push({ m: debrisModel(t.debris), x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
     if (t.weed) list.push({ spr: weedSprite(t.weed), x: t.x, y: t.y, sway: 0.8, w: 1 });
     if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: CROP_IDS.indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
@@ -1065,6 +1210,7 @@ function render() {
   }
   tick('objects');
   if (farmerD) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
+  drawMarks(); tick('marks');
   for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); ctx.fillStyle = p.c; const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), p.kind === 'drop' ? 1 : s, p.kind === 'drop' ? 3 : s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
   drawPondLeaves();
@@ -1083,6 +1229,24 @@ function render() {
 // which matters with ~100 trees all re-posing at 10 Hz and every one re-laid while the camera turns.
 // Trunks are fixed. Every clump on a tree shares one wind sample (the trunk position), scaled by weight, so the canopy
 // sways as a whole instead of each tier jumping on its own phase. Pines also cap at 1 px and drop the vertical lift.
+function onScreen(x, y, pad) { const [sx, sy] = proj(x, y); return sx > -pad && sx < W + pad && sy > -pad && sy < H + pad + 90; }
+// order markers and region signs: an axe over trees marked for chopping, a flag where a sapling goes, the padlock and price
+const AXE_MARK = pix(['..iii', '.iRRi', 'iRRRi', '.iRwi', '...w.', '..w..', '.w...']);
+const FLAG = pix(['w.', 'wrr', 'wrrr', 'wrr', 'w', 'w', 'w']);
+const HOVER = pix(['i...i', '.....', '.....', '.....', 'i...i'], false);
+function markAt(t) { const o = TV.get(t.id); const h = o && o.tree ? o.tree.h - 6 : 14; const [sx, sy] = proj(t.x, t.y); return [Math.round(sx), Math.round(sy) - h]; }
+function drawMarks() {
+  const bob = Math.round(Math.sin(realT * 4)) ;
+  for (const o of S.orders) {
+    if (o.type === 'chop') { const t = S.trees.find(q => q.id === o.id); if (!t || !onScreen(t.x, t.y, 40)) continue; const [x, y] = markAt(t); ctx.drawImage(AXE_MARK, x - 3, y - 10 + bob); }
+    else if (onScreen(o.x, o.y, 20)) { const [sx, sy] = proj(o.x, o.y); ctx.globalAlpha = 0.55; ctx.drawImage(SAPLING[0], Math.round(sx) - 4, Math.round(sy) - 7); ctx.globalAlpha = 1; ctx.drawImage(FLAG, Math.round(sx) + 2, Math.round(sy) - 9 + bob); }
+  }
+  if (INPUT.hover) { const h = INPUT.hover; if (h.tree) { const [x, y] = markAt(h.tree); ctx.drawImage(AXE_MARK, x - 3, y - 12 + bob); }
+    else if (h.spot) { const [sx, sy] = proj(h.spot.x, h.spot.y); ctx.globalAlpha = h.ok ? 0.7 : 0.35; ctx.drawImage(SAPLING[0], Math.round(sx) - 4, Math.round(sy) - 7); ctx.globalAlpha = 1;
+      if (!h.ok) { ctx.fillStyle = Rf[2]; ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 4, 7, 1); } } }
+  for (const r of WD.REGIONS) if (!regionOpen(r.id) && onScreen(r.sign.x, r.sign.y, 30)) { const [sx, sy] = proj(r.sign.x, r.sign.y), x = Math.round(sx), y = Math.round(sy);
+    ctx.drawImage(LOCK, x - 3, y - 22 + bob); }
+}
 function spritePixels(c) { return c.d32 || (c.d32 = new Uint32Array(c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer)); }
 function stackPixels(m, a) { const k = stackCanvas(m, a); if (!k.d32) k.d32 = new Uint32Array(k.c.getContext('2d').getImageData(0, 0, k.c.width, k.c.height).data.buffer); return k; }
 function blit(dst, dw, dh, src, sw, sh, x0, y0, shiftOf) {
@@ -1143,9 +1307,9 @@ function updateFx(dt) {
   for (let i = particles.length - 1; i >= 0; i--) { const p = particles[i]; p.life -= dt; if (p.life <= 0) { particles.splice(i, 1); continue; }
     p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; if (p.kind === 'smoke') continue; if (!p.text) { p.vz -= 40 * dt; if (p.z < 0) { p.z = 0; p.vx *= 0.5; p.vy *= 0.5; p.vz = 0; } } else p.vz *= 0.97; }
   windT += dt;
-  for (const o of props) if (o.tree) { const T = o.tree, k = 2 * Math.PI / T.period, g = gustAt(o.x, o.y);
+  for (const o of [...props, ...TV.values()]) if (o.tree) { const T = o.tree, k = 2 * Math.PI / T.period, g = gustAt(o.x, o.y);
     o.leanV += (k * k * (T.push * g - o.lean) - 2 * T.damp * k * o.leanV) * dt; o.lean += o.leanV * dt;
-    if (T.kind === 'oak' && Math.random() < dt * g * 0.6) leaves.push({ x: o.x + R(-10, 10), y: o.y + R(-10, 10), z: T.h - 14, ph: R(0, 6), c: pick([G[4], Ac[1], G[3]]) }); }
+    if (T.kind === 'oak' && Math.random() < dt * g * 0.6 && onScreen(o.x, o.y, 0)) leaves.push({ x: o.x + R(-10, 10), y: o.y + R(-10, 10), z: T.h - 14, ph: R(0, 6), c: pick([G[4], Ac[1], G[3]]) }); }
   for (let i = leaves.length - 1; i >= 0; i--) { const l = leaves[i]; l.z -= 9 * dt; l.ph += dt * 3; l.x += dt * (2 + 10 * gustAt(l.x, l.y)); if (l.z <= 0) leaves.splice(i, 1); }
   if (!fireflies.length) for (let i = 0; i < 18; i++) fireflies.push({ x: R(10, 80), y: R(80, 122), z: R(2, 9), ph: R(0, 6) });
   for (const f of fireflies) { f.x += Math.sin(realT * 0.7 + f.ph) * dt * 3; f.y += Math.cos(realT * 0.5 + f.ph) * dt * 2; }
@@ -1165,16 +1329,85 @@ function hud() {
   document.getElementById('log').innerHTML = S.log.map(s => `<div>${s}</div>`).join('');
 }
 
-// ---------- camera: manual only (no auto-rotation). drag / swipe, Q E, ← →, R resets; wheel = integer zoom ----------
+// ---------- camera and pointer (v4.3) ----------
+// Drag (or one finger) pans the big map; Shift+drag or right-drag turns it; W A S D pan, Q E / ← → turn, R goes home.
+// The pan is in world units; the screen offset is still rounded once per frame (setCam), so panning moves the whole picture
+// by whole pixels and nothing shimmers. In chop / plant mode a click marks a tree or a spot instead.
 let keyRot = 0, drag = null;
 const ROT_KEYS = { q: -1, Q: -1, ArrowLeft: -1, e: 1, E: 1, ArrowRight: 1 };
+const PAN_KEYS = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0], W: [0, -1], A: [-1, 0], S: [0, 1], D: [1, 0] };
+const keyPan = new Set();
 const typing = e => e.target && /^(TEXTAREA|INPUT|BUTTON)$/.test(e.target.tagName); // the save menu has text boxes
-addEventListener('keydown', e => { if (typing(e)) return; if (ROT_KEYS[e.key]) { keyRot = ROT_KEYS[e.key]; e.preventDefault(); } if (e.key === 'r' || e.key === 'R') cam.ta = DEFAULT_A; });
-addEventListener('keyup', e => { if (ROT_KEYS[e.key] === keyRot) keyRot = 0; });
+const INPUT = { mode: null, kind: 'apple', hover: null };
+function clampCam() { cam.x = clamp(cam.x, WORLD.x0 + 70, WORLD.x1 - 70); cam.y = clamp(cam.y, WORLD.y0 + 40, WORLD.y1 - 30); }
+function panScreen(dx, dy) { // move the picture by (dx, dy) framebuffer pixels
+  const rx = dx / RS, ry = dy / (K * RS); cam.x -= rx * CA + ry * SA; cam.y -= -rx * SA + ry * CA; clampCam(); }
+function panTo(x, y) { cam.x = x; cam.y = y; clampCam(); }
+function toWorld(clientX, clientY) { const r = cv.getBoundingClientRect(), px = (clientX - r.left) * W / r.width, py = (clientY - r.top) * H / r.height;
+  const rx = (px - CX) / RS, ry = (py - CY) / (K * RS); return { x: rx * CA + ry * SA, y: -rx * SA + ry * CA, px, py }; }
+function treeAtScreen(px, py) { let best = null, bd = 1e9;
+  for (const t of S.trees) { if (t.stage !== 'tree' || t.kind !== 'wild') continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60;
+    if (Math.abs(px - sx) > 16 || py > sy + 6 || py < sy - h) continue; const d = Math.abs(px - sx) + Math.abs(py - (sy - h * 0.45)) * 0.5; if (d < bd) { bd = d; best = t; } }
+  return best; }
+function plantSpot(x, y) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
+  const a = WD.areaAt(x, y);
+  if (!(a === 'home' || S.eff.regions.includes(a))) return { ok: false, why: '这里还没解锁' };
+  if (groundAt(x, y)[1] !== 'grass') return { ok: false, why: '只能种在草地上' };
+  if (tiles.some(t => Math.abs(t.x - x) < 9 && Math.abs(t.y - y) < 9)) return { ok: false, why: '不能种在田里' };
+  if (yard.some(c => Math.hypot(c.x - x, c.y - y) < 7)) return { ok: false, why: '这里有杂物，等农夫收拾完再种' };
+  if ([[HOUSE, 28], [BARN, 28], [STALL, 22], [WELL, 12]].some(([b, d]) => Math.hypot(b.x - x, b.y - y) < d)) return { ok: false, why: '离房子太近' };
+  if (props.some(p => !p.region && Math.hypot(p.x - x, p.y - y) < (p.tree ? 11 : 8)) || S.trees.some(t => Math.hypot(t.x - x, t.y - y) < 11) ||
+      S.orders.some(o => o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
+  return { ok: true };
+}
+const say = text => window.dispatchEvent(new CustomEvent('pf:say', { detail: text }));
+function orderChop(id) {
+  const t = S.trees.find(q => q.id === id); if (!t) return { ok: false };
+  const i = S.orders.findIndex(o => o.type === 'chop' && o.id === id); if (i >= 0) { S.orders.splice(i, 1); return { ok: true, removed: true }; }
+  if (!S.eff.regions.includes('forest')) return { ok: false, why: '先在商店买下林场' };
+  if (!S.eff.axe) return { ok: false, why: '先在商店买斧头' };
+  if (!WD.choppable(t, S.eff.regions)) return { ok: false, why: '这棵树不能砍' };
+  if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
+  S.orders.push({ type: 'chop', id }); return { ok: true };
+}
+function orderPlant(kind, x, y) {
+  if (!WD.FRUIT[kind]) return { ok: false };
+  const sp = plantSpot(x, y); if (!sp.ok) return sp;
+  const want = S.orders.filter(o => o.type === 'plant' && o.kind === kind).length;
+  if (want >= F.saplings[kind]) return { ok: false, why: `${WD.FRUIT[kind].name}树苗不够（有 ${F.saplings[kind]} 棵）` };
+  if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
+  S.orders.push({ type: 'plant', kind, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }); return { ok: true };
+}
+function setMode(mode, kind) { INPUT.mode = mode || null; if (kind) INPUT.kind = kind; INPUT.hover = null; cv.style.cursor = mode ? 'crosshair' : '';
+  window.dispatchEvent(new CustomEvent('pf:mode', { detail: { mode: INPUT.mode, kind: INPUT.kind } })); }
+function hoverAt(e) {
+  if (!INPUT.mode) { INPUT.hover = null; return; }
+  const w = toWorld(e.clientX, e.clientY);
+  if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); INPUT.hover = t ? { tree: t } : null; }
+  else INPUT.hover = { spot: w, ok: plantSpot(w.x, w.y).ok };
+}
+function clickAt(e) {
+  const w = toWorld(e.clientX, e.clientY); let r = null;
+  if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); r = t ? orderChop(t.id) : { ok: false, why: '点一棵林场里的树' }; if (r.ok) say(r.removed ? '取消了砍树' : '标记了要砍的树'); }
+  else if (INPUT.mode === 'plant') { r = orderPlant(INPUT.kind, w.x, w.y); if (r.ok) say(`标记了种${WD.FRUIT[INPUT.kind].name}树苗的位置`); }
+  if (r && !r.ok && r.why) say(r.why);
+  if (r && r.ok) saveNow();
+}
+addEventListener('keydown', e => { if (typing(e)) return; if (ROT_KEYS[e.key]) { keyRot = ROT_KEYS[e.key]; e.preventDefault(); }
+  if (PAN_KEYS[e.key]) keyPan.add(e.key.toLowerCase());
+  if (e.key === 'r' || e.key === 'R') { cam.ta = DEFAULT_A; panTo(HOME_CAM.x, HOME_CAM.y); }
+  if (e.key === 'Escape' && INPUT.mode) setMode(null); });
+addEventListener('keyup', e => { if (ROT_KEYS[e.key] === keyRot) keyRot = 0; if (PAN_KEYS[e.key]) keyPan.delete(e.key.toLowerCase()); });
+addEventListener('blur', () => { keyPan.clear(); keyRot = 0; });
 cv.style.touchAction = 'none';
-cv.addEventListener('pointerdown', e => { drag = e.clientX; cv.setPointerCapture(e.pointerId); document.body.classList.add('grab'); });
-cv.addEventListener('pointermove', e => { if (drag === null) return; cam.ta += (e.clientX - drag) * 0.008; drag = e.clientX; });
-const endDrag = () => { drag = null; document.body.classList.remove('grab'); };
+cv.addEventListener('contextmenu', e => e.preventDefault());
+cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, rot: e.button === 2 || e.shiftKey, moved: false }; cv.setPointerCapture(e.pointerId); });
+cv.addEventListener('pointermove', e => { hoverAt(e); if (!drag) return;
+  if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 5) { drag.moved = true; document.body.classList.add('grab'); }
+  if (drag.moved) { const r = cv.getBoundingClientRect(), k = W / r.width;
+    if (drag.rot) cam.ta += (e.clientX - drag.x) * 0.008; else panScreen((e.clientX - drag.x) * k, (e.clientY - drag.y) * k); }
+  drag.x = e.clientX; drag.y = e.clientY; });
+const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0 && INPUT.mode) clickAt(e); drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
@@ -1186,6 +1419,7 @@ if (Q.has('cursor')) { // visible pointer for recordings
 function advance(dt) {
   realT += dt;
   if (keyRot) cam.ta += keyRot * dt * 1.8;
+  if (keyPan.size) { let x = 0, y = 0; for (const k of keyPan) { x += PAN_KEYS[k][0]; y += PAN_KEYS[k][1]; } panScreen(-x * 170 * dt, -y * 170 * dt); }
   cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;
   // (no camera follow: a drifting camera shifted the whole map by a pixel every few frames)
   const mult = F.sleeping ? SIM.SLEEP_MULT : 1;
@@ -1215,7 +1449,7 @@ function cacheBlank() { // the ground is fully painted, and a weed sprite always
 function rebuildCaches(why) {
   for (const [k, m] of STK) { m._ck.delete(k.a); } STK.clear(); stkPx = 0;
   for (const m of ALLM) { m._ck = null; m.secs = new Array(NSEC); m.slices = sliceSet(m, 0); }
-  for (const p of props) if (p.tree) p._ck = null; discC.clear(); WG = null; buildGroundBase();
+  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = null; buildGroundBase();
   console.warn('[farm] caches rebuilt:', why); window.__farm.rebuilds = (window.__farm.rebuilds || 0) + 1;
   if (cacheBlank()) location.reload(); // hand-drawn sprites were lost too: start fresh
 }
@@ -1225,21 +1459,22 @@ setInterval(() => { if (!document.hidden && cacheBlank()) rebuildCaches('blank c
 document.addEventListener('visibilitychange', () => { if (!document.hidden && cacheBlank()) rebuildCaches('blank cache after tab was hidden'); });
 window.__farm.mem = () => ({ stkPx, stk: STK.size, atlasPx: ALLM.reduce((t, m) => t + m.secs.reduce((u, x) => u + (x ? x.c.width * x.c.height : 0), 0), 0) });
 window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clearRect(0, 0, GW, GH); }; // test hook for the watchdog
-buildGroundBase();
+let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '4.2';
+const GAME_VERSION = '4.3';
 function snapshot() {
   return {
     saveVersion: PFSave.CURRENT, gameVersion: GAME_VERSION, createdAt: S.createdAt, savedAt: Date.now(), rng: RNG.a,
     clock: { day: S.day, t: S.t }, coins: S.coins,
     stats: { totalSold: S.totalSold, cleared: S.cleared, earned: S.earned, soldToday: S.soldToday, todayEarn: S.todayEarn, dayEarn: S.dayEarn.slice() },
     prices: Object.assign({}, S.prices),
-    inventory: { water: F.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, F.bag), gathered: F.gathered, basket: F.crops.slice() },
+    inventory: { water: F.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, F.bag), gathered: F.gathered, basket: F.crops.slice(), wood: F.wood, saplings: Object.assign({}, F.saplings) },
     farmer: { x: Math.round(F.x * 100) / 100, y: Math.round(F.y * 100) / 100, sleeping: F.sleeping, home: F.home },
-    tiles: tiles.map(t => ({ c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot } })),
+    tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot } })),
     upgrades: Object.assign({}, S.up), settings: { speed: S.speed },
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
+    trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
     log: S.log.slice(),
   };
 }
@@ -1249,10 +1484,12 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.prices = Object.assign(SIM.startPrices(), s.prices); S.waterMax = s.inventory.waterMax; S.store = Object.assign(SIM.emptySeeds(), s.inventory.store);
   Object.assign(F, { water: Math.min(s.inventory.water, s.inventory.waterMax), bag: Object.assign(SIM.emptySeeds(), s.inventory.bag), gathered: s.inventory.gathered, crops: s.inventory.basket.slice(), task: null, moving: false,
     x: s.farmer.x, y: s.farmer.y, sleeping: s.farmer.sleeping, home: s.farmer.home || s.farmer.sleeping });
-  const byPos = new Map(s.tiles.map(t => [t.c + ',' + t.r, t]));
-  for (const t of tiles) { const o = byPos.get(t.c + ',' + t.r); if (!o) continue;
+  const byPos = new Map(s.tiles.map(t => [(t.f || 'home') + ',' + t.c + ',' + t.r, t]));
+  for (const t of tiles) { const o = byPos.get(t.f + ',' + t.c + ',' + t.r); if (!o) continue;
     Object.assign(t, { open: o.open, tilled: o.tilled, watered: o.watered, debris: o.debris, weed: o.weed, crop: o.crop && Object.assign({}, o.crop) });
     if (t.crop) t.crop.stage = SIM.stageOf(t.crop); }
+  F.wood = s.inventory.wood || 0; F.saplings = Object.assign({ apple: 0, orange: 0 }, s.inventory.saplings);
+  resetTreeViews(); S.trees = s.trees ? s.trees.map(t => Object.assign({}, t)) : WD.defaultTrees(); S.orders = (s.orders || []).map(o => Object.assign({}, o)); // a v2 save gets the default forest
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
   if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
@@ -1274,6 +1511,7 @@ const boot = PFSave.read();
 SAVE.notes = boot.notes;
 if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); settleOffline((Date.now() - boot.state.savedAt) / 1000); }
 else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); }
+OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); groundReady = true;
 if (!boot.blocked) saveNow();
 setInterval(saveNow, 15000);
 let hiddenAt = 0;
@@ -1282,11 +1520,45 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', saveNow);
-Object.assign(window.__farm, { SAVE, snapshot, yard, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - Math.hypot(j.at.x - F.x, j.at.y - F.y) / 8) * 10) / 10 })),
+Object.assign(window.__farm, { SAVE, snapshot, yard, WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
+  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
+  toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; saveNow(); return true; } return false; },
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });
+// ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
+// The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
+// farmer and the part of the world on screen. Click it to look somewhere else.
+const MM = { el: document.getElementById('minimap'), s: 0.5, base: null };
+function minimapBase() {
+  if (!MM.el) return; const w = Math.round((WORLD.x1 - WORLD.x0) * MM.s), h = Math.round((WORLD.y1 - WORLD.y0) * MM.s);
+  MM.el.width = w; MM.el.height = h; const b = MM.base = MM.base || mkc(w, h), g = b.getContext('2d'); b.width = w; b.height = h;
+  g.imageSmoothingEnabled = true; g.drawImage(groundBase, (WORLD.x0 - GX0) * RS, (WORLD.y0 - GY0) * RS, (WORLD.x1 - WORLD.x0) * RS, (WORLD.y1 - WORLD.y0) * RS, 0, 0, w, h);
+  const P = (x, y) => [(x - WORLD.x0) * MM.s, (y - WORLD.y0) * MM.s];
+  g.fillStyle = G[0]; for (const p of props) if (p.tree) { const [x, y] = P(p.x, p.y); g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 3, 3); }
+  for (const p of props) if (p.big) { const [x, y] = P(p.x, p.y); g.fillStyle = p.m === models.house ? Rf[2] : Wd[2]; g.fillRect(Math.round(x) - 5, Math.round(y) - 4, 10, 8); }
+  for (const r of WD.REGIONS) if (!regionOpen(r.id)) { const [x0, y0] = P(r.rect[0], r.rect[1]), [x1, y1] = P(r.rect[2], r.rect[3]);
+    g.fillStyle = 'rgba(20,14,10,0.45)'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = '#e8c78a'; g.setLineDash([3, 2]); g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); g.setLineDash([]);
+    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
+    g.fillStyle = '#ffd76a'; g.fillText(SIM.shopItem(r.id).levels[0].cost + ' 金', (x0 + x1) / 2, (y0 + y1) / 2 + 10); }
+}
+function minimapDraw() {
+  if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
+  const P = (x, y) => [(x - WORLD.x0) * MM.s, (y - WORLD.y0) * MM.s];
+  g.drawImage(MM.base, 0, 0);
+  for (const t of tiles) if (t.open) { const [x, y] = P(t.x - 4, t.y - 4); g.fillStyle = t.crop ? (SIM.ripe(t.crop) ? '#ffd76a' : G[3]) : t.tilled ? Wd[1] : t.debris || t.weed ? G[2] : Wd[3]; g.fillRect(x, y, 4, 4); }
+  for (const t of S.trees) { const [x, y] = P(t.x, t.y); g.fillStyle = t.stage !== 'tree' ? Wd[3] : t.ripe ? (t.kind === 'apple' ? Rf[2] : Ac[2]) : t.kind === 'wild' ? G[1] : G[4]; g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 3, 3); }
+  for (const o of S.orders) { const t = o.type === 'chop' ? S.trees.find(q => q.id === o.id) : o; if (!t) continue; const [x, y] = P(t.x, t.y); g.fillStyle = '#ff5a4a'; g.fillRect(Math.round(x) - 1, Math.round(y) - 4, 2, 3); }
+  setCam(); g.strokeStyle = '#fff6dc'; g.lineWidth = 1; g.beginPath();
+  [[0, 0], [W, 0], [W, H], [0, H]].forEach(([px, py], i) => { const rx = (px - CX) / RS, ry = (py - CY) / (K * RS), [x, y] = P(rx * CA + ry * SA, -rx * SA + ry * CA); i ? g.lineTo(x, y) : g.moveTo(x, y); });
+  g.closePath(); g.stroke();
+  const [fx, fy] = P(F.x, F.y); g.fillStyle = Ink[0]; g.fillRect(Math.round(fx) - 2, Math.round(fy) - 2, 5, 5); g.fillStyle = '#ffffff'; g.fillRect(Math.round(fx) - 1, Math.round(fy) - 1, 3, 3);
+}
+if (MM.el) { window.__farm.onGround = () => { MM.base = null; };
+  MM.el.addEventListener('pointerdown', e => { const r = MM.el.getBoundingClientRect(); panTo(WORLD.x0 + (e.clientX - r.left) / r.width * (WORLD.x1 - WORLD.x0), WORLD.y0 + (e.clientY - r.top) / r.height * (WORLD.y1 - WORLD.y0)); minimapDraw(); });
+  setInterval(minimapDraw, 250); }
+window.__farm.minimapDraw = minimapDraw;
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();

@@ -1,7 +1,7 @@
 // Browser test for saving (used by CI):  node tools/save-smoke.js [--write-fixture]
 // Serves the repo root, then checks: save -> reload restores the same state; every fixture in tools/fixtures loads and
 // plays a day; a broken save falls back to the backup; a newer save is left alone; offline gold is 50% / 3-day capped;
-// export -> import round trip; reset starts over and keeps a copy.
+// export -> import round trip; reset starts over and keeps a copy; Phase 3: regions, chop and transplant orders, fruit.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures');
@@ -27,7 +27,7 @@ async function seed(p, items) {
 const core = p => p.evaluate(() => { const s = __farm.snapshot(); delete s.savedAt; return s; });
 async function test(name, fn) {
   const ctx = await browser.newContext();
-  try { await fn(ctx); console.log('ok  ', name); } catch (e) { failed++; console.log('FAIL', name, '\n     ', e.message.split('\n').filter(l => /^[+-] /.test(l.trim()) || /^ *[+-]/.test(l)).slice(0, 30).join('\n      ')); }
+  try { await fn(ctx); console.log('ok  ', name); } catch (e) { failed++; console.log('FAIL', name, '\n     ', e.message.split('\n')[0].slice(0, 300), '\n     ', e.message.split('\n').filter(l => /^[+-] /.test(l.trim()) || /^ *[+-]/.test(l)).slice(0, 30).join('\n      ')); }
   await ctx.close();
 }
 (async () => {
@@ -80,12 +80,12 @@ async function test(name, fn) {
     await p.evaluate(s => __farm.importState(PFSave.decode(s)), str); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     assert.strictEqual(await p.evaluate(() => __farm.S.day), day);
   });
-  await test('v1 save upgrades to v3: nothing bought, still 12 tiles, yard is seeded', async ctx => {
+  await test('v1 save upgrades to the current version: nothing bought, still 12 tiles, yard is seeded', async ctx => {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')); s.savedAt = Date.now();
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => { __farm.saveNow(); const v = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:save'));
       return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: __farm.S.speed, yard: v.yard && v.yard.length, kinds: [...new Set((v.yard || []).map(c => c.type))] }; });
-    assert.strictEqual(r.v, 3); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
+    assert.strictEqual(r.v, 4); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
     assert(r.yard >= 8, 'old save should get a yard to tidy: ' + r.yard); assert(r.kinds.every(k => ['rock', 'branch', 'weed', 'pebble'].includes(k)));
     assert.deepStrictEqual(p.errs, []);
   });
@@ -139,6 +139,58 @@ async function test(name, fn) {
     const r = await p.evaluate(() => { let lost = 0, prev = new Set(); for (let i = 0; i < 12 * 33; i++) { __farm.advance(10, 6); const now = new Set(__farm.tiles.filter(t => t.tilled).map(t => t.c + ',' + t.r)); for (const k of prev) if (!now.has(k)) lost++; prev = now; }
       return { day: __farm.S.day, lost, tilled: prev.size, locked: __farm.tiles.filter(t => !t.open && (t.tilled || t.crop)).length }; });
     assert(r.day >= 12); assert.strictEqual(r.lost, 0); assert.strictEqual(r.tilled, 12); assert.strictEqual(r.locked, 0); assert.deepStrictEqual(p.errs, []);
+  });
+  await test('regions: buying one opens its field and gate, and it survives reload', async ctx => {
+    const p = await open(ctx);
+    let r = await p.evaluate(() => { const S = __farm.S, T = __farm.tiles; S.coins = 2000; const before = T.filter(t => t.f === 'east' && t.open).length;
+      const poor = __farm.buy('south'); const ok = __farm.buy('east').ok; return { before, ok, poor: poor.ok, open: T.filter(t => t.f === 'east' && t.open).length, coins: S.coins, regions: S.eff.regions.slice(), lab: document.querySelectorAll('.rlab').length }; });
+    assert.strictEqual(r.before, 0); assert(r.ok); assert(!r.poor); assert(r.open >= 12, 'east field opens tiles: ' + r.open); assert.strictEqual(r.coins, 2000 - 1200); assert.deepStrictEqual(r.regions, ['east']); assert.strictEqual(r.lab, 4);
+    const junk = () => __farm.tiles.filter(t => t.f === 'east' && (t.debris || t.weed)).length, j0 = await p.evaluate(junk);
+    await p.evaluate(() => { for (let i = 0; i < 66; i++) __farm.advance(10, 5); __farm.saveNow(); });
+    const worked = j0 - await p.evaluate(junk) + await p.evaluate(() => __farm.tiles.filter(t => t.f === 'east' && (t.tilled || t.crop)).length);
+    await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    r = await p.evaluate(() => ({ regions: __farm.S.eff.regions.slice(), open: __farm.tiles.filter(t => t.f === 'east' && t.open).length }));
+    assert.deepStrictEqual(r.regions, ['east']); assert(r.open >= 12); assert(worked >= 1, 'the farmer works the new field'); assert.deepStrictEqual(p.errs, []);
+  });
+  await test('chop and transplant orders: wood, a sapling, then fruit he picks and sells', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const f = __farm, S = f.S, F = f.F; S.coins = 5000; f.buy('axe'); f.buy('forest');
+      const no = f.orderChop(S.trees.find(t => t.kind === 'apple').id);
+      const w = S.trees.filter(t => t.kind === 'wild').slice(0, 2); const marks = w.map(t => f.orderChop(t.id).ok);
+      for (let i = 0; i < 60 && S.orders.length; i++) f.advance(10, 10);
+      const wood = F.wood, sap = F.saplings.apple + F.saplings.orange, stumps = w.filter(t => t.stage === 'stump').length;
+      const kind = F.saplings.apple ? 'apple' : 'orange', bad = f.orderPlant(kind, 96, 64), good = [[20, 70], [30, 96], [176, 24], [184, 100], [12, 120], [20, 84], [176, 40]].map(([x, y]) => f.orderPlant(kind, x, y)).find(q => q.ok) || { ok: false };
+      for (let i = 0; i < 60 && S.orders.length; i++) f.advance(10, 10);
+      const pl = S.trees.find(t => t.stage === 'sapling' && t.kind === kind), day0 = S.day; let fruitDay = 0, sold0 = S.coins;
+      const picked = () => S.events.some(e => /摘了 \d+ 个(苹果|橘子)/.test(e.msg));
+      for (let i = 0; i < 9 * 33 && !(fruitDay && picked()); i++) { f.advance(10, 5); if (pl.stage === 'tree' && !fruitDay) fruitDay = S.day; }
+      return { no: no.ok, marks, wood, sap, stumps, bad: bad.ok, good: good.ok, planted: !!pl, grewIn: fruitDay - day0, orders: S.orders.length, picked: picked(), fruitGold: S.fruitGold || 0 }; });
+    assert(!r.no, 'fruit trees cannot be chopped'); assert.deepStrictEqual(r.marks, [true, true]);
+    assert.strictEqual(r.wood, 10); assert.strictEqual(r.sap, 2); assert.strictEqual(r.stumps, 2);
+    assert(!r.bad, 'no planting in the field'); assert(r.good); assert(r.planted); assert.strictEqual(r.orders, 0);
+    assert(r.grewIn >= 4 && r.grewIn <= 5, 'sapling grows up in 5 nights: ' + r.grewIn); assert(r.picked, 'he picks the new tree'); assert.deepStrictEqual(p.errs, []);
+  });
+  await test('orchard fruit is picked and sold; pan, minimap and tool bar work', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const f = __farm, S = f.S; S.coins = 2000; f.buy('orchard'); const c0 = S.coins; let fruitGold = 0;
+      for (let i = 0; i < 2 * 33; i++) f.advance(10, 5);
+      return { c0, fruitGold: S.fruitGold || 0, apples: S.events.filter(e => /摘了 5 个苹果/.test(e.msg)).length, coins: S.coins, ripe: S.trees.filter(t => t.kind === 'apple' && t.ripe).length }; });
+    assert(r.apples >= 3, 'picked all three apple trees: ' + r.apples); assert(r.fruitGold >= 30, 'sold apples: ' + r.fruitGold);
+    await p.keyboard.down('d'); await p.waitForTimeout(400); await p.keyboard.up('d');
+    const cam = await p.evaluate(() => ({ x: __farm.cam.x, y: __farm.cam.y }));
+    await p.mouse.move(640, 400); await p.mouse.down(); await p.mouse.move(400, 300, { steps: 5 }); await p.mouse.up();
+    const cam2 = await p.evaluate(() => ({ x: __farm.cam.x, y: __farm.cam.y })); assert(cam2.x !== cam.x || cam2.y !== cam.y, 'drag pans');
+    await p.click('#minimap', { position: { x: 20, y: 20 } }); const cam3 = await p.evaluate(() => __farm.cam.x); assert(cam3 < 0, 'minimap click jumps west: ' + cam3);
+    await p.keyboard.press('r'); assert.strictEqual(await p.evaluate(() => Math.round(__farm.cam.x)), 96);
+    await p.keyboard.press('m'); assert(await p.evaluate(() => document.getElementById('minimap').hidden)); await p.keyboard.press('m');
+    await p.evaluate(() => { __farm.S.coins = 2000; __farm.buy('axe'); __farm.buy('forest'); }); await p.waitForSelector('#tools:not([hidden]) [data-m="chop"]');
+    await p.click('#tools [data-m="chop"]'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), 'chop');
+    await p.evaluate(() => __farm.panTo(96, -60)); await p.waitForTimeout(100);
+    const tgt = await p.evaluate(() => { const t = __farm.S.trees.find(t => t.kind === 'wild' && t.x > 70 && t.x < 130 && t.y > -80 && t.y < -45); const s = __farm.treeScreen(t.id), c = document.querySelector('canvas').getBoundingClientRect();
+      return { id: t.id, x: c.left + s.x * c.width / 426, y: c.top + s.y * c.height / 266 }; });
+    await p.mouse.click(tgt.x, tgt.y); const ord = await p.evaluate(() => __farm.S.orders.map(o => o.id));
+    assert.deepStrictEqual(ord, [tgt.id]); await p.keyboard.press('Escape'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), null);
+    assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

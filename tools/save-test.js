@@ -1,7 +1,7 @@
 // Unit tests for the pure save / sim rules (no browser):  node tools/save-test.js
 // Every saveVersion keeps a fixture in tools/fixtures/save-v<N>*.json; all of them must migrate to the current version.
 const assert = require('assert'), fs = require('fs'), path = require('path');
-const SAVE = require('../save.js'), SIM = require('../sim.js');
+const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js');
 const FIX = path.join(__dirname, 'fixtures');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 class Mem { constructor(o = {}) { this.m = new Map(Object.entries(o)); } get length() { return this.m.size; } key(i) { return [...this.m.keys()][i]; }
@@ -55,10 +55,10 @@ ok('v1 -> current: nothing bought, 1x speed, farm and gold kept, yard left to se
   assert.strictEqual(s.inventory.store.carrot, v1.inventory.store.carrot); assert.strictEqual(s.inventory.store.watermelon, 0);
   assert.strictEqual(s.yard, undefined);
 });
-ok('v2 -> v3: bought levels kept, missing yard stays unset, junk yard items dropped', () => {
+ok('v2 -> current: bought levels kept, missing yard stays unset, junk yard items dropped', () => {
   const raw = Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v2-day4.json'), 'utf8')), { yard: [{ type: 'weed', v: 1, rot: 0.2, x: 50, y: 80 }, { type: 'bogus', v: 0, x: 1, y: 1 }] });
   const s = SAVE.migrate(raw);
-  assert.strictEqual(s.saveVersion, 3); assert.strictEqual(s.upgrades.can, raw.upgrades && raw.upgrades.can || 0);
+  assert.strictEqual(s.saveVersion, SAVE.CURRENT); assert.strictEqual(s.upgrades.can, raw.upgrades && raw.upgrades.can || 0);
   assert.strictEqual(s.coins, raw.coins); assert.deepStrictEqual(s.yard, [{ type: 'weed', v: 1, rot: 0.2, x: 50, y: 80 }]);
   const empty = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v2-day4.json'), 'utf8')), { yard: [] }));
   assert.deepStrictEqual(empty.yard, []);
@@ -68,6 +68,59 @@ ok('v2 -> v3: bought levels kept, missing yard stays unset, junk yard items drop
 ok('v2 keeps bought levels and rejects junk', () => {
   const v2 = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), { saveVersion: 2, upgrades: { can: 2, speed: 1, bogus: 5, hoe: -3 }, settings: { speed: 3 } }));
   assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1);
+});
+ok('v3 -> v4: regions and axe not bought, trees rebuilt, orders empty, tiles on the home field, yard kept', () => {
+  const v2 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v3-day4.json'), 'utf8')), s = SAVE.migrate(v2);
+  assert.strictEqual(v2.saveVersion, 3); assert.strictEqual(s.saveVersion, 4); assert.deepStrictEqual(s.yard, v2.yard);
+  for (const id of ['axe', 'forest', 'east', 'orchard', 'south']) assert.strictEqual(s.upgrades[id], 0);
+  for (const id of Object.keys(v2.upgrades)) assert.strictEqual(s.upgrades[id], v2.upgrades[id]);
+  assert.strictEqual(s.trees, null); assert.deepStrictEqual(s.orders, []); assert.strictEqual(s.inventory.wood, 0); assert.deepStrictEqual(s.inventory.saplings, { apple: 0, orange: 0 });
+  assert(s.tiles.every(t => t.f === 'home')); assert.strictEqual(s.coins, v2.coins);
+});
+ok('v4 keeps trees and orders, drops bad ones', () => {
+  const base = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v3-day4.json'), 'utf8')));
+  const trees = WD.defaultTrees(); trees[0].stage = 'stump'; trees.push({ id: 'x', x: 1, y: 2, kind: 'pear', v: 0, stage: 'tree', age: 0, ripe: 0, cd: 0 });
+  const s = SAVE.migrate(Object.assign(base, { trees, orders: [{ type: 'chop', id: 'w1' }, { type: 'plant', kind: 'orange', x: 20, y: 70 }, { type: 'dance' }] }));
+  assert.strictEqual(s.trees.length, trees.length - 1); assert.strictEqual(s.trees[0].stage, 'stump'); assert.strictEqual(s.orders.length, 2);
+});
+ok('save.js and world.js agree on fruit; every region is a shop item', () => {
+  assert.deepStrictEqual(SAVE.FRUIT_IDS, WD.FRUIT_IDS);
+  for (const id of WD.REGION_IDS) { const it = SIM.shopItem(id); assert(it && it.region, id); }
+  assert.deepStrictEqual(SIM.SHOP.filter(s => s.region).map(s => s.id).sort(), WD.REGION_IDS.slice().sort());
+});
+ok('region prices and region effects', () => {
+  const cost = id => SIM.shopItem(id).levels[0].cost;
+  assert.deepStrictEqual([cost('axe'), cost('forest'), cost('east'), cost('orchard'), cost('south')], [500, 800, 1200, 1500, 2500]);
+  const up = SIM.emptyUpgrades(); assert.deepStrictEqual(SIM.effects(up).regions, []); assert.strictEqual(SIM.effects(up).axe, false);
+  up.axe = 1; up.east = 1; up.forest = 1; const e = SIM.effects(up); assert.strictEqual(e.axe, true); assert.deepStrictEqual(e.regions.slice().sort(), ['east', 'forest']);
+});
+ok('map: regions sit outside the farm and each other, gates on their edge, routes end at the gate', () => {
+  const R = WD.REGIONS, ov = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3], H = WD.HOME;
+  for (const r of R) { assert(!ov(r.rect, [H.x0, H.y0, H.x1, H.y1]), r.id); for (const q of R) if (q !== r) assert(!ov(r.rect, q.rect), r.id + q.id);
+    const [x0, y0, x1, y1] = r.rect, g = r.gate; assert(g.x === x0 || g.x === x1 || g.y === y0 || g.y === y1, 'gate on edge ' + r.id);
+    const w = WD.WORLD; assert(x0 > w.x0 && y0 > w.y0 && x1 < w.x1 && y1 < w.y1);
+    const rt = WD.ROUTES[r.id], end = rt[rt.length - 1]; assert.deepStrictEqual([end.x, end.y], [g.x, g.y]); assert.strictEqual(WD.areaAt(r.center.x, r.center.y), r.id); }
+  assert.strictEqual(WD.areaAt(96, 64), 'home'); assert.strictEqual(WD.areaAt(-150, 200), null);
+  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '64x40');
+});
+ok('fruit: apple 5 every 3 days, orange 4 every 2 days', () => {
+  for (const [k, n, every] of [['apple', 5, 3], ['orange', 4, 2]]) { const t = WD.fruitTree('t', 0, 0, k, 0); let got = [];
+    for (let d = 0; d < 12; d++) { got.push(WD.pickFruit(t)); WD.treeOvernight(t); }
+    assert.strictEqual(got[0], n); assert.strictEqual(got.filter(x => x).length, Math.ceil(12 / every)); assert(got.every((x, i) => x === (i % every ? 0 : n))); }
+  assert.strictEqual(WD.FRUIT.apple.price, 12); assert.strictEqual(WD.FRUIT.orange.price, 15);
+});
+ok('a planted sapling fruits 5 days later; a stump grows back', () => {
+  const t = { id: 'p', x: 0, y: 0, kind: 'orange', v: 0, stage: 'sapling', age: 0, ripe: 0, cd: 0 };
+  for (let d = 1; d <= 5; d++) { assert.strictEqual(WD.pickFruit(t), 0); WD.treeOvernight(t); } assert.strictEqual(t.stage, 'tree'); assert.strictEqual(WD.pickFruit(t), 4);
+  const w = { id: 'w', x: 0, y: 0, kind: 'wild', v: 0, stage: 'stump', age: 0, ripe: 0, cd: 0 }; let d = 0; while (w.stage !== 'tree' && d < 30) { WD.treeOvernight(w); d++; }
+  assert.strictEqual(d, WD.STUMP_TO_TREE); // counted from the chop
+});
+ok('chopping: 5 wood and a sapling, only grown wild trees in a bought forest', () => {
+  const y = WD.chopYield(() => 0.1); assert.deepStrictEqual(y, { wood: 5, sapling: 'apple' }); assert.strictEqual(WD.chopYield(() => 0.9).sapling, 'orange');
+  const trees = WD.defaultTrees(), w = trees.find(t => t.kind === 'wild'), a = trees.find(t => t.kind === 'apple');
+  assert(trees.filter(t => t.kind === 'wild').length >= 12); assert.strictEqual(trees.filter(t => t.kind === 'apple').length, 3);
+  assert(WD.choppable(w, ['forest'])); assert(!WD.choppable(w, [])); assert(!WD.choppable(a, ['forest'])); assert(!WD.choppable(Object.assign({}, w, { stage: 'stump' }), ['forest']));
+  assert.deepStrictEqual(WD.defaultTrees(), trees); assert(trees.every(t => WD.areaAt(t.x, t.y) === (t.kind === 'wild' ? 'forest' : 'orchard')));
 });
 ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
 ok('shop: costs, short amount, max level', () => {
