@@ -1,4 +1,4 @@
-// Browser smoke for v5.1 field surprises: node tools/surprise-smoke.js
+// Browser smoke for field surprises: node tools/surprise-smoke.js
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
@@ -25,10 +25,10 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.1, saveVersion stays 9', async ctx => {
+  await test('version 5.1.1, saveVersion stays 9', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => ({ v: __farm.version, sv: __farm.snapshot().saveVersion }));
-    assert.strictEqual(r.v, '5.1');
+    assert.strictEqual(r.v, '5.1.1');
     assert.strictEqual(r.sv, 9);
     assert.deepStrictEqual(p.errs, []);
   });

@@ -151,7 +151,9 @@
   function validFamily(f) {
     const kids = (Array.isArray(f.kids) ? f.kids : []).filter(k => k && /^kid[01]$/.test(k.id)).slice(0, 2)
       .map(k => ({ id: k.id, name: typeof k.name === 'string' ? k.name.slice(0, 8) : '孩子', born: int(k.born, 1, 1) }));
-    return { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), sales: int(f.sales, 0, 0, 9), moved: int(f.moved, 0, 0), kids };
+    const t = obj(f.today);
+    const today = { day: int(t.day, 0, 0), chat: int(t.chat, 0, 0, 20), gift: int(t.gift, 0, 0, 50), giftName: typeof t.giftName === 'string' ? t.giftName.slice(0, 16) : '', sales: int(t.sales, 0, 0, 20) };
+    return { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), sales: int(f.sales, 0, 0, 9), moved: int(f.moved, 0, 0), kids, today };
   }
   // what a family member had on them when the game was saved (they keep working from the house door after loading)
   function validMember(m) {

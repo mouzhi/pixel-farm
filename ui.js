@@ -56,6 +56,7 @@
     coast: pixIcon(['', '', '', '                ', '     www  ww', '   wwkwkwwkwk', '  wkkkkkkkkkk', '  kssysysyssk', '  ksssssssssk', ' kssysysysssk', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbbbb', 'bbbbbbbbbbbbbbbb'].map(r => r.padEnd(16)), { k: ink, w: wt[4], b: wt[2], s: wd[4], y: '#fff6dc' }) });
   ICONS.fence = ICONS.pasture; // v5.0
   ICONS.heart = pixIcon(['', '', '', '   kkk   kkk', '  kpppk kpppk', ' kpphppkpppppk', ' kphhpppppppk', ' kpppppppppppk', '  kpppppppppk', '   kpppppppk', '    kpppppk', '     kpppk', '      kpk', '       k'].map(r => r.padEnd(16)), { k: ink, p: '#e57fa0', h: '#f6ecd0' });
+  ICONS.flower = pixIcon(['', '', '', '      y', '     kyk', '    ykyky', '     kyk', '      b', '      b', '     kbk', '      k'].map(r => r.padEnd(16)), { k: ink, y: '#ffd76a', b: gr[3] });
   const artIcon = k => { const a = G.animalArt(k), n = Math.max(16, a.width, a.height), c = document.createElement('canvas'); c.width = c.height = n;
     c.getContext('2d').drawImage(a, (n - a.width) >> 1, n - a.height - ((n - a.height) >> 2)); return c.toDataURL(); };
   for (const k of PFAnimals.KIND_IDS) ICONS[k] = artIcon(k);
@@ -69,15 +70,21 @@
   const cropIcon = k => { atlas = atlas || (G.cropAtlasURL && G.cropAtlasURL());
     return `<i style="background:url(${atlas || (window.PF_CROPS && window.PF_CROPS.src)}) no-repeat;background-size:${32 * SIM.IDS.length}px 32px;background-position:${-32 * SIM.IDS.indexOf(k)}px 0"></i>`; };
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${ICONS[id]});background-size:32px;image-rendering:pixelated"></i>`);
+  const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
+  // v5.1.1: a fixed 48px bar (8 tick marks) that stays inside the 62px slot at every can size
+  const METER_W = 48;
+  function meterBar(cur, max) {
+    const fill = max > 0 ? Math.max(0, Math.min(METER_W, Math.round(METER_W * cur / max))) : 0;
+    return `<div class="meter" aria-valuenow="${cur}" aria-valuemax="${max}"><i class="fill" style="width:${fill}px"></i><span class="ticks"></span></div>`;
+  }
   // ---- inventory bar: water, the seeds he can grow, the basket ----
   let invKey = '';
   function inv() {
     const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
-    const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(k)).length;
+    const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(typ(k))).length;
     const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
     if (key === invKey) return; invKey = key;
-    const pips = Array.from({ length: Math.min(S.waterMax, 30) }, (_, i) => `<b class="${i < F.water ? 'on' : ''}"></b>`).join('');
-    let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i><div class="pips">${pips}</div><span class="k">水壶 ${F.water}/${S.waterMax}</span></div>`;
+    let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i>${meterBar(F.water, S.waterMax)}<span class="k">水壶</span><span class="n">${F.water}/${S.waterMax}</span></div>`;
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0);
       h += `<div class="slot${n ? '' : ' dim'}" title="${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟">${cropIcon(k)}<span class="k">${SIM.CROPS[k].name}种</span><span class="n">${n}</span></div>`; }
     h += `<div class="slot${F.crops.length ? '' : ' dim'}" title="篮子：装满 ${E.basket} 个就去集市"><i style="background:url(${BASKET});background-size:32px"></i><span class="k">篮子</span><span class="n">${F.crops.length}/${E.basket}</span></div>`;
@@ -97,7 +104,7 @@
     const rodTip = E.searod ? `${rod.name}，另有海竿，可在码头海钓` : `${rod.name}（开局就有）。商店可升级钢竿、碳素竿；买下海边和海竿后能海钓`;
     h += `<div class="slot" title="${rodTip}"><i style="background:url(${E.searod ? ICONS.searod : ICONS.rod});background-size:32px;image-rendering:pixelated"></i><span class="k">${E.searod ? '海竿' : rod.name}</span></div>`;
     if (FS && fishN) {
-      const counts = {}; for (const k of F.crops) if (FS.isFish(k)) counts[k] = (counts[k] || 0) + 1;
+      const counts = {}; for (const k of F.crops) { const id = typ(k); if (FS.isFish(id)) counts[id] = (counts[id] || 0) + 1; }
       for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id);
         h += `<div class="slot" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条"><i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i><span class="k">${f.name}</span><span class="n">${counts[id]}</span></div>`; }
     }
@@ -121,14 +128,62 @@
     }
     shop.innerHTML = h + '</div>';
   }
-  const toggleShop = v => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; drawShop(true); } };
+  const toggleShop = v => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; drawShop(true); } };
   shop.addEventListener('click', e => { const d = e.target && e.target.dataset; if (!d) return;
     if (d.a === 'close') toggleShop(false);
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); speedBar(); if (!r.ok) e.target.classList.add('shake'); } });
   $('shopBtn').addEventListener('click', () => toggleShop());
+
+  const store = $('store'); let storeKey = '';
+  function rowIcon(row) {
+    const id = row.id || row.type;
+    if (row.kind === 'seed' || (id && SIM.CROPS[id])) return cropIcon(id);
+    if (id && FRUIT_ICON[id]) return `<i style="background:url(${FRUIT_ICON[id]});background-size:32px;image-rendering:pixelated"></i>`;
+    if (id === 'wood') return `<i style="background:url(${FRUIT_ICON.wood});background-size:32px;image-rendering:pixelated"></i>`;
+    if (id === 'hay') return icon('hay');
+    if (id === 'flower') return icon('flower');
+    if (ICONS[id]) return icon(id);
+    const FS = window.PFFish, f = FS && FS.isFish(id) && (FS.BY_ID[id] || (FS.fishOf && FS.fishOf(id)));
+    if (f) return `<i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i>`;
+    return '<i></i>';
+  }
+  function storeCard(row, extra) {
+    const gold = row.gold ? `${row.gold} 金` : (row.unit != null && row.kind === 'seed' ? `收购 ${row.unit} 金` : '');
+    const unit = row.n && row.unit && row.gold ? `×${row.unit}` : '';
+    return `<div class="card">${rowIcon(row)}<div class="ct"><div><b>${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${esc(unit ? unit + ' · ' + gold : gold)}</span>` : ''}</div></div>`;
+  }
+  function drawStore(force) {
+    const S = G.S, data = G.storehouse(), key = JSON.stringify(data) + !!atlas;
+    if (!force && key === storeKey) return; storeKey = key;
+    const cards = rows => rows.map(r => storeCard(r)).join('') || '<div class="empty">空空的</div>';
+    let h = `<div class="shead"><b>仓库</b><span>今日可卖 <b style="color:#ffd76a">${data.sellGold}</b> 金</span><button class="pbtn x" data-a="close" title="关闭（I / Esc）">✕</button></div>`;
+    h += `<div class="sec">仓库种子</div><div class="cards">${cards(data.store)}</div>`;
+    h += `<div class="sec">随身种子</div><div class="cards">${cards(data.bag)}</div>`;
+    if (data.familyBag.length) h += `<div class="sec">家人身上的种子</div><div class="cards">${cards(data.familyBag)}</div>`;
+    h += `<div class="sec">篮子（按今日行情）</div>`;
+    if (!data.baskets.length) h += '<div class="empty">篮子是空的</div>';
+    else for (const b of data.baskets) { h += (data.baskets.length > 1 || b.who !== '农夫' ? `<div class="who">${esc(b.who)}</div>` : '') + `<div class="cards">${b.rows.map(r => storeCard(r)).join('')}</div>`; }
+    h += `<div class="sec">材料</div><div class="cards">`;
+    h += storeCard({ id: 'wood', kind: 'item', name: `木材（${data.wood.n}/${data.wood.cap}）`, n: data.wood.n, unit: data.wood.unit, gold: data.wood.gold }, data.wood.spare ? `<div class="d">仓库放得下 ${data.wood.cap} 份，多出 ${data.wood.spare} 份可卖</div>` : `<div class="d">扩建房子和围篱笆要用，满了才拿去卖（${data.wood.unit} 金一份）</div>`);
+    h += storeCard({ id: 'hay', kind: 'item', name: '干草', n: data.hay.n }, `<div class="d">喂动物用，集市 ${data.hay.unit} 金一捆</div>`);
+    for (const r of data.saplings) h += storeCard(r, '<div class="d">用右下角的种树按钮指定位置</div>');
+    h += '</div>';
+    store.innerHTML = h;
+  }
+  const toggleStore = v => { store.hidden = v === undefined ? !store.hidden : !v; if (!store.hidden) { menu.hidden = true; shop.hidden = true; drawStore(true); } };
+  store.addEventListener('click', e => { const d = e.target && e.target.dataset; if (d && d.a === 'close') toggleStore(false); });
+  $('storeBtn').addEventListener('click', () => toggleStore());
+  $('storeHud').addEventListener('click', () => toggleStore(true));
+  addEventListener('pointerdown', e => {
+    if (store.hidden) return;
+    if (store.contains(e.target) || $('storeBtn').contains(e.target) || $('storeHud').contains(e.target)) return;
+    toggleStore(false);
+  });
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
-    if (e.key === 'b' || e.key === 'B') toggleShop(); if (e.key === 'Escape') toggleShop(false); });
+    if (e.key === 'b' || e.key === 'B') toggleShop();
+    if (e.key === 'i' || e.key === 'I') toggleStore();
+    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
   // ---- speed buttons (bought in the shop) ----
   let spKey = '';
   function speedBar() {
@@ -228,7 +283,7 @@
     else if (a === 'syncstop' && L) { L.forgetDir().then(() => { drawMenu(); hintSync(); }); }
     else if (a === 'exportlog' && L) { L.downloadLog(G.version); }
   });
-  $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) shop.hidden = true; mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
+  $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) { shop.hidden = true; store.hidden = true; } mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
   if ($('syncHint') && L) $('syncHint').addEventListener('click', () => { L.resumeDir().then(() => { hintSync(); if (!menu.hidden) drawMenu(); }); });
   hintSync();
   // ---- offline summary ----
@@ -242,5 +297,18 @@
   }
   addEventListener('pf:offline', e => showOffline(e.detail));
   showOffline(G.SAVE.offline);
-  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv(); speedBar();
+  const loveHud = $('loveHud'), loveTip = $('loveTip'), loveIco = $('loveIco');
+  if (loveIco) { loveIco.style.backgroundImage = 'url(' + ICONS.heart + ')'; loveIco.style.backgroundRepeat = 'no-repeat'; }
+  function placeLoveTip() { if (!loveHud || !loveTip) return; const r = $('hud').getBoundingClientRect(); loveTip.style.top = Math.round(r.bottom + 6) + 'px'; }
+  function drawLoveTip() {
+    if (!loveTip || loveTip.hidden || !G.loveStatus) return;
+    const love = G.loveStatus();
+    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>';
+    placeLoveTip();
+  }
+  const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };
+  if (loveHud) loveHud.addEventListener('click', e => { e.stopPropagation(); toggleLoveTip(); });
+  addEventListener('pointerdown', e => { if (!loveTip || loveTip.hidden) return; if (loveTip.contains(e.target) || (loveHud && loveHud.contains(e.target))) return; toggleLoveTip(false); });
+  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv(); speedBar();
+  G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (G.hud) G.hud(); };
 })();
