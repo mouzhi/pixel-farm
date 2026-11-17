@@ -1,5 +1,6 @@
-// 像素农场 · 节奏与经济规则（纯函数，没有画面依赖；浏览器里是 window.PFSim，Node 里可以直接 require 做单元测试）
+// 像素农场 · 节奏、经济与商店规则（纯函数，没有画面依赖；浏览器里是 window.PFSim，Node 里可以直接 require 做单元测试）
 // Phase 1: day-based crops, one watering lasts the whole day, auto crop choice by profit, daily price drift, offline settlement.
+// Phase 2: shop (tools, basket, speed, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
 'use strict';
 (function (root) {
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
@@ -8,18 +9,58 @@
   const AWAKE_MIN = BEDTIME - WAKE;
   const DAY_REAL_SEC = AWAKE_MIN / MIN_PER_SEC + (1440 - AWAKE_MIN) / (MIN_PER_SEC * SLEEP_MULT); // 313 s
   const WATER_MAX0 = 4;           // watering can capacity at the start
-  const BASKET = 10;              // crops carried before a market trip
+  const BASKET = 10;              // crops carried before a market trip (start)
   const OFFLINE_RATE = 0.5, OFFLINE_CAP_DAYS = 3, OFFLINE_MIN_SEC = 60;
-  // seed: shop price, days: watered days to ripen, price: base sell price, seedSell: merchant buys seeds back (phase 2),
-  // seedBack: chance a harvest returns one seed of the same kind
+  // seed: shop price, days: watered days to the first harvest, price: base sell price, seedSell: what the merchant pays
+  // for a spare seed, drop: [chance of >= 1 seed, chance of a 2nd] from a harvest (expected < 1, so the merchant still
+  // matters), regrow / harvests: berry bushes keep fruiting every `regrow` days for `harvests` pickings
   const CROPS = {
-    carrot: { name: '胡萝卜', seed: 3, days: 1, price: 8, seedSell: 1, seedBack: 0.35 },
-    cabbage: { name: '卷心菜', seed: 10, days: 2, price: 30, seedSell: 4, seedBack: 0.2 },
-    pumpkin: { name: '南瓜', seed: 25, days: 4, price: 85, seedSell: 10, seedBack: 0.15 },
+    carrot: { name: '胡萝卜', seed: 3, days: 1, price: 8, seedSell: 1, drop: [0.7, 0.1] },
+    cabbage: { name: '卷心菜', seed: 10, days: 2, price: 30, seedSell: 4, drop: [0.65, 0.1] },
+    pumpkin: { name: '南瓜', seed: 25, days: 4, price: 85, seedSell: 10, drop: [0.6, 0.1] },
+    strawberry: { name: '草莓', seed: 80, days: 4, price: 30, seedSell: 30, drop: [0.6, 0], regrow: 1, harvests: 10, unlock: 'strawberry' },
+    watermelon: { name: '西瓜', seed: 60, days: 6, price: 220, seedSell: 20, drop: [0.55, 0.05], unlock: 'watermelon' },
   };
   const IDS = Object.keys(CROPS);
-  const START_COLS = 4, START_ROWS = 3; // 12 of the 24 home-field tiles are open at the start
-  const startOpen = (c, r) => c < START_COLS && r < START_ROWS;
+  // ---- shop: every item is a ladder of levels; upgrades[id] = how many levels are bought ----
+  const SHOP = [
+    { id: 'field', name: '家门口的田', icon: 'field', levels: [{ cost: 150, label: '开垦东侧 6 格', desc: '田地 12 → 18 格' }, { cost: 250, label: '开垦最后 6 格', desc: '田地 18 → 24 格', }] },
+    { id: 'can', name: '水壶', icon: 'can', levels: [{ cost: 80, label: '铜水壶', desc: '装 8 格水' }, { cost: 600, label: '银水壶', desc: '装 16 格水' }, { cost: 2000, label: '金水壶', desc: '装 30 格水' }] },
+    { id: 'shoe', name: '鞋子', icon: 'shoe', levels: [{ cost: 200, label: '布鞋', desc: '走路 ×1.25' }, { cost: 800, label: '皮靴', desc: '走路 ×1.5' }, { cost: 2500, label: '风行靴', desc: '走路 ×1.8' }] },
+    { id: 'hoe', name: '锄头', icon: 'hoe', levels: [{ cost: 250, label: '钢锄头', desc: '开垦快一倍' }, { cost: 3000, label: '宽锄头', desc: '一锄翻 3×3' }] },
+    { id: 'basket', name: '篮子', icon: 'basket', levels: [{ cost: 300, label: '大篮子', desc: '一次装 20 个' }, { cost: 1200, label: '手推车', desc: '一次装 40 个' }] },
+    { id: 'speed', name: '游戏倍速', icon: 'speed', levels: [{ cost: 600, label: '2× 速度', desc: '解锁 2× 按钮' }, { cost: 3000, label: '4× 速度', desc: '解锁 4× 按钮' }] },
+    { id: 'strawberry', name: '草莓种子', icon: 'strawberry', levels: [{ cost: 800, label: '草莓', desc: '4 天结果，之后每天摘一次，共 10 次' }] },
+    { id: 'watermelon', name: '西瓜种子', icon: 'watermelon', levels: [{ cost: 2500, label: '西瓜', desc: '6 天成熟，卖 220' }] },
+  ];
+  const SHOP_IDS = SHOP.map(s => s.id);
+  const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
+  const shopItem = id => SHOP.find(s => s.id === id);
+  function effects(up) {
+    up = up || {};
+    const lv = id => Math.min(shopItem(id).levels.length, Math.max(0, up[id] | 0));
+    return {
+      field: lv('field'),
+      waterMax: [WATER_MAX0, 8, 16, 30][lv('can')],
+      walk: [1, 1.25, 1.5, 1.8][lv('shoe')],
+      tillDur: lv('hoe') >= 1 ? 2 : 4, till3: lv('hoe') >= 2,
+      basket: [BASKET, 20, 40][lv('basket')],
+      speedMax: [1, 2, 4][lv('speed')],
+      crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
+    };
+  }
+  // what the next level of an item costs and whether it can be bought now
+  function offer(up, coins, id) {
+    const it = shopItem(id); if (!it) return null;
+    const have = Math.max(0, (up && up[id]) | 0);
+    if (have >= it.levels.length) return { id, maxed: true, have, item: it };
+    const L = it.levels[have];
+    return { id, item: it, have, level: L, cost: L.cost, ok: coins >= L.cost, short: Math.max(0, L.cost - coins) };
+  }
+  // 12 of the 24 home tiles are open at the start; the field upgrade opens the east 6 (rows 0-2), then the last row
+  const START_COLS = 4, START_ROWS = 3;
+  const isOpen = (c, r, field) => (field >= 2) || (field >= 1 ? r < START_ROWS : c < START_COLS && r < START_ROWS);
+  const startOpen = (c, r) => isOpen(c, r, 0);
   const emptySeeds = () => Object.fromEntries(IDS.map(k => [k, 0]));
   const startPrices = () => Object.fromEntries(IDS.map(k => [k, 1]));
   const ripe = crop => crop.age >= CROPS[crop.type].days;
@@ -27,22 +68,30 @@
   function stageOf(crop) {
     const d = CROPS[crop.type].days;
     if (crop.age >= d) return 3;
+    if (crop.n > 0) return 2; // a picked berry bush stays leafy while the next fruit comes
     return Math.min(2, Math.floor((crop.age * 3 + d - 1) / d));
   }
   const priceOf = (type, prices) => Math.max(1, Math.round(CROPS[type].price * ((prices && prices[type]) || 1)));
-  // net gold per tile per day; a free (weed / returned) seed costs nothing
-  const netPerDay = (type, prices, free) => (priceOf(type, prices) - (free ? 0 : CROPS[type].seed)) / CROPS[type].days;
+  // net gold per tile per day; a free (weed / harvested) seed costs nothing; a berry bush spreads its seed over all pickings
+  function netPerDay(type, prices, free) {
+    const c = CROPS[type], seed = free ? 0 : c.seed;
+    if (c.regrow) return (priceOf(type, prices) * c.harvests - seed) / (c.days + c.regrow * (c.harvests - 1));
+    return (priceOf(type, prices) - seed) / c.days;
+  }
   // which seed in the bag to plant next: the best earner per tile-day at today's prices
   function pickFromBag(bag, prices) {
     let best = null, bv = -Infinity;
     for (const k of IDS) if ((bag[k] || 0) > 0) { const v = netPerDay(k, prices, true); if (v > bv) { bv = v; best = k; } }
     return best;
   }
+  // seeds a harvest gives back (the last picking of a berry bush, or any single-harvest crop)
+  function harvestSeeds(type, rnd) { const d = CROPS[type].drop; let n = 0; if (rnd() < d[0]) n++; if (n && rnd() < d[1]) n++; return n; }
   // seeds to buy at the stall for `need` empty tiles: premium seeds only while at least half of the purse stays,
-  // free carrot seeds (weeds, returns) are used before buying carrot seeds
-  function planSeeds(coins, prices, need, freeCarrots) {
+  // free carrot seeds (weeds) are used before buying carrot seeds
+  function planSeeds(coins, prices, need, freeCarrots, crops) {
+    crops = crops || IDS.filter(k => !CROPS[k].unlock);
     const buy = emptySeeds(); let cost = 0; const floor = coins * 0.5;
-    const order = IDS.slice().sort((a, b) => netPerDay(b, prices, false) - netPerDay(a, prices, false));
+    const order = crops.slice().sort((a, b) => netPerDay(b, prices, false) - netPerDay(a, prices, false));
     for (let i = 0; i < need; i++) {
       let done = false;
       for (const k of order) {
@@ -57,13 +106,19 @@
     }
     return { buy, cost };
   }
+  // seeds beyond what one full replanting needs are sold back (only what the farmer carries)
+  function surplusSeeds(bag, store, openTiles) {
+    const sell = emptySeeds(); let gold = 0; const cap = Math.max(6, openTiles);
+    for (const k of IDS) { const extra = Math.min(bag[k] || 0, (bag[k] || 0) + (store[k] || 0) - cap); if (extra > 0) { sell[k] = extra; gold += extra * CROPS[k].seedSell; } }
+    return { sell, gold };
+  }
   // merchant prices drift a little every morning: at most 5% a day, pulled back toward 1, kept in 0.8..1.2
   function driftPrices(prices, rnd) {
     const out = {};
     for (const k of IDS) { const m = (prices && prices[k]) || 1; out[k] = Math.round(Math.min(1.2, Math.max(0.8, m + 0.3 * (1 - m) + (rnd() * 2 - 1) * 0.05)) * 1000) / 1000; }
     return out;
   }
-  // offline: away time -> game days at 50% of the online rate, at most 3 days, times the average income of the last 3 days
+  // offline: away time -> game days at 50% of the online rate (always 1x speed), at most 3 days, times the recent daily income
   function offlineSettle(awaySec, dayEarn) {
     if (!(awaySec >= OFFLINE_MIN_SEC)) return null;
     const days = Math.min(OFFLINE_CAP_DAYS, awaySec / DAY_REAL_SEC * OFFLINE_RATE);
@@ -71,6 +126,7 @@
     return { awaySec, days: Math.round(days * 100) / 100, capped: awaySec / DAY_REAL_SEC * OFFLINE_RATE > OFFLINE_CAP_DAYS, avg: Math.round(avg), gold: Math.floor(avg * days) };
   }
   const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC,
-    CROPS, IDS, START_COLS, START_ROWS, startOpen, emptySeeds, startPrices, ripe, stageOf, priceOf, netPerDay, pickFromBag, planSeeds, driftPrices, offlineSettle };
+    CROPS, IDS, SHOP, SHOP_IDS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, isOpen, startOpen, emptySeeds, startPrices,
+    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

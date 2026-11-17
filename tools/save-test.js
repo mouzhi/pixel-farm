@@ -16,7 +16,7 @@ for (const f of fixtures) ok(`fixture ${f} migrates to v${SAVE.CURRENT}`, () => 
 });
 ok('minimal (older) v1 save gets defaults', () => {
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
-  assert.strictEqual(s.inventory.waterMax, 4); assert.deepStrictEqual(s.prices, { carrot: 1, cabbage: 1, pumpkin: 1 }); assert.deepStrictEqual(s.stats.dayEarn, []);
+  assert.strictEqual(s.inventory.waterMax, 4); assert.deepStrictEqual(s.prices, { carrot: 1, cabbage: 1, pumpkin: 1, strawberry: 1, watermelon: 1 }); assert.deepStrictEqual(s.stats.dayEarn, []);
 });
 ok('write keeps the previous good save as :bak', () => {
   const m = new Mem(), a = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
@@ -44,6 +44,50 @@ ok('export string round trip and tamper check', () => {
 ok('reset keeps one copy of the old save', () => {
   const m = new Mem({ [SAVE.KEY]: 'x', [SAVE.BAK]: 'y' }); SAVE.reset(m);
   assert.strictEqual(m.getItem(SAVE.KEY), null); assert.strictEqual(m.getItem(SAVE.BAK), null); assert([...m.m.keys()].some(k => k.startsWith(SAVE.PREFIX + 'reset:')));
+});
+ok('v1 -> v2: nothing bought, 1x speed, farm and gold kept', () => {
+  const v1 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), s = SAVE.migrate(v1);
+  assert.strictEqual(v1.saveVersion, 1); assert.strictEqual(s.saveVersion, 2);
+  assert.deepStrictEqual(s.upgrades, SIM.emptyUpgrades()); assert.deepStrictEqual(s.settings, { speed: 1 });
+  assert.strictEqual(s.coins, v1.coins); assert.strictEqual(s.clock.day, v1.clock.day); assert.strictEqual(s.tiles.length, v1.tiles.length);
+  assert.deepStrictEqual(s.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]), v1.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]));
+  assert.strictEqual(s.inventory.store.carrot, v1.inventory.store.carrot); assert.strictEqual(s.inventory.store.watermelon, 0);
+});
+ok('v2 keeps bought levels and rejects junk', () => {
+  const v2 = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), { saveVersion: 2, upgrades: { can: 2, speed: 1, bogus: 5, hoe: -3 }, settings: { speed: 3 } }));
+  assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1);
+});
+ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
+ok('shop: costs, short amount, max level', () => {
+  const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
+  assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);
+  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; for (let i = 1; i < L.length; i++) assert(L[i].cost > L[i - 1].cost, id + ' gets dearer'); }
+});
+ok('shop effects: base and fully upgraded', () => {
+  const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.speedMax, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, 1, false]);
+  assert.deepStrictEqual(b.crops, ['carrot', 'cabbage', 'pumpkin']);
+  const max = {}; for (const id of SIM.SHOP_IDS) max[id] = SIM.shopItem(id).levels.length; const m = SIM.effects(max);
+  assert.deepStrictEqual([m.waterMax, m.walk, m.basket, m.speedMax, m.till3, m.tillDur], [30, 1.8, 40, 4, true, 2]); assert.deepStrictEqual(m.crops, SIM.IDS);
+  const open = lv => { let c = 0; for (let r = 0; r < 4; r++) for (let x = 0; x < 6; x++) c += SIM.isOpen(x, r, lv); return c; };
+  assert.deepStrictEqual([0, 1, 2].map(open), [12, 18, 24]);
+});
+ok('crop ladder: each unlock earns more per tile-day than the last', () => {
+  const v = k => SIM.netPerDay(k, SIM.startPrices(), false);
+  assert(v('carrot') < v('cabbage') && v('cabbage') < v('pumpkin') && v('pumpkin') < v('strawberry') && v('strawberry') < v('watermelon'));
+});
+ok('harvest seed drop rates match the table', () => {
+  let s = 1; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (const k of SIM.IDS) { let t = 0; for (let i = 0; i < 20000; i++) t += SIM.harvestSeeds(k, rnd); const d = SIM.CROPS[k].drop, exp = d[0] * (1 + d[1]);
+    assert(Math.abs(t / 20000 - exp) < 0.03, `${k} ${t / 20000} vs ${exp}`); }
+});
+ok('surplus seeds: only what he carries above one replanting', () => {
+  const bag = Object.assign(SIM.emptySeeds(), { carrot: 20, pumpkin: 3 }), store = Object.assign(SIM.emptySeeds(), { carrot: 4, pumpkin: 30 });
+  const r = SIM.surplusSeeds(bag, store, 12); assert.strictEqual(r.sell.carrot, 12); assert.strictEqual(r.sell.pumpkin, 3); assert.strictEqual(r.gold, 12 * 1 + 3 * 10);
+  assert.strictEqual(SIM.surplusSeeds(Object.assign(SIM.emptySeeds(), { carrot: 6 }), SIM.emptySeeds(), 6).gold, 0);
+});
+ok('seed plan never buys a locked crop', () => {
+  const p = SIM.planSeeds(1e6, SIM.startPrices(), 20, 0, SIM.effects({}).crops); assert.strictEqual(p.buy.watermelon + p.buy.strawberry, 0);
+  const q = SIM.planSeeds(1e6, SIM.startPrices(), 20, 0, SIM.effects({ watermelon: 1 }).crops); assert(q.buy.watermelon > 0);
 });
 ok('a day is about 5 real minutes', () => assert(SIM.DAY_REAL_SEC > 290 && SIM.DAY_REAL_SEC < 330));
 ok('crops ripen after their days, carrot next morning', () => {

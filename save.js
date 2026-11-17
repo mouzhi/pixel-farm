@@ -8,11 +8,13 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 1;
+  const CURRENT = 2;
   const MIGRATIONS = {
-    // 2: s => ({ ...s, upgrades: { can: 0, shoe: 0, hoe: 0, basket: 0, speed: 1, ...(s.upgrades || {}) } }),
+    // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
+    2: s => Object.assign({}, s, { upgrades: Object.assign({}, UPGRADE_IDS.reduce((o, k) => (o[k] = 0, o), {}), s.upgrades), settings: Object.assign({ speed: 1 }, s.settings) }),
   };
-  const CROP_IDS = ['carrot', 'cabbage', 'pumpkin'];
+  const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon']; // levels; max levels live in sim.js
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -23,11 +25,12 @@
     const out = { c: int(t.c, 0, 0, 999), r: int(t.r, 0, 0, 999), open: t.open !== false, tilled: !!t.tilled, watered: !!t.watered, debris: null, weed: null, crop: null };
     if (t.debris && (t.debris.type === 'rock' || t.debris.type === 'branch')) out.debris = { type: t.debris.type, v: int(t.debris.v, 0, 0, 99), rot: num(t.debris.rot, 0) };
     if (t.weed) out.weed = { v: int(t.weed.v, 0, 0, 99), rot: num(t.weed.rot, 0) };
-    if (t.crop && CROP_IDS.includes(t.crop.type)) out.crop = { type: t.crop.type, age: int(t.crop.age, 0, 0, 99), rot: num(t.crop.rot, 0) };
+    if (t.crop && CROP_IDS.includes(t.crop.type)) out.crop = { type: t.crop.type, age: int(t.crop.age, 0, 0, 99), n: int(t.crop.n, 0, 0, 99), rot: num(t.crop.rot, 0) };
     return out;
   }
   // fills defaults for everything, so a v1 save written before a field existed still loads
   function validate(s) {
+    const up = obj(s.upgrades), sp = obj(s.settings).speed;
     const clock = obj(s.clock), stats = obj(s.stats), inv = obj(s.inventory), f = obj(s.farmer), prices = obj(s.prices);
     if (!Array.isArray(s.tiles) || !s.tiles.length) throw new Error('save has no tiles');
     return {
@@ -49,6 +52,8 @@
       },
       farmer: { x: num(f.x, 36, -100, 400), y: num(f.y, 40, -100, 400), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
+      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
+      settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }
@@ -107,6 +112,6 @@
     if (sum(m[1]) !== m[2]) throw new Error('存档字符串不完整或被改动过');
     return migrate(JSON.parse(b64d(m[1])));
   }
-  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
+  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSave = api;
 })(typeof window !== 'undefined' ? window : globalThis);

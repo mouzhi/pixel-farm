@@ -39,7 +39,7 @@ async function test(name, fn) {
     const a = await core(p); assert(a.clock.day >= 2, 'played into day 2'); assert(a.tiles.some(t => t.crop), 'has crops');
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     const b = await core(p); delete a.log; delete b.log; assert.deepStrictEqual(b, a); assert.deepStrictEqual(p.errs, []);
-    if (process.argv.includes('--write-fixture')) { const s = await p.evaluate(() => __farm.snapshot()); fs.writeFileSync(path.join(FIX, 'save-v1-day4.json'), JSON.stringify(s, null, 1) + '\n'); console.log('     wrote fixtures/save-v1-day4.json'); }
+    if (process.argv.includes('--write-fixture')) { const s = await p.evaluate(() => __farm.snapshot()); const f = `save-v${s.saveVersion}-day4.json`; fs.writeFileSync(path.join(FIX, f), JSON.stringify(s, null, 1) + '\n'); console.log('     wrote fixtures/' + f); }
   });
   for (const f of fs.readdirSync(FIX).filter(f => /^save-v\d+.*\.json$/.test(f))) await test(`fixture ${f} loads and plays a day`, async ctx => {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')); s.savedAt = Date.now();
@@ -79,6 +79,40 @@ async function test(name, fn) {
     assert.strictEqual(r.day, 1); assert(r.t < 400); assert.strictEqual(r.copies, 1);
     await p.evaluate(s => __farm.importState(PFSave.decode(s)), str); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     assert.strictEqual(await p.evaluate(() => __farm.S.day), day);
+  });
+  await test('v1 save upgrades to v2: nothing bought, still 12 tiles', async ctx => {
+    const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')); s.savedAt = Date.now();
+    const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
+    const r = await p.evaluate(() => { __farm.saveNow(); const v = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:save'));
+      return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: __farm.S.speed }; });
+    assert.strictEqual(r.v, 2); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
+    assert.deepStrictEqual(p.errs, []);
+  });
+  await test('shop: buy from the panel, upgrades survive reload, speed buttons work', async ctx => {
+    const p = await open(ctx);
+    await p.evaluate(() => { __farm.S.coins = 1000; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden]) [data-buy="field"]');
+    await p.click('#shop [data-buy="field"]'); await p.click('#shop [data-buy="speed"]');
+    let r = await p.evaluate(() => ({ coins: __farm.S.coins, up: Object.assign({}, __farm.S.up), open: __farm.tiles.filter(t => t.open).length, poor: __farm.buy('watermelon') }));
+    assert.strictEqual(r.coins, 1000 - 150 - 600); assert.strictEqual(r.up.field, 1); assert.strictEqual(r.up.speed, 1); assert.strictEqual(r.open, 18);
+    assert.deepStrictEqual(r.poor, { ok: false, reason: 'short', short: 2500 - 250 });
+    await p.waitForSelector('#speed:not([hidden]) [data-v="2"]'); await p.click('#speed [data-v="2"]');
+    assert.strictEqual(await p.evaluate(() => __farm.S.speed), 2);
+    await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    r = await p.evaluate(() => ({ coins: __farm.S.coins, field: __farm.S.up.field, open: __farm.tiles.filter(t => t.open).length, speed: __farm.S.speed, bar: !document.getElementById('speed').hidden }));
+    assert.deepStrictEqual(r, { coins: 250, field: 1, open: 18, speed: 2, bar: true }); assert.deepStrictEqual(p.errs, []);
+  });
+  await test('wide hoe tills 3x3, harvests drop seeds, strawberries regrow', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const S = __farm.S, T = __farm.tiles; S.coins = 1e5; for (const id of ['field', 'field', 'hoe', 'hoe', 'strawberry', 'basket', 'basket']) __farm.buy(id);
+      for (const t of T) { t.debris = t.weed = null; t.tilled = false; t.crop = null; }
+      __farm.F.bag = { carrot: 0, cabbage: 0, pumpkin: 0, strawberry: 0, watermelon: 0 }; S.store = Object.assign({}, __farm.F.bag); __farm.F.gathered = 0;
+      __farm.advance(12, 10); const tilled = T.filter(t => t.tilled).length;
+      T.forEach((t, i) => { t.tilled = true; t.crop = { type: i % 2 ? 'strawberry' : 'pumpkin', age: 9, n: 0, stage: 3, rot: 0 }; });
+      __farm.advance(150, 10);
+      const berries = T.filter(t => t.crop && t.crop.type === 'strawberry' && t.crop.n === 1).length;
+      return { tilled, berries, seeds: S.flow.harvest, board: __farm.board().map(j => j.kind) }; });
+    assert(r.tilled >= 9, 'one swing of the wide hoe tills a 3x3: ' + r.tilled); assert(r.berries >= 6, 'picked strawberry bushes stay planted'); assert(r.seeds >= 3, 'pumpkins left seeds');
+    assert.deepStrictEqual(p.errs, []);
   });
   await test('tilled soil never reverts over 12 days', async ctx => {
     const p = await open(ctx);
