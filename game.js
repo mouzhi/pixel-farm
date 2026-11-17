@@ -687,7 +687,15 @@ function yardTask(c) {
     yard.splice(i, 1); S.cleared++;
     const yr = yardRng(S.cleared * 2654435761 + S.day * 374761393);
     if (c.type === 'weed' && yr() < 0.7) { F.gathered++; S.flow.weed++; popText(c.x, c.y, 10, '+1', '#e6c35c'); }
-    else if ((c.type === 'rock' || c.type === 'branch') && yr() < 0.3) { S.coins++; S.earned++; S.todayEarn++; popText(c.x, c.y, 12, '+1', '#ffd76a'); }
+    else {
+      // early-game gold comes from the yard (day 1 has no harvest). Rocks always pay, branches and pebbles often do;
+      // a full first-day sweep is about 12–18 gold, later nightly spawns stay small so mid-game is barely affected.
+      let g = 0;
+      if (c.type === 'rock') g = yr() < 0.4 ? 2 : 1;
+      else if (c.type === 'branch' && yr() < 0.7) g = 1;
+      else if (c.type === 'pebble' && yr() < 0.4) g = 1;
+      if (g) { S.coins += g; S.earned += g; S.todayEarn += g; popText(c.x, c.y, 12, '+' + g, '#ffd76a'); }
+    }
     const col = c.type === 'weed' ? ['#5a9a3a', '#3f7a32'] : c.type === 'branch' ? ['#a0703f', '#7a5230'] : ['#9a9a92', '#b9b8ad', '#77776f'];
     burst(c.x, c.y, 2, col, 10);
     log(c.type === 'weed' ? '拔掉了院子里的杂草' : c.type === 'rock' ? '搬走了院子里的一块石头' : c.type === 'branch' ? '捡走了院子里的枯枝' : '清走了一颗小石子');
@@ -1462,7 +1470,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '4.3';
+const GAME_VERSION = '4.3.1';
 function snapshot() {
   return {
     saveVersion: PFSave.CURRENT, gameVersion: GAME_VERSION, createdAt: S.createdAt, savedAt: Date.now(), rng: RNG.a,
