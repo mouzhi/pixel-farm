@@ -182,7 +182,7 @@
       dataLoad[key] = 'ok';
       const q = dataLoadQ[key] || []; dataLoadQ[key] = null;
       for (let i = 0; i < q.length; i++) if (q[i]) q[i](true);
-      if (A.ctx) preloadData();
+      if (A.ctx && (set.music || set.sfx)) preloadData();
       if (D.on) monitor();
     };
     s.onerror = function () {
@@ -205,10 +205,43 @@
   }
   function prefetchAudio() {
     const cur = slotNow(), nxt = NEXT_SLOT[cur];
-    if (lazySrc(cur) && !dataFor(cur) && dataLoad[cur] !== 'fail') loadDataScript(cur, lazySrc(cur));
-    if ((set.music || minutesUntil(nxt) <= NEAR_MIN) && lazySrc(nxt) && !dataFor(nxt) && dataLoad[nxt] !== 'fail') loadDataScript(nxt, lazySrc(nxt));
+    if (set.music && lazySrc(cur) && !dataFor(cur) && dataLoad[cur] !== 'fail') loadDataScript(cur, lazySrc(cur));
+    if (set.music && (minutesUntil(nxt) <= NEAR_MIN) && lazySrc(nxt) && !dataFor(nxt) && dataLoad[nxt] !== 'fail') loadDataScript(nxt, lazySrc(nxt));
     const more = lazyMap() && lazyMap().sfxMore;
     if (more && set.sfx && dataLoad.sfxMore !== 'ok' && dataLoad.sfxMore !== 'fail') loadDataScript('sfxMore', more);
+  }
+  function coreSrc() {
+    const m = lazyMap();
+    return (m && (m.morning || m.core)) || '';
+  }
+  function ensureCoreData(cb) {
+    if (audioData() && (audioData().tracks || audioData().sfx)) { if (cb) cb(true); return; }
+    const src = coreSrc();
+    if (!src) { if (cb) cb(!!audioData()); return; }
+    loadDataScript('morning', src, cb);
+  }
+  function warmWhenIdle() {
+    if (audioData()) return;
+    const go = function () { if (!audioData()) ensureCoreData(); };
+    if (window.requestIdleCallback) requestIdleCallback(go, { timeout: 2500 });
+    else setTimeout(go, 2000);
+  }
+  function dataReady(kind, cb) {
+    const after = function (ok) {
+      if (kind === 'music') {
+        const cur = slotNow();
+        if (set.music && lazySrc(cur) && !dataFor(cur) && cur !== 'morning') {
+          loadDataScript(cur, lazySrc(cur), function () {
+            if (A.ctx) preloadData();
+            if (cb) cb(ok);
+          });
+          return;
+        }
+      }
+      if (A.ctx && (set.music || set.sfx)) preloadData();
+      if (cb) cb(ok);
+    };
+    ensureCoreData(after);
   }
   function lazyPending(slot) {
     if (dataFor(slot) || !lazySrc(slot) || dataLoad[slot] === 'fail') return false;
@@ -444,11 +477,11 @@
   }
   function preloadData() {
     const pack = audioData(); if (!pack || !A.ctx) return;
-    if (pack.sfx) Object.keys(pack.sfx).forEach(k => {
+    if (set.sfx && pack.sfx) Object.keys(pack.sfx).forEach(k => {
       if (dataBufs[k]) return;
       decodeB64(pack.sfx[k], buf => { dataBufs[k] = buf; }, () => { fileBad['data:' + k] = true; });
     });
-    const slot = slotNow(); if (dataFor(slot)) decodeTrack(slot, () => {});
+    if (set.music) { const slot = slotNow(); if (dataFor(slot)) decodeTrack(slot, () => {}); }
   }
   function playDataSfx(name, vol) {
     const keys = dataSfxKeys(name); if (!keys.length) return false;
@@ -541,7 +574,7 @@
   }
   function unlock() {
     if (!build()) return;
-    const go = () => { A.unlocked = A.ctx.state === 'running'; if (A.unlocked) { applyVolumes(); ambience(); idleCalls(); if (!(audioData() && audioData().sfx)) preload(CORE_NAMES); preloadData(); startPrefetchClock(); ['pointerdown', 'keydown', 'touchend'].forEach(ev => removeEventListener(ev, unlock, true)); } };
+    const go = () => { A.unlocked = A.ctx.state === 'running'; if (A.unlocked) { applyVolumes(); ambience(); idleCalls(); if (set.sfx && !(audioData() && audioData().sfx)) preload(CORE_NAMES); if (set.music || set.sfx) { preloadData(); startPrefetchClock(); } ['pointerdown', 'keydown', 'touchend'].forEach(ev => removeEventListener(ev, unlock, true)); } };
     if (A.ctx.state !== 'running') A.ctx.resume().then(go, () => {}); else go();
   }
   ['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlock, true));
@@ -565,7 +598,7 @@
   }
   function hud() {
     paintXhsToggles();
-    startPrefetchClock();
+    if (set.music || set.sfx) startPrefetchClock();
     if (window.PF_AUDIO_NO_HUD || document.documentElement.classList.contains('xhs-mobile')) return;
     const wrap = document.getElementById('wrap'); if (!wrap || document.getElementById('audioBar')) return;
     const st = document.createElement('style');
@@ -584,9 +617,10 @@
 
   window.PFAudio = {
     KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, filePlays: A.filePlays, lastSfx: A.lastSfx, sfxBad: Object.keys(fileBad), mode: (embAudible() ? 'files' : (D.on && audible() ? 'files' : G.on ? 'gen' : 'off')), slot: D.on ? (E.slot || D.slot) : null, track: E.slot ? ('embedded:' + E.slot) : (D.on && D.decks[D.cur] ? D.decks[D.cur].url : null), trackPlays: D.plays + E.plays, failed: Object.keys(D.failed).concat(Object.keys(E.failed)), embedded: !!(audioData()), lazy: Object.assign({}, dataLoad), dataTracks: audioData() && audioData().tracks ? Object.keys(audioData().tracks) : [] }),
-    setMusic: on => { set.music = !!on; persist(); hud(); const b = document.getElementById('musicBtn'); if (b) b.style.backgroundImage = `url(${IC.music[set.music ? 0 : 1]})`, b.classList.toggle('off', !set.music); paintXhsToggles(); applyVolumes(); },
-    setSfx: on => { set.sfx = !!on; persist(); const b = document.getElementById('sfxBtn'); if (b) b.style.backgroundImage = `url(${IC.sfx[set.sfx ? 0 : 1]})`, b.classList.toggle('off', !set.sfx); paintXhsToggles(); applyVolumes(); },
+    setMusic: on => { set.music = !!on; persist(); if (on) { startPrefetchClock(); dataReady('music', function () { applyVolumes(); }); } hud(); const b = document.getElementById('musicBtn'); if (b) b.style.backgroundImage = `url(${IC.music[set.music ? 0 : 1]})`, b.classList.toggle('off', !set.music); paintXhsToggles(); applyVolumes(); },
+    setSfx: on => { set.sfx = !!on; persist(); if (on) { startPrefetchClock(); dataReady('sfx', function () { applyVolumes(); }); } const b = document.getElementById('sfxBtn'); if (b) b.style.backgroundImage = `url(${IC.sfx[set.sfx ? 0 : 1]})`, b.classList.toggle('off', !set.sfx); paintXhsToggles(); applyVolumes(); },
     setVolume: (mv, sv) => { if (mv != null) set.mv = Math.max(0, Math.min(1, mv)); if (sv != null) set.sv = Math.max(0, Math.min(1, sv)); persist(); applyVolumes(); },
+    whenReady: dataReady, warmWhenIdle: warmWhenIdle, ensureCoreData: ensureCoreData,
     setTracks: t => { A.tracks = t || []; D.failed = {}; if (A.ctx && set.music) { stopFiles(); musicOn(); } },
     _seekEnd: () => { const d = D.decks[D.cur]; if (d && d.el.duration) d.el.currentTime = d.el.duration - XF - 1; }, // tests
     play: sfx, unlock, _out: () => A.ctx && { ctx: A.ctx, node: A.master }, // tests / recording a preview

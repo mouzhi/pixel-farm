@@ -216,12 +216,20 @@
     placeSheets();
   }
 
+  function parsePx(v) {
+    var n = parseFloat(v);
+    return isFinite(n) ? n : 0;
+  }
   function placeSheets() {
     var hud = doc.getElementById('hud');
     if (!hud) return;
     var r = hud.getBoundingClientRect();
     if (!(r.height > 0)) return;
-    doc.documentElement.style.setProperty('--xhs-sheet-top', Math.round(r.bottom + 8) + 'px');
+    var rootEl = doc.documentElement;
+    rootEl.style.setProperty('--xhs-sheet-top', Math.round(r.bottom + 8) + 'px');
+    var navBottom = parsePx(rootEl.style.getPropertyValue('--xhs-nav-bottom'));
+    var sideTop = Math.max(r.bottom + 8, navBottom || 0);
+    rootEl.style.setProperty('--xhs-share-top', Math.round(sideTop) + 'px');
   }
 
   function buildChrome() {
@@ -301,44 +309,76 @@
     if (root.__farm && __farm.fit) __farm.fit();
   }
 
+  function readSafeInsets() {
+    var out = { top: 0, right: 0, bottom: 0, left: 0 };
+    if (!doc.documentElement) return out;
+    var el = doc.createElement('div');
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = 'position:fixed;top:0;left:0;width:0;height:0;visibility:hidden;pointer-events:none;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px) env(safe-area-inset-left,0px)';
+    doc.documentElement.appendChild(el);
+    try {
+      var cs = root.getComputedStyle(el);
+      out.top = parsePx(cs.paddingTop);
+      out.right = parsePx(cs.paddingRight);
+      out.bottom = parsePx(cs.paddingBottom);
+      out.left = parsePx(cs.paddingLeft);
+    } catch (e) {}
+    if (el.parentNode) el.parentNode.removeChild(el);
+    return out;
+  }
+  function btnRect(b) {
+    if (!b) return null;
+    var left = b.left != null ? b.left : 0;
+    var top = b.top != null ? b.top : 0;
+    var width = b.width != null ? b.width : 0;
+    var height = b.height != null ? b.height : 0;
+    var right = b.right != null ? b.right : (left + width);
+    var bottom = b.bottom != null ? b.bottom : (top + height);
+    if (!right && !bottom && !width && !height) return null;
+    return { left: left, top: top, right: right, bottom: bottom };
+  }
   function applyWindowInsets() {
-    var mini = root.xhs && root.xhs.miniTool;
-    if (!mini || typeof mini.getWindowInfo !== 'function') return;
-    Promise.resolve(mini.getWindowInfo()).then(function (info) {
-      if (!info) return;
-      var w = info.windowWidth || (doc.documentElement && doc.documentElement.clientWidth) || root.innerWidth || 0;
+    var w = (doc.documentElement && doc.documentElement.clientWidth) || root.innerWidth || 0;
+    function applyInfo(info) {
+      info = info || {};
+      w = info.windowWidth || w;
+      var cssSafe = readSafeInsets();
       var safe = info.safeArea || {};
+      var sb = info.statusBarHeight != null ? info.statusBarHeight : (safe.top || cssSafe.top || 0);
+      // 44px nav row under the status bar, plus an 8px gap
+      var topClear = Math.max(sb, safe.top || 0, cssSafe.top, 0) + 44 + 8;
+      var leftClear = Math.max(safe.left || 0, cssSafe.left, 8);
+      var rightClear = Math.max((w && safe.right != null) ? (w - safe.right) : 0, cssSafe.right, 8);
       var mb = info.menuButtons || {};
-      var topClear = Math.max(safe.top || 0, info.statusBarHeight || 0, 20) + 12;
-      var leftClear = Math.max(safe.left || 0, 8);
-      var rightClear = Math.max(w - (safe.right || w), 8);
-      var btns = [mb.back, mb.me, mb.share];
-      for (var i = 0; i < btns.length; i++) {
-        var b = btns[i];
-        if (!b) continue;
-        topClear = Math.max(topClear, (b.bottom || 0) + 12);
-        var cx = ((b.left || 0) + (b.right || 0)) / 2;
-        if (cx < w / 2) leftClear = Math.max(leftClear, (b.right || 0) + 12);
-        else rightClear = Math.max(rightClear, w - (b.left || 0) + 12);
+      var names = ['back', 'me', 'share', 'close', 'more', 'home'];
+      var rightBtn = null;
+      var i, b, r, cx;
+      for (i = 0; i < names.length; i++) {
+        r = btnRect(mb[names[i]]);
+        if (!r) continue;
+        topClear = Math.max(topClear, r.bottom + 8);
+        cx = (r.left + r.right) / 2;
+        if (w && cx >= w / 2) rightBtn = r;
       }
-      // keep generous minima so we never sit under the capsule / share even if a rect is late or null
-      topClear = Math.max(topClear, 96);
-      leftClear = Math.max(leftClear, 72);
-      rightClear = Math.max(rightClear, 108);
-      var cap = mb.back || mb.me;
-      var shareTop, shareRight;
-      if (cap) {
-        shareTop = (cap.bottom || 0) + 8;
-        shareRight = Math.max(8, w - (cap.right || w));
-      }
+      // HUD sits fully below the nav row, so side insets stay modest
+      var shareRight = Math.max(8, rightClear);
+      if (rightBtn) shareRight = Math.max(8, w - rightBtn.right, cssSafe.right);
       var rootEl = doc.documentElement;
       rootEl.style.setProperty('--xhs-top-clear', Math.round(topClear) + 'px');
       rootEl.style.setProperty('--xhs-left-clear', Math.round(leftClear) + 'px');
       rootEl.style.setProperty('--xhs-right-clear', Math.round(rightClear) + 'px');
-      if (shareTop != null) rootEl.style.setProperty('--xhs-share-top', Math.round(shareTop) + 'px');
-      if (shareRight != null) rootEl.style.setProperty('--xhs-share-right', Math.round(shareRight) + 'px');
-      placeSheets();
-    }, function () { placeSheets(); });
+      rootEl.style.setProperty('--xhs-nav-bottom', Math.round(topClear) + 'px');
+      rootEl.style.setProperty('--xhs-share-right', Math.round(shareRight) + 'px');
+      rootEl.style.setProperty('--xhs-share-top', Math.round(topClear + 56) + 'px');
+      if (root.requestAnimationFrame) requestAnimationFrame(function () { placeSheets(); });
+      else placeSheets();
+    }
+    var mini = root.xhs && root.xhs.miniTool;
+    if (mini && typeof mini.getWindowInfo === 'function') {
+      Promise.resolve(mini.getWindowInfo()).then(applyInfo, function () { applyInfo(null); });
+    } else {
+      applyInfo(null);
+    }
   }
   P.applyWindowInsets = applyWindowInsets;
 
@@ -406,20 +446,34 @@
     if (m) { m.classList.toggle('off', !set.music); m.setAttribute('aria-pressed', String(!!set.music)); }
     if (s) { s.classList.toggle('off', !set.sfx); s.setAttribute('aria-pressed', String(!!set.sfx)); }
   }
-  function toggleMusic() {
+  function toggleSound(kind) {
     var A = root.PFAudio;
-    if (!A) return;
+    var btn = doc.getElementById(kind === 'music' ? 'xhs-btn-music' : 'xhs-btn-sfx');
+    if (!A) {
+      if (btn) btn.classList.add('loading');
+      return;
+    }
     if (A.unlock) A.unlock();
-    A.setMusic(!A.settings().music);
+    var cur = A.settings();
+    var want = kind === 'music' ? !cur.music : !cur.sfx;
+    if (!want) {
+      if (kind === 'music') A.setMusic(false); else A.setSfx(false);
+      if (btn) btn.classList.remove('loading');
+      paintAudioToggles();
+      return;
+    }
+    if (btn) btn.classList.add('loading');
+    if (kind === 'music') A.setMusic(true); else A.setSfx(true);
     paintAudioToggles();
+    var done = function () {
+      if (btn) btn.classList.remove('loading');
+      paintAudioToggles();
+    };
+    if (A.whenReady) A.whenReady(kind, done);
+    else done();
   }
-  function toggleSfx() {
-    var A = root.PFAudio;
-    if (!A) return;
-    if (A.unlock) A.unlock();
-    A.setSfx(!A.settings().sfx);
-    paintAudioToggles();
-  }
+  function toggleMusic() { toggleSound('music'); }
+  function toggleSfx() { toggleSound('sfx'); }
   function onShareCard() {
     closeMore();
     if (!P.shareCard) { if (P.toast) P.toast('这里还不能分享'); return; }

@@ -75,10 +75,10 @@ def stage() -> None:
     # Official preview/submit allowlist has no audio extensions (preview API
     # rejected in-package .mp3 even though the zip auditor allowed it). CSP also
     # forbids data:/blob: on <audio>, so recorded samples are base64-embedded in
-    # .js files and decoded with Web Audio. First-screen assets/audio-data.js holds
-    # morning + core SFX only; afternoon/evening/night and extra SFX are separate
-    # assets/ files, loaded lazily by audio.js when that period is near or a
-    # non-core sound is needed. Music is 64 kbps stereo.
+    # .js files and decoded with Web Audio. assets/audio-data.js holds morning +
+    # core SFX; afternoon/evening/night and extra SFX are separate assets/ files.
+    # None of these are on the boot critical path: audio.js lazy-loads them after
+    # the first frames or when the player turns sound on. Music is 64 kbps stereo.
     def write_audio_data() -> None:
         def b64(path: Path) -> str:
             return base64.b64encode(path.read_bytes()).decode("ascii")

@@ -442,39 +442,132 @@
     writeThroughLocalCache(SAVE_KEY, raw);
   }
 
+  // Hydration must not stall the first frame: localStorage is sync, xhs Storage
+  // is capped at SEED_WAIT_MS, and cloud merge always runs in the background.
+  var SEED_WAIT_MS = 300;
+  var bootSaveStamp = 0;
+  var allowLateAdopt = true;
+  var liveAdopted = false;
+  function withTimeout(p, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      function finish(tag, value) { if (!done) { done = true; resolve({ tag: tag, value: value }); } }
+      if (p && typeof p.then === 'function') p.then(function (v) { finish('ok', v); }, function () { finish('ok', {}); });
+      else finish('ok', p || {});
+      setTimeout(function () { finish('timeout', null); }, ms);
+    });
+  }
+  function stampFromStore() {
+    try { return stampOf(syncStore && syncStore.getItem(SAVE_KEY)); } catch (e) { return 0; }
+  }
+  function wrapLocalStorage() {
+    return wrapStore({
+      get length() { return root.localStorage.length; },
+      key: function (i) { return root.localStorage.key(i); },
+      getItem: function (k) { return root.localStorage.getItem(k); },
+      setItem: function (k, v) { root.localStorage.setItem(k, v); },
+      removeItem: function (k) { root.localStorage.removeItem(k); },
+      clear: function () { root.localStorage.clear(); },
+      _dump: function () { return readLocalStorageAll(); }
+    });
+  }
+  function installStore(xhsSeed, lsSeed) {
+    if (syncStore) return;
+    var seed = mergeSeeds(xhsSeed || {}, lsSeed || {});
+    if (!Object.keys(seed).length && !isXhs) {
+      try {
+        if (root.localStorage) {
+          syncStore = wrapLocalStorage();
+          bootSaveStamp = stampFromStore();
+          return;
+        }
+      } catch (e) { /* private mode */ }
+    }
+    syncStore = wrapStore(memoryStore(seed));
+    bootSaveStamp = stampFromStore();
+  }
+  function applyLiveRestore(raw) {
+    if (liveAdopted) return;
+    if (!root.__farm || typeof root.__farm.restore !== 'function') return;
+    if (!root.PFSave || typeof root.PFSave.read !== 'function') return;
+    liveAdopted = true;
+    try {
+      var again = root.PFSave.read();
+      if (again && again.state) {
+        root.__farm.restore(again.state);
+        if (typeof root.__farm.hud === 'function') root.__farm.hud();
+        if (typeof root.__farm.render === 'function') root.__farm.render();
+      }
+    } catch (e) {}
+  }
+  function shouldAdoptIncoming(incoming, localRaw) {
+    if (incoming == null) return false;
+    if (!localRaw) return true;
+    if (isNewer(stampOf(incoming), stampOf(localRaw))) return true;
+    // boot saveNow may have stamped local as "now"; still take a save that was
+    // newer than the pre-boot copy, while the late-adopt window is open.
+    return !!(allowLateAdopt && isNewer(stampOf(incoming), bootSaveStamp));
+  }
+  function mergeLateSeed(xhsSeed) {
+    if (!xhsSeed || !syncStore) return;
+    var dump = syncStore._dump && syncStore._dump();
+    if (!dump) return;
+    var k, changedSave = false;
+    for (k in xhsSeed) {
+      if (!Object.prototype.hasOwnProperty.call(xhsSeed, k)) continue;
+      var val = xhsSeed[k];
+      var raw = typeof val === 'string' ? val : String(val);
+      if (k === SAVE_KEY) {
+        if (shouldAdoptIncoming(raw, dump[k])) {
+          dump[k] = raw;
+          writeThroughLocalCache(k, raw);
+          changedSave = true;
+        }
+      } else if (dump[k] == null) {
+        dump[k] = raw;
+      }
+    }
+    if (changedSave) applyLiveRestore(dump[SAVE_KEY]);
+  }
+  function closeLateAdopt() { allowLateAdopt = false; }
+  if (root.addEventListener) {
+    setTimeout(function () {
+      root.addEventListener('pointerdown', closeLateAdopt, true);
+    }, 1000);
+    setTimeout(closeLateAdopt, 8000);
+  }
+
   function hydrate() {
     cloudOk = cloudMethodsPresent();
     refreshCloudState();
-    return loadXhsSeed().then(function (xhsSeed) {
-      var lsSeed = {};
-      try { lsSeed = readLocalStorageAll(); } catch (e) { lsSeed = {}; }
-      // Prefer xhs Storage as the "local" layer, fill gaps from localStorage, pick newer save.
-      var seed = mergeSeeds(xhsSeed, lsSeed);
-      if (!Object.keys(seed).length && !isXhs) {
-        // web / no container: wrap localStorage directly if present
-        try {
-          if (root.localStorage) {
-            syncStore = wrapStore({
-              get length() { return root.localStorage.length; },
-              key: function (i) { return root.localStorage.key(i); },
-              getItem: function (k) { return root.localStorage.getItem(k); },
-              setItem: function (k, v) { root.localStorage.setItem(k, v); },
-              removeItem: function (k) { root.localStorage.removeItem(k); },
-              clear: function () { root.localStorage.clear(); },
-              _dump: function () { return readLocalStorageAll(); }
-            });
-            if (cloudOk) return mergeCloud();
-            return;
-          }
-        } catch (e) { /* private mode */ }
+    var lsSeed = {};
+    try { lsSeed = readLocalStorageAll(); } catch (e) { lsSeed = {}; }
+    var xhsP = loadXhsSeed();
+    function startCloud() {
+      if (!cloudOk) return;
+      mergeCloud().then(function () {}, function () {});
+    }
+    function afterSeed(xhsSeed, fromTimeout) {
+      installStore(fromTimeout ? {} : (xhsSeed || {}), lsSeed);
+      if (!syncStore) {
+        var seed = {};
+        try { seed = lsSeed; } catch (e) {}
+        syncStore = wrapStore(memoryStore(seed));
+        bootSaveStamp = stampFromStore();
       }
-      syncStore = wrapStore(memoryStore(seed));
-      if (cloudOk) return mergeCloud();
+      if (fromTimeout) {
+        xhsP.then(function (late) {
+          mergeLateSeed(late);
+          startCloud();
+        }, function () { startCloud(); });
+      } else {
+        startCloud();
+      }
+    }
+    return withTimeout(xhsP, SEED_WAIT_MS).then(function (r) {
+      afterSeed(r && r.value, r && r.tag === 'timeout');
     }, function () {
-      var seed = {};
-      try { seed = readLocalStorageAll(); } catch (e) {}
-      syncStore = wrapStore(memoryStore(seed));
-      if (cloudOk) return mergeCloud();
+      afterSeed({}, true);
     });
   }
 
@@ -492,9 +585,10 @@
       var localRaw = null;
       try { localRaw = syncStore.getItem(SAVE_KEY); } catch (e) {}
       var cloudRaw = typeof best.content === 'string' ? best.content : JSON.stringify(best.content);
-      if (!localRaw || isNewer(stampOf(best.content), stampOf(localRaw))) {
+      if (shouldAdoptIncoming(cloudRaw, localRaw)) {
         adoptIntoLocal(cloudRaw);
         scheduleFlush(); // write-through to local caches; not a cloud dirty write
+        applyLiveRestore(cloudRaw);
       } else if (isNewer(stampOf(localRaw), stampOf(best.content))) {
         scheduleCloudFlush(true);
       }
