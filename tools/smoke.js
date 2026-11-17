@@ -4,7 +4,7 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg', '.ogg': 'audio/ogg' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
   if (!p.startsWith(ROOT) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
@@ -60,14 +60,67 @@ const fail = [];
         fam.moved = S.day; fam.love = 100; if (__farm.hud) __farm.hud();
         const movedVal = (document.getElementById('loveVal') || {}).textContent;
         const movedHint = (__farm.loveStatus() || {}).hint;
-        return { meters, version: __farm.version, storeOpen, txt, sellGold: data.sellGold, basketGold: data.basketGold, storeN: data.store.reduce((s, r) => s + r.n, 0), hasGiant: /巨大/.test(txt), hasGold: /金蛋/.test(txt), hasWood: /木材/.test(txt), hasHay: /干草/.test(txt), hasFish: /鲫/.test(txt) || /鲤/.test(txt), mid, fullHint, love2, movedVal, movedHint };
+        // shop UI: coin/wood icons, category tabs, last tab remembered, locked-item teasers
+        document.getElementById('store').hidden = true;
+        const tipClose = document.getElementById('loveTip'); if (tipClose) tipClose.hidden = true;
+        S.coins = 1200; F.wood = 25; if (__farm.hud) __farm.hud();
+        document.getElementById('shopBtn').click();
+        const shopEl = document.getElementById('shop');
+        const buyBtns = [...shopEl.querySelectorAll('[data-buy]')];
+        const tabIds = [...shopEl.querySelectorAll('[data-tab]')].map(b => b.dataset.tab);
+        const goldWordOnBuy = buyBtns.some(b => /金/.test(b.textContent));
+        const shopUi = {
+          open: !shopEl.hidden,
+          woodHud: (document.getElementById('wood') || {}).textContent,
+          tabs: tabIds,
+          coinIco: !!shopEl.querySelector('.wallet .ico.coin'),
+          woodIco: !!shopEl.querySelector('.wallet .ico.wood'),
+          buyHasCoin: buyBtns.some(b => b.querySelector('.ico.coin')),
+          goldWordOnBuy,
+        };
+        const box = el => { const r = el.getBoundingClientRect(); return { l: r.left, r: r.right, cy: r.top + r.height / 2, w: r.width, h: r.height }; };
+        const alignOf = root => {
+          const rows = [...root.querySelectorAll('.cost')].map(c => ({ ico: box(c.querySelector('.ico')), amt: box(c.querySelector('.amt')) }));
+          if (!rows.length) return { ok: false, why: 'no cost' };
+          const vCenter = rows.every(r => Math.abs(r.ico.cy - r.amt.cy) <= 2);
+          const icoSz = rows.every(r => Math.abs(r.ico.w - 16) <= 1 && Math.abs(r.ico.h - 16) <= 1);
+          const numsRight = rows.length < 2 || Math.abs(rows[0].amt.r - rows[1].amt.r) <= 1;
+          const icoLeft = rows.length < 2 || Math.abs(rows[0].ico.l - rows[1].ico.l) <= 1;
+          return { ok: vCenter && icoSz && numsRight && icoLeft, vCenter, icoSz, numsRight, icoLeft, n: rows.length };
+        };
+        const toolsBtn = shopEl.querySelector('[data-buy="can"]');
+        shopUi.singleAlign = toolsBtn ? alignOf(toolsBtn) : { ok: false, why: 'no can' };
+        const buildTab = shopEl.querySelector('[data-tab="build"]'); if (buildTab) buildTab.click();
+        const house = shopEl.querySelector('[data-item="house"]');
+        const houseBtn = house && house.querySelector('[data-buy="house"]');
+        const houseShort = house && house.querySelector('.short');
+        shopUi.dualAlign = houseBtn ? alignOf(houseBtn) : { ok: false, why: 'no house' };
+        if (houseBtn && houseShort && houseShort.querySelector('.amt')) {
+          const btnAmt = box(houseBtn.querySelector('.amt')); // first row; all share right edge
+          const shAmt = box(houseShort.querySelector('.amt'));
+          const btnIco = box(houseBtn.querySelector('.ico'));
+          const shIco = box(houseShort.querySelector('.ico'));
+          shopUi.shortAlign = { ok: Math.abs(btnAmt.r - shAmt.r) <= 2 && Math.abs(btnIco.l - shIco.l) <= 2, amt: Math.round(shAmt.r - btnAmt.r), ico: Math.round(shIco.l - btnIco.l) };
+        } else shopUi.shortAlign = { ok: false, why: 'no short' };
+        const aniBtn = shopEl.querySelector('[data-tab="animals"]'); if (aniBtn) aniBtn.click();
+        shopUi.teaser = /先买/.test(shopEl.textContent) && /猪圈/.test(shopEl.textContent);
+        shopUi.savedTab = localStorage.getItem('mouzhi/pixel-farm:shop-tab');
+        const closeShop = () => { const b = shopEl.querySelector('[data-a="close"]'); if (b) b.click(); else shopEl.hidden = true; };
+        closeShop();
+        document.getElementById('shopBtn').click();
+        shopUi.reopenedAnimals = !!(shopEl.querySelector('[data-tab="animals"].on') && /猪/.test(shopEl.textContent));
+        closeShop();
+        return { meters, version: __farm.version, storeOpen, txt, sellGold: data.sellGold, basketGold: data.basketGold, storeN: data.store.reduce((s, r) => s + r.n, 0), hasGiant: /巨大/.test(txt), hasGold: /金蛋/.test(txt), hasWood: /木材/.test(txt), hasHay: /干草/.test(txt), hasFish: /鲫/.test(txt) || /鲤/.test(txt), mid, fullHint, love2, movedVal, movedHint, shopUi };
       });
       const bad = (ui.meters || []).filter(m => !m.ok);
       const storeOk = ui.storeOpen && ui.hasGiant && ui.hasGold && ui.hasWood && ui.hasHay && ui.storeN >= 7 && ui.sellGold >= ui.basketGold;
       const loveOk = ui.mid && ui.mid.loveVal === '63/100' && ui.mid.tipOpen && /聊天 \+3/.test(ui.mid.tipTxt) && /野花/.test(ui.mid.tipTxt) && /好感满后/.test(ui.mid.hint) && ui.mid.fillW > 0 && /等待大木屋/.test(ui.fullHint) && /一家/.test(ui.movedVal) && /已经住在农场/.test(ui.movedHint);
-      const okUi = !bad.length && storeOk && loveOk && ui.version === '5.2.1';
-      console.log(okUi ? 'ok  ' : 'FAIL', 'meters+store+love', JSON.stringify({ bad, storeOpen: ui.storeOpen, sellGold: ui.sellGold, love: { mid: ui.mid, fullHint: ui.fullHint, movedVal: ui.movedVal, movedHint: ui.movedHint }, flags: { g: ui.hasGiant, e: ui.hasGold, w: ui.hasWood, h: ui.hasHay, f: ui.hasFish, n: ui.storeN, v: ui.version } }));
-      if (!okUi) fail.push('meters+store+love');
+      const shop = ui.shopUi || {};
+      const alignOk = shop.singleAlign && shop.singleAlign.ok && shop.dualAlign && shop.dualAlign.ok && shop.shortAlign && shop.shortAlign.ok;
+      const shopOk = shop.open && shop.woodHud === '25' && (shop.tabs || []).join() === 'tools,seeds,land,build,animals' && shop.coinIco && shop.woodIco && shop.buyHasCoin && !shop.goldWordOnBuy && shop.teaser && shop.savedTab === 'animals' && shop.reopenedAnimals && alignOk;
+      const okUi = !bad.length && storeOk && loveOk && shopOk && ui.version === '5.2.2';
+      console.log(okUi ? 'ok  ' : 'FAIL', 'meters+store+love+shop', JSON.stringify({ bad, storeOpen: ui.storeOpen, sellGold: ui.sellGold, love: { mid: ui.mid, fullHint: ui.fullHint, movedVal: ui.movedVal, movedHint: ui.movedHint }, shop, flags: { g: ui.hasGiant, e: ui.hasGold, w: ui.hasWood, h: ui.hasHay, f: ui.hasFish, n: ui.storeN, v: ui.version } }));
+      if (!okUi) fail.push('meters+store+love+shop');
       // close the panel so the later screenshot-less colour test is not blocked; Esc on window
       await p.keyboard.press('Escape');
       // v5.1.2: 第N天 HUD, the event log, inventory, title, and catch list must not overlap
@@ -109,6 +162,22 @@ const fail = [];
       const okLayout = !layoutHits.length;
       console.log(okLayout ? 'ok  ' : 'FAIL', 'hud-log-layout', JSON.stringify(layoutHits));
       if (!okLayout) fail.push('hud-log-layout');
+      await p.setViewportSize({ width: 390, height: 844 });
+      const portrait = await p.evaluate(() => {
+        const tip = document.getElementById('loveTip'); if (tip) tip.hidden = true;
+        document.getElementById('store').hidden = true;
+        document.getElementById('shopBtn').click();
+        const shop = document.getElementById('shop');
+        const r = shop.getBoundingClientRect();
+        const tabs = shop.querySelectorAll('[data-tab]');
+        const inView = r.left >= -1 && r.right <= innerWidth + 1 && r.top >= 0 && r.bottom <= innerHeight + 1 && r.width > 200 && r.height > 120;
+        const tabWrap = getComputedStyle(shop.querySelector('.tabs')).flexWrap === 'wrap';
+        shop.hidden = true;
+        return { hidden: shop.hidden, inView, tabN: tabs.length, tabWrap, w: Math.round(r.width), h: Math.round(r.height), top: Math.round(r.top) };
+      });
+      const okPortrait = portrait.inView && portrait.tabN === 5 && portrait.tabWrap;
+      console.log(okPortrait ? 'ok  ' : 'FAIL', 'shop-portrait', JSON.stringify(portrait));
+      if (!okPortrait) fail.push('shop-portrait');
       await p.setViewportSize({ width: 1280, height: 800 });
     }
     const r = await p.evaluate(manual => {

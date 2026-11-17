@@ -2092,6 +2092,7 @@ function hud() {
   document.getElementById('clock').textContent = fmtT(S.t);
   document.getElementById('act').textContent = '当前：' + S.label;
   document.getElementById('coins').textContent = S.coins;
+  const woodEl = document.getElementById('wood'); if (woodEl) woodEl.textContent = FARMER.wood;
   document.getElementById('seeds').textContent = seedCount(S.store);
   const arrow = m => m > 1.02 ? '↑' : m < 0.98 ? '↓' : '';
   const pr = S.eff.crops.map(k => `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${arrow(S.prices[k])}`).concat(AN.PRODUCT_IDS.filter(k => S.animals.some(a => AN.KINDS[a.kind].product === k)).map(k => `${AN.PRODUCTS[k].name} ${priceOfAny(k)}${arrow(S.prices[k])}`)).join(' · ');
@@ -2260,7 +2261,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.2.1';
+const GAME_VERSION = '5.2.2';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2355,6 +2356,28 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
 const MM = { el: document.getElementById('minimap'), s: 0.5, base: null };
+// coin from the HUD sprite sheet, drawn beside region prices (same icon as the shop)
+const MM_HUD = new Image();
+let mmCoin = null;
+function mmCoinBadge() {
+  if (mmCoin) return mmCoin;
+  if (!MM_HUD.complete || !MM_HUD.naturalWidth) return null;
+  const s = 10, c = document.createElement('canvas'); c.width = s; c.height = s;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(MM_HUD, 0, 0, 32, 32, 0, 0, s, s);
+  return mmCoin = c;
+}
+function mmCoinReady() { mmCoin = null; MM.base = null; if (typeof minimapDraw === 'function') minimapDraw(); }
+MM_HUD.onload = mmCoinReady;
+MM_HUD.src = 'assets/hud_icons.png';
+if (MM_HUD.complete && MM_HUD.naturalWidth) mmCoinReady();
+function fillCoinPrice(g, n, cx, cy) {
+  const label = String(n), badge = mmCoinBadge(), ih = 10, gap = 2;
+  g.font = '600 10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  const tw = g.measureText(label).width, total = (badge ? ih + gap : 0) + tw, x = Math.round(cx - total / 2), y = Math.round(cy);
+  if (badge) g.drawImage(badge, x, y - (ih >> 1));
+  g.fillStyle = '#ffd76a'; g.fillText(label, x + (badge ? ih + gap : 0), y);
+}
 function minimapBase() {
   if (!MM.el) return; const w = Math.round((WORLD.x1 - WORLD.x0) * MM.s), h = Math.round((WORLD.y1 - WORLD.y0) * MM.s);
   MM.el.width = w; MM.el.height = h; const b = MM.base = MM.base || mkc(w, h), g = b.getContext('2d'); b.width = w; b.height = h;
@@ -2364,8 +2387,8 @@ function minimapBase() {
   for (const p of props) if (p.big) { const [x, y] = P(p.x, p.y); g.fillStyle = p.house ? Rf[2] : Wd[2]; g.fillRect(Math.round(x) - 5, Math.round(y) - 4, 10, 8); }
   for (const r of WD.REGIONS) if (!regionOpen(r.id)) { const [x0, y0] = P(r.rect[0], r.rect[1]), [x1, y1] = P(r.rect[2], r.rect[3]);
     g.fillStyle = 'rgba(20,14,10,0.45)'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = '#e8c78a'; g.setLineDash([3, 2]); g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); g.setLineDash([]);
-    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
-    g.fillStyle = '#ffd76a'; g.fillText(SIM.shopItem(r.id).levels[0].cost + ' 金', (x0 + x1) / 2, (y0 + y1) / 2 + 10); }
+    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
+    fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
 }
 function minimapDraw() {
   if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
