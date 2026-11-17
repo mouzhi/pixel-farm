@@ -55,7 +55,7 @@
     toastT = setTimeout(function () { toastEl.hidden = true; }, 2800);
   };
 
-  function ico(id, kind, title, fn, label) {
+  function ico(id, kind, title, fn) {
     var b = doc.createElement('button');
     b.type = 'button';
     b.id = id;
@@ -65,13 +65,7 @@
     var i = doc.createElement('i');
     i.setAttribute('aria-hidden', 'true');
     b.appendChild(i);
-    if (label) {
-      var lab = doc.createElement('span');
-      lab.className = 'xhs-ico-lab';
-      lab.textContent = label;
-      b.appendChild(lab);
-    }
-    b.addEventListener('click', fn);
+    if (typeof fn === 'function') b.addEventListener('click', fn);
     return b;
   }
 
@@ -187,37 +181,45 @@
 
     bar.appendChild(ico('xhs-btn-bag', 'bag', '背包', function () {
       toggleEl(doc.getElementById('xhs-inv-dock'));
-    }, '包'));
+    }));
     bar.appendChild(ico('xhs-btn-store', 'store', '仓库', function () {
       var btn = doc.getElementById('storeBtn');
       closeSheets(doc.getElementById('store'));
       if (btn) btn.click();
       else toggleEl(doc.getElementById('store'));
       markIcons();
-    }, '仓'));
+    }));
     bar.appendChild(ico('xhs-btn-shop', 'shop', '商店', function () {
       var btn = doc.getElementById('shopBtn');
       closeSheets(doc.getElementById('shop'));
       if (btn) btn.click();
       else toggleEl(doc.getElementById('shop'));
       markIcons();
-    }, '店'));
+    }));
     var follow = ico('xhs-follow', 'follow', '跟随农夫', function () {
       setFollow(!P.followFarmer);
-    }, '随');
+    });
     follow.classList.add('on');
     bar.appendChild(follow);
-    bar.appendChild(ico('xhs-btn-author', 'author', '关注作者', onFollowCreator, '关'));
+    bar.appendChild(ico('xhs-btn-author', 'author', '关注作者', onFollowCreator));
     bar.appendChild(ico('xhs-btn-board', 'board', '排行榜', function () {
       if (P.leaderboard && typeof P.leaderboard.open === 'function') P.leaderboard.open();
       markIcons();
-    }, '榜'));
-    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed, '倍');
-    speed.hidden = true;
-    bar.appendChild(speed);
+    }));
 
-    var noteBtn = ico('xhs-btn-note', 'note', '发笔记', onPostNote);
-    doc.body.appendChild(noteBtn);
+    var side = doc.createElement('div'); side.id = 'xhs-side';
+    side.appendChild(ico('xhs-btn-note', 'note', '发笔记', onPostNote));
+    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
+    speed.hidden = true;
+    side.appendChild(speed);
+    // 音乐 / 音效开关预留，等音频接入后再显示
+    var music = ico('xhs-btn-music', 'music', '音乐');
+    var sfx = ico('xhs-btn-sfx', 'sfx', '音效');
+    music.hidden = true;
+    sfx.hidden = true;
+    side.appendChild(music);
+    side.appendChild(sfx);
+    doc.body.appendChild(side);
     setupFollow();
     setupPostNote();
     applyWindowInsets();

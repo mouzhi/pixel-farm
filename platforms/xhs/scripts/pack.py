@@ -59,7 +59,8 @@ def stage() -> None:
     shutil.copy2(HERE / "mobile.css", STAGE / "mobile.css")
     shutil.copy2(HERE / "boot.js", STAGE / "boot.js")
     shutil.copy2(HERE / "leaderboard.js", STAGE / "leaderboard.js")
-    shutil.copy2(HERE / "ui-icons.png", STAGE / "ui-icons.png")
+    shutil.copy2(HERE / "atlas_hud_128_q90.webp", STAGE / "atlas_hud_128_q90.webp")
+    shutil.copy2(HERE / "atlas_128_q90.webp", STAGE / "atlas_128_q90.webp")
     shutil.copy2(HERE / "note-copy.js", STAGE / "note-copy.js")
     note_dir = HERE / "note"
     if note_dir.is_dir():
