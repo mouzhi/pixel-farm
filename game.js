@@ -10,11 +10,12 @@ const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // forest margin around the home farm (world units)
 const AN = window.PFAnimals; // v4.5: animal care rules
 const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
-const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
+const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
 let SPEED = +Q.get('speed') || 1;
 const MANUAL = Q.has('manual');
+const PATHDEBUG = Q.has('path'); // ?path=1 draws the walkability grid and current routes
 const MIN_PER_SEC = window.PFSim.MIN_PER_SEC, WALK = 7, WAKE = window.PFSim.WAKE, BEDTIME = window.PFSim.BEDTIME; // sim.js: about 5 real minutes a day
 
 // ---------- rng / helpers ----------
@@ -608,15 +609,28 @@ const particles = [];
 let groundDirty = true;
 const fmtT = t => { const m = ((Math.floor(t) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
 function log(msg) { S.log.unshift(fmtT(S.t) + ' ' + msg); S.log.length = Math.min(S.log.length, 4); S.events.push({ day: S.day, t: Math.floor(S.t), msg }); if (S.events.length > 300) S.events.splice(0, S.events.length - 300); }
-// routes: inside one area the farmer walks straight; between areas he follows the road through the region's gate
-const areaOf = p => WD.areaAt(p.x, p.y) || 'home';
-function routeVia(a, b) {
-  const A = areaOf(a), B = areaOf(b); if (A === B) return [];
-  const out = A !== 'home' && WD.ROUTES[A] ? WD.ROUTES[A].slice().reverse() : [];
-  if (B !== 'home' && WD.ROUTES[B]) out.push(...WD.ROUTES[B]);
-  return out.map(p => ({ x: p.x, y: p.y }));
+// routes: A* on a walkability grid so people and animals go around the house, the pond and fences
+// (dirt roads are cheaper, so they still prefer the lanes between regions). Rebuilt when the map changes.
+let navGrid = null, navVer = 0, navDirty = true, dbgRoutes = [];
+function navState() {
+  return {
+    houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
+    pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
+    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })),
+    rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y }))
+  };
 }
-function travel(a, b) { let d = 0, p = a; for (const q of routeVia(a, b)) { d += Math.hypot(q.x - p.x, q.y - p.y); p = q; } return d + Math.hypot(b.x - p.x, b.y - p.y); }
+function markNavDirty() { navDirty = true; }
+function ensureNav() { if (!navGrid || navDirty) { navGrid = NAV.build(navState()); navVer++; navDirty = false; } return navGrid; }
+function pathTo(a, b, bounds) { return NAV.route(ensureNav(), a, b, bounds ? { bounds } : undefined); }
+function routeVia(a, b, bounds) { return pathTo(a, b, bounds).waypoints; }
+function travel(a, b) { return pathTo(a, b).length; }
+function setWalkTarget(v, x, y) { if (Math.hypot((v.tx || 0) - x, (v.ty || 0) - y) > 0.8) v.via = null; v.tx = x; v.ty = y; }
+function nextHop(v, dest, bounds) {
+  if (!v.via || v._nav !== navVer) { v.via = routeVia(v, dest, bounds); v._nav = navVer; }
+  while (v.via.length && Math.hypot(v.via[0].x - v.x, v.via[0].y - v.y) <= 0.5) v.via.shift();
+  return v.via.length ? v.via[0] : dest;
+}
 const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue; const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01; if (d < bd) { bd = d; best = t; } } return best; };
 const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 }))];
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
@@ -647,6 +661,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   groundDirty = true;
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(); }
+  markNavDirty();
 }
 function buy(id) { // the player's one action: spend gold on the next level of a shop item
   const o = SIM.offer(S.up, S.coins, id, FARMER.wood);
@@ -809,7 +824,7 @@ function yardTask(c) {
   const fx = c.type === 'weed' ? 'leaf' : (c.type === 'rock' || c.type === 'pebble') ? 'rock' : 'wood';
   return { kind: 'tidy', label: labels[c.type], to: standAt(c), tile: c, dur, fx, pose: 'pull', done: () => {
     const i = yard.indexOf(c); if (i < 0) return;
-    yard.splice(i, 1); S.cleared++;
+    yard.splice(i, 1); S.cleared++; if (c.type === 'rock') markNavDirty();
     const yr = yardRng(S.cleared * 2654435761 + S.day * 374761393);
     if (c.type === 'weed' && yr() < 0.7) { F.gathered++; S.flow.weed++; popText(c.x, c.y, 10, '+1', '#e6c35c'); }
     else {
@@ -1083,6 +1098,7 @@ function overnight() {
     for (const k of g.rare) { const ev = SU.catToast(k, cropNames()); surpriseNote(ev, HOUSE.x, HOUSE.y + 6); bits.push(`一颗${SIM.CROPS[k].name}种子`); }
     log(`猫咪在门口放了${bits.join('、')}`); }
   familyMorning();
+  markNavDirty();
   groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
   onMorning();
 }
@@ -1105,7 +1121,8 @@ function stepSim(dm) {
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = chooseTask(); F.task.work = 0; F.task.via = routeVia(F, F.task.to).concat(F.task.via || []); if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (!F.task) { F.task = chooseTask(); F.task.work = 0; F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  else if (F._nav !== navVer) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
@@ -1452,15 +1469,19 @@ function stepAnimals(dm) {
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE;
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
     if (v.hold) { v.graze = 0; continue; }
-    if (night) { const P = PENS[penOfKind(a.kind)], home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; v.tx = home.x; v.ty = home.y; v.wait = 0; }
-    const dx = v.tx - v.x, dy = v.ty - v.y, d = Math.hypot(dx, dy);
+    const P = PENS[penOfKind(a.kind)], roam = { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 };
+    if (night) { const home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; setWalkTarget(v, home.x, home.y); v.wait = 0; }
+    const hop = nextHop(v, { x: v.tx, y: v.ty }, roam), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, ASPEED[a.kind] * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.graze = 0;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
     if (night) { v.graze = 0; continue; }
     v.wait -= dm; v.graze = v.wait > 0 && (Math.floor(v.wait / 6) % 2 === 0);
-    if (v.wait <= 0) { const R0 = PENS[penOfKind(a.kind)].roam, far = anRng() < 0.3;
-      v.tx = Math.max(R0[0], Math.min(R0[2], far ? R0[0] + anRng() * (R0[2] - R0[0]) : v.x + (anRng() - 0.5) * 24));
-      v.ty = Math.max(R0[1], Math.min(R0[3], far ? R0[1] + anRng() * (R0[3] - R0[1]) : v.y + (anRng() - 0.5) * 14));
+    if (v.wait <= 0) { const R0 = P.roam, far = anRng() < 0.3;
+      let tx = Math.max(R0[0], Math.min(R0[2], far ? R0[0] + anRng() * (R0[2] - R0[0]) : v.x + (anRng() - 0.5) * 24));
+      let ty = Math.max(R0[1], Math.min(R0[3], far ? R0[1] + anRng() * (R0[3] - R0[1]) : v.y + (anRng() - 0.5) * 14));
+      const snap = NAV.nearestWalkable(ensureNav(), tx, ty, 12, null);
+      if (snap) { tx = Math.max(R0[0] - 2, Math.min(R0[2] + 2, snap.x)); ty = Math.max(R0[1] - 2, Math.min(R0[3] + 2, snap.y)); }
+      setWalkTarget(v, tx, ty);
       v.wait = 20 + anRng() * 50; }
   }
 }
@@ -1478,15 +1499,15 @@ function stepPets(dm) {
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
     if (v.hold) { v.pose = 2; continue; }
     let speed = dog ? 4.2 : 2.4;
-    if (night || F.home) { v.tx = DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6); v.ty = DOOR.y + 5 + (k % 2) * 3; v.wait = 0; }
+    if (night || F.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; }
     else if (dog) { const side = F.fx >= 0 ? 1 : -1, c = [[-side, 3], [side, 3], [-side, -4], [side, -4]].map(([sx, oy]) => [F.x + sx * (9 + k * 6), F.y + oy + k * 2]).find(([x, y]) => dry(x, y));
       if (!c) { v.pose = 2; continue; } const [bx, by] = c, far = Math.hypot(bx - v.x, by - v.y); // never wait in the pond
-      if (far > 10) { v.tx = bx; v.ty = by; } if (far > 26) speed = WALK * S.eff.walk * 1.15; }
+      if (far > 10) setWalkTarget(v, bx, by); if (far > 26) speed = WALK * S.eff.walk * 1.15; }
     else { // cat: nap somewhere sunny, sometimes come and sit by the farmer
       const d0 = Math.hypot(v.tx - v.x, v.ty - v.y);
       if (d0 < 0.4) { v.wait -= dm; if (v.wait <= 0) { const spots = WD.NAP_SPOTS.filter(napOpen), near = petRng() < 0.25 && (WD.areaAt(F.x, F.y) === 'home' || S.eff.regions.includes(WD.areaAt(F.x, F.y)));
-        const n = near && dry(F.x + 8, F.y + 4) ? { x: F.x + 8, y: F.y + 4 } : spots[Math.floor(petRng() * spots.length)]; v.tx = n.x + (petRng() - 0.5) * 6 + k * 5; v.ty = n.y + (petRng() - 0.5) * 4; v.wait = 60 + petRng() * 150; v.idle = 0; } } }
-    const dx = v.tx - v.x, dy = v.ty - v.y, d = Math.hypot(dx, dy);
+        const n = near && dry(F.x + 8, F.y + 4) ? { x: F.x + 8, y: F.y + 4 } : spots[Math.floor(petRng() * spots.length)]; setWalkTarget(v, n.x + (petRng() - 0.5) * 6 + k * 5, n.y + (petRng() - 0.5) * 4); v.wait = 60 + petRng() * 150; v.idle = 0; } } }
+    const hop = nextHop(v, { x: v.tx, y: v.ty }), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, speed * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.idle = 0; v.pose = Math.floor(v.step / 2.5) % 2;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
     v.idle += dm; v.pose = night || F.home || v.idle > (dog ? 90 : 12) ? 3 : 2;
@@ -1514,7 +1535,7 @@ function setView(o, t) {
   else { o.spr = t.age >= (t.kind === 'wild' ? 5 : 3) ? SAPLING[1] : SAPLING[0]; o.sway = 0.6; }
 }
 function treeView(t) { let o = TV.get(t.id); if (!o) { o = { x: t.x, y: t.y, rot: 0, z: 0, lean: 0, leanV: 0, tick: (treeN++ % 6) / 6, sim: t }; TV.set(t.id, o); setView(o, t); } return o; }
-function treeChanged(t) { const o = TV.get(t.id); if (o) { o.sim = t; setView(o, t); } }
+function treeChanged(t) { const o = TV.get(t.id); if (o) { o.sim = t; setView(o, t); } markNavDirty(); }
 function resetTreeViews() { for (const o of TV.values()) if (o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.clear(); }
 // ---- v5.0 house tiers: the house prop swaps to a bigger model (built once per tier); the woodpile moves out of the annex ----
 const HOUSE_MODELS = [models.house]; let houseTierShown = 0;
@@ -1992,6 +2013,18 @@ function render() {
     for (let i = 0; i < 3; i++) { const ph = (realT * 0.5 + i / 3) % 1; ctx.globalAlpha = 1 - ph; pixText('Z', sx + 6 + ph * 18 + Math.sin(ph * 6) * 3, sy - 80 - ph * 26, '#f4f0ff', ph > 0.5 ? 2 : 1); }
     ctx.globalAlpha = 1;
   }
+  if (PATHDEBUG || dbgRoutes.length) drawPathOverlay();
+}
+function actorRoutes() {
+  const out = [];
+  for (const a of actors()) if (a.task && a.task.via && a.task.via.length) out.push({ points: [{ x: a.x, y: a.y }, ...a.task.via, a.task.to], color: a === FARMER ? '#ffe566' : '#b6f27a' });
+  for (const v of AV.values()) if (v.via && v.via.length) out.push({ points: [{ x: v.x, y: v.y }, ...v.via, { x: v.tx, y: v.ty }], color: '#7ec8ff' });
+  for (const v of PV.values()) if (v.via && v.via.length) out.push({ points: [{ x: v.x, y: v.y }, ...v.via, { x: v.tx, y: v.ty }], color: '#ff9ed1' });
+  return out;
+}
+function drawPathOverlay() {
+  const routes = dbgRoutes.length ? dbgRoutes : actorRoutes();
+  NAV.draw(ctx, ensureNav(), (x, y) => proj(x, y), routes, { showDirt: !!PATHDEBUG && PATHDEBUG !== 'routes' });
 }
 // Trees are composed in plain pixel arrays (trunk stack + clump sprites + outline), then put once: no canvas read-back per pose,
 // which matters with ~100 trees all re-posing at 10 Hz and every one re-laid while the camera turns.
@@ -2351,7 +2384,9 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
-  importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });
+  importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
+  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes,
+  setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
