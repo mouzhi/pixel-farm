@@ -2,7 +2,8 @@
 // Serves the repo root, then checks: save -> reload restores the same state; every fixture in tools/fixtures loads and
 // plays a day; a broken save falls back to the backup; a newer save is left alone; offline gold is 50% / 3-day capped;
 // export -> import round trip; reset starts over and keeps a copy; Phase 3: regions, chop and transplant orders, fruit;
-// Phase 4: pasture, buildings, animals cared for by the board, products sold, hunger, reload.
+// Phase 4: pasture, buildings, animals cared for by the board, products sold, hunger, reload;
+// v4.6: fishing (starter rod, pond idle task, rod upgrades, seaside, sea rod), catch log, save migration.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures'), SAVE = require('../save.js');
@@ -213,6 +214,43 @@ async function test(name, fn) {
     const b = await p.evaluate(() => ({ s: __farm.snapshot(), views: __farm.AV.size }));
     assert.deepStrictEqual(b.s.animals, a.animals); assert.deepStrictEqual(b.s.trough, a.trough); assert.strictEqual(b.views, 4); assert.strictEqual(b.s.saveVersion, require('../save.js').CURRENT);
     const mm = await p.evaluate(() => { const c = document.getElementById('minimap'); return c && c.width > 0; }); assert(mm);
+    assert.deepStrictEqual(p.errs, []);
+  });
+  await test('fishing: starter rod in the shop, pond fishing when idle, catch log, coast and sea rod, survives reload', async ctx => {
+    const p = await open(ctx);
+    await p.evaluate(() => { __farm.S.coins = 500; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
+    const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop h3, #shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent, inv: document.getElementById('inv').textContent }));
+    assert(/钓鱼/.test(shop.head), 'fishing section: ' + shop.head);
+    assert(/竹竿/.test(shop.txt), 'starter rod shown as owned');
+    assert(/先买海边/.test(shop.txt), 'sea rod locked');
+    assert(/竹竿/.test(shop.inv) || /钓竿/.test(shop.inv) || /海竿/.test(shop.inv), 'rod slot in inventory: ' + shop.inv);
+    await p.keyboard.press('Escape');
+    const pond = await p.evaluate(() => {
+      const S = __farm.S, F = __farm.F;
+      __farm.yard.length = 0;
+      for (const t of __farm.tiles) { if (!t.open) continue; t.tilled = true; t.watered = true; t.debris = t.weed = null; t.crop = { type: 'carrot', age: 0, n: 0, stage: 0 }; }
+      F.bag = window.PFSim.emptySeeds(); F.gathered = 0; F.crops = []; F.task = null; F.home = false; F.sleeping = false;
+      S.store = window.PFSim.emptySeeds(); S.t = 17.5 * 60; S.coins = 0;
+      __farm.advance(30, 10);
+      return { label: S.label, kind: F.task && F.task.kind, water: F.task && F.task.water, catches: S.catches.slice(), basket: F.crops.slice(), log: S.events.map(e => e.msg).join('\n'), fishGold: S.fishGold || 0 };
+    });
+    const hooked = pond.catches.length > 0 || /钓到|空钩|钓鱼|抛竿|上钩|收线|海钓/.test((pond.log || '') + (pond.label || '')) || pond.kind === 'fish';
+    assert(hooked, 'farmer went fishing: ' + JSON.stringify({ kind: pond.kind, label: pond.label, catches: pond.catches, log: (pond.log || '').slice(-240) }));
+    const sea = await p.evaluate(() => {
+      const S = __farm.S, F = __farm.F;
+      S.coins = 1e5; __farm.buy('coast'); __farm.buy('searod');
+      __farm.yard.length = 0; F.task = null; F.crops = []; S.t = 16.8 * 60; F.home = false; F.sleeping = false; F.x = 200; F.y = 200; // closer to the coast so the walk fits in the afternoon window
+      for (const t of __farm.tiles) { if (!t.open) continue; t.tilled = true; t.watered = true; t.debris = t.weed = null; t.crop = { type: 'carrot', age: 0, n: 0, stage: 0 }; }
+      __farm.advance(28, 10);
+      return { label: S.label, kind: F.task && F.task.kind, water: F.task && F.task.water, catches: S.catches.slice(), log: S.events.map(e => e.msg).join('\n'), regions: S.eff.regions, searod: S.eff.searod };
+    });
+    assert(sea.searod && sea.regions.includes('coast'), 'coast and sea rod bought');
+    assert(sea.catches.some(c => c.water === 'sea') || sea.water === 'sea' || /海钓|码头/.test((sea.label || '') + (sea.log || '')), 'sea fishing happened: ' + JSON.stringify({ kind: sea.kind, label: sea.label, catches: sea.catches, log: (sea.log || '').slice(-240) }));
+    await p.evaluate(() => __farm.saveNow()); const a = await core(p); await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    const b = await p.evaluate(() => ({ s: __farm.snapshot() }));
+    assert.strictEqual(b.s.saveVersion, require('../save.js').CURRENT);
+    assert.strictEqual(b.s.upgrades.coast, 1); assert.strictEqual(b.s.upgrades.searod, 1);
+    assert.deepStrictEqual(b.s.catches, a.catches);
     assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

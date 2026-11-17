@@ -9,7 +9,7 @@ const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // forest margin around the home farm (world units)
 const AN = window.PFAnimals; // v4.5: animal care rules
-const WD = window.PFWorld, WORLD = WD.WORLD; // v4.3: the big map (64 x 40 tiles); the farm keeps its 0..192 x 0..128 coordinates
+const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
 let SPEED = +Q.get('speed') || 1;
@@ -549,6 +549,7 @@ const S = {
   flow: { weed: 0, harvest: 0, bought: 0, boughtGold: 0, sold: 0, soldGold: 0 }, // seed flow since the page opened (diagnostics, not saved)
   trees: WD.defaultTrees(), orders: [], // v4.3: forest / fruit trees with their state; the player's chop and transplant orders
   animals: [], trough: { feed: 0, water: 0 }, hay: 0, // v4.5: the pasture's animals, its trough, bales of hay in the barn
+  catches: [], fishGold: 0, // v4.6: recent catches (id, name, gold, water, day) and gold earned from fish this session
 };
 Object.assign(S.prices, { egg: 1, wool: 1, milk: 1 }); // animal products drift like crops
 const PASTURE = WD.region('pasture'), TROUGH_SPOT = { x: PASTURE.trough.x - 9, y: PASTURE.trough.y + 2 }, COOP_DOOR = { x: PASTURE.coop.x + 1, y: PASTURE.coop.y + 14 };
@@ -627,6 +628,10 @@ function board() {
   if (weeds.length) { const t = rngNear(weeds); post('weed', 45, t, () => weedTask(t)); }
   if (debris.length) { const t = rngNear(debris); post('clear', 40, t, () => clearTask(t)); }
   if (yard.length) { const c = rngNear(yard); post('tidy', 18, c, () => yardTask(c)); }
+  // v4.6 fishing: lowest-priority idle work (below yard tidy 18). Sea fishing is a little more worthwhile once unlocked.
+  if (T < 19 * 60 && F.crops.length < E.basket) {
+    if (E.searod && E.regions.includes('coast')) { const sp = fishSpot('sea'); post('fish', 12, sp.stand, () => fishTask('sea')); }
+    else post('fish', 8, FS.POND_SPOT.stand, () => fishTask('pond')); }
   if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
   if (tillable.length && T < 17 * 60) { // the wide hoe aims at the tile whose 3x3 has the most soil to turn
     const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
@@ -803,24 +808,46 @@ function petTask(a) {
 }
 function hearts(x, y) { for (let i = 0; i < 3; i++) particles.push({ x: x + VR(-3, 3), y, z: 10 + i * 3, vx: VR(-2, 2), vy: 0, vz: 6, c: Ac[3], life: 1.2, kind: 'heart' }); }
 const PRODUCT_COL = { egg: [Ac[0], St[3]], wool: [Ac[0], St[3]], milk: [Ac[0], Wt[4]] };
-const priceOfAny = ty => WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
+const priceOfAny = ty => FS.isFish(ty) ? FS.priceOf(ty) : WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
   return { label: F.crops.length ? '正在去市场卖菜' : S.animals.length && S.hay < AN.need(S.animals) * 2 ? '正在去市场买干草' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
     const n = F.crops.length, open = tiles.filter(t => t.open);
-    let sum = 0; for (const ty of F.crops) { const g = priceOfAny(ty); sum += g; if (WD.FRUIT[ty]) S.fruitGold = (S.fruitGold || 0) + g; if (AN.PRODUCTS[ty]) S.animalGold = (S.animalGold || 0) + g; } F.crops.length = 0;
+    let sum = 0, nFish = 0; for (const ty of F.crops) { const g = priceOfAny(ty); sum += g; if (WD.FRUIT[ty]) S.fruitGold = (S.fruitGold || 0) + g; if (AN.PRODUCTS[ty]) S.animalGold = (S.animalGold || 0) + g; if (FS.isFish(ty)) { S.fishGold = (S.fishGold || 0) + g; nFish++; } } F.crops.length = 0;
     if (F.wood) { const g = F.wood * WD.WOOD.price; sum += g; S.woodGold = (S.woodGold || 0) + g; log(`卖出木材 ${F.wood} 份，得 ${g} 金`); F.wood = 0; }
     const sp = SIM.surplusSeeds(F.bag, S.store, open.length);
     if (sp.gold) { for (const k of CROP_IDS) F.bag[k] -= sp.sell[k]; sum += sp.gold; S.flow.sold += seedCount(sp.sell); S.flow.soldGold += sp.gold; log(`卖掉多余的种子：${seedText(sp.sell)}（${sp.gold} 金）`); }
     if (sum) { S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
       popText(STALL.x + VR(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
-      if (n) log(`卖出 ${n} 个作物和水果`); }
+      if (n) log(`卖出 ${n} 件收获` + (nFish ? `（其中 ${nFish} 条鱼）` : '')); }
     if (S.animals.length) { const need = AN.need(S.animals), want = Math.min(AN.HAY.stock, need * 4) - S.hay, can = Math.floor(S.coins * 0.5 / AN.HAY.price), n = Math.max(0, Math.min(want, can));
       if (n > 0 && S.hay < need * 3) { S.coins -= n * AN.HAY.price; S.hay += n; S.hayGold = (S.hayGold || 0) + n * AN.HAY.price; log(`买了 ${n} 捆干草（${n * AN.HAY.price} 金），放进仓库`); } }
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
     if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops);
       if (p.cost > 0) { S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
   } };
+}
+function fishSpot(water) { if (water === 'sea') { const r = WD.region('coast'); return r.fish; } return FS.POND_SPOT; }
+function fishTask(water) {
+  const spot = fishSpot(water), wait = FS.waitTime(S.eff.rod, rand);
+  return { kind: 'fish', label: water === 'sea' ? '正在码头海钓' : '正在池塘边钓鱼', to: spot.stand, tile: spot.hook, hook: spot.hook, water, phase: 'cast',
+    dur: FS.CAST + wait + FS.BITE + FS.REEL, wait, rest: true, tick: fishTick, done: fishDone };
+}
+function fishTick(k) {
+  const c = FS.CAST, wt = c + k.wait, b = wt + FS.BITE, w = k.work, prev = k.phase;
+  k.phase = w < c ? 'cast' : w < wt ? 'wait' : w < b ? 'bite' : 'reel';
+  k.rest = k.phase === 'cast' || k.phase === 'wait'; k.pose = (k.phase === 'bite' || k.phase === 'reel') ? 'pull' : null;
+  const labels = { cast: k.water === 'sea' ? '正在码头抛竿' : '正在池塘边抛竿', wait: '静静等鱼上钩', bite: '有鱼咬钩了！', reel: '正在收线' };
+  k.label = labels[k.phase]; S.label = k.label;
+  if (prev !== 'bite' && k.phase === 'bite') burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#c8e8f0', '#ffffff'], 10, 'splash');
+}
+function fishDone() {
+  const k = F.task, r = FS.roll(k.water, S.eff.rod, rand);
+  if (r.miss) { log('浮标动了一下，没钓上来'); popText(k.hook.x, k.hook.y, 8, '空钩', '#c8e8f0'); burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#ffffff'], 4, 'splash'); return; }
+  if (F.crops.length >= S.eff.basket) { log('篮子满了，这条鱼只好放回去'); return; }
+  F.crops.push(r.fish);
+  S.catches.unshift({ id: r.fish, name: r.name, gold: r.gold, water: k.water, day: S.day }); S.catches.length = Math.min(12, S.catches.length);
+  log(`钓到一条${r.name}（${r.gold} 金）`); popText(k.hook.x, k.hook.y, 12, r.name, r.col); burst(k.hook.x, k.hook.y, 4, [r.col, '#ffffff'], 6, 'spark');
 }
 
 // ---------- simulation ----------
@@ -865,6 +892,7 @@ function stepSim(dm) {
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
     k.work += dm; F.act += dm; F.moving = false;
+    if (k.tick) k.tick(k, dm);
     if (k.fx && Math.random() < dm * 0.5) fxTick(k);
     if (k.work >= k.dur) { k.done && k.done(); F.task = null; }
   }
@@ -952,7 +980,7 @@ const pathSegs = [[DOOR.x, DOOR.y, DOOR.x, 54], [DOOR.x, 54, 68, 54], [68, 54, 1
 function segDist(px, py, [x1, y1, x2, y2]) { const dx = x2 - x1, dy = y2 - y1, l = dx * dx + dy * dy || 1; let t = ((px - x1) * dx + (py - y1) * dy) / l; t = clamp(t, 0, 1); return Math.hypot(px - x1 - t * dx, py - y1 - t * dy); }
 // v4.3: dirt roads from the farm to each region's gate, and a short lane inside each region
 for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) pathSegs.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
-const LANES = { forest: [[100, -38, 100, -60]], east: [[216, 66, 238, 66]], orchard: [[-40, 8, -70, -14]], south: [[68, 150, 68, 176], [68, 176, 78, 176]], pasture: [[216, -40, 263, -40], [263, -40, 263, -26], [248, -40, 248, -62], [263, -40, 300, -40], [300, -40, 300, -60]] };
+const LANES = { forest: [[100, -38, 100, -60]], east: [[216, 66, 238, 66]], orchard: [[-40, 8, -70, -14]], south: [[68, 150, 68, 176], [68, 176, 78, 176]], pasture: [[216, -40, 263, -40], [263, -40, 263, -26], [248, -40, 248, -62], [263, -40, 300, -40], [300, -40, 300, -60]], coast: [[220, 212, 272, 236], [272, 236, 280, 256], [280, 256, 280, 268]] };
 for (const k in LANES) for (const l of LANES[k]) pathSegs.push(l.concat(k)); // tagged: only painted once the region is open
 const routeSegs = []; for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) routeSegs.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
 const nearRoute = (x, y, d) => routeSegs.some(s => segDist(x, y, s) < d) || Object.values(LANES).some(ls => ls.some(l => segDist(x, y, l) < d));
@@ -967,12 +995,16 @@ function groundAt(x, y) { // -> [palette colour, kind]
   const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2 + (vnoise(x / 4, y / 4, 11) - 0.5) * 0.34;
   if (e < 1) return [Wt[2], 'water'];           // one flat tone: the layered water is painted over it in screen space (waterPass)
   if (e < 1.3) return [G[3], 'shore'];
+  const sea = WD.seaAt(x, y);
+  if (sea === 'water') return [Wt[2], 'water'];
+  if (sea === 'sand') { const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; }
   const wob = (vnoise(x / 3, y / 3, 7) - 0.5) * 1.6;
   const pd = pathD(x, y), pw = 4.2 + wob;
   const yd = Math.max(YARD.x0 - x, x - YARD.x1, YARD.y0 - y, y - YARD.y1) + wob * 0.6;
   if (pd < pw || yd < 0) return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt'];
   // regions: an open region is farm grass (with a packed-dirt yard round its field); a locked one stays a wild meadow
   for (const r of WD.REGIONS) if (WD.inRect(x, y, r.rect)) {
+    if (r.id === 'coast') { const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; } // the beach is sand even before it is bought
     if (!regionOpen(r.id)) return [vnoise(x / 9, y / 9, 13) > 0.62 ? G[3] : G[2], 'wild'];
     const fy = fieldYard(r); if (fy && rectOut(x, y, fy) === 0) return [Wd[4], 'dirt'];
     return [G[3], 'grass'];
@@ -1007,17 +1039,18 @@ const decals = [];
     const k = groundAt(x, y)[1], v = r2();
     if (k === 'wild') { if (v < 0.75) decals.push({ x, y, c: v < 0.3 ? SPRITES.flowers[Math.floor(r2() * 4)] : SPRITES.tufts[Math.floor(r2() * 4)] }); }
     else if (k === 'grass' && v < 0.35) decals.push({ x, y, c: v < 0.04 ? SPRITES.flowers[Math.floor(r2() * 4)] : SPRITES.tufts[Math.floor(r2() * 4)] });
-    else if (k === 'dirt' && v < 0.1) decals.push({ x, y, c: SPRITES.dirtTufts[Math.floor(r2() * 2)] }); }
+    else if (k === 'dirt' && v < 0.1) decals.push({ x, y, c: SPRITES.dirtTufts[Math.floor(r2() * 2)] });
+    else if (k === 'sand' && v < 0.16) decals.push({ x, y, c: SPRITES.pebbles ? SPRITES.pebbles[Math.floor(r2() * (SPRITES.pebbles.length || 1))] : SPRITES.dirtTufts[Math.floor(r2() * 2)] }); }
 }
 // ---------- the big map (v4.3): roads cut through the forest rim, wild forest between the clearings, fenced regions ----------
 for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) continue;
-  if (nearRoute(p.x, p.y, 14) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10))) props.splice(i, 1); }
+  if (nearRoute(p.x, p.y, 14) || WD.seaAt(p.x, p.y) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10) || (r.water && WD.inRect(p.x, p.y, r.water, 8)))) props.splice(i, 1); }
 { const fr = mulberry32(5150), P = a => a[Math.floor(fr() * a.length)];
   const kinds = () => P([...treeDefs.dark, ...treeDefs.pine, ...treeDefs.oak, ...treeDefs.olive, ...treeDefs.dark, ...treeDefs.birch]);
   for (let y = WORLD.y0 - 8; y <= WORLD.y1 + 14; y += 17) for (let x = WORLD.x0 - 8; x <= WORLD.x1 + 10; x += 18) {
     const tx = x + (fr() - 0.5) * 9 + ((Math.round(y / 17) & 1) ? 9 : 0), ty = y + (fr() - 0.5) * 7;
     if (tx > -46 && tx < WW + 46 && ty > -46 && ty < WH + 46) continue;                    // the farm's own rim is already there
-    if (WD.REGIONS.some(r => WD.inRect(tx, ty, r.rect, 12)) || nearRoute(tx, ty, 13)) continue;
+    if (WD.seaAt(tx, ty) || WD.REGIONS.some(r => WD.inRect(tx, ty, r.rect, 12) || (r.water && WD.inRect(tx, ty, r.water, 8))) || nearRoute(tx, ty, 13)) continue;
     let d = 1e9; for (const r of WD.REGIONS) d = Math.min(d, rectOut(tx, ty, r.rect)); d = Math.min(d, Math.max(-tx, tx - WW, -ty, ty - WH, 0));
     if (fr() < (d < 50 ? 0.9 : 0.55)) addTree(kinds(), tx, ty);
   }
@@ -1031,12 +1064,23 @@ const SIGN = pix(['.bbbbbbbbbbb.', 'bsssssssssssb', 'bsttsssttsssb', 'bsssssssss
 const LOCK = pix(['.eee.', 'e...e', 'e...e', 'yyyyy', 'yyiyy', 'yyiyy', 'yyyyy']);
 const regionProps = {};
 for (const r of WD.REGIONS) { const [x0, y0, x1, y1] = r.rect, list = regionProps[r.id] = [];
-  const nearGate = (x, y) => Math.hypot(x - r.gate.x, y - r.gate.y) < 12;
+  const openings = [r.gate, r.pier].filter(Boolean);
+  const nearGate = (x, y) => openings.some(g => Math.hypot(x - g.x, y - g.y) < 12);
   for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); list.push(p); }
   for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); list.push(p); }
   const sign = { spr: SIGN, x: r.sign.x, y: r.sign.y, region: r.id, sign: 1 }; billboards.push(sign); list.push(sign);
   if (r.barrel) addProp(barrelModel, r.barrel.x, r.barrel.y, 0);
 }
+const SEA_SOLIDS = [];
+const pierDeck = buildModel(14, 16, 4, Object.assign((x, y, z) => {
+  if (z <= 0) return (x < 2 || x > 11) ? Wd[1] : null; // posts at the sides
+  if (z === 1 || z === 2) return (y & 1) ? Wd[3] : Wd[4]; // planks running along the pier
+  if (z === 3 && (x <= 1 || x >= 12)) return Wd[2]; // low rail
+  return null;
+}, {}));
+{ const r = WD.region('coast'); if (r && r.pier) { const list = regionProps[r.id] || (regionProps[r.id] = []);
+  for (let y = r.pier.y; y <= r.fish.stand.y + 4; y += 8) { const p = addProp(pierDeck, r.pier.x, y, 0, { pier: 1 }); list.push(p);
+    if (y > r.pier.y) { SEA_SOLIDS.push({ x: r.pier.x - 6, y, r: 2 }); SEA_SOLIDS.push({ x: r.pier.x + 6, y, r: 2 }); } } } }
 // ---------- the pasture (v4.5): coop, shed, trough, hay; animals are billboards that wander slowly ----------
 function coopModel() { // a small red-roofed hen house with a ramp to its door
   const X0 = 3, X1 = 22, Y0 = 4, Y1 = 17, ZW = 12;
@@ -1126,6 +1170,7 @@ function stepAnimals(dm) {
 }
 // ---------- trees with a state (v4.3): forest trees to chop, stumps that grow back, transplanted saplings, fruit trees ----------
 const FRUIT_COL = { apple: [Rf[2], Rf[3]], orange: [Ac[2], Ac[1]] };
+const FISH_COL = Object.fromEntries(FS.ALL.map(f => [f.id, [f.col, f.col]]));
 const WILD = [treeDefs.oak[0], treeDefs.oak[1], treeDefs.olive[0], treeDefs.birch[0], treeDefs.pine[0], treeDefs.oak[2], treeDefs.olive[1], treeDefs.birch[1]];
 const FDEF = new Map();
 function fruitDef(kind, v, ripe) { const key = kind + v + (ripe ? 'r' : ''); let d = FDEF.get(key); if (d) return d;
@@ -1181,7 +1226,7 @@ function drawBillboard(c, o, alpha = 1) {
 }
 function drawBasket(c, fx, fy, o) { // little basket of the last crop, held at the hip (hidden from behind)
   const b = SPRITES.basket, bx = fx + (o.row === 'walk_front' ? 1 : o.flip ? -9 : 2), by = fy - 12;
-  c.fillStyle = CROPS[o.basket] ? CROPS[o.basket].top : (FRUIT_COL[o.basket] || PRODUCT_COL[o.basket])[0]; c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
+  c.fillStyle = CROPS[o.basket] ? CROPS[o.basket].top : (FRUIT_COL[o.basket] || PRODUCT_COL[o.basket] || FISH_COL[o.basket] || [Ac[0]])[0]; c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
   c.drawImage(b, bx, by);
 }
 function bbShadow(c, o, wide = 1) { const [sx, sy] = proj(o.x, o.y); const x = Math.round(sx), y = Math.round(sy); c.fillStyle = '#000';
@@ -1228,7 +1273,13 @@ const WSENT = u32(Wt[2]);
 const WTONE = [Wt[0], Wt[1], Wt[2], Wt[3], Wt[4], Wt[5], Ac[0], PAL.ramps.shallow[0], Wd[0], G[0]].map(u32);
 const LUM = c => 0.3 * (c & 255) + 0.59 * (c >>> 8 & 255) + 0.11 * (c >>> 16 & 255);
 const RTONE = new Map(); for (const c of [...PAL.colors, '#1c1626']) { const v = u32(c), l = LUM(v); RTONE.set(v, l < 70 ? 0 : l < 118 ? 1 : 2); }
-let WG = null;
+let WG = { pond: null, sea: null };
+function seaBox() { // southern ocean, clipped to the screen (a second pass so pond and sea do not share a midY)
+  const pts = []; for (const [ux, uy] of [[155, 240], [WORLD.x1, 240], [155, WORLD.y1], [WORLD.x1, WORLD.y1]]) pts.push(proj(ux, uy));
+  const x0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[0]))) - 4), x1 = Math.min(W, Math.ceil(Math.max(...pts.map(p => p[0]))) + 4);
+  const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
+  return [x0, y0, x1 - x0, y1 - y0];
+}
 function waterBox() {
   const pts = []; for (const [ux, uy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) pts.push(proj(POND.x + ux * POND.rx * 1.3, POND.y + uy * POND.ry * 1.3));
   const x0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[0]))) - 4), x1 = Math.min(W, Math.ceil(Math.max(...pts.map(p => p[0]))) + 4);
@@ -1264,11 +1315,11 @@ function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip a
       const i = y * bw + X; if (!mask[i]) continue; const tn = RTONE.get(p >>> 0); if (tn !== undefined && tn < tone[i]) tone[i] = tn; } }
 }
 const pondLeaves = [], pondDecor = [];
-function waterPass(t) {
-  const [bx, by, bw, bh] = waterBox(); if (bw <= 0 || bh <= 0) return;
+function paintWater(t, box, key) {
+  const [bx, by, bw, bh] = box; if (bw <= 0 || bh <= 0) return;
   const img = ctx.getImageData(bx, by, bw, bh), d = new Uint32Array(img.data.buffer);
-  if (!WG || WG.aq !== AQ || WG.bx !== bx || WG.by !== by || WG.bw !== bw || WG.bh !== bh) WG = waterGeom(d, bx, by, bw, bh);
-  const Gm = WG; if (!Gm.n) return;
+  if (!WG[key] || WG[key].aq !== AQ || WG[key].bx !== bx || WG[key].by !== by || WG[key].bw !== bw || WG[key].bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh);
+  const Gm = WG[key]; if (!Gm.n) return;
   const { mask, dist, far, midY, pondH, along, tone } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
   // 1 + 2: depth and sky
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
@@ -1286,7 +1337,7 @@ function waterPass(t) {
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
     if (dd < 1.5 && y > midY && tone[i] >= 3) tone[i] = 7;
     if (Math.round(dd) === ring && tone[i] >= 2 && Math.sin(along[i] * 0.55 - wph(t, 2)) + 0.6 * Math.sin(along[i] * 0.23 + 1.3 - wph(t, 1)) > 0.55) tone[i] = 5; }
-  for (const s of POND_SOLIDS) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
+  for (const s of (key === 'sea' ? SEA_SOLIDS : POND_SOLIDS)) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
     for (let a = 0; a < 6.283; a += 0.12) { const x = Math.round(cx + Math.cos(a) * (s.r + 1)), y = Math.round(cy + Math.sin(a) * (s.r * 0.5 + 1)); if (x < 0 || y < 0 || x >= bw || y >= bh || y < cy) continue;
       const i = y * bw + x; if (mask[i] && tone[i] >= 1 && Math.sin(x * 0.9 + y * 0.4 - wph(t, 2)) > 0.3) tone[i] = 5; } }
   // 5: the back bank: a mud lip on land, mirrored dark in the water, faint ripples, a waterline that creeps
@@ -1307,7 +1358,6 @@ function waterPass(t) {
     for (const dx of xs) put(x + dx, y, Math.abs(dx) <= (xs.length >= 5 ? 1 : 0) ? 6 : 5, 1); }
   if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1); ripple(x, y, lt - s0); }
   // v4.4: asynkimo step 6 also has warm point glints (yellow/white pluses) and falling drips, not only dashes and leaves
-  pondDecor.length = 0;
   if (Gm.sky.length) for (let g = 0; g < 10; g++) { const [x, y] = at(Gm.sky), s0 = rr() * (WLOOP - 0.45), a = (lt - s0) / 0.45; if (a < 0 || a >= 1) continue;
     pondDecor.push([x + bx, y + by, g % 3 === 0 ? Ac[1] : Ac[0], a > 0.28 && a < 0.7 ? 1 : 0]); }
   if (Gm.deep.length) for (let g = 0; g < 3; g++) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 0.4), a = (lt - s0) / 0.4; if (a < 0 || a >= 1) continue;
@@ -1315,12 +1365,11 @@ function waterPass(t) {
   if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1.4), a = lt - s0;
     if (a >= 0 && a < 0.85) pondDecor.push([x + bx, y + by - Math.round((0.85 - a) * 18), Wt[5], 2]);
     else if (a >= 0.85 && a < 1.85) ripple(x, y, a - 0.85); }
-  pondLeaves.length = 0;
   if (Gm.deep.length) for (let q = 0; q < 2; q++) { const [x, y] = at(Gm.deep), s0 = rr() * WLOOP, a = ((lt - s0) % WLOOP + WLOOP) % WLOOP, col = q ? Ac[1] : G[4];
     if (a < 1.2) pondLeaves.push([x + bx, y + by - Math.round((1.2 - a) * 16), col]);                 // falling
     else if (a < 4.2) { const fx = x + Math.round((a - 1.2) * 3); put(fx, y + 1, 0); put(fx - 1, y, 5, 1); pondLeaves.push([fx + bx, y + by, col]); ripple(x, y, a - 1.2); } // floating
     else if (a < 4.8) { const fx = x + 9; if (a < 4.5) pondLeaves.push([fx + bx, y + by, col, 1]); } }  // sinking
-  for (const dcl of decals) { if (dcl.lily === undefined) continue; const [sx, sy] = proj(dcl.x, dcl.y); dcl.bob = Math.sin(wph(t, 1) + 1.7 * dcl.lily) > 0.4 ? 1 : 0;
+  if (key === 'pond') for (const dcl of decals) { if (dcl.lily === undefined) continue; const [sx, sy] = proj(dcl.x, dcl.y); dcl.bob = Math.sin(wph(t, 1) + 1.7 * dcl.lily) > 0.4 ? 1 : 0;
     const x0 = Math.round(sx) - (dcl.c.width >> 1) - bx, yb = Math.round(sy) + 1 + dcl.bob - by; for (let x = x0 + 2; x < x0 + dcl.c.width - 2; x++) put(x, yb, 0); }
   // damp ground on the near shore, the creeping waterline, then tones -> colours
   for (const i of Gm.damp) { const s = SHADE.get(d[i]); if (s) d[i] = s; }
@@ -1328,9 +1377,40 @@ function waterPass(t) {
   for (let i = 0; i < N; i++) if (mask[i]) d[i] = WTONE[tone[i]];
   ctx.putImageData(img, bx, by);
 }
+function waterPass(t) {
+  pondDecor.length = 0; pondLeaves.length = 0;
+  paintWater(t, waterBox(), 'pond');
+  paintWater(t, seaBox(), 'sea');
+}
+
 function drawPondLeaves() {
   for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); }
   for (const [x, y, c, sh] of pondDecor) { ctx.fillStyle = c; if (sh === 1) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } else if (sh === 2) ctx.fillRect(x, y, 1, 2); else ctx.fillRect(x, y, 1, 1); }
+}
+// style A: a whole-pixel rod, line and bobber. The line is a Bresenham of 1px ink; the bobber bobs 1 px while waiting and jerks on a bite.
+function linePx(x0, y0, x1, y1, col) {
+  x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
+  const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
+  let x = x0, y = y0, err = dx - dy;
+  ctx.fillStyle = col;
+  while (true) { ctx.fillRect(x, y, 1, 1); if (x === x1 && y === y1) break; const e2 = 2 * err; if (e2 > -dy) { err -= dy; x += sx; } if (e2 < dx) { err += dx; y += sy; } }
+}
+function drawFishing() {
+  const k = F.task; if (!k || k.kind !== 'fish' || F.moving || F.home || !k.hook) return;
+  const [fx, fy] = proj(F.x, F.y), [hx0, hy0] = proj(k.hook.x, k.hook.y);
+  const pose = farmerPose(), flip = pose.flip ? -1 : 1;
+  const tipx = Math.round(fx) + flip * 8, tipy = Math.round(fy) - 18;
+  const hipx = Math.round(fx) + flip * 2, hipy = Math.round(fy) - 10;
+  let u = 1; // how far the line has gone: 0 at the start of the cast, 1 once it is waiting
+  if (k.phase === 'cast') u = Math.min(1, k.work / FS.CAST);
+  else if (k.phase === 'reel') u = Math.max(0.15, 1 - (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL);
+  const hx = fx + (hx0 - fx) * u, hy = fy + (hy0 - fy) * u;
+  const bob = k.phase === 'wait' ? Math.round(Math.sin(realT * 2.2)) : k.phase === 'bite' ? Math.round(Math.sin(realT * 14) * 2) : 0;
+  const bx = Math.round(hx), by = Math.round(hy) + bob;
+  linePx(hipx, hipy, tipx, tipy, Wd[2]); // the rod
+  if (u > 0.05) linePx(tipx, tipy, bx, by - 2, Ink[0]);
+  ctx.fillStyle = Rf[2]; ctx.fillRect(bx - 1, by - 2, 2, 2);
+  ctx.fillStyle = Ac[0]; ctx.fillRect(bx - 1, by - 3, 2, 1);
 }
 
 let realT = 0;
@@ -1409,6 +1489,7 @@ function render() {
     if (p.kind === 'heart') { const hx = Math.round(sx), hy = Math.round(sy - p.z * RS); ctx.fillRect(hx - 2, hy, 2, 1); ctx.fillRect(hx + 1, hy, 2, 1); ctx.fillRect(hx - 2, hy + 1, 5, 1); ctx.fillRect(hx - 1, hy + 2, 3, 1); ctx.fillRect(hx, hy + 3, 1, 1); continue; } const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), s, s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
   drawPondLeaves();
+  drawFishing();
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (night > 0) lighting(night, T);
   if (night > 0.5) for (const f of fireflies) { const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
@@ -1524,6 +1605,13 @@ function hud() {
   const pr = S.eff.crops.map(k => `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${arrow(S.prices[k])}`).concat(AN.PRODUCT_IDS.filter(k => S.animals.some(a => AN.KINDS[a.kind].product === k)).map(k => `${AN.PRODUCTS[k].name} ${priceOfAny(k)}${arrow(S.prices[k])}`)).join(' · ');
   if (hudPrices !== pr) { hudPrices = pr; document.getElementById('prices').textContent = '今日行情：' + pr; }
   document.getElementById('log').innerHTML = S.log.map(s => `<div>${s}</div>`).join('');
+  const box = document.getElementById('catches');
+  if (box) {
+    const today = S.catches.filter(c => c.day === S.day), recent = S.catches.slice(0, 8);
+    if (!recent.length) box.hidden = true;
+    else { box.hidden = false; box.innerHTML = `<div class="h">今日钓到 ${today.length} 条` + (S.fishGold ? ` · 累计卖出 ${S.fishGold} 金` : '') + `</div>` +
+      recent.map(c => `<div>${c.day === S.day ? '今' : '第' + c.day + '天'} · ${c.name} ${c.gold} 金${c.water === 'sea' ? ' · 海' : ''}</div>`).join(''); }
+  }
 }
 
 // ---------- camera and pointer (v4.3) ----------
@@ -1659,7 +1747,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '4.5';
+const GAME_VERSION = '4.6';
 function snapshot() {
   return {
     saveVersion: PFSave.CURRENT, gameVersion: GAME_VERSION, createdAt: S.createdAt, savedAt: Date.now(), rng: RNG.a,
@@ -1673,6 +1761,7 @@ function snapshot() {
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
     animals: S.animals.map(a => Object.assign({}, a)), trough: Object.assign({}, S.trough),
+    catches: S.catches.map(c => Object.assign({}, c)),
     log: S.log.slice(),
   };
 }
@@ -1693,6 +1782,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   yard.length = 0;
   if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
   else fillYard(mulberry32((s.rng || 1) ^ 0xC0FFEE), YARD_START); // old saves get a yard to tidy, without touching the sim RNG
+  S.catches = (s.catches || []).map(c => Object.assign({}, c)); S.fishGold = 0;
   S.log = s.log.slice(); S.label = F.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
 }
 const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };

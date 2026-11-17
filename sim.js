@@ -51,6 +51,9 @@
     { id: 'chicken', name: '鸡', icon: 'chicken', farm: 1, needs: 'coop', levels: [200, 220, 250, 280, 300, 340].map((cost, i) => ({ cost, label: `第 ${i + 1} 只鸡`, desc: '每天吃 1 份干草，下 1 个蛋（开心时 2 个）' })) },
     { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'shed', levels: [800, 900, 1000].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' })) },
     { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
+    { id: 'rod', name: '钓竿', icon: 'rod', fish: 1, levels: [{ cost: 400, label: '钢竿', desc: '咬钩更快，更容易钓到少见的鱼' }, { cost: 1600, label: '碳素竿', desc: '再快一些，锦鲤更常见' }] },
+    { id: 'coast', name: '海边', icon: 'coast', region: 1, fish: 1, levels: [{ cost: 3500, label: '海边', desc: '东南边的沙滩和码头，看得见海' }] },
+    { id: 'searod', name: '海竿', icon: 'searod', fish: 1, needs: 'coast', levels: [{ cost: 2000, label: '大海竿', desc: '能在码头上钓海鱼' }] },
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
@@ -70,6 +73,7 @@
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
       coop: lv('coop') > 0, shed: lv('shed') > 0,
       animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow') },
+      rod: lv('rod'), searod: lv('searod') > 0,
     };
   }
   // what the next level of an item costs and whether it can be bought now

@@ -1,7 +1,7 @@
 // Unit tests for the pure save / sim rules (no browser):  node tools/save-test.js
 // Every saveVersion keeps a fixture in tools/fixtures/save-v<N>*.json; all of them must migrate to the current version.
 const assert = require('assert'), fs = require('fs'), path = require('path');
-const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js');
+const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js');
 const FIX = path.join(__dirname, 'fixtures');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 class Mem { constructor(o = {}) { this.m = new Map(Object.entries(o)); } get length() { return this.m.size; } key(i) { return [...this.m.keys()][i]; }
@@ -77,9 +77,9 @@ ok('v3 -> current: regions and axe not bought, trees rebuilt, orders empty, tile
   assert.strictEqual(s.trees, null); assert.deepStrictEqual(s.orders, []); assert.strictEqual(s.inventory.wood, 0); assert.deepStrictEqual(s.inventory.saplings, { apple: 0, orange: 0 });
   assert(s.tiles.every(t => t.f === 'home')); assert.strictEqual(s.coins, v2.coins); assert.strictEqual(s.upgrades.field, 0);
 });
-ok('v5 -> v6: no pasture or animals, empty trough, no hay, product prices at base, everything else kept', () => {
+ok('v5 -> current: no pasture or animals, empty trough, no hay, product prices at base, everything else kept', () => {
   const v4 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v5-day4.json'), 'utf8')), s = SAVE.migrate(v4); // (v4 = the older save, here v5)
-  assert.strictEqual(v4.saveVersion, 5); assert.strictEqual(s.saveVersion, 6);
+  assert.strictEqual(v4.saveVersion, 5); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   for (const id of ['pasture', 'coop', 'shed', 'chicken', 'sheep', 'cow']) assert.strictEqual(s.upgrades[id], 0);
   for (const id of Object.keys(v4.upgrades)) assert.strictEqual(s.upgrades[id], v4.upgrades[id]);
   assert.deepStrictEqual(s.animals, []); assert.deepStrictEqual(s.trough, { feed: 0, water: 0 }); assert.strictEqual(s.inventory.hay, 0);
@@ -92,6 +92,37 @@ ok('v6 keeps animals and the trough, drops bad animals, keeps eggs in the basket
     trough: { feed: 5, water: 1 }, inventory: Object.assign(base.inventory, { hay: 12, basket: ['egg', 'milk', 'rock'] }) }));
   assert.strictEqual(s.animals.length, 2); assert.strictEqual(s.animals[1].h, 100); assert.strictEqual(s.animals[1].ready, 3);
   assert.deepStrictEqual(s.trough, { feed: 5, water: 1 }); assert.strictEqual(s.inventory.hay, 12); assert.deepStrictEqual(s.inventory.basket, ['egg', 'milk']);
+});
+ok('v6 -> v7: old saves get the starter bamboo rod, no sea rod or coast, empty catch log, animals kept', () => {
+  const v6 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v6-day4.json'), 'utf8')), s = SAVE.migrate(v6);
+  assert.strictEqual(v6.saveVersion, 6); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
+  assert.strictEqual(s.upgrades.rod, 0); assert.strictEqual(s.upgrades.searod, 0); assert.strictEqual(s.upgrades.coast, 0);
+  assert.deepStrictEqual(s.catches, []);
+  for (const id of Object.keys(v6.upgrades)) assert.strictEqual(s.upgrades[id], v6.upgrades[id]);
+  assert.deepStrictEqual(s.animals, v6.animals || []); assert.strictEqual(s.coins, v6.coins);
+});
+ok('catches validate: known fish kept, junk dropped, basket accepts fish', () => {
+  const base = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v6-day4.json'), 'utf8')));
+  const s = SAVE.migrate(Object.assign(base, { catches: [{ id: 'crucian', name: '鲫鱼', gold: 5, water: 'pond', day: 1 }, { id: 'dragon', gold: 9 }, { id: 'tuna', name: '金枪鱼', gold: 80, water: 'sea', day: 3 }],
+    inventory: Object.assign(base.inventory, { basket: ['crucian', 'carrot', 'rock', 'tuna'] }) }));
+  assert.deepStrictEqual(s.catches.map(c => c.id), ['crucian', 'tuna']);
+  assert.strictEqual(s.catches[1].water, 'sea'); assert.deepStrictEqual(s.inventory.basket, ['crucian', 'carrot', 'tuna']);
+});
+ok('fish: starter rod is owned at level 0, shop upgrades and sea rod lock, prices and rolls', () => {
+  const up = SIM.emptyUpgrades(); assert.strictEqual(SIM.effects(up).rod, 0); assert.strictEqual(SIM.effects(up).searod, false);
+  assert(SIM.offer(up, 400, 'rod').ok); assert.strictEqual(SIM.offer(up, 1e5, 'searod').locked, 'coast');
+  up.coast = 1; assert(SIM.offer(up, 2000, 'searod').ok);
+  assert.strictEqual(SIM.shopItem('rod').levels.map(l => l.cost).join(), '400,1600');
+  assert.strictEqual(SIM.shopItem('coast').levels[0].cost, 3500); assert.strictEqual(SIM.shopItem('searod').levels[0].cost, 2000);
+  assert.deepStrictEqual(SAVE.FISH_IDS, FS.FISH_IDS);
+  assert.strictEqual(FS.priceOf('crucian'), 5); assert.strictEqual(FS.priceOf('sword'), 140); assert.strictEqual(FS.rodOf(0).name, '竹竿');
+  let s = 1; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const ev = (water, lv, n = 20000) => { let g = 0, miss = 0; s = 1; for (let i = 0; i < n; i++) { const r = FS.roll(water, lv, rnd); if (r.miss) miss++; else g += r.gold; } return { ev: g / n, miss: miss / n }; };
+  const b = ev('pond', 0), st = ev('pond', 1), c = ev('pond', 2), sea = ev('sea', 2);
+  assert(b.ev > 5 && b.ev < 10, 'bamboo ev ' + b.ev); assert(st.ev > b.ev && c.ev > st.ev, 'better rods earn more');
+  assert(b.miss > st.miss && st.miss > c.miss, 'better rods miss less');
+  assert(sea.ev > 25 && sea.ev < 55, 'sea ev ' + sea.ev);
+  s = 1; for (let i = 0; i < 200; i++) { const w = FS.waitTime(0, rnd); assert(w >= 38 && w <= 54, 'wait ' + w); }
 });
 ok('animals: shop needs pasture -> building -> animal, prices and counts', () => {
   const up = SIM.emptyUpgrades(); assert.strictEqual(SIM.offer(up, 1e5, 'coop').locked, 'pasture'); assert.strictEqual(SIM.offer(up, 1e5, 'chicken').ok, false);
@@ -150,7 +181,7 @@ ok('save.js and world.js agree on fruit; every region is a shop item', () => {
 });
 ok('region prices and region effects', () => {
   const cost = id => SIM.shopItem(id).levels[0].cost;
-  assert.deepStrictEqual([cost('axe'), cost('forest'), cost('east'), cost('orchard'), cost('south')], [500, 800, 1200, 1500, 2500]);
+  assert.deepStrictEqual([cost('axe'), cost('forest'), cost('east'), cost('orchard'), cost('south'), cost('coast')], [500, 800, 1200, 1500, 2500, 3500]);
   const up = SIM.emptyUpgrades(); assert.deepStrictEqual(SIM.effects(up).regions, []); assert.strictEqual(SIM.effects(up).axe, false);
   up.axe = 1; up.east = 1; up.forest = 1; const e = SIM.effects(up); assert.strictEqual(e.axe, true); assert.deepStrictEqual(e.regions.slice().sort(), ['east', 'forest']);
 });
@@ -161,7 +192,11 @@ ok('map: regions sit outside the farm and each other, gates on their edge, route
     const w = WD.WORLD; assert(x0 > w.x0 && y0 > w.y0 && x1 < w.x1 && y1 < w.y1);
     const rt = WD.ROUTES[r.id], end = rt[rt.length - 1]; assert.deepStrictEqual([end.x, end.y], [g.x, g.y]); assert.strictEqual(WD.areaAt(r.center.x, r.center.y), r.id); }
   assert.strictEqual(WD.areaAt(96, 64), 'home'); assert.strictEqual(WD.areaAt(-150, 200), null);
-  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '64x40');
+  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '64x50');
+  const coast = WD.region('coast'); assert.strictEqual(WD.areaAt(coast.center.x, coast.center.y), 'coast');
+  assert.strictEqual(WD.areaAt(coast.fish.stand.x, coast.fish.stand.y), 'coast'); // the pier is in r.water, still area 'coast'
+  assert.strictEqual(WD.seaAt(280, 278), 'water');
+  const shore = WD.seaShore(280); assert.strictEqual(WD.seaAt(280, shore + 4), 'water'); assert.strictEqual(WD.seaAt(280, shore - 4), 'sand'); assert.strictEqual(WD.seaAt(0, 100), null);
 });
 ok('fruit: apple 5 every 3 days, orange 4 every 2 days', () => {
   for (const [k, n, every] of [['apple', 5, 3], ['orange', 4, 2]]) { const t = WD.fruitTree('t', 0, 0, k, 0); let got = [];
