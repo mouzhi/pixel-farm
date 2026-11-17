@@ -8,7 +8,7 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 8;
+  const CURRENT = 9;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -46,9 +46,17 @@
       const troughs = { coop: empty(), sty: empty(), fold: empty(), shed: empty() }; troughs[(up.shed | 0) > 0 ? 'shed' : 'coop'] = old;
       const out = Object.assign({}, s, { upgrades: up, troughs, prices: Object.assign({ truffle: 1 }, s.prices) }); delete out.trough; return out;
     },
+    // v5.0 phase 5: house and fence levels start at 0; nobody has met 阿禾 yet; no family members out working. Wild trees outside
+    // the forest became trees you can chop: a save with its own tree list gets them appended (frozen copy of the v5.0 list).
+    9: s => {
+      const extra = [[22, 84, 0], [44, 82, 4], [8, 96, 3], [6, 62, 5], [8, 14, 2], [128, 6, 6], [186, 84, 1], [184, 118, 7], [334, 24, 0], [226, 104, 3], [338, 108, 5],
+        [48, 196, 2], [178, 158, 6], [226, -92, 1], [338, -92, 4], [-144, -92, 7], [-60, -92, 0]].map(([x, y, v], i) => ({ id: 'h' + i, x, y, kind: 'wild', v, stage: 'tree', age: 0, ripe: 0, cd: 0 }));
+      const trees = Array.isArray(s.trees) ? s.trees.concat(extra.filter(t => !s.trees.some(o => o && o.id === t.id))) : s.trees;
+      return Object.assign({}, s, { upgrades: Object.assign({ house: 0, fence: 0 }, s.upgrades), trees, family: { love: 0, met: 0, chatDay: 0, gifts: 0, moved: 0, kids: [] }, members: [] });
+    },
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'rod', 'coast', 'searod']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod']; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
@@ -109,7 +117,7 @@
       prices: Object.fromEntries([...CROP_IDS, ...PRODUCT_IDS].map(k => [k, num(prices[k], 1, 0.8, 1.2)])),
       inventory: {
         water: int(inv.water, 0, 0, 999), waterMax: int(inv.waterMax, 4, 1, 999), store: seeds(inv.store), bag: seeds(inv.bag),
-        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k) || PRODUCT_IDS.includes(k) || FISH_IDS.includes(k)).slice(0, 200),
+        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k) || PRODUCT_IDS.includes(k) || FISH_IDS.includes(k) || k === 'flower').slice(0, 200),
         wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
       },
       farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
@@ -122,8 +130,22 @@
       animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
       troughs: Object.fromEntries(PEN_IDS.map(k => { const t = obj(obj(s.troughs)[k]); return [k, { feed: int(t.feed, 0, 0, 99), water: t.water ? 1 : 0 }]; })),
       catches: (Array.isArray(s.catches) ? s.catches : []).map(validCatch).filter(Boolean).slice(0, 12),
+      family: validFamily(obj(s.family)),
+      members: (Array.isArray(s.members) ? s.members : []).map(validMember).filter(Boolean).slice(0, 3),
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
+  }
+  // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
+  function validFamily(f) {
+    const kids = (Array.isArray(f.kids) ? f.kids : []).filter(k => k && /^kid[01]$/.test(k.id)).slice(0, 2)
+      .map(k => ({ id: k.id, name: typeof k.name === 'string' ? k.name.slice(0, 8) : '孩子', born: int(k.born, 1, 1) }));
+    return { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), moved: int(f.moved, 0, 0), kids };
+  }
+  // what a family member had on them when the game was saved (they keep working from the house door after loading)
+  function validMember(m) {
+    if (!m || typeof m.id !== 'string' || !/^(partner|kid[01])$/.test(m.id)) return null;
+    return { id: m.id, water: int(m.water, 0, 0, 999), bag: seeds(m.bag), gathered: int(m.gathered, 0, 0, 1e6),
+      basket: (Array.isArray(m.basket) ? m.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k) || PRODUCT_IDS.includes(k) || FISH_IDS.includes(k) || k === 'flower').slice(0, 200) };
   }
   function migrate(s) {
     if (!s || typeof s !== 'object' || !Number.isInteger(s.saveVersion) || s.saveVersion < 1) throw new Error('not a pixel-farm save');

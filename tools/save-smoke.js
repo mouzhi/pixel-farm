@@ -28,6 +28,7 @@ async function seed(p, items) {
 }
 const core = p => p.evaluate(() => { const s = __farm.snapshot(); delete s.savedAt; return s; });
 async function test(name, fn) {
+  if (process.env.PF_ONLY && !new RegExp(process.env.PF_ONLY).test(name)) return; // run a subset: PF_ONLY=regex
   const ctx = await browser.newContext();
   try { await fn(ctx); console.log('ok  ', name); } catch (e) { failed++; console.log('FAIL', name, '\n     ', e.message.split('\n')[0].slice(0, 300), '\n     ', e.message.split('\n').filter(l => /^[+-] /.test(l.trim()) || /^ *[+-]/.test(l)).slice(0, 30).join('\n      ')); }
   await ctx.close();
@@ -284,6 +285,40 @@ async function test(name, fn) {
     assert.deepStrictEqual(r.kinds, ['chicken', 'chicken', 'sheep', 'cow']); assert.strictEqual(r.views, 4); assert(r.up.fold === 1 && r.up.orchard === 1 && r.up.shed === 1 && r.up.coop === 1);
     assert.deepStrictEqual(r.troughs.shed, { feed: 4, water: 1 }); assert(r.coop < 60, 'chicken lives by the home coop: ' + r.coop); assert.deepStrictEqual(r.notes, []);
     await p.evaluate(() => __farm.advance(1440, 10)); assert.deepStrictEqual(p.errs, []);
+  });
+  await test('v5.0 wood and family: home trees chopped for good, wood in the storehouse, house tiers, 阿禾 moves in, children, shared board, reload', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const f = __farm, S = f.S, FM = f.FARMER; S.coins = 1e5; f.buy('axe');
+      const forest = S.trees.find(t => t.id.startsWith('w')), home = S.trees.find(t => t.id === 'h5');
+      const lockedForest = f.orderChop(forest.id).ok, rim = f.orderChop('nope').ok, fruit = f.orderChop('a0'); // forest locked; not a tree; a fruit tree
+      f.orderChop('h5'); let i = 0; while (S.orders.length && i++ < 4000) f.advance(0.1, 10);
+      const chopped = { stage: home.stage, wood: FM.wood, saplings: FM.saplings.apple + FM.saplings.orange };
+      f.advance(1440, 10); const dug = !S.trees.some(t => t.id === 'h5'); // a home stump is dug out overnight
+      FM.wood = 30; const short = f.buy('house'); FM.wood = 60; const ok = f.buy('house'); const tier1 = { wood: FM.wood, pop: f.popCap(), m: f.houseProp.m.w };
+      S.day = Math.max(S.day, 3); S.family = f.FAM.empty(); FM.crops = ['carrot', 'flower']; f.giftAtStall(); const gift = { love: S.family.love, met: S.family.met, crops: FM.crops.slice() }; f.giftAtStall(); gift.again = S.family.love;
+            return { lockedForest, rim, fruit: fruit.why, chopped, dug, short: short.reason + ':' + short.shortWood, ok: ok.ok, tier1, gift }; });
+    if (process.env.PF_DEBUG) console.log(JSON.stringify(r));
+    assert(!r.lockedForest && !r.rim && /果树/.test(r.fruit), JSON.stringify(r));
+    assert.strictEqual(r.gift.love, 15); assert.deepStrictEqual(r.gift.crops, ['carrot']); assert.strictEqual(r.gift.again, 15, 'one chat a day');
+    assert.strictEqual(r.chopped.stage, 'stump'); assert(r.chopped.wood >= 5 && r.chopped.saplings === 1, JSON.stringify(r.chopped)); assert(r.dug, 'home stump dug out');
+    assert.strictEqual(r.short, 'short:10'); assert(r.ok); assert.strictEqual(r.tier1.wood, 20); assert.strictEqual(r.tier1.pop, 2); assert(r.tier1.m > 70, 'bigger house model');
+    // she moves in the morning after love reaches 100, the children follow with a bigger house; nobody shares a target
+    const fam = await p.evaluate(() => { const f = __farm, S = f.S; S.family.love = 100; f.advance(1440, 10);
+      const moved = S.family.moved > 0 && S.members.length === 1 && S.members[0].role === 'partner'; const movedLog = S.events.some(e => /阿禾搬进了大木屋/.test(e.msg));
+      S.coins = 1e5; f.FARMER.wood = 1000; f.buy('house'); f.buy('house'); f.buy('forest'); f.buy('sty'); f.buy('fence');
+      S.day = Math.max(S.day, 40); Object.assign(S.family, { moved: S.day - 30, kids: [{ id: 'kid0', name: '小豆', born: S.day - 20 }, { id: 'kid1', name: '小米', born: S.day - 8 }] }); f.syncFamily();
+      let clash = 0; const key = a => a.task ? [a.task.tile, a.task.an, a.task.key].filter(Boolean) : [];
+      for (let i = 0; i < 400; i++) { f.advance(3, 10); const as = f.actors(); for (let x = 0; x < as.length; x++) for (let y = x + 1; y < as.length; y++) if (key(as[x]).some(q => key(as[y]).includes(q))) clash++; }
+      const T = () => S.t % 1440; for (let i = 0; i < 3000 && T() >= 5 * 60 && T() < 23.5 * 60; i++) f.advance(5, 5);
+      const night = f.actors().every(a => a.home), who = f.actors().map(a => (a.id || 'farmer') + ':' + a.home + ':' + (a.task && a.task.label) + ':' + Math.round(a.x) + ',' + Math.round(a.y) + ':' + Math.floor(S.t % 1440));
+      return { moved, roles: S.members.map(m => m.role), clash, night, fences: f.penFence.length, log: movedLog, who }; });
+    if (process.env.PF_DEBUG) console.log(JSON.stringify(fam));
+    assert(fam.moved && fam.log, JSON.stringify(fam)); assert.deepStrictEqual(fam.roles, ['partner', 'teen', 'child']); assert.strictEqual(fam.clash, 0); assert(fam.night, 'everyone home at night'); assert(fam.fences > 10, 'fence round the sty');
+    await p.evaluate(() => __farm.saveNow()); const before = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood }));
+    await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    const after = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood, members: __farm.S.members.map(m => m.role), m: __farm.houseProp.m.h, v: __farm.snapshot().saveVersion }));
+    assert.deepStrictEqual(after.fam, before.fam); assert.strictEqual(after.up, 3); assert.strictEqual(after.wood, before.wood); assert.deepStrictEqual(after.members, ['partner', 'teen', 'child']); assert(after.m > 76, 'manor model after reload'); assert.strictEqual(after.v, 9);
+    assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });

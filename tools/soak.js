@@ -1,4 +1,4 @@
-// Soak (PF_ANIMALS=1 to soak a full pasture): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
+// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
 const { chromium } = require('playwright-core');
 const URL = process.argv[2] || (process.env.PF_URL || 'http://127.0.0.1:8765') + '/index.html?speed=12';
 const SECS = +process.argv[3] || 180;
@@ -24,6 +24,10 @@ const SECS = +process.argv[3] || 180;
   await p.goto(URL); await p.waitForFunction(() => window.__farm && __farm.spritesReady());
   // PF_ANIMALS=1: buy every pen, every animal and all six pets (v4.6 load); the rotation sweeps pass all of them
   if (process.env.PF_ANIMALS) await p.evaluate(() => { const f = __farm; f.S.coins = 1e6; for (const id of ['forest', 'orchard', 'pasture', 'coop', 'sty', 'fold', 'shed', ...Array(6).fill('chicken'), ...Array(3).fill('pig'), ...Array(3).fill('sheep'), ...Array(3).fill('cow'), ...Array(3).fill('cat'), ...Array(3).fill('dog')]) f.buy(id); f.panTo(280, -54); });
+  // PF_FAMILY=1 (v5.0): the 庄园, a fence, 阿禾 living here and two children (one teen, one child) — four people on the board
+  if (process.env.PF_FAMILY) await p.evaluate(() => { const f = __farm, S = f.S; S.coins = Math.max(S.coins, 1e6); f.FARMER.wood = 2000;
+    for (const id of ['axe', 'field', 'field', 'field', 'coop', 'chicken', 'chicken', 'house', 'house', 'house', 'fence']) f.buy(id);
+    S.day = Math.max(S.day, 40); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 30, kids: [{ id: 'kid0', name: '小豆', born: S.day - 20 }, { id: 'kid1', name: '小米', born: S.day - 8 }] }); f.syncFamily(); f.panTo(70, 60); });
   const cdp = await p.context().newCDPSession(p); await cdp.send('Performance.enable');
   const t0 = Date.now(); let i = 0;
   while ((Date.now() - t0) / 1000 < SECS) {

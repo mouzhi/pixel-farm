@@ -87,6 +87,7 @@
       if (rnd() < 0.78) out.push({ id: 'w' + out.length, x: Math.round(jx), y: Math.round(jy), kind: 'wild', v: Math.floor(rnd() * 8), stage: 'tree', age: 0, ripe: 0, cd: 0 });
     }
     region('orchard').apples.forEach(([x, y], i) => out.push(fruitTree('a' + i, x, y, 'apple', i)));
+    EXTRA_TREES.forEach(t => out.push(Object.assign({}, t)));
     return out;
   }
   // one night for one tree
@@ -100,9 +101,34 @@
   }
   function pickFruit(t) { if (!t.ripe || !FRUIT[t.kind] || t.stage !== 'tree') return 0; t.ripe = 0; t.cd = FRUIT[t.kind].every; return FRUIT[t.kind].n; }
   // chopping a grown forest tree: wood plus one fruit sapling (apple 60% / orange 40%)
-  function chopYield(rnd) { return { wood: WOOD.perChop, sapling: rnd() < 0.6 ? 'apple' : 'orange' }; }
-  const choppable = (t, regions) => t.kind === 'wild' && t.stage === 'tree' && regions.includes('forest');
+  // v5.0: chopping any grown wild tree: wood plus one fruit sapling (apple 60% / orange 40%), and sometimes a little extra
+  // (DROPS, rolled in order on one number). Only trees inside 林场 grow back; anywhere else the stump is cleared overnight.
+  const DROPS = [
+    { id: 'fruit', p: 0.25, name: '果子' },        // 2 apples or oranges into the basket
+    { id: 'flower', p: 0.15, name: '野花' },       // a wildflower: a gift for her (or 5 gold at the market)
+    { id: 'seed', p: 0.08, name: '稀有种子' },     // 1 strawberry or watermelon seed into the barn, even before the unlock
+    { id: 'coins', p: 0.08, name: '几枚铜钱' },    // 10–30 gold dropped in the roots
+    { id: 'nest', p: 0.04, name: '鸟窝' },         // an egg in an old nest
+  ];
+  function chopYield(rnd) {
+    const out = { wood: WOOD.perChop, sapling: rnd() < 0.6 ? 'apple' : 'orange', drop: null };
+    let r = rnd(), acc = 0; for (const d of DROPS) { acc += d.p; if (r < acc) { out.drop = d.id; break; } }
+    if (out.drop === 'fruit') { out.fruit = rnd() < 0.6 ? 'apple' : 'orange'; out.n = 2; }
+    if (out.drop === 'seed') out.seed = rnd() < 0.6 ? 'strawberry' : 'watermelon';
+    if (out.drop === 'coins') out.gold = 10 + Math.floor(rnd() * 21);
+    return out;
+  }
+  // which trees can be marked: wild (never fruit) grown trees inside the farm or a bought region. The rim forest that frames
+  // the map lies outside every area, so it can never be cleared.
+  const choppable = (t, regions) => t.kind === 'wild' && t.stage === 'tree' && (() => { const a = areaAt(t.x, t.y); return a === 'home' || (a && regions.includes(a)); })();
+  const regrows = t => areaAt(t.x, t.y) === 'forest';
+  // v5.0: wild trees outside the forest (the four by the pond, a few at the farm's corners, two or three per region)
+  const EXTRA_TREES = [[22, 84, 0], [44, 82, 4], [8, 96, 3], [6, 62, 5], [8, 14, 2], [128, 6, 6], [186, 84, 1], [184, 118, 7],
+    [334, 24, 0], [226, 104, 3], [338, 108, 5], [48, 196, 2], [178, 158, 6], [226, -92, 1], [338, -92, 4], [-144, -92, 7], [-60, -92, 0]]
+    .map(([x, y, v], i) => ({ id: 'h' + i, x, y, kind: 'wild', v, stage: 'tree', age: 0, ripe: 0, cd: 0 }));
+  // v5.0 house: tiers after the starting cabin; each adds a room (pop = people who can live there). Wood + gold.
+  const HOUSE_TIERS = [{ name: '小木屋', pop: 1, woodCap: 100 }, { name: '大木屋', pop: 2, woodCap: 200 }, { name: '二层农舍', pop: 3, woodCap: 400 }, { name: '庄园', pop: 4, woodCap: 800 }];
   const api = { PENS, PEN_IDS, NAP_SPOTS, TILE, WORLD, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
-    MAX_ORDERS, fruitTree, defaultTrees, treeOvernight, pickFruit, chopYield, choppable };
+    MAX_ORDERS, fruitTree, defaultTrees, treeOvernight, pickFruit, chopYield, choppable, regrows, DROPS, EXTRA_TREES, HOUSE_TIERS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorld = api;
 })(typeof window !== 'undefined' ? window : globalThis);

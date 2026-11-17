@@ -1,7 +1,7 @@
 // Unit tests for the pure save / sim rules (no browser):  node tools/save-test.js
 // Every saveVersion keeps a fixture in tools/fixtures/save-v<N>*.json; all of them must migrate to the current version.
 const assert = require('assert'), fs = require('fs'), path = require('path');
-const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js');
+const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js'), FAM = require('../family.js');
 const FIX = path.join(__dirname, 'fixtures');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 class Mem { constructor(o = {}) { this.m = new Map(Object.entries(o)); } get length() { return this.m.size; } key(i) { return [...this.m.keys()][i]; }
@@ -85,7 +85,7 @@ ok('v5 -> current: no animals, pets or pens, empty troughs, no hay, product pric
   assert.deepStrictEqual(s.animals, []); assert.strictEqual(s.trough, undefined); assert.strictEqual(s.inventory.hay, 0);
   for (const k of AN.PEN_IDS) assert.deepStrictEqual(s.troughs[k], { feed: 0, water: 0 });
   assert.deepStrictEqual([s.prices.egg, s.prices.wool, s.prices.milk, s.prices.truffle], [1, 1, 1, 1]); assert.strictEqual(s.prices.carrot, v5.prices.carrot);
-  assert.deepStrictEqual(s.trees, v5.trees); assert.deepStrictEqual(s.yard, v5.yard); assert.strictEqual(s.coins, v5.coins);
+  assert.deepStrictEqual(s.trees.slice(0, v5.trees.length), v5.trees); assert.deepStrictEqual(s.yard, v5.yard); assert.strictEqual(s.coins, v5.coins); // v9 appends the new wild trees
 });
 // a v4.5 player with the north pasture, coop, shed and all three kinds: nothing is lost on the way to v8
 const v6Rich = () => { const base = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v5-day4.json'), 'utf8')));
@@ -243,12 +243,27 @@ ok('a planted sapling fruits 5 days later; a stump grows back', () => {
   const w = { id: 'w', x: 0, y: 0, kind: 'wild', v: 0, stage: 'stump', age: 0, ripe: 0, cd: 0 }; let d = 0; while (w.stage !== 'tree' && d < 30) { WD.treeOvernight(w); d++; }
   assert.strictEqual(d, WD.STUMP_TO_TREE); // counted from the chop
 });
-ok('chopping: 5 wood and a sapling, only grown wild trees in a bought forest', () => {
-  const y = WD.chopYield(() => 0.1); assert.deepStrictEqual(y, { wood: 5, sapling: 'apple' }); assert.strictEqual(WD.chopYield(() => 0.9).sapling, 'orange');
-  const trees = WD.defaultTrees(), w = trees.find(t => t.kind === 'wild'), a = trees.find(t => t.kind === 'apple');
-  assert(trees.filter(t => t.kind === 'wild').length >= 12); assert.strictEqual(trees.filter(t => t.kind === 'apple').length, 3);
-  assert(WD.choppable(w, ['forest'])); assert(!WD.choppable(w, [])); assert(!WD.choppable(a, ['forest'])); assert(!WD.choppable(Object.assign({}, w, { stage: 'stump' }), ['forest']));
-  assert.deepStrictEqual(WD.defaultTrees(), trees); assert(trees.every(t => WD.areaAt(t.x, t.y) === (t.kind === 'wild' ? 'forest' : 'orchard')));
+ok('chopping (v5.0): 5 wood and a sapling; any wild tree at home or in a bought region; fruit trees and the rim forest never', () => {
+  const seq = a => { let i = 0; return () => a[i++ % a.length]; };
+  assert.deepStrictEqual(WD.chopYield(seq([0.1, 0.9])), { wood: 5, sapling: 'apple', drop: null }); assert.strictEqual(WD.chopYield(seq([0.9, 0.99])).sapling, 'orange');
+  const trees = WD.defaultTrees(), wild = trees.filter(t => t.kind === 'wild'), a = trees.find(t => t.kind === 'apple');
+  assert(wild.length >= 29); assert.strictEqual(trees.filter(t => t.kind === 'apple').length, 3); assert.deepStrictEqual(WD.defaultTrees(), trees);
+  const w = wild.find(t => WD.areaAt(t.x, t.y) === 'forest'), home = wild.filter(t => WD.areaAt(t.x, t.y) === 'home');
+  assert(home.length >= 6); assert(home.every(t => WD.choppable(t, []))); assert(home.every(t => !WD.regrows(t)));
+  assert(WD.choppable(w, ['forest'])); assert(!WD.choppable(w, [])); assert(WD.regrows(w)); assert(!WD.choppable(a, ['forest', 'orchard']));
+  assert(!WD.choppable(Object.assign({}, w, { stage: 'stump' }), ['forest']));
+  for (const t of wild) { const r = WD.areaAt(t.x, t.y); assert(r, `${t.id} is in an area`); if (r !== 'home') assert(!WD.choppable(t, []), `${t.id} locked until ${r} is bought`); }
+  // the framing forest round the map edge is scenery: it is not in S.trees at all, and any spot outside every area is never choppable
+  for (const [x, y] of [[-30, 60], [230, 140], [100, -30], [-20, 140], [210, 10], [-40, 110]]) assert(!WD.choppable({ kind: 'wild', stage: 'tree', x, y }, SIM.SHOP.filter(i => i.region).map(i => i.id)), `${x},${y}`);
+  assert(wild.every(t => !WD.seaAt || !WD.seaAt(t.x, t.y)));
+});
+ok('chop drops: about 60% of chops drop something; fruit, flower, rare seed, coins or a nest, each in range', () => {
+  let x = 1; const rnd = () => (x = (x * 16807) % 2147483647) / 2147483647, n = {}, N = 20000;
+  for (let i = 0; i < N; i++) { const y = WD.chopYield(rnd); n[y.drop || 'none'] = (n[y.drop || 'none'] || 0) + 1;
+    if (y.drop === 'fruit') { assert(WD.FRUIT[y.fruit]); assert.strictEqual(y.n, 2); }
+    if (y.drop === 'seed') assert(['strawberry', 'watermelon'].includes(y.seed));
+    if (y.drop === 'coins') assert(y.gold >= 10 && y.gold <= 30); }
+  for (const d of WD.DROPS) assert(Math.abs(n[d.id] / N - d.p) < 0.02, d.id); assert(Math.abs(n.none / N - 0.4) < 0.02);
 });
 ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
 ok('shop: costs, short amount, max level', () => {
@@ -303,3 +318,60 @@ ok('offline: 50% rate, capped at 3 days, nothing under a minute', () => {
   assert.strictEqual(SIM.offlineSettle(3600, []).gold, 0);
 });
 console.log(`${n} passed`);
+
+// ---- v5.0 phase 5: wood as a material, house tiers, family ----
+ok('house tiers cost wood + gold, raise the population and the woodshed; fence costs wood; offer() reports missing wood', () => {
+  const L = SIM.shopItem('house').levels; assert.deepStrictEqual(L.map(l => [l.cost, l.wood]), [[800, 40], [3000, 150], [8000, 400]]);
+  assert.deepStrictEqual(WD.HOUSE_TIERS.map(t => t.pop), [1, 2, 3, 4]); assert.deepStrictEqual(WD.HOUSE_TIERS.map(t => t.name), ['小木屋', '大木屋', '二层农舍', '庄园']);
+  for (let i = 1; i < WD.HOUSE_TIERS.length; i++) assert(WD.HOUSE_TIERS[i].woodCap > WD.HOUSE_TIERS[i - 1].woodCap);
+  const o = SIM.offer({}, 1000, 'house', 10); assert(!o.ok); assert.strictEqual(o.shortWood, 30); assert.strictEqual(o.short, 0);
+  assert(SIM.offer({}, 800, 'house', 40).ok); assert(!SIM.offer({}, 799, 'house', 400).ok); assert.strictEqual(SIM.offer({}, 1e5, 'house').shortWood, 40); // no wood argument = none
+  assert.strictEqual(SIM.offer({ house: 3 }, 1e9, 'house', 1e9).maxed, true); assert.strictEqual(SIM.effects({ house: 2 }).house, 2); assert.strictEqual(SIM.effects({}).house, 0);
+  assert.strictEqual(SIM.offer({}, 200, 'fence', 60).ok, true); assert.strictEqual(SIM.effects({ fence: 1 }).fence, true);
+  assert(L[0].wood <= 60 && L[2].wood >= 300); // first house by the axe's first week; the manor takes the forest's regrowth into the late game
+});
+ok('fences: +4 mood a night for every animal', () => {
+  const a = [AN.animal('chicken0', 'chicken')], b = [AN.animal('chicken0', 'chicken')], tr = () => ({ feed: 9, water: 1 });
+  AN.overnight(a, tr()); AN.overnight(b, tr(), AN.CARE.fence); assert.strictEqual(b[0].h - a[0].h, Math.min(AN.CARE.fence, 100 - a[0].h));
+});
+ok('family: meet 阿禾 on day 3, one chat and one gift a day, she moves in at 100 love once the house has room', () => {
+  const f = FAM.empty(); assert.strictEqual(FAM.visit(f, 2, 'flower'), 0); assert.strictEqual(f.met, 0);
+  assert.strictEqual(FAM.visit(f, 3, 'flower'), FAM.CHAT + 12); assert.strictEqual(FAM.visit(f, 3, 'flower'), 0); assert.strictEqual(f.met, 3);
+  for (const id of FS.FISH_IDS) assert.strictEqual(FAM.giftValue(id), FAM.GIFT_FISH, id);
+  assert.strictEqual(FAM.giftValue('wool'), 0); assert.strictEqual(FAM.bestGift(['carrot', 'egg', 'apple', 'wool']), 'apple'); assert.strictEqual(FAM.bestGift(['carrot', 'milk']), null);
+  let d = 4; while (f.love < 100) FAM.visit(f, d++, 'egg'); assert(d - 3 >= 10 && d - 3 <= 16, 'eggs only: about two weeks of visits (' + (d - 3) + ')');
+  assert.deepStrictEqual(FAM.morning(f, d, 1), ['waiting']); assert.strictEqual(f.moved, 0);
+  assert.deepStrictEqual(FAM.morning(f, d + 1, 2), ['moved']); assert.strictEqual(f.moved, d + 1);
+  assert.strictEqual(FAM.visit(f, d + 2, 'flower'), 0); // no more courting once she lives here
+  assert.deepStrictEqual(FAM.workers(f, d + 1).map(w => w.role), ['partner']);
+});
+ok('family: children need a bigger house and time; baby -> child -> teen; children only take light jobs', () => {
+  const f = Object.assign(FAM.empty(), { love: 100, moved: 10 });
+  for (let d = 10; d < 40; d++) FAM.morning(f, d, 2); assert.strictEqual(f.kids.length, 0, 'no room for a child in the 大木屋');
+  const g = Object.assign(FAM.empty(), { love: 100, moved: 10 }); const born = [];
+  for (let d = 11; d < 60; d++) { const pop = d < 30 ? 3 : 4; if (FAM.morning(g, d, pop).includes('born')) born.push(d); }
+  assert.deepStrictEqual(born, [17, 30]); assert.deepStrictEqual(g.kids.map(k => k.name), ['小豆', '小米']);
+  const k = g.kids[0]; assert.strictEqual(FAM.kidStage(k, 17), 'baby'); assert.strictEqual(FAM.kidStage(k, 22), 'child'); assert.strictEqual(FAM.kidStage(k, 31), 'teen');
+  assert.deepStrictEqual(FAM.workers(g, 20).map(w => w.role), ['partner']); assert.deepStrictEqual(FAM.workers(g, 32).map(w => w.role), ['partner', 'teen']);
+  assert(FAM.canDo('child', 'feed') && FAM.canDo('child', 'pick') && !FAM.canDo('child', 'water') && !FAM.canDo('child', 'chop') && !FAM.canDo('child', 'buy'));
+  assert(FAM.canDo('teen', 'chop') && !FAM.canDo('teen', 'buy') && !FAM.canDo('teen', 'fish')); assert(FAM.canDo('partner', 'buy') && !FAM.canDo('partner', 'fish'));
+});
+ok('v8 -> v9: house and fence at 0, nobody met yet, wild trees appended once, wood, regions and animals kept', () => {
+  const v8 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v8-day4.json'), 'utf8')); v8.inventory.wood = 37; v8.upgrades.forest = 1; v8.upgrades.chicken = 2; v8.upgrades.coop = 1;
+  v8.animals = [AN.animal('chicken0', 'chicken'), AN.animal('chicken1', 'chicken')]; v8.trees = WD.defaultTrees().filter(t => !/^h/.test(t.id)); v8.trees[0].stage = 'stump';
+  const s = SAVE.migrate(v8); assert.strictEqual(s.saveVersion, 9);
+  assert.strictEqual(s.upgrades.house, 0); assert.strictEqual(s.upgrades.fence, 0); assert.strictEqual(s.inventory.wood, 37); assert.strictEqual(s.upgrades.forest, 1); assert.strictEqual(s.animals.length, 2);
+  assert.deepStrictEqual(s.family, FAM.empty()); assert.deepStrictEqual(s.members, []);
+  assert.strictEqual(s.trees.length, v8.trees.length + WD.EXTRA_TREES.length); assert.strictEqual(s.trees[0].stage, 'stump');
+  assert.deepStrictEqual(s.trees.slice(v8.trees.length).map(t => t.id), WD.EXTRA_TREES.map(t => t.id));
+  assert.deepStrictEqual(s.trees.slice(v8.trees.length), WD.EXTRA_TREES); // the frozen copy in migration 9 matches world.js
+  const again = SAVE.migrate(Object.assign({}, v8, { trees: WD.defaultTrees() })); assert.strictEqual(again.trees.length, WD.defaultTrees().length); // no duplicates
+  assert.strictEqual(SAVE.migrate(Object.assign({}, v8, { trees: null })).trees, null);
+});
+ok('v9 validation: family and members are clamped, junk dropped', () => {
+  const v = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v8-day4.json'), 'utf8')));
+  const s = SAVE.migrate(Object.assign(v, { family: { love: 999, met: 3, chatDay: 5, gifts: 4, moved: 9, kids: [{ id: 'kid0', name: '小豆', born: 20 }, { id: 'kid7', name: 'x', born: 1 }, 5] },
+    members: [{ id: 'partner', water: 3, bag: { carrot: 2 }, gathered: 1, basket: ['egg', 'flower', 'rock'] }, { id: 'stranger' }, null] }));
+  assert.strictEqual(s.family.love, 100); assert.deepStrictEqual(s.family.kids, [{ id: 'kid0', name: '小豆', born: 20 }]);
+  assert.strictEqual(s.members.length, 1); assert.deepStrictEqual(s.members[0].basket, ['egg', 'flower']); assert.strictEqual(s.members[0].bag.carrot, 2);
+});
