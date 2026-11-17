@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.1</title>
+<title>像素堆叠 · 放置农场 v5.1.1</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -33,12 +33,15 @@
   .slot .k{font-size:11px;font-weight:500;opacity:.8;line-height:1;margin-top:1px}
   .slot.dim{opacity:.45}
   .slot canvas,.slot i{width:32px;height:32px;image-rendering:pixelated;display:block}
-  .pips{display:flex;gap:2px;margin-top:2px}.pips b{width:5px;height:5px;background:#3d5f73;box-shadow:0 0 0 1px #10202a}.pips b.on{background:#7ec3e6}
+  .meter{width:48px;height:5px;margin-top:2px;background:#3d5f73;box-shadow:0 0 0 1px #10202a;position:relative;flex:none;overflow:hidden;image-rendering:pixelated}
+  .meter .fill{display:block;height:5px;background:#7ec3e6;width:0}
+  .meter .ticks{position:absolute;left:6px;top:0;width:1px;height:5px;background:#10202a;box-shadow:6px 0 #10202a,12px 0 #10202a,18px 0 #10202a,24px 0 #10202a,30px 0 #10202a,36px 0 #10202a;pointer-events:none}
   .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
   .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
   #menuBtn{position:absolute;right:12px;top:66px}
   #shopBtn{position:absolute;right:86px;top:66px}
-  #speed{position:absolute;right:160px;top:66px;display:flex;gap:4px}#speed[hidden]{display:none}
+  #storeBtn{position:absolute;right:168px;top:66px}
+  #speed{position:absolute;right:250px;top:66px;display:flex;gap:4px}#speed[hidden]{display:none}
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
   #shop{right:12px;top:100px;width:420px;max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
@@ -59,10 +62,28 @@
   #minimap{right:12px;top:100px;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto}#minimap[hidden]{display:none}
   #mapBtn{position:absolute;right:12px;bottom:12px}
   #tools{position:absolute;right:76px;bottom:12px;display:flex;gap:4px}#tools[hidden]{display:none}
-  #shop,#menu{z-index:3}
+  #shop,#menu,#store{z-index:3}
+  #store{right:12px;top:100px;width:380px;bottom:90px;overflow:auto;padding:8px 10px}
+  #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
+  #store .sec{font-size:12px;opacity:.7;margin:6px 0 4px}
+  #store .cards{display:flex;flex-direction:column;gap:5px}
+  #store .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
+  #store .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
+  #store .ct{flex:1;min-width:0}#store .d{font-weight:500;font-size:12px;opacity:.85}
+  #store .cb{display:flex;flex-direction:column;align-items:flex-end;gap:0;flex:none;color:#ffd76a}#store .cb .u{font-size:11px;opacity:.8;font-weight:500;color:#fff6dc}
+  #store .empty{opacity:.7;font-weight:500;padding:4px 2px}
+  #store .who{font-size:11px;opacity:.7;margin:2px 0 0}
   .rlab{position:absolute;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0}.rlab b{color:#ffd76a}.rlab[hidden]{display:none}
   #say{left:50%;top:76px;transform:translateX(-50%);padding:4px 12px;pointer-events:none}#say[hidden]{display:none}
   #shop .sec{font-size:12px;opacity:.7;margin:6px 0 0}#shop .look{padding:0 6px;font-size:12px;margin-top:2px}
+  #loveHud{margin-top:5px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:13px}
+  #loveHud.dim{opacity:.7}
+  #loveHud i#loveIco{width:16px;height:16px;background-size:16px;image-rendering:pixelated;flex:none;display:block}
+  #loveHud .meter{width:72px;margin-top:0;background:#4a1c1c;box-shadow:0 0 0 1px #2a1d16}
+  #loveHud .meter .fill{background:#e57fa0}
+  #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
+  #loveTip{left:12px;padding:8px 10px;min-width:220px;max-width:280px;z-index:4;font-weight:500;font-size:13px;line-height:1.5}
+  #loveTip .hint{opacity:.9;margin-top:3px}#loveTip b, #loveVal{color:#ffd76a}
 </style>
 </head>
 <body>
@@ -71,18 +92,25 @@
   <div id="hud">
     <div class="row"><span id="day">第 1 天</span><span id="clock">06:00</span></div>
     <div id="act">当前：起床</div>
-    <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
+    <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span id="storeHud" title="查看仓库（I）" style="cursor:pointer"><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
     <div id="prices">今日行情：</div>
+    <div id="loveHud" title="去集市逛逛，就能认识店主阿禾。">
+      <i id="loveIco"></i><span id="loveLab">阿禾</span><b id="loveVal">0/100</b>
+      <div class="meter" id="loveBar"><i class="fill" id="loveFill" style="width:0"></i><span class="ticks"></span></div>
+    </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.1 · 田里的小惊喜（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · 滚轮缩放</span></div>
+  <div id="loveTip" class="panel" hidden></div>
+  <div id="title">像素堆叠 · 放置农场 v5.1.1 · 田里的小惊喜（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · 滚轮缩放</span></div>
   <div id="log"></div>
   <div id="catches" hidden></div>
   <div id="inv" class="panel"></div>
   <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
   <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
   <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
+  <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
   <div id="speed" hidden></div>
   <div id="shop" class="panel" hidden></div>
+  <div id="store" class="panel" hidden></div>
   <div id="menu" class="panel" hidden></div>
   <div id="offline" class="panel" hidden></div>
   <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>

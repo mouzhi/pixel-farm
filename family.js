@@ -16,7 +16,8 @@
   const BABY_DAYS = 5, CHILD_DAYS = 14;            // age (days) when a baby becomes a child, and a child a teen
   // light chores a child can do; a teen does everything an adult does except buying at the market
   const CHILD_KINDS = ['collect', 'pet', 'petpet', 'pick', 'feed', 'tidy', 'weed', 'store'];
-  const empty = () => ({ love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [] });
+  const emptyToday = () => ({ day: 0, chat: 0, gift: 0, giftName: '', sales: 0 });
+  const empty = () => ({ love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [], today: emptyToday() });
   const itemType = it => (it && typeof it === 'object') ? it.type : it; // v5.1: a basket slot may be a surprise object
   const giftValue = item => { const ty = itemType(item); return GIFTS[ty] || (/^(crucian|carp|grassc|bass|koi|sardine|seabass|snapper|tuna|sword)$/.test(ty) ? GIFT_FISH : 0); };
   // pick the gift worth the most love from a basket (null: nothing she would like)
@@ -26,9 +27,11 @@
   function visit(fam, day, gift, sold = 0) {
     if (day < MEET_DAY || fam.moved) return 0;
     if (!fam.met) fam.met = day;
-    let add = 0;
-    if (fam.chatDay !== day) { fam.chatDay = day; fam.sales = 0; add += CHAT; if (gift) { add += giftValue(gift); fam.gifts++; } } // one chat and at most one gift a day
-    if (sold > 0 && fam.sales < SALES_DAY) { fam.sales++; add += SALE; }
+    let add = 0, chat = 0, giftAdd = 0, saleAdd = 0;
+    if (fam.chatDay !== day) { fam.chatDay = day; fam.sales = 0; chat = CHAT; add += CHAT; if (gift) { giftAdd = giftValue(gift); add += giftAdd; fam.gifts++; } } // one chat and at most one gift a day
+    if (sold > 0 && fam.sales < SALES_DAY) { fam.sales++; saleAdd = SALE; add += SALE; }
+    if (!fam.today || fam.today.day !== day) fam.today = emptyToday();
+    fam.today.day = day; fam.today.chat += chat; fam.today.gift += giftAdd; fam.today.sales += saleAdd;
     fam.love = Math.min(LOVE_MAX, fam.love + add); return add;
   }
   const kidCap = pop => Math.max(0, pop - 2);      // pop 3 → 1 child, pop 4 → 2 children

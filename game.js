@@ -925,19 +925,80 @@ const basePrice = ty => ty === 'flower' ? FLOWER_PRICE : FS.isFish(ty) ? FS.pric
 const priceOfAny = it => SU.priceOf(it, basePrice(SU.itemType(it)));
 // v5.0 the storehouse holds this much wood (a bigger house has a bigger woodshed)
 const woodCap = () => WD.HOUSE_TIERS[S.eff.house || 0].woodCap;
+// v5.1.1: everything the farm is holding, for the 仓库 panel (today's prices)
+function storehouse() {
+  const names = cropNames();
+  for (const k of WD.FRUIT_IDS) names[k] = WD.FRUIT[k].name;
+  for (const k of AN.PRODUCT_IDS) names[k] = AN.PRODUCTS[k].name;
+  names.flower = '野花';
+  if (FS) for (const id of FS.FISH_IDS) { const f = FS.BY_ID[id] || (FS.fishOf && FS.fishOf(id)); if (f) names[id] = f.name; }
+  const label = it => SU.itemName(it, names);
+  const seedRows = bags => CROP_IDS.map(k => {
+    const n = bags.reduce((s, b) => s + (b[k] || 0), 0); if (!n) return null;
+    const unit = SIM.CROPS[k].seedSell; return { id: k, kind: 'seed', name: SIM.CROPS[k].name + '种子', n, unit, gold: n * unit };
+  }).filter(Boolean);
+  function groupBasket(list) {
+    const map = new Map();
+    for (const it of list) {
+      const o = SU.itemOf(it), key = [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'), unit = priceOfAny(it);
+      const e = map.get(key) || { type: o.type, kind: 'item', name: label(it), n: 0, unit, gold: 0, surprise: SU.isSurpriseItem(it) };
+      e.n++; e.gold += unit; map.set(key, e);
+    }
+    return Array.from(map.values());
+  }
+  const famBag = {}; for (const m of S.members) for (const k of CROP_IDS) famBag[k] = (famBag[k] || 0) + (m.bag[k] || 0);
+  const baskets = [{ who: '农夫', rows: groupBasket(FARMER.crops) }].concat(S.members.map(m => ({ who: m.name, rows: groupBasket(m.crops) }))).filter(b => b.rows.length);
+  const basketGold = baskets.reduce((s, b) => s + b.rows.reduce((a, r) => a + r.gold, 0), 0);
+  const cap = woodCap(), wood = FARMER.wood, spare = Math.max(0, wood - cap), woodGold = spare * WD.WOOD.price;
+  return {
+    store: seedRows([S.store]),
+    bag: seedRows([FARMER.bag, { carrot: FARMER.gathered || 0 }]),
+    familyBag: seedRows([famBag]),
+    baskets, basketGold,
+    wood: { n: wood, cap, spare, unit: WD.WOOD.price, gold: woodGold },
+    hay: { n: S.hay, unit: AN.HAY.price },
+    saplings: WD.FRUIT_IDS.map(k => ({ id: k, kind: 'sapling', name: WD.FRUIT[k].name + '树苗', n: (FARMER.saplings[k] || 0) })).filter(r => r.n),
+    sellGold: basketGold + woodGold,
+  };
+}
 // v5.0 family: 阿禾 keeps the stall. The first stop there each day is a chat (+3) and the best gift in the basket (a wildflower,
 // a fish, fruit, an egg ...); the day's first two sale trips add +1 each. At 100 she moves in once the house has a second room
 // and her father takes over the stall.
 function giftAtStall() {
   const fam = S.family; if (fam.moved || S.day < FAM.MEET_DAY) return;
   const first = !fam.met, g = fam.chatDay !== S.day ? FAM.bestGift(F.crops) : null; if (g) F.crops.splice(F.crops.indexOf(g), 1);
-  const add = FAM.visit(fam, S.day, g, F.crops.length); if (!add) return;
+  const before = fam.love, add = FAM.visit(fam, S.day, g, F.crops.length); if (!add) return;
   const ty = g && SU.itemType(g);
   const name = ty ? (ty === 'flower' ? '一束野花' : FS.isFish(ty) ? '一条' + FS.BY_ID[ty].name : '一个' + (WD.FRUIT[ty] ? WD.FRUIT[ty].name : AN.PRODUCTS[ty] ? AN.PRODUCTS[ty].name : ty)) : '';
+  if (g && fam.today && fam.today.day === S.day) fam.today.giftName = name;
   if (first) log('认识了集市的店主阿禾，聊了几句');
   log((g ? `送给阿禾${name}，` : add > FAM.SALE ? '和阿禾聊了一会儿，' : '把菜卖给阿禾，') + `好感 +${add}（${fam.love}/${FAM.LOVE_MAX}）`);
   hearts(STALL.x - 10, STALL.y + 4, 16);
+  const gained = fam.love - before;
+  if (gained) popText(KEEPER.x, KEEPER.y, 28, '+' + gained + '♥', '#e57fa0');
   if (fam.love >= FAM.LOVE_MAX) log(S.eff.house >= 1 ? '阿禾答应明天搬过来一起住' : '阿禾说：等房子再大一点，我就搬过来（要先扩建成大木屋）');
+}
+function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next milestone
+  const fam = S.family, max = FAM.LOVE_MAX, tier = WD.HOUSE_TIERS[S.eff.house || 0];
+  const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby').length;
+  const people = 1 + S.members.length + babies;
+  const today = (fam.today && fam.today.day === S.day) ? fam.today : { chat: 0, gift: 0, giftName: '', sales: 0 };
+  let hint;
+  if (fam.moved) {
+    const kids = fam.kids.map(k => `${k.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[FAM.kidStage(k, S.day)]}）`);
+    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人。`;
+  } else if (!fam.met) hint = '去集市逛逛，就能认识店主阿禾。';
+  else if (fam.love >= max && S.eff.house >= 1) hint = '好感已满，她答应明天搬过来。';
+  else if (fam.love >= max) hint = '已满，等待大木屋';
+  else hint = '好感满后，扩建大木屋她就会搬来';
+  const bits = [];
+  if (today.chat) bits.push('聊天 +' + today.chat);
+  if (today.gift) bits.push((today.giftName ? '礼物（' + today.giftName + '）' : '礼物') + ' +' + today.gift);
+  if (today.sales) bits.push('卖菜 +' + today.sales);
+  const total = today.chat + today.gift + today.sales;
+  const todayText = bits.length ? ('今天：' + bits.join('，') + '，共 +' + total) : (fam.moved ? '' : '今天还没去集市');
+  return { met: fam.met, moved: fam.moved, love: fam.love, max, people, pop: tier.pop, today, todayText, hint,
+    label: fam.moved ? `一家 ${people}/${tier.pop}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
 }
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
@@ -1510,7 +1571,7 @@ function syncRegionProps() { // open gates and take the signs down for bought re
     for (const p of regionProps[id]) { const want = !(open && (p.gate || p.sign)), arr = p.sign ? billboards : props, i = arr.indexOf(p);
       if (want && i < 0) arr.push(p); else if (!want && i >= 0) arr.splice(i, 1); } }
 }
-const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111' };
+const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111', '♥': '101111111010000' };
 function pixText(s, x, y, col, sc = 1) {
   const w = s.length * 4 * sc - sc; x = Math.round(x - w / 2); y = Math.round(y);
   for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0];
@@ -1956,6 +2017,13 @@ function hud() {
   const arrow = m => m > 1.02 ? '↑' : m < 0.98 ? '↓' : '';
   const pr = S.eff.crops.map(k => `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${arrow(S.prices[k])}`).concat(AN.PRODUCT_IDS.filter(k => S.animals.some(a => AN.KINDS[a.kind].product === k)).map(k => `${AN.PRODUCTS[k].name} ${priceOfAny(k)}${arrow(S.prices[k])}`)).join(' · ');
   if (hudPrices !== pr) { hudPrices = pr; document.getElementById('prices').textContent = '今日行情：' + pr; }
+  const love = loveStatus(), loveVal = document.getElementById('loveVal'), loveFill = document.getElementById('loveFill'), loveHud = document.getElementById('loveHud');
+  if (loveVal) loveVal.textContent = love.label;
+  if (document.getElementById('loveLab')) document.getElementById('loveLab').textContent = love.title;
+  if (loveFill) loveFill.style.width = (love.moved ? 72 : Math.round(72 * love.love / love.max)) + 'px';
+  if (loveHud) { loveHud.title = [love.todayText, love.hint].filter(Boolean).join(' · '); loveHud.classList.toggle('dim', !love.met && !love.moved); }
+  const loveTip = document.getElementById('loveTip');
+  if (loveTip && !loveTip.hidden) loveTip.innerHTML = (love.todayText ? `<div>${love.todayText}</div>` : '') + `<div class="hint">${love.hint}</div>`;
   document.getElementById('log').innerHTML = S.log.map(s => `<div>${s}</div>`).join('');
   const box = document.getElementById('catches');
   if (box) {
@@ -2113,7 +2181,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.1';
+const GAME_VERSION = '5.1.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2199,7 +2267,7 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
-  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU,
+  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });
