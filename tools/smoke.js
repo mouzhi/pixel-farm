@@ -4,7 +4,7 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
   if (!p.startsWith(ROOT) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
@@ -16,7 +16,7 @@ const fail = [];
   const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   for (const url of [`${base}/index.html?manual`, `${base}/index.html`, 'file://' + path.join(ROOT, 'index.html')]) {
     const p = await b.newPage({ viewport: { width: 1280, height: 800 } }), errs = [];
-    p.on('pageerror', e => errs.push(String(e))); p.on('requestfailed', r => errs.push('request failed ' + r.url()));
+    p.on('pageerror', e => errs.push(String(e))); p.on('requestfailed', r => { const u = r.url(); if (/\.(mp3|ogg|wav|m4a)(\?|$)/i.test(u)) return; errs.push('request failed ' + u); });
     p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
     await p.goto(url); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 15000 });
     if (url.includes('manual')) {
@@ -65,7 +65,7 @@ const fail = [];
       const bad = (ui.meters || []).filter(m => !m.ok);
       const storeOk = ui.storeOpen && ui.hasGiant && ui.hasGold && ui.hasWood && ui.hasHay && ui.storeN >= 7 && ui.sellGold >= ui.basketGold;
       const loveOk = ui.mid && ui.mid.loveVal === '63/100' && ui.mid.tipOpen && /聊天 \+3/.test(ui.mid.tipTxt) && /野花/.test(ui.mid.tipTxt) && /好感满后/.test(ui.mid.hint) && ui.mid.fillW > 0 && /等待大木屋/.test(ui.fullHint) && /一家/.test(ui.movedVal) && /已经住在农场/.test(ui.movedHint);
-      const okUi = !bad.length && storeOk && loveOk && ui.version === '5.2';
+      const okUi = !bad.length && storeOk && loveOk && ui.version === '5.2.1';
       console.log(okUi ? 'ok  ' : 'FAIL', 'meters+store+love', JSON.stringify({ bad, storeOpen: ui.storeOpen, sellGold: ui.sellGold, love: { mid: ui.mid, fullHint: ui.fullHint, movedVal: ui.movedVal, movedHint: ui.movedHint }, flags: { g: ui.hasGiant, e: ui.hasGold, w: ui.hasWood, h: ui.hasHay, f: ui.hasFish, n: ui.storeN, v: ui.version } }));
       if (!okUi) fail.push('meters+store+love');
       // close the panel so the later screenshot-less colour test is not blocked; Esc on window

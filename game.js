@@ -1031,23 +1031,28 @@ function fishSpot(water) { if (water === 'sea') { const r = WD.region('coast'); 
 function fishTask(water) {
   const spot = fishSpot(water), wait = FS.waitTime(S.eff.rod, rand);
   return { kind: 'fish', label: water === 'sea' ? '正在码头海钓' : '正在池塘边钓鱼', to: spot.stand, tile: spot.hook, hook: spot.hook, water, phase: 'cast',
-    dur: FS.CAST + wait + FS.BITE + FS.REEL, wait, rest: true, tick: fishTick, done: fishDone };
+    dur: FS.CAST + wait + FS.BITE + FS.REEL + FS.SHOW, wait, rest: true, tick: fishTick, done: fishDone };
 }
 function fishTick(k) {
-  const c = FS.CAST, wt = c + k.wait, b = wt + FS.BITE, w = k.work, prev = k.phase;
-  k.phase = w < c ? 'cast' : w < wt ? 'wait' : w < b ? 'bite' : 'reel';
+  const c = FS.CAST, wt = c + k.wait, b = wt + FS.BITE, r0 = b + FS.REEL, w = k.work, prev = k.phase;
+  k.phase = w < c ? 'cast' : w < wt ? 'wait' : w < b ? 'bite' : w < r0 ? 'reel' : 'show';
   k.rest = k.phase === 'cast' || k.phase === 'wait'; k.pose = (k.phase === 'bite' || k.phase === 'reel') ? 'pull' : null;
-  const labels = { cast: k.water === 'sea' ? '正在码头抛竿' : '正在池塘边抛竿', wait: '静静等鱼上钩', bite: '有鱼咬钩了！', reel: '正在收线' };
-  k.label = labels[k.phase]; S.label = k.label;
-  if (prev !== 'bite' && k.phase === 'bite') burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#c8e8f0', '#ffffff'], 10, 'splash');
+  const labels = { cast: k.water === 'sea' ? '正在码头抛竿' : '正在池塘边抛竿', wait: '静静等鱼上钩', bite: '有鱼咬钩了！', reel: '正在收线', show: '把鱼收进篮子' };
+  k.label = labels[k.phase]; if (F === FARMER) S.label = k.label;
+  if (prev !== 'bite' && k.phase === 'bite') {
+    if (!k.result) k.result = FS.roll(k.water, S.eff.rod, rand);
+    burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#c8e8f0', '#ffffff'], 10, 'splash');
+  }
+  if (prev !== 'reel' && k.phase === 'reel' && k.result && !k.result.miss && FS.isRare(k.result.fish) && window.PF_FX)
+    PF_FX.play('glow', k.hook.x, k.hook.y, 6);
 }
 function fishDone() {
-  const k = F.task, r = FS.roll(k.water, S.eff.rod, rand);
+  const k = F.task, r = k.result || FS.roll(k.water, S.eff.rod, rand);
   if (r.miss) { log('浮标动了一下，没钓上来'); popText(k.hook.x, k.hook.y, 8, '空钩', '#c8e8f0'); burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#ffffff'], 4, 'splash'); return; }
   if (F.crops.length >= BASK()) { log('篮子满了，这条鱼只好放回去'); return; }
   F.crops.push(r.fish);
   S.catches.unshift({ id: r.fish, name: r.name, gold: r.gold, water: k.water, day: S.day }); S.catches.length = Math.min(12, S.catches.length);
-  log(`钓到一条${r.name}（${r.gold} 金）`); popText(k.hook.x, k.hook.y, 12, r.name, r.col); burst(k.hook.x, k.hook.y, 4, [r.col, '#ffffff'], 6, 'spark');
+  log(`钓到一条${r.name}（${r.gold} 金）`); popText(F.x, F.y, 16, r.name, r.col); burst(F.x, F.y, 8, r.rare ? [r.col, '#fff2a8', '#ffffff', '#ffd76a'] : [r.col, '#ffffff'], r.rare ? 10 : 6, 'spark');
 }
 
 // ---------- simulation ----------
@@ -1588,6 +1593,16 @@ function farmerPose(P = F) {
   const sx = P.fx * CA - P.fy * SA, sy = P.fx * SA + P.fy * CA; // facing turned into screen space
   const side = Math.abs(sx) > Math.abs(sy) * 0.9, flip = sx < 0;
   const k = P.task;
+  // fishing: always face the water (the pond stand is on the right bank, so at the default camera that is left)
+  if (!P.moving && k && k.kind === 'fish' && k.hook) {
+    const [px] = proj(P.x, P.y), [hx] = proj(k.hook.x, k.hook.y), face = hx < px;
+    if (k.pose === 'pull' && k.work > 0) {
+      const q = SEQ.pull, u = k.phase === 'reel' ? Math.min(1, Math.max(0, (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL)) : 0.35;
+      const fr = u < 0.45 ? 3 : u < 0.8 ? 2 : 1;
+      return { row: 'pull', fr: q.includes(fr) ? fr : q[Math.min(q.length - 1, fr)], flip: face };
+    }
+    return { row: 'idle_side', fr: 0, flip: face, dir: 'walk_side' };
+  }
   if (!P.moving && k && k.pose && k.work > 0) { const q = SEQ[k.pose]; return { row: k.pose, fr: q[Math.floor(realT * 6) % q.length], flip: Math.abs(sx) < 0.05 ? false : flip }; }
   const dir = side ? 'walk_side' : sy > 0 ? 'walk_front' : 'walk_back';
   if (P.moving) return { row: dir, fr: Math.floor(realT * 8) % 4, flip: side && flip, dir };
@@ -1796,7 +1811,10 @@ function drawPondLeaves() {
   for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); }
   for (const [x, y, c, sh] of pondDecor) { ctx.fillStyle = c; if (sh === 1) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } else if (sh === 2) ctx.fillRect(x, y, 1, 2); else ctx.fillRect(x, y, 1, 1); }
 }
-// style A: a whole-pixel rod, line and bobber. The line is a Bresenham of 1px ink; the bobber bobs 1 px while waiting and jerks on a bite.
+// style A: a whole-pixel rod, line and bobber. The line is a Bresenham of 1px ink. Pose maths live in PFFish.pose:
+// the rod points at the water (up and left at the pond's right bank), the bobber bobs, a bite dips it, and a catch
+// arcs the fish out toward the fisher. Rare fish glow (same gold rim + plus-spark as a glowing crop) and a heart emote
+// floats up from the head.
 function linePx(x0, y0, x1, y1, col) {
   x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
   const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -1804,22 +1822,82 @@ function linePx(x0, y0, x1, y1, col) {
   ctx.fillStyle = col;
   while (true) { ctx.fillRect(x, y, 1, 1); if (x === x1 && y === y1) break; const e2 = 2 * err; if (e2 > -dy) { err -= dy; x += sx; } if (e2 < dx) { err += dx; y += sy; } }
 }
-function drawFishing() {
-  const k = F.task; if (!k || k.kind !== 'fish' || F.moving || F.home || !k.hook) return;
-  const [fx, fy] = proj(F.x, F.y), [hx0, hy0] = proj(k.hook.x, k.hook.y);
-  const pose = farmerPose(), flip = pose.flip ? -1 : 1;
-  const tipx = Math.round(fx) + flip * 8, tipy = Math.round(fy) - 18;
-  const hipx = Math.round(fx) + flip * 2, hipy = Math.round(fy) - 10;
-  let u = 1; // how far the line has gone: 0 at the start of the cast, 1 once it is waiting
-  if (k.phase === 'cast') u = Math.min(1, k.work / FS.CAST);
-  else if (k.phase === 'reel') u = Math.max(0.15, 1 - (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL);
-  const hx = fx + (hx0 - fx) * u, hy = fy + (hy0 - fy) * u;
-  const bob = k.phase === 'wait' ? Math.round(Math.sin(realT * 2.2)) : k.phase === 'bite' ? Math.round(Math.sin(realT * 14) * 2) : 0;
-  const bx = Math.round(hx), by = Math.round(hy) + bob;
-  linePx(hipx, hipy, tipx, tipy, Wd[2]); // the rod
-  if (u > 0.05) linePx(tipx, tipy, bx, by - 2, Ink[0]);
+function drawRod(grip, tip, look) {
+  const dx = tip.x - grip.x, dy = tip.y - grip.y, L = Math.hypot(dx, dy) || 1, px = -dy / L, py = dx / L;
+  linePx(grip.x + px, grip.y + py, tip.x + px, tip.y + py, look.ink);
+  linePx(grip.x, grip.y, tip.x, tip.y, look.shaft);
+  linePx(grip.x - px * 0.4, grip.y - py * 0.4, grip.x + dx * 0.35, grip.y + dy * 0.35, look.hi);
+  const gx = Math.round(grip.x), gy = Math.round(grip.y);
+  ctx.fillStyle = look.ink; ctx.fillRect(gx - 1, gy - 1, 3, 3);
+  ctx.fillStyle = look.wrap; ctx.fillRect(gx - 1, gy, 3, 2);
+  ctx.fillStyle = look.tip; ctx.fillRect(Math.round(tip.x), Math.round(tip.y) - 1, 1, 2);
+}
+function drawBobber(x, y) {
+  const bx = Math.round(x), by = Math.round(y);
+  ctx.fillStyle = Ink[0]; ctx.fillRect(bx - 1, by - 3, 3, 5);
   ctx.fillStyle = Rf[2]; ctx.fillRect(bx - 1, by - 2, 2, 2);
-  ctx.fillStyle = Ac[0]; ctx.fillRect(bx - 1, by - 3, 2, 1);
+  ctx.fillStyle = Ac[0]; ctx.fillRect(bx - 1, by, 2, 1);
+}
+function drawTinyFish(x, y, col, dir, glow, t) {
+  const bx = Math.round(x), by = Math.round(y), s = dir < 0 ? -1 : 1;
+  const pix = (ox, oy, c) => { ctx.fillStyle = c; ctx.fillRect(bx + ox * s - (s < 0 ? 1 : 0), by + oy, 1, 1); };
+  const body = [[-3, 0], [-2, -1], [-2, 0], [-2, 1], [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, 0], [2, -1], [2, 1], [3, 0]];
+  if (glow) { // plus-sparks around the fish (same language as a glowing crop), then the body on top so it stays readable
+    const ph = Math.abs(Math.floor((t || 0) * 5 + bx + by)) % 6;
+    ctx.fillStyle = ph % 2 ? '#ffffff' : '#ffd76a';
+    ctx.fillRect(bx - 2 + (ph % 3), by - 6, 5, 1); ctx.fillRect(bx, by - 7, 1, 5);
+    ctx.fillRect(bx + 5, by - 1 + (ph % 2), 1, 1);
+    ctx.fillRect(bx - 5, by + 2, 1, 1);
+  }
+  for (const [ox, oy] of body) { pix(ox - 1, oy, Ink[0]); pix(ox + 1, oy, Ink[0]); pix(ox, oy - 1, Ink[0]); pix(ox, oy + 1, Ink[0]); }
+  for (const [ox, oy] of body) pix(ox, oy, col);
+  pix(-1, 0, Ac[0]); pix(0, 1, Ac[0]);
+  pix(-2, -1, Ink[0]);
+}
+function drawFishEmote(e) {
+  const x = Math.round(e.x), y = Math.round(e.y);
+  ctx.globalAlpha = Math.max(0, Math.min(1, e.a));
+  ctx.fillStyle = Ink[0]; ctx.fillRect(x - 5, y - 6, 11, 9); ctx.fillRect(x - 1, y + 3, 3, 2);
+  ctx.fillStyle = Ac[0]; ctx.fillRect(x - 4, y - 5, 9, 7);
+  ctx.fillStyle = Ink[0]; ctx.fillRect(x, y + 2, 1, 2);
+  // little heart
+  ctx.fillStyle = Ac[3];
+  ctx.fillRect(x - 2, y - 3, 2, 1); ctx.fillRect(x + 1, y - 3, 2, 1);
+  ctx.fillRect(x - 2, y - 2, 5, 1); ctx.fillRect(x - 1, y - 1, 3, 1); ctx.fillRect(x, y, 1, 1);
+  ctx.globalAlpha = 1;
+}
+function fishPhaseU(k) {
+  if (k.phase === 'cast') return Math.min(1, k.work / FS.CAST);
+  if (k.phase === 'wait') return 1;
+  if (k.phase === 'bite') return Math.min(1, (k.work - FS.CAST - k.wait) / FS.BITE);
+  if (k.phase === 'reel') return Math.min(1, (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL);
+  if (k.phase === 'show') return Math.min(1, (k.work - FS.CAST - k.wait - FS.BITE - FS.REEL) / FS.SHOW);
+  return 1;
+}
+function drawFishing() {
+  for (const P of actors()) {
+    const k = P.task; if (!k || k.kind !== 'fish' || P.moving || P.home || !k.hook) continue;
+    const [fx, fy] = proj(P.x, P.y), [hx0, hy0] = proj(k.hook.x, k.hook.y);
+    const look = FS.rodLook(S.eff.rod, k.water === 'sea' && S.eff.searod);
+    const p = FS.pose(Math.round(fx), Math.round(fy), Math.round(hx0), Math.round(hy0), k.phase || 'wait', fishPhaseU(k), realT, k.result);
+    drawRod(p.grip, p.tip, look);
+    if (p.lineEnd) {
+      if (p.bob.slack) {
+        const mx = (p.tip.x + p.lineEnd.x) / 2, my = (p.tip.y + p.lineEnd.y) / 2 + p.bob.slack;
+        linePx(p.tip.x, p.tip.y, mx, my, Ink[0]); linePx(mx, my, p.lineEnd.x, p.lineEnd.y - 2, Ink[0]);
+      } else linePx(p.tip.x, p.tip.y, p.lineEnd.x, p.lineEnd.y - (p.fish ? 0 : 2), Ink[0]);
+    }
+    if (p.bob.show) drawBobber(p.bob.x, p.bob.y);
+    if (p.fish) {
+      const col = (k.result && k.result.col) || (k.result && FS.fishOf(k.result.fish) && FS.fishOf(k.result.fish).col) || '#cf6a3c';
+      drawTinyFish(p.fish.x, p.fish.y, col, p.fish.dir, p.fish.glow, realT);
+      if (p.fish.glow && window.PF_FX) {
+        const slot = Math.floor(realT / 0.45);
+        if (k._glowSlot !== slot) { k._glowSlot = slot; PF_FX.play('glow', P.x + (k.hook.x - P.x) * (1 - p.fish.p), P.y + (k.hook.y - P.y) * (1 - p.fish.p), 8 + p.fish.p * 6); }
+      }
+    }
+    if (p.emote) drawFishEmote(p.emote);
+  }
 }
 
 let realT = 0;
@@ -2152,7 +2230,7 @@ function frame(now) {
   if (dt > 0) noteLog('sampleFps', 1 / dt);
   advance(dt); render(); hud(); requestAnimationFrame(frame);
 }
-window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
+window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
 { const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
   const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
@@ -2182,7 +2260,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.2';
+const GAME_VERSION = '5.2.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
