@@ -80,12 +80,32 @@ async function test(name, fn) {
     await p.evaluate(s => __farm.importState(PFSave.decode(s)), str); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     assert.strictEqual(await p.evaluate(() => __farm.S.day), day);
   });
-  await test('v1 save upgrades to v2: nothing bought, still 12 tiles', async ctx => {
+  await test('v1 save upgrades to v3: nothing bought, still 12 tiles, yard is seeded', async ctx => {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')); s.savedAt = Date.now();
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => { __farm.saveNow(); const v = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:save'));
-      return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: __farm.S.speed }; });
-    assert.strictEqual(r.v, 2); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
+      return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: __farm.S.speed, yard: v.yard && v.yard.length, kinds: [...new Set((v.yard || []).map(c => c.type))] }; });
+    assert.strictEqual(r.v, 3); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
+    assert(r.yard >= 8, 'old save should get a yard to tidy: ' + r.yard); assert(r.kinds.every(k => ['rock', 'branch', 'weed', 'pebble'].includes(k)));
+    assert.deepStrictEqual(p.errs, []);
+  });
+  await test('day-1 afternoon: farmer tidies the yard instead of sitting by the pond', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => {
+      __farm.SAVE.off = true;
+      const start = __farm.yard.length, seen = [];
+      while (__farm.S.day === 1 && (__farm.S.t % 1440) < 19 * 60) {
+        __farm.advance(8, 8);
+        const k = __farm.F.task && __farm.F.task.kind, lab = __farm.S.label;
+        if (k === 'tidy' || /院子|小石子/.test(lab)) seen.push(lab);
+        if (seen.length && start - __farm.yard.length >= 2) break;
+      }
+      return { start, left: __farm.yard.length, seen: seen.slice(0, 4), label: __farm.S.label, t: Math.floor(__farm.S.t % 1440), planted: __farm.tiles.filter(t => t.open && t.crop).length, kind: __farm.F.task && __farm.F.task.kind };
+    });
+    assert(r.start >= 8, 'fresh farm has yard clutter: ' + r.start);
+    assert(r.seen.length > 0, 'farmer should tidy the yard after the field is done: ' + JSON.stringify(r));
+    assert(r.left < r.start, 'yard items should be cleared: ' + JSON.stringify(r));
+    assert(!/坐在池塘边休息/.test(r.label) || r.left === 0, 'should not rest while clutter remains: ' + JSON.stringify(r));
     assert.deepStrictEqual(p.errs, []);
   });
   await test('shop: buy from the panel, upgrades survive reload, speed buttons work', async ctx => {

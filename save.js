@@ -8,10 +8,14 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 2;
+  const CURRENT = 3;
+  const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
     2: s => Object.assign({}, s, { upgrades: Object.assign({}, UPGRADE_IDS.reduce((o, k) => (o[k] = 0, o), {}), s.upgrades), settings: Object.assign({ speed: 1 }, s.settings) }),
+    // v4.2 yard clutter: { type, v, rot, x, y } around the farm. A missing yard is left unset so the game can seed one
+    // without touching the saved RNG. An empty array means the yard was fully cleared and must stay empty.
+    3: s => Object.assign({}, s, { yard: Array.isArray(s.yard) ? s.yard : undefined }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
   const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon']; // levels; max levels live in sim.js
@@ -27,6 +31,11 @@
     if (t.weed) out.weed = { v: int(t.weed.v, 0, 0, 99), rot: num(t.weed.rot, 0) };
     if (t.crop && CROP_IDS.includes(t.crop.type)) out.crop = { type: t.crop.type, age: int(t.crop.age, 0, 0, 99), n: int(t.crop.n, 0, 0, 99), rot: num(t.crop.rot, 0) };
     return out;
+  }
+  function validYard(c) {
+    c = obj(c);
+    if (!YARD_TYPES.includes(c.type)) return null;
+    return { type: c.type, v: int(c.v, 0, 0, 99), rot: num(c.rot, 0), x: num(c.x, 0, -100, 400), y: num(c.y, 0, -100, 400) };
   }
   // fills defaults for everything, so a v1 save written before a field existed still loads
   function validate(s) {
@@ -54,6 +63,7 @@
       tiles: s.tiles.map(validTile),
       upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
       settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
+      yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }

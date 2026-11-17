@@ -1,0 +1,424 @@
+{
+ "saveVersion": 3,
+ "gameVersion": "4.2",
+ "createdAt": 1794917879578,
+ "savedAt": 1794917880845,
+ "rng": 1692655254,
+ "clock": {
+  "day": 2,
+  "t": 2107.499999999883
+ },
+ "coins": 54,
+ "stats": {
+  "totalSold": 10,
+  "cleared": 31,
+  "earned": 89,
+  "soldToday": 10,
+  "todayEarn": 87,
+  "dayEarn": [
+   2
+  ]
+ },
+ "prices": {
+  "carrot": 1.047,
+  "cabbage": 1.006,
+  "pumpkin": 0.997,
+  "strawberry": 0.951,
+  "watermelon": 0.951
+ },
+ "inventory": {
+  "water": 0,
+  "waterMax": 4,
+  "store": {
+   "carrot": 10,
+   "cabbage": 0,
+   "pumpkin": 0,
+   "strawberry": 0,
+   "watermelon": 0
+  },
+  "bag": {
+   "carrot": 0,
+   "cabbage": 0,
+   "pumpkin": 0,
+   "strawberry": 0,
+   "watermelon": 0
+  },
+  "gathered": 0,
+  "basket": [
+   "carrot",
+   "carrot"
+  ]
+ },
+ "farmer": {
+  "x": 152.6,
+  "y": 110.85,
+  "sleeping": false,
+  "home": false
+ },
+ "tiles": [
+  {
+   "c": 0,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 0.03510475815273822
+   }
+  },
+  {
+   "c": 1,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "cabbage",
+    "age": 0,
+    "n": 0,
+    "rot": 0.510282913884148
+   }
+  },
+  {
+   "c": 2,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 0,
+    "n": 0,
+    "rot": 5.708653876781463
+   }
+  },
+  {
+   "c": 3,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 3.4850470389705155
+   }
+  },
+  {
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 0.34699438164010643
+   },
+   "crop": null
+  },
+  {
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "c": 0,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 5.472514640437439
+   }
+  },
+  {
+   "c": 1,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 3.8975809018127623
+   }
+  },
+  {
+   "c": 2,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 5.877357741780579
+   }
+  },
+  {
+   "c": 3,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 2.8020852910261604
+   }
+  },
+  {
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 3.895600527115166
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 0.3885179671645165
+   },
+   "crop": null
+  },
+  {
+   "c": 0,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 1.1496657095011324
+   }
+  },
+  {
+   "c": 1,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 1.7800848532281817
+   }
+  },
+  {
+   "c": 2,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 3.563812001133338
+   }
+  },
+  {
+   "c": 3,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": true,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "carrot",
+    "age": 0,
+    "n": 0,
+    "rot": 3.0266590597108007
+   }
+  },
+  {
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 0.14020773056894542
+   },
+   "crop": null
+  },
+  {
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.068523628264666
+   },
+   "crop": null
+  },
+  {
+   "c": 0,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "c": 1,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.8234889362193645
+   },
+   "crop": null
+  },
+  {
+   "c": 2,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 1.150608870331198
+   },
+   "crop": null
+  },
+  {
+   "c": 3,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 3.934762383317575
+   },
+   "crop": null
+  },
+  {
+   "c": 4,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "c": 5,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 6.261392728611827
+   },
+   "weed": null,
+   "crop": null
+  }
+ ],
+ "upgrades": {
+  "field": 0,
+  "can": 0,
+  "shoe": 0,
+  "hoe": 0,
+  "basket": 0,
+  "speed": 0,
+  "strawberry": 0,
+  "watermelon": 0
+ },
+ "settings": {
+  "speed": 1
+ },
+ "yard": [
+  {
+   "type": "rock",
+   "v": 2,
+   "rot": 0.25325077287852765,
+   "x": 34.09,
+   "y": 77.65
+  },
+  {
+   "type": "weed",
+   "v": 2,
+   "rot": 6.200251965438947,
+   "x": 156.01,
+   "y": 81.17
+  }
+ ],
+ "log": [
+  "11:07 读取存档：第 2 天，54 金",
+  "10:28 在井边装满了水壶（4 格）",
+  "09:51 在井边装满了水壶（4 格）",
+  "09:17 在井边装满了水壶（4 格）"
+ ]
+}
