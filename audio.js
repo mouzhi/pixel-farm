@@ -15,7 +15,7 @@
   const set = load();
   const persist = () => { try { store && store.setItem(KEY, JSON.stringify(set)); } catch (e) {} };
   const AC = window.AudioContext || window.webkitAudioContext;
-  const A = { ctx: null, // tracks: null = use DEFAULT_TRACKS (set below)
+  const A = { ctx: null, filePlays: 0, // tracks: null = use DEFAULT_TRACKS (set below)
     unlocked: false, tracks: window.PF_MUSIC_TRACKS !== undefined ? window.PF_MUSIC_TRACKS : null, plays: 0, lastSfx: '' };
   const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
@@ -26,7 +26,7 @@
     let c; try { c = new AC(); } catch (e) { return false; }
     A.ctx = c;
     const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3; comp.connect(c.destination);
-    A.master = c.createGain(); A.master.gain.value = 0.9; A.master.connect(comp);
+    A.master = c.createGain(); A.master.gain.value = 1.4; A.master.connect(comp);
     A.music = c.createGain(); A.music.gain.value = 0; A.music.connect(A.master); // faded in by applyVolumes(); files + generator
     A.genBus = c.createGain(); A.genBus.gain.value = 1; // the generator alone (faded out while a recorded track plays)
     A.tone = c.createBiquadFilter(); A.tone.type = 'lowpass'; A.tone.frequency.value = 2600; A.tone.Q.value = 0.4; // the "warm, slightly muffled" lo-fi tone
@@ -269,41 +269,100 @@
     chirp: t => { const n = 2 + (Math.random() * 3 | 0), f0 = rnd(2600, 4200); for (let i = 0; i < n; i++) { const c = A.ctx, o = c.createOscillator(), g = c.createGain(), s = t + i * rnd(0.09, 0.16);
       o.frequency.setValueAtTime(f0, s); o.frequency.exponentialRampToValueAtTime(f0 * rnd(1.15, 1.5), s + 0.06); o.connect(g); g.connect(A.amb); env(g, s, 0.01, 0.05, 0.07); o.start(s); o.stop(s + 0.1); } },
     cricket: t => { const c = A.ctx, o = c.createOscillator(), g = c.createGain(), f = rnd(4300, 4900); o.frequency.value = f; o.connect(g); g.connect(A.amb); g.gain.setValueAtTime(0, t);
-      const n = 3 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) { const s = t + i * 0.045; g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.025, s + 0.008); g.gain.linearRampToValueAtTime(0, s + 0.03); } o.start(t); o.stop(t + n * 0.045 + 0.05); },
+      const n = 3 + (Math.random() * 4 | 0); for (let i = 0; i < n; i++) { const s = t + i * 0.045; g.gain.setValueAtTime(0, s); g.gain.linearRampToValueAtTime(0.015, s + 0.008); g.gain.linearRampToValueAtTime(0, s + 0.03); } o.start(t); o.stop(t + n * 0.045 + 0.05); },
   };
-  const bufs = {}, last = {};
-  let lastAny = 0;
+  // ---- recorded SFX (ElevenLabs, see CREDITS.md) with the ZzFX / procedural sounds above as the fallback ----
+  // First-screen sounds sit in sfx/ (main package); the rest in assets/audio/sfx/ load the first time they are asked for
+  // (that first time plays the synthesized fallback). Played through <audio> elements only (the mini tool container
+  // allows packaged media files but no fetch / blob:), two elements per file so a sound can overlap itself.
+  const CORE = 'sfx/', MORE = 'assets/audio/sfx/';
+  const FILES = {
+    tap: [CORE + 'tap.mp3'], till: [CORE + 'hoe1.mp3', CORE + 'hoe2.mp3'], water: [CORE + 'water1.mp3', CORE + 'water2.mp3'],
+    harvest: [CORE + 'harvest1.mp3', CORE + 'harvest2.mp3'], coin: [CORE + 'coin.mp3'],
+    plant: [MORE + 'plant.mp3'], refill: [MORE + 'refill.mp3'], pick: [MORE + 'pick.mp3'], chop: [MORE + 'chop1.mp3', MORE + 'chop2.mp3'],
+    hay: [MORE + 'hay.mp3'], cast: [MORE + 'cast.mp3'], fish: [MORE + 'splash.mp3'], buy: [MORE + 'buy.mp3'], unlock: [MORE + 'unlock.mp3'],
+    surprise: [MORE + 'sparkle.mp3'], giant: [MORE + 'sparkle.mp3'], clear: [MORE + 'clear.mp3'],
+    chicken: [MORE + 'chicken.mp3'], sheep: [MORE + 'sheep.mp3'], cow: [MORE + 'cow.mp3'], pig: [MORE + 'pig.mp3'], cat: [MORE + 'cat.mp3'], dog: [MORE + 'dog.mp3'],
+    bird: [MORE + 'bird1.mp3', MORE + 'bird2.mp3'],
+  };
+  const CORE_NAMES = ['tap', 'till', 'water', 'harvest', 'coin'];
+  const RATE = { giant: 0.85 }; // a deeper sparkle for the giant crop
+  const POOL = {}, fileBad = {};
+  function pool(url) {
+    if (POOL[url]) return POOL[url];
+    const p = POOL[url] = { els: [], i: 0 };
+    for (let k = 0; k < 2; k++) {
+      const el = new Audio(); el.preload = 'auto'; el.src = url; el.preservesPitch = el.mozPreservesPitch = el.webkitPreservesPitch = false;
+      const e = { el, g: null };
+      try { e.g = A.ctx.createGain(); A.ctx.createMediaElementSource(el).connect(e.g); e.g.connect(A.sfx); } catch (err) { e.g = null; }
+      el.addEventListener('error', () => { fileBad[url] = true; });
+      p.els.push(e);
+    }
+    return p;
+  }
+  const preload = names => names.forEach(n => (FILES[n] || []).forEach(pool));
+  const lastUrl = {};
+  function playFile(name, vol) {
+    const list = (FILES[name] || []).filter(u => !fileBad[u]); if (!list.length) return false;
+    const opts = list.length > 1 ? list.filter(u => u !== lastUrl[name]) : list, url = pick(opts); // never the same variant twice in a row
+    const p = pool(url), e = p.els[p.i = (p.i + 1) % p.els.length];
+    if (e.el.readyState < 2) return false; // still loading: the caller plays the synthesized sound this once
+    lastUrl[name] = url;
+    try { e.el.currentTime = 0; } catch (err) {}
+    e.el.playbackRate = (RATE[name] || 1) * rnd(0.95, 1.05);
+    const v = Math.max(0, Math.min(1, vol * rnd(0.85, 1)));
+    if (e.g) e.g.gain.value = v; else e.el.volume = Math.max(0, Math.min(1, v * set.sv));
+    const pr = e.el.play(); if (pr && pr.catch) pr.catch(() => {});
+    return true;
+  }
+  const bufs = {}, last = {}, recent = [];
+  const GAP = { tap: 40, chicken: 1500, sheep: 2500, cow: 2500, pig: 2000, cat: 2500, dog: 4000, bird: 3000, surprise: 600, giant: 600 };
+  const PRIORITY = { buy: 1, unlock: 1, surprise: 1, giant: 1, tap: 1, deny: 1 }; // the player's own actions always sound
   function sfx(name, vol = 1) {
     if (!set.sfx || !A.ctx || A.ctx.state !== 'running' || document.hidden) return false;
-    const now = performance.now(), gap = name === 'tap' ? 40 : 260;
-    if (now - (last[name] || 0) < gap || (name !== 'tap' && now - lastAny < 90)) return false; // an idle farm at 4x must not rattle
-    last[name] = now; if (name !== 'tap') lastAny = now;
+    const now = performance.now();
+    if (now - (last[name] || 0) < (GAP[name] || 260)) return false;
+    while (recent.length && now - recent[0] > 2000) recent.shift();
+    if (!PRIORITY[name] && (recent.length >= 4 || (recent.length && now - recent[recent.length - 1] < 120))) return false; // density cap: <= 4 sounds / 2 s
+    last[name] = now; if (name !== 'tap') recent.push(now);
     A.plays++; A.lastSfx = name;
-    const t = t0() + 0.01;
-    if (JINGLE[name]) { JINGLE[name](t); return true; }
-    const p = Z[name]; if (!p) return false;
-    let b = bufs[name]; if (!b) { const d = zzfxBuild(A.ctx.sampleRate, ...p); b = bufs[name] = A.ctx.createBuffer(1, d.length || 1, A.ctx.sampleRate); b.getChannelData(0).set(d); }
+    if (FILES[name] && playFile(name, vol)) { A.filePlays++; return true; }
+    const t = t0() + 0.01, alias = { bird: 'chirp', unlock: 'buy', cast: 'fish' }[name] || name;
+    if (JINGLE[alias]) { JINGLE[alias](t); return true; }
+    const p = Z[alias]; if (!p) return false;
+    let b = bufs[alias]; if (!b) { const d = zzfxBuild(A.ctx.sampleRate, ...p); b = bufs[alias] = A.ctx.createBuffer(1, d.length || 1, A.ctx.sampleRate); b.getChannelData(0).set(d); }
     const s = A.ctx.createBufferSource(), g = A.ctx.createGain(); s.buffer = b; s.playbackRate.value = rnd(0.94, 1.06); g.gain.value = 0.5 * vol; s.connect(g); g.connect(A.sfx); s.start(t);
     return true;
   }
-  // ambience: birds by day, crickets at night (part of the SFX switch)
+  const later = (ms, name, vol) => setTimeout(() => sfx(name, vol), ms);
+  // ambience: an occasional bird by day, soft crickets at night (part of the SFX switch)
   let ambT = 0;
-  function ambience() { clearTimeout(ambT); ambT = setTimeout(ambience, night() ? rnd(700, 1600) : rnd(2500, 7000));
+  function ambience() { clearTimeout(ambT); ambT = setTimeout(ambience, night() ? rnd(1500, 4000) : rnd(15000, 40000));
     if (!set.sfx || !A.ctx || A.ctx.state !== 'running' || document.hidden || !window.__farm) return;
-    (night() ? JINGLE.cricket : JINGLE.chirp)(t0() + 0.02); }
+    if (night()) JINGLE.cricket(t0() + 0.02); else sfx('bird', 0.6); }
+  // animals call on their own only rarely (mean minutes between calls); the dog never does
+  const IDLE = { chicken: 4, pig: 7, sheep: 9, cow: 10, cat: 6 };
+  let idleT = 0;
+  function idleCalls() { clearTimeout(idleT); idleT = setTimeout(idleCalls, 20000);
+    const g = window.__farm, S = g && g.S; if (!S || night() || !set.sfx || document.hidden) return;
+    const have = {}; (S.animals || []).forEach(a => { have[a.kind] = 1; }); (g.PETS_LIVE || []).forEach(p => { have[p.kind] = 1; });
+    for (const k of Object.keys(IDLE)) if (have[k] && Math.random() < 20 / (IDLE[k] * 60)) { sfx(k, 0.45); break; }
+  }
 
   // ---------- game events ----------
   const TASK = { till: 'till', clear: 'clear', weed: 'clear', tidy: 'clear', plant: 'plant', transplant: 'plant', water: 'water', trough: 'water', refill: 'refill',
-    harvest: 'harvest', pick: 'pick', chop: 'chop', feed: 'hay', hay: 'hay', fish: 'fish', collect: 'chicken' };
+    harvest: 'harvest', pick: 'pick', chop: 'chop', feed: 'hay', hay: 'hay', fish: 'fish' };
+  const UNLOCKS = /^(forest|east|orchard|south|coast|north|pasture|coop|fold|shed|sty|house)/;
   addEventListener('pf:farm', e => {
-    const d = e.detail || {}, far = d.who && d.who !== 'farmer' ? 0.55 : 1;
+    const d = e.detail || {}, far = d.who && d.who !== 'farmer' ? 0.55 : 1; // family members' work sits further back
     if (d.type === 'task') {
-      if ((d.kind === 'pet' || d.kind === 'petpet') && d.an) return sfx(Z[d.an] ? d.an : 'chicken', far);
-      if (d.kind === 'pet' && !d.an) return;
-      if (d.an && Z[d.an] && Math.random() < 0.5) return sfx(d.an, far); // milking / shearing: the animal answers
+      if (d.kind === 'pet' || d.kind === 'petpet') return d.an ? sfx(d.an, d.an === 'dog' ? 0.5 : 0.8 * far) : undefined; // petting: the animal answers
+      if (d.kind === 'collect') { const k = d.an || 'chicken'; return Math.random() < 0.3 ? sfx(k, 0.7 * far) : sfx('pick', 0.6 * far); } // eggs, milk, wool, truffles
       const n = TASK[d.kind]; if (n) sfx(n, far);
-    } else if (d.type === 'income') { if (d.source === 'market') sfx('coin'); else if (d.gold) sfx('coin', 0.7); }
-    else if (d.type === 'purchase' && d.who === 'player') sfx('buy');
+      if (d.kind === 'feed' && d.an && Math.random() < 0.4) later(700, d.an, 0.6 * far); // fed animals sometimes say thanks
+    } else if (d.type === 'task-start' && d.kind === 'fish') sfx('cast', 0.8 * far);
+    else if (d.type === 'income') { if (d.source === 'market') sfx('coin'); else if (d.gold) sfx('coin', 0.7); }
+    else if (d.type === 'purchase' && d.who === 'player') sfx(UNLOCKS.test(String(d.item)) ? 'unlock' : 'buy');
     else if (d.type === 'surprise') sfx(d.kind === 'giant' ? 'giant' : 'surprise');
   });
   // UI taps: any button or clickable icon outside the canvas
@@ -318,7 +377,7 @@
   }
   function unlock() {
     if (!build()) return;
-    const go = () => { A.unlocked = A.ctx.state === 'running'; if (A.unlocked) { applyVolumes(); ambience(); ['pointerdown', 'keydown', 'touchend'].forEach(ev => removeEventListener(ev, unlock, true)); } };
+    const go = () => { A.unlocked = A.ctx.state === 'running'; if (A.unlocked) { applyVolumes(); ambience(); idleCalls(); preload(CORE_NAMES); ['pointerdown', 'keydown', 'touchend'].forEach(ev => removeEventListener(ev, unlock, true)); } };
     if (A.ctx.state !== 'running') A.ctx.resume().then(go, () => {}); else go();
   }
   ['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlock, true));
@@ -352,13 +411,13 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hud); else hud();
 
   window.PFAudio = {
-    KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, lastSfx: A.lastSfx, mode: D.on ? 'files' : G.on ? 'gen' : 'off', slot: D.on ? D.slot : null, track: D.on && D.decks[D.cur] ? D.decks[D.cur].url : null, trackPlays: D.plays, failed: Object.keys(D.failed) }),
+    KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, filePlays: A.filePlays, lastSfx: A.lastSfx, sfxBad: Object.keys(fileBad), mode: D.on ? 'files' : G.on ? 'gen' : 'off', slot: D.on ? D.slot : null, track: D.on && D.decks[D.cur] ? D.decks[D.cur].url : null, trackPlays: D.plays, failed: Object.keys(D.failed) }),
     setMusic: on => { set.music = !!on; persist(); hud(); const b = document.getElementById('musicBtn'); if (b) b.style.backgroundImage = `url(${IC.music[set.music ? 0 : 1]})`, b.classList.toggle('off', !set.music); applyVolumes(); },
     setSfx: on => { set.sfx = !!on; persist(); const b = document.getElementById('sfxBtn'); if (b) b.style.backgroundImage = `url(${IC.sfx[set.sfx ? 0 : 1]})`, b.classList.toggle('off', !set.sfx); applyVolumes(); },
     setVolume: (mv, sv) => { if (mv != null) set.mv = Math.max(0, Math.min(1, mv)); if (sv != null) set.sv = Math.max(0, Math.min(1, sv)); persist(); applyVolumes(); },
     setTracks: t => { A.tracks = t || []; D.failed = {}; if (A.ctx && set.music) { stopFiles(); musicOn(); } },
     _seekEnd: () => { const d = D.decks[D.cur]; if (d && d.el.duration) d.el.currentTime = d.el.duration - XF - 1; }, // tests
     play: sfx, unlock, _out: () => A.ctx && { ctx: A.ctx, node: A.master }, // tests / recording a preview
- names: () => Object.keys(Z).concat(Object.keys(JINGLE)),
+ names: () => Object.keys(Z).concat(Object.keys(JINGLE)), fileNames: () => Object.keys(FILES), preload: () => preload(Object.keys(FILES)), _gapReset: () => { for (const k of Object.keys(last)) last[k] = 0; recent.length = 0; },
   };
 })();

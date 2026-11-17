@@ -1,6 +1,6 @@
 // Browser test for sound (used by CI):  node tools/audio-smoke.js
 // Checks: nothing plays before a user gesture; the first tap starts the generator at once, then the time-of-day track
-// (assets/audio/) crossfades in; the farm clock switches tracks; a missing file falls back to the generator; game events play SFX;
+// (assets/audio/) crossfades in; recorded SFX load from sfx/ and assets/audio/sfx/; the density cap holds; the farm clock switches tracks; a missing file falls back to the generator; game events play SFX;
 // the music / SFX icons toggle, persist across a reload and do not overlap the other HUD buttons; no page errors.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
@@ -60,10 +60,23 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
   });
   await test('game events play sounds', async () => {
     const n = await p.evaluate(async () => { const before = PFAudio.state().plays, ev = d => dispatchEvent(new CustomEvent('pf:farm', { detail: d })), w = () => new Promise(r => setTimeout(r, 300));
-      for (const d of [{ type: 'task', kind: 'till', who: 'farmer' }, { type: 'task', kind: 'petpet', an: 'cat' }, { type: 'income', source: 'market', gold: 9 }, { type: 'purchase', who: 'player' }, { type: 'surprise', kind: 'giant' }]) { ev(d); await w(); }
+      for (const d of [{ type: 'task', kind: 'till', who: 'farmer' }, { type: 'task', kind: 'petpet', an: 'cat' }, { type: 'income', source: 'market', gold: 9 }, { type: 'purchase', who: 'player', item: 'east' }, { type: 'surprise', kind: 'giant' }]) { PFAudio._gapReset(); ev(d); await w(); }
       return PFAudio.state().plays - before; });
     assert.strictEqual(n, 5);
-    for (const k of await p.evaluate(() => PFAudio.names())) assert.ok(await p.evaluate(async k => { await new Promise(r => setTimeout(r, 300)); return PFAudio.play(k); }, k), k);
+    for (const k of await p.evaluate(() => PFAudio.names())) assert.ok(await p.evaluate(async k => { await new Promise(r => setTimeout(r, 100)); PFAudio._gapReset(); return PFAudio.play(k); }, k), k);
+  });
+  await test('recorded SFX files load and play (core in sfx/, the rest in assets/audio/sfx/)', async () => {
+    await p.evaluate(() => PFAudio.preload()); await p.waitForTimeout(2500);
+    const r = await p.evaluate(async () => { const names = PFAudio.fileNames(), before = PFAudio.state().filePlays, miss = [];
+      for (const k of names) { PFAudio._gapReset(); const f0 = PFAudio.state().filePlays; PFAudio.play(k); if (PFAudio.state().filePlays === f0) miss.push(k); await new Promise(r => setTimeout(r, 60)); }
+      return { miss, bad: PFAudio.state().sfxBad }; });
+    assert.deepStrictEqual(r, { miss: [], bad: [] });
+  });
+  await test('density cap: a burst of farm work plays at most 4 sounds in 2 s', async () => {
+    const n = await p.evaluate(async () => { PFAudio._gapReset(); const before = PFAudio.state().plays, kinds = ['till', 'water', 'harvest', 'plant', 'chop', 'pick', 'clear', 'hay', 'till', 'water'];
+      for (const k of kinds) { dispatchEvent(new CustomEvent('pf:farm', { detail: { type: 'task', kind: k, who: 'farmer' } })); await new Promise(r => setTimeout(r, 140)); }
+      return PFAudio.state().plays - before; });
+    assert.ok(n <= 4 && n >= 3, 'played ' + n);
   });
   await test('toggles persist across reload', async () => {
     await p.click('#musicBtn'); await p.click('#sfxBtn');
