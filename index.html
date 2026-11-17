@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v4.0</title>
+<title>像素堆叠 · 放置农场 v4.1</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -35,6 +35,17 @@
   .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
   .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
   #menuBtn{position:absolute;right:12px;top:66px}
+  #shopBtn{position:absolute;right:86px;top:66px}
+  #speed{position:absolute;right:160px;top:66px;display:flex;gap:4px}#speed[hidden]{display:none}
+  .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
+  #shop{right:12px;top:100px;width:420px;max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
+  #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
+  #shop .cards{display:flex;flex-direction:column;gap:5px}
+  #shop .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
+  #shop .card.max{opacity:.6}
+  #shop .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
+  #shop .ct{flex:1;min-width:0}#shop .lv{font-weight:500;font-size:11px;opacity:.75}#shop .d{font-weight:500;font-size:12px;opacity:.85}
+  #shop .cb{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}#shop .short{font-size:11px;color:#f0a090;font-weight:500}#shop .done{color:#8fd35a;font-size:18px}
   #menu{right:12px;top:100px;width:300px;padding:10px 12px}
   #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
   #menu textarea{width:100%;box-sizing:border-box;height:64px;font:11px monospace;background:#1a120e;color:#fff6dc;border:2px solid #8a6a44;resize:none}
@@ -53,10 +64,13 @@
     <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
     <div id="prices">今日行情：</div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v4.0 · 存档和慢节奏（自动运行）<br><span style="font-weight:400;opacity:.8">拖动画面 / Q E / ← → 旋转镜头 · R 复位 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v4.1 · 商店和工具升级（自动运行）<br><span style="font-weight:400;opacity:.8">拖动画面 / Q E / ← → 旋转镜头 · R 复位 · 滚轮缩放</span></div>
   <div id="log"></div>
   <div id="inv" class="panel"></div>
   <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
+  <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
+  <div id="speed" hidden></div>
+  <div id="shop" class="panel" hidden></div>
   <div id="menu" class="panel" hidden></div>
   <div id="offline" class="panel" hidden></div>
 </div>

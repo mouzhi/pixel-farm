@@ -220,6 +220,8 @@ const CROPS = {
   carrot: { name: '胡萝卜', price: 9, top: Ac[2] },
   cabbage: { name: '卷心菜', price: 13, top: G[4] },
   pumpkin: { name: '南瓜', price: 21, top: Ac[2] },
+  strawberry: { name: '草莓', price: 30, top: Rf[2] }, // basket colours only; prices live in sim.js
+  watermelon: { name: '西瓜', price: 220, top: G[2] },
 };
 // tilled soil: a flat two-slice tile (furrow + ridges), rendered through the same rotation cache, so its rows never crawl
 function soilModel(wet) { const base = wet ? Wd[0] : Wd[1], ridge = wet ? Wd[1] : Wd[2];
@@ -464,11 +466,11 @@ addTree(treeDefs.oak[0], 22, 84); addTree(treeDefs.pine[1], 44, 82); addTree(tre
 POND_SOLIDS.push({ x: POND.x + 11, y: POND.y + 5, r: 6 });
 addProp(mossRock, POND.x + 11, POND.y + 5, 0.6);
 // ---------- field ----------
-// Pacing, economy and save rules live in sim.js and save.js (pure, unit-tested); this block is the farm's state machine.
+// Pacing, economy, shop and save rules live in sim.js and save.js (pure, unit-tested); this block is the farm's state machine.
 const SIM = window.PFSim, CROP_IDS = SIM.IDS;
 const tiles = [];
 for (let r = 0; r < FIELD.rows; r++) for (let c = 0; c < FIELD.cols; c++) {
-  tiles.push({ c, r, x: (FIELD.c0 + c) * TILE + TILE / 2, y: (FIELD.r0 + r) * TILE + TILE / 2, open: SIM.startOpen(c, r), debris: null, weed: null, tilled: false, crop: null, watered: false });
+  tiles.push({ c, r, x: (FIELD.c0 + c) * TILE + TILE / 2, y: (FIELD.r0 + r) * TILE + TILE / 2, open: SIM.isOpen(c, r, 0), debris: null, weed: null, tilled: false, crop: null, watered: false });
 }
 // clutter is stored as plain data (kind + variant index), so it can be saved; the model is looked up when drawing
 const debrisModel = d => { const a = d.type === 'rock' ? models.rocks : models.branches; return a[d.v % a.length]; };
@@ -486,8 +488,10 @@ tiles.forEach(t => spawnClutter(t, 0.34, 0.42));
 const S = {
   day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [],
   store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
+  up: SIM.emptyUpgrades(), eff: SIM.effects({}), speed: 1, // shop levels, what they add up to, chosen game speed (1 / 2 / 4)
   farmer: { x: DOOR.x, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null, bag: SIM.emptySeeds(), gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, act: 0 },
   log: [], events: [], label: '起床',
+  flow: { weed: 0, harvest: 0, bought: 0, boughtGold: 0, sold: 0, soldGold: 0 }, // seed flow since the page opened (diagnostics, not saved)
 };
 const F = S.farmer;
 const particles = [];
@@ -499,67 +503,128 @@ const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so 
 const seedCount = o => CROP_IDS.reduce((n, k) => n + (o[k] || 0), 0);
 const seedText = o => CROP_IDS.filter(k => o[k] > 0).map(k => `${SIM.CROPS[k].name}×${o[k]}`).join('、');
 let onMorning = () => {};
+function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
+  S.eff = SIM.effects(S.up); S.waterMax = S.eff.waterMax;
+  for (const t of tiles) if (!t.open && SIM.isOpen(t.c, t.r, S.eff.field)) t.open = true;
+  if (S.speed > S.eff.speedMax) S.speed = S.eff.speedMax;
+  groundDirty = true;
+}
+function buy(id) { // the player's one action: spend gold on the next level of a shop item
+  const o = SIM.offer(S.up, S.coins, id);
+  if (!o || o.maxed) return { ok: false, reason: 'maxed' };
+  if (!o.ok) return { ok: false, reason: 'short', short: o.short };
+  S.coins -= o.cost; S.up[id] = o.have + 1; applyUpgrades();
+  log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金）`); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'spark');
+  if (id === 'field') log('新的田地开放了，农夫会去清理');
+  return { ok: true, offer: o };
+}
 
-// ---------- farmer AI ----------
-// Phase 1 order: harvest -> (late: water) -> clear -> weed -> store seeds -> plant -> till -> water -> sell / buy seeds -> rest.
-// Crops grow one day overnight if watered that day, so watering only has to happen once, any time before bed.
-function storeTask() { return { label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗胡萝卜种子放进仓库`); S.store.carrot += F.gathered; F.gathered = 0; } }; }
-function chooseTask() {
-  const T = S.t % 1440;
+// ---------- farmer AI: task board + scoring ----------
+// Every system posts the jobs it has (with a target and a base priority) to a board; the farmer takes the job with the best
+// score = base priority - walking distance / 8. Hard rules (night, a full basket) come first. Picking the nearest target per
+// kind makes him work along a row instead of zigzagging. Later, helpers will read the same board and claim tiles.
+function storeTask() { return { kind: 'store', label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗胡萝卜种子放进仓库`); S.store.carrot += F.gathered; F.gathered = 0; } }; }
+function homeTask() { return { kind: 'home', label: '回家睡觉', to: DOOR, dur: 5, done: () => { F.home = true; F.sleeping = true; log('回到家，躺下睡觉 Zzz'); } }; }
+function board() {
+  const T = S.t % 1440, E = S.eff, out = [];
+  const post = (kind, base, at, make) => out.push({ kind, base, at, make });
   const open = tiles.filter(t => t.open);
   const ripe = open.filter(t => t.crop && SIM.ripe(t.crop));
   const dry = open.filter(t => t.crop && !SIM.ripe(t.crop) && !t.watered);
   const debris = open.filter(t => t.debris), weeds = open.filter(t => t.weed);
   const tilledEmpty = open.filter(t => t.tilled && !t.crop && !t.weed);
   const tillable = open.filter(t => !t.tilled && !t.crop && !t.debris && !t.weed);
-  const bagN = seedCount(F.bag);
-
+  const bagN = seedCount(F.bag), storeN = seedCount(S.store), full = F.crops.length >= E.basket;
+  if (ripe.length && !full) { const t = rngNear(ripe); post('harvest', 90, t, () => harvestTask(t)); }
+  if (dry.length) { const late = T >= 15 * 60;
+    if (F.water <= 0) post('refill', late ? 95 : 60, WELL_SPOT, refillTask);
+    else { const t = rngNear(dry); post('water', late ? 96 : 61, t, () => waterTask(t)); } }
+  if (tilledEmpty.length && bagN > 0) { const t = rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t)); }
+  else if (tilledEmpty.length && (storeN > 0 || F.gathered > 0)) post('fetch', 68, BARN_DOOR, () => fetchTask(tilledEmpty.length + tillable.length));
+  else if (tilledEmpty.length && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) post('buy', 55, STALL_SPOT, sellTask);
+  if (weeds.length) { const t = rngNear(weeds); post('weed', 45, t, () => weedTask(t)); }
+  if (debris.length) { const t = rngNear(debris); post('clear', 40, t, () => clearTask(t)); }
+  if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
+  if (tillable.length && T < 17 * 60) { // the wide hoe aims at the tile whose 3x3 has the most soil to turn
+    const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
+    post('till', 35, t, () => tillTask(t)); }
+  if (F.crops.length) {
+    const busy = ripe.length || dry.length || (tilledEmpty.length && bagN);
+    const base = full ? 100 : T >= 17.5 * 60 ? 80 : F.crops.length >= E.basket * 0.6 ? 58 : !busy ? 30 : 0;
+    if (base) post('sell', base, STALL_SPOT, sellTask);
+  }
+  return out;
+}
+function chooseTask() {
+  const T = S.t % 1440;
   if (T >= BEDTIME || T < WAKE - 30) {
     if (F.crops.length && T < BEDTIME + 60) return sellTask();
     if (F.gathered > 0 && T < BEDTIME + 60) return storeTask();
-    return { label: '回家睡觉', to: DOOR, dur: 5, done: () => { F.home = true; F.sleeping = true; log('回到家，躺下睡觉 Zzz'); } };
+    return homeTask();
   }
-  if (F.crops.length >= SIM.BASKET) return sellTask();
-  if (ripe.length) { const t = rngNear(ripe);
-    return { label: '正在收获', to: standAt(t), tile: t, dur: 4, fx: 'leaf', pose: 'pull', done: () => { if (!t.crop) return; const ty = t.crop.type; F.crops.push(ty); t.crop = null; groundDirty = true; burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8); popText(t.x, t.y, 12, '+1', '#ffffff'); if (rand() < SIM.CROPS[ty].seedBack) F.bag[ty]++; log(`收获了一个${SIM.CROPS[ty].name}`); } }; }
-  if (dry.length && T >= 16 * 60) return waterTask(dry); // late in the day the watering comes first
-  if (debris.length) { const t = rngNear(debris); const rock = t.debris.type === 'rock';
-    return { label: '正在清理杂物', to: standAt(t), tile: t, dur: rock ? 8 : 6, fx: rock ? 'rock' : 'wood', pose: 'pull', done: () => { t.debris = null; S.cleared++; burst(t.x, t.y, 2, rock ? ['#9a9a92', '#b9b8ad', '#77776f'] : ['#a0703f', '#7a5230'], 10); log(rock ? '搬走了一块石头' : '清走了一根树枝'); groundDirty = true; } }; }
-  if (weeds.length) { const t = rngNear(weeds);
-    return { label: '正在拔草收集种子', to: standAt(t), tile: t, dur: 6, fx: 'leaf', pose: 'pull', done: () => { t.weed = null; const n = RI(2, 3); F.gathered += n; burst(t.x, t.y, 3, ['#5a9a3a', '#e6c35c', '#3f7a32'], 10); popText(t.x, t.y, 10, '+' + n, '#e6c35c'); log(`拔掉杂草，收集到 ${n} 颗种子`); } }; }
-  if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) return storeTask();
-  if (tilledEmpty.length && (bagN > 0 || S.store.carrot > 0 || F.gathered > 0)) {
-    if (bagN <= 0 && F.gathered > 0) { F.bag.carrot += F.gathered; F.gathered = 0; }
-    else if (bagN <= 0) { const n = Math.min(S.store.carrot, tilledEmpty.length + tillable.length); return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => { const m = Math.min(n, S.store.carrot); S.store.carrot -= m; F.bag.carrot += m; log(`从仓库取出 ${m} 颗胡萝卜种子`); } }; }
-    const t = rngNear(tilledEmpty), ty = SIM.pickFromBag(F.bag, S.prices);
-    return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
-  }
-  if (tillable.length && T < 17 * 60) { const t = rngNear(tillable); // tilled soil is permanent, so every open tile gets tilled once
-    return { label: '正在开垦土地', to: standAt(t), tile: t, dur: 4, fx: 'dirt', pose: 'hoe', done: () => { t.tilled = true; groundDirty = true; burst(t.x, t.y, 1, ['#8b5a35', '#a06c43', '#6e452a'], 8); } }; }
-  if (dry.length) return waterTask(dry);
-  if (F.crops.length && (dry.length === 0 || T >= 17 * 60 + 30 || F.crops.length >= 6)) return sellTask();
-  if (tilledEmpty.length && bagN === 0 && S.store.carrot === 0 && F.gathered === 0 && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) return sellTask(); // a trip just to buy seeds
-  // nothing urgent: rest or stroll
+  let best = null, bs = -Infinity;
+  for (const j of board()) { const s = j.base - Math.hypot(j.at.x - F.x, j.at.y - F.y) / 8; if (s > bs) { bs = s; best = j; } }
+  if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
+  // nothing on the board: rest or stroll
   F.idleCount++;
-  if (F.idleCount % 3 === 0) { const t = pick(open); return { label: '在田边巡视', to: { x: t.x + R(-6, 6), y: FIELD.r0 * TILE - 4 }, dur: 6 }; }
-  return { label: '坐在池塘边休息', to: BENCH_SPOT, dur: 25, rest: true };
+  if (F.idleCount % 3 === 0) { const t = pick(tiles.filter(t => t.open)); return { kind: 'idle', label: '在田边巡视', to: { x: t.x + R(-6, 6), y: FIELD.r0 * TILE - 4 }, dur: 6 }; }
+  return { kind: 'idle', label: '坐在池塘边休息', to: BENCH_SPOT, dur: 25, rest: true };
 }
-function waterTask(dry) {
-  if (F.water <= 0) return { label: '正在井边打水', to: WELL_SPOT, dur: 8, fx: 'water', done: () => { F.water = S.waterMax; log(`在井边装满了水壶（${S.waterMax} 格）`); } };
-  const t = rngNear(dry);
-  return { label: '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => { if (t.watered || F.water <= 0) return; F.water--; t.watered = true; groundDirty = true; burst(t.x, t.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop'); } };
+function harvestTask(t) {
+  return { label: '正在收获', to: standAt(t), tile: t, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
+    if (!t.crop || !SIM.ripe(t.crop) || F.crops.length >= S.eff.basket) return;
+    const ty = t.crop.type, c = SIM.CROPS[ty]; F.crops.push(ty); groundDirty = true;
+    burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8); popText(t.x, t.y, 12, '+1', '#ffffff');
+    if (c.regrow && (t.crop.n || 0) + 1 < c.harvests) { t.crop.n = (t.crop.n || 0) + 1; t.crop.age = c.days - c.regrow; t.crop.stage = SIM.stageOf(t.crop); log(`摘了一个${c.name}（第 ${t.crop.n} 次）`); return; }
+    t.crop = null;
+    const n = SIM.harvestSeeds(ty, rand); if (n) { F.bag[ty] += n; S.flow.harvest += n; popText(t.x + 3, t.y, 16, `+${n}种`, '#e6c35c'); }
+    log(`收获了一个${c.name}` + (n ? `，留下 ${n} 颗种子` : ''));
+  } };
 }
-// one stop at the stall: sell the whole basket at today's prices, then buy seeds for the empty tiles
+function refillTask() { return { label: '正在井边打水', to: WELL_SPOT, dur: 8, fx: 'water', done: () => { F.water = S.waterMax; log(`在井边装满了水壶（${S.waterMax} 格）`); } }; }
+function waterTask(t) {
+  return { label: '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => { if (t.watered || F.water <= 0 || !t.crop) return; F.water--; t.watered = true; groundDirty = true; burst(t.x, t.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop'); } };
+}
+function plantTask(t) {
+  const ty = SIM.pickFromBag(F.bag, S.prices);
+  return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
+}
+function fetchTask(need) { // take the best seeds from the barn first
+  return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => {
+    if (F.gathered > 0) { S.store.carrot += F.gathered; F.gathered = 0; }
+    const order = CROP_IDS.slice().sort((a, b) => SIM.netPerDay(b, S.prices, true) - SIM.netPerDay(a, S.prices, true)), took = SIM.emptySeeds();
+    let left = need; for (const k of order) { const m = Math.min(left, S.store[k]); S.store[k] -= m; F.bag[k] += m; took[k] = m; left -= m; if (left <= 0) break; }
+    log(`从仓库取出种子：${seedText(took) || '没有了'}`);
+  } };
+}
+function weedTask(t) {
+  return { label: '正在拔草收集种子', to: standAt(t), tile: t, dur: 6, fx: 'leaf', pose: 'pull', done: () => { if (!t.weed) return; t.weed = null; const n = RI(2, 3); F.gathered += n; S.flow.weed += n; burst(t.x, t.y, 3, ['#5a9a3a', '#e6c35c', '#3f7a32'], 10); popText(t.x, t.y, 10, '+' + n, '#e6c35c'); log(`拔掉杂草，收集到 ${n} 颗种子`); } };
+}
+function clearTask(t) {
+  const rock = t.debris.type === 'rock';
+  return { label: '正在清理杂物', to: standAt(t), tile: t, dur: rock ? 8 : 6, fx: rock ? 'rock' : 'wood', pose: 'pull', done: () => { if (!t.debris) return; t.debris = null; S.cleared++; burst(t.x, t.y, 2, rock ? ['#9a9a92', '#b9b8ad', '#77776f'] : ['#a0703f', '#7a5230'], 10); log(rock ? '搬走了一块石头' : '清走了一根树枝'); groundDirty = true; } };
+}
+function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 around the target in one go
+  const wide = S.eff.till3;
+  return { label: wide ? '正在用宽锄头开垦' : '正在开垦土地', to: standAt(t), tile: t, dur: wide ? 5 : S.eff.tillDur, fx: 'dirt', pose: 'hoe', done: () => {
+    const area = wide ? tiles.filter(u => Math.abs(u.c - t.c) <= 1 && Math.abs(u.r - t.r) <= 1) : [t];
+    for (const u of area) if (u.open && !u.tilled && !u.crop && !u.debris && !u.weed) { u.tilled = true; burst(u.x, u.y, 1, ['#8b5a35', '#a06c43', '#6e452a'], 8); }
+    groundDirty = true;
+  } };
+}
+// one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
   return { label: F.crops.length ? '正在去市场卖菜' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
-    const n = F.crops.length;
-    if (n) { let sum = 0; for (const ty of F.crops) sum += SIM.priceOf(ty, S.prices); F.crops.length = 0;
-      S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
+    const n = F.crops.length, open = tiles.filter(t => t.open);
+    let sum = 0; for (const ty of F.crops) sum += SIM.priceOf(ty, S.prices); F.crops.length = 0;
+    const sp = SIM.surplusSeeds(F.bag, S.store, open.length);
+    if (sp.gold) { for (const k of CROP_IDS) F.bag[k] -= sp.sell[k]; sum += sp.gold; S.flow.sold += seedCount(sp.sell); S.flow.soldGold += sp.gold; log(`卖掉多余的种子：${seedText(sp.sell)}（${sp.gold} 金）`); }
+    if (sum) { S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
       popText(STALL.x + R(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'spark');
-      log(`卖出 ${n} 个作物，得 ${sum} 金`); }
-    const open = tiles.filter(t => t.open), need = open.filter(t => !t.crop).length - seedCount(F.bag);
-    if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered);
-      if (p.cost > 0) { S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
+      if (n) log(`卖出 ${n} 个作物，得 ${sum - sp.gold} 金`); }
+    const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
+    if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops);
+      if (p.cost > 0) { S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
   } };
 }
 
@@ -589,7 +654,7 @@ function stepSim(dm) {
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
   const dx = tgt.x - F.x, dy = tgt.y - F.y, dist = Math.hypot(dx, dy);
-  if (dist > 0.5) { const st = Math.min(dist, WALK * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
+  if (dist > 0.5) { const st = Math.min(dist, WALK * S.eff.walk * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
     k.work += dm; F.act += dm; F.moving = false;
@@ -751,11 +816,26 @@ function drawSpr(c, o, poseT) { // small 2D sprite anchored at its bottom centre
   c.drawImage(s, 0, 0, s.width, cut, x + dx, y, s.width, cut); c.drawImage(s, 0, cut, s.width, s.height - cut, x, y + cut, s.width, s.height - cut);
 }
 const CROP_SPR = [SPRITES.seed, SPRITES.sprout, SPRITES.young];
-function drawCrop(c, o, poseT) { // ripe crops are SpriteCook billboards; the leafy top half sways with the trees' wind
+// ripe-crop atlas, 16x16 per crop in SIM.IDS order: the three SpriteCook crops, then hand-drawn strawberry and watermelon
+const RIPE_EXTRA = {
+  strawberry: pix(['....l...g.....', '...lgg.ggl....', '..gglgggmgg...', '.ggmgglggmgg..', '.gRrgmggrRmg..', 'ggrrmggmgrrgg.', 'gmRrgglgmgRmgg',
+    '.mgmrRggmrrgg.', '.gmgrrmgmRmgm.', '..mmgmgrrgmm..', '...dmmgRrmd...', '....dmmmmd....', '......dd......', '..............']),
+  watermelon: pix(['..........l...', '....ll..lgl...', '.....lggg.....', '..............', '...mmdmmdmm...', '..mdmmdmmdmm..', '.mdmhdmmdmmdm.',
+    'mmdmhdmmdmmdmm', 'mmdmmdmmdmmdmm', 'mmdmmdmmdmmdmm', '.mdmmdmmdmmdm.', '..mdmmdmmdmd..', '...ddddddddd..', '..............']),
+};
+const CROPX = { c: null };
+function cropAtlas() { // built once the SpriteCook sheet has loaded
+  if (CROPX.c || !CROPI.ok) return CROPX.c;
+  const a = mkc(16 * CROP_IDS.length, 16), g = a.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(CROPI.img, 0, 0);
+  CROP_IDS.forEach((k, i) => { if (RIPE_EXTRA[k]) g.drawImage(RIPE_EXTRA[k], i * 16, 0); });
+  return CROPX.c = a;
+}
+function drawCrop(c, o, poseT) { // ripe crops are 16x16 billboards; the leafy top half sways with the trees' wind
+  const img = cropAtlas(); if (!img) return;
   const [sx, sy] = proj(o.x, o.y), x = Math.round(sx) - 8, y = Math.round(sy) - 13, u = o.ci * 16;
   const [dx] = clumpPose(o.x, o.y, 0.45, 0, poseT);
-  if (o.flip) { c.save(); c.translate(x + 16, 0); c.scale(-1, 1); c.drawImage(CROPI.img, u, 0, 16, 9, -dx, y, 16, 9); c.drawImage(CROPI.img, u, 9, 16, 7, 0, y + 9, 16, 7); c.restore(); return; }
-  c.drawImage(CROPI.img, u, 0, 16, 9, x + dx, y, 16, 9); c.drawImage(CROPI.img, u, 9, 16, 7, x, y + 9, 16, 7);
+  if (o.flip) { c.save(); c.translate(x + 16, 0); c.scale(-1, 1); c.drawImage(img, u, 0, 16, 9, -dx, y, 16, 9); c.drawImage(img, u, 9, 16, 7, 0, y + 9, 16, 7); c.restore(); return; }
+  c.drawImage(img, u, 0, 16, 9, x + dx, y, 16, 9); c.drawImage(img, u, 9, 16, 7, x, y + 9, 16, 7);
 }
 
 // ---------- render ----------
@@ -891,7 +971,7 @@ function render() {
   for (const t of tiles) {
     if (t.debris) list.push({ m: debrisModel(t.debris), x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
     if (t.weed) list.push({ spr: weedSprite(t.weed), x: t.x, y: t.y, sway: 0.8, w: 1 });
-    if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: ['carrot', 'cabbage', 'pumpkin'].indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
+    if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: CROP_IDS.indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
       else list.push({ spr: CROP_SPR[Math.min(2, t.crop.stage)], x: t.x, y: t.y, sway: t.crop.stage === 2 ? 0.5 : 0, flat: t.crop.stage === 0 }); }
   }
   let farmerD = null;
@@ -1011,8 +1091,8 @@ function hud() {
   document.getElementById('clock').textContent = fmtT(S.t);
   document.getElementById('act').textContent = '当前：' + S.label;
   document.getElementById('coins').textContent = S.coins;
-  document.getElementById('seeds').textContent = S.store.carrot;
-  const pr = CROP_IDS.map(k => { const m = S.prices[k]; return `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${m > 1.02 ? '↑' : m < 0.98 ? '↓' : ''}`; }).join(' · ');
+  document.getElementById('seeds').textContent = seedCount(S.store);
+  const pr = S.eff.crops.map(k => { const m = S.prices[k]; return `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${m > 1.02 ? '↑' : m < 0.98 ? '↓' : ''}`; }).join(' · ');
   if (hudPrices !== pr) { hudPrices = pr; document.getElementById('prices').textContent = '今日行情：' + pr; }
   document.getElementById('log').innerHTML = S.log.map(s => `<div>${s}</div>`).join('');
 }
@@ -1041,7 +1121,7 @@ function advance(dt) {
   cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;
   // (no camera follow: a drifting camera shifted the whole map by a pixel every few frames)
   const mult = F.sleeping ? SIM.SLEEP_MULT : 1;
-  let dm = dt * MIN_PER_SEC * SPEED * mult;
+  let dm = dt * MIN_PER_SEC * SPEED * (S.speed || 1) * mult; // SPEED: ?speed= debug multiplier; S.speed: the bought 1x / 2x / 4x
   while (dm > 0) { const s = Math.min(dm, 1); stepSim(s); dm -= s; }
   updateFx(dt);
 }
@@ -1080,7 +1160,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 buildGroundBase();
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '4.0';
+const GAME_VERSION = '4.1';
 function snapshot() {
   return {
     saveVersion: PFSave.CURRENT, gameVersion: GAME_VERSION, createdAt: S.createdAt, savedAt: Date.now(), rng: RNG.a,
@@ -1089,7 +1169,8 @@ function snapshot() {
     prices: Object.assign({}, S.prices),
     inventory: { water: F.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, F.bag), gathered: F.gathered, basket: F.crops.slice() },
     farmer: { x: Math.round(F.x * 100) / 100, y: Math.round(F.y * 100) / 100, sleeping: F.sleeping, home: F.home },
-    tiles: tiles.map(t => ({ c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, rot: t.crop.rot } })),
+    tiles: tiles.map(t => ({ c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot } })),
+    upgrades: Object.assign({}, S.up), settings: { speed: S.speed },
     log: S.log.slice(),
   };
 }
@@ -1103,6 +1184,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   for (const t of tiles) { const o = byPos.get(t.c + ',' + t.r); if (!o) continue;
     Object.assign(t, { open: o.open, tilled: o.tilled, watered: o.watered, debris: o.debris, weed: o.weed, crop: o.crop && Object.assign({}, o.crop) });
     if (t.crop) t.crop.stage = SIM.stageOf(t.crop); }
+  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; applyUpgrades(); // opens tiles a v1 save did not know about
   S.log = s.log.slice(); S.label = F.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
 }
 const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };
@@ -1128,7 +1210,9 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', saveNow);
-Object.assign(window.__farm, { SAVE, snapshot, restore, saveNow, settleOffline, version: GAME_VERSION,
+Object.assign(window.__farm, { SAVE, snapshot, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - Math.hypot(j.at.x - F.x, j.at.y - F.y) / 8) * 10) / 10 })),
+  setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; saveNow(); return true; } return false; },
+  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });

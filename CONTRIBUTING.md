@@ -66,7 +66,7 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
 
 ## 存档兼容
 
-存档从 v4.0 开始上线（`saveVersion` 1）。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
+存档从 v4.0 开始上线（`saveVersion` 1）；v4.1 升到 2（加了 `upgrades` 商店等级和 `settings.speed`，作物多了 `n` 已采摘次数）。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
 
 - 存档放在 `localStorage` 的 `mouzhi/pixel-farm:save`，上一份能读的存档在 `:bak`。键名都带 `mouzhi/pixel-farm:` 前缀，因为同一个 GitHub Pages 域名下的其他项目共用 localStorage。
 - 存档是一个 JSON 对象，带整数 `saveVersion`。读档时按顺序跑 `MIGRATIONS[v]`，把 v-1 升到 v，一直升到 `CURRENT`；然后 `validate()` 补齐所有缺失字段的默认值、限制范围，所以缺字段不会报错。
