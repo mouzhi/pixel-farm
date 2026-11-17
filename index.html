@@ -4,30 +4,37 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.1.1</title>
+<title>像素堆叠 · 放置农场 v5.1.2</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
   canvas#game{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
-  #hud{position:absolute;left:12px;top:12px;color:#fff6dc;font:600 15px/1.45 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Noto Serif CJK SC",sans-serif;
-       background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:220px;letter-spacing:.5px}
+  /* v5.1.2: HUD chrome is a viewport grid so 第N天 / 日志 / 背包 / 标题 never overlap, including letterboxed laptop sizes */
+  #ui{position:fixed;inset:12px;display:grid;grid-template-columns:minmax(220px,min(380px,32vw)) minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"left mid right" "left mid right" "left inv btmr";gap:8px;pointer-events:none;z-index:2}
+  #leftDock{grid-area:left;display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-width:0;max-width:100%;align-self:stretch;z-index:3}
+  #leftBottom{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto}
+  #rightDock{grid-area:right;display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0;z-index:3}
+  #navBtns{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  #bottomRight{grid-area:btmr;display:flex;gap:4px;align-items:flex-end;justify-content:flex-end;align-self:end}
+  #hud{color:#fff6dc;font:600 15px/1.45 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Noto Serif CJK SC",sans-serif;
+       background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:0;width:100%;box-sizing:border-box;letter-spacing:.5px;flex:none}
   #hud .row{display:flex;gap:14px;justify-content:space-between}
   #hud b{color:#ffd76a}
   #act{color:#bff0a0;margin:2px 0}
-  #title{position:absolute;right:12px;top:12px;color:#fff6dc;font:600 13px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:4px 10px;border:2px solid #e8c78a}
-  #log{position:absolute;left:12px;bottom:12px;color:#fff6dc;font:500 13px/1.5 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:6px 10px;border:2px solid #b89a66;min-width:240px}
+  #title{grid-area:mid;justify-self:end;align-self:start;color:#fff6dc;font:600 13px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:4px 10px;border:2px solid #e8c78a;max-width:min(420px,100%);box-sizing:border-box;z-index:3}
+  #log{color:#fff6dc;font:500 13px/1.5 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:6px 10px;border:2px solid #b89a66;min-width:0;width:100%;box-sizing:border-box}
   #log div{opacity:.95}
   canvas#game{cursor:grab} body.grab canvas#game{cursor:grabbing}
   #fakecursor{position:fixed;left:-50px;top:-50px;width:26px;height:26px;margin:-13px 0 0 -13px;border-radius:50%;border:3px solid #fff6dc;background:rgba(255,215,106,.35);box-shadow:0 0 0 2px #3a2a20;pointer-events:none;z-index:9}
   body.grab #fakecursor{background:rgba(255,215,106,.8);transform:scale(.8)}
   #log div:nth-child(2){opacity:.75}#log div:nth-child(3){opacity:.55}#log div:nth-child(4){opacity:.4}
-  #catches{position:absolute;left:12px;bottom:118px;color:#fff6dc;font:500 12px/1.45 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:5px 10px;border:2px solid #b89a66;min-width:160px;max-width:260px}
+  #catches{color:#fff6dc;font:500 12px/1.45 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:5px 10px;border:2px solid #b89a66;min-width:0;max-width:100%;box-sizing:border-box}
   #catches[hidden]{display:none}#catches b{color:#ffd76a;font-weight:600}#catches .h{opacity:.75;margin-bottom:2px}
   .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:96px 24px;image-rendering:pixelated}
   .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}
-  #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px}
+  #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px;overflow-wrap:anywhere}
   .panel{position:absolute;color:#fff6dc;font:600 13px/1.5 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:rgba(40,28,22,.86);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35)}
-  #inv{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:6px;padding:6px 8px}
+  #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:6px 8px;max-width:100%;box-sizing:border-box}
   .slot{width:62px;height:58px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
   .slot .n{position:absolute;right:3px;top:1px;font-size:13px;color:#ffd76a;text-shadow:1px 1px 0 #000}
   .slot .k{font-size:11px;font-weight:500;opacity:.8;line-height:1;margin-top:1px}
@@ -38,12 +45,10 @@
   .meter .ticks{position:absolute;left:6px;top:0;width:1px;height:5px;background:#10202a;box-shadow:6px 0 #10202a,12px 0 #10202a,18px 0 #10202a,24px 0 #10202a,30px 0 #10202a,36px 0 #10202a;pointer-events:none}
   .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
   .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
-  #menuBtn{position:absolute;right:12px;top:66px}
-  #shopBtn{position:absolute;right:86px;top:66px}
-  #storeBtn{position:absolute;right:168px;top:66px}
-  #speed{position:absolute;right:250px;top:66px;display:flex;gap:4px}#speed[hidden]{display:none}
+  #menuBtn,#shopBtn,#storeBtn{position:relative}
+  #speed{position:relative;display:flex;gap:4px}#speed[hidden]{display:none}
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
-  #shop{right:12px;top:100px;width:420px;max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
+  #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
   #shop .cards{display:flex;flex-direction:column;gap:5px}
   #shop .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
@@ -51,19 +56,19 @@
   #shop .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
   #shop .ct{flex:1;min-width:0}#shop .lv{font-weight:500;font-size:11px;opacity:.75}#shop .d{font-weight:500;font-size:12px;opacity:.85}
   #shop .cb{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}#shop .short{font-size:11px;color:#f0a090;font-weight:500}#shop .done{color:#8fd35a;font-size:18px}
-  #menu{right:12px;top:100px;width:320px;padding:10px 12px}
-  #syncHint{position:absolute;right:12px;top:42px;font-size:11px;padding:2px 8px;z-index:3}
+  #menu{position:relative;right:auto;top:auto;width:min(320px,calc(100vw - 24px));padding:10px 12px}
+  #syncHint{position:relative;right:auto;top:auto;font-size:11px;padding:2px 8px;z-index:3}
   #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
   #menu textarea{width:100%;box-sizing:border-box;height:64px;font:11px monospace;background:#1a120e;color:#fff6dc;border:2px solid #8a6a44;resize:none}
   #menu .note{font-weight:500;font-size:12px;opacity:.85}
   #menu .bad{color:#ffb39a}
-  #offline{left:50%;top:40%;transform:translate(-50%,-50%);padding:14px 18px;min-width:280px;text-align:center;font-size:14px}
+  #offline{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);padding:14px 18px;min-width:280px;text-align:center;font-size:14px;z-index:5}
   #offline h3{margin:0 0 6px;font-size:16px;color:#ffd76a}
-  #minimap{right:12px;top:100px;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto}#minimap[hidden]{display:none}
-  #mapBtn{position:absolute;right:12px;bottom:12px}
-  #tools{position:absolute;right:76px;bottom:12px;display:flex;gap:4px}#tools[hidden]{display:none}
+  #minimap{position:relative;right:auto;top:auto;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
+  #mapBtn{position:relative}
+  #tools{position:relative;display:flex;gap:4px}#tools[hidden]{display:none}
   #shop,#menu,#store{z-index:3}
-  #store{right:12px;top:100px;width:380px;bottom:90px;overflow:auto;padding:8px 10px}
+  #store{position:relative;right:auto;top:auto;bottom:auto;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
   #store .sec{font-size:12px;opacity:.7;margin:6px 0 4px}
   #store .cards{display:flex;flex-direction:column;gap:5px}
@@ -73,8 +78,8 @@
   #store .cb{display:flex;flex-direction:column;align-items:flex-end;gap:0;flex:none;color:#ffd76a}#store .cb .u{font-size:11px;opacity:.8;font-weight:500;color:#fff6dc}
   #store .empty{opacity:.7;font-weight:500;padding:4px 2px}
   #store .who{font-size:11px;opacity:.7;margin:2px 0 0}
-  .rlab{position:absolute;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0}.rlab b{color:#ffd76a}.rlab[hidden]{display:none}
-  #say{left:50%;top:76px;transform:translateX(-50%);padding:4px 12px;pointer-events:none}#say[hidden]{display:none}
+  .rlab{position:fixed;transform:translate(-50%,-100%);padding:2px 8px;font-size:12px;line-height:16px;white-space:nowrap;cursor:pointer;text-align:center;color:#ffe9b0;z-index:1}.rlab b{color:#ffd76a}.rlab[hidden]{display:none}
+  #say{position:fixed;left:50%;top:76px;transform:translateX(-50%);padding:4px 12px;pointer-events:none;z-index:3}#say[hidden]{display:none}
   #shop .sec{font-size:12px;opacity:.7;margin:6px 0 0}#shop .look{padding:0 6px;font-size:12px;margin-top:2px}
   #loveHud{margin-top:5px;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;font-size:13px}
   #loveHud.dim{opacity:.7}
@@ -82,43 +87,56 @@
   #loveHud .meter{width:72px;margin-top:0;background:#4a1c1c;box-shadow:0 0 0 1px #2a1d16}
   #loveHud .meter .fill{background:#e57fa0}
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
-  #loveTip{left:12px;padding:8px 10px;min-width:220px;max-width:280px;z-index:4;font-weight:500;font-size:13px;line-height:1.5}
+  #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip b, #loveVal{color:#ffd76a}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
 </style>
 </head>
 <body>
 <div id="wrap">
   <canvas id="game"></canvas>
-  <div id="hud">
-    <div class="row"><span id="day">第 1 天</span><span id="clock">06:00</span></div>
-    <div id="act">当前：起床</div>
-    <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span id="storeHud" title="查看仓库（I）" style="cursor:pointer"><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
-    <div id="prices">今日行情：</div>
-    <div id="loveHud" title="去集市逛逛，就能认识店主阿禾。">
-      <i id="loveIco"></i><span id="loveLab">阿禾</span><b id="loveVal">0/100</b>
-      <div class="meter" id="loveBar"><i class="fill" id="loveFill" style="width:0"></i><span class="ticks"></span></div>
-    </div>
-  </div>
-  <div id="loveTip" class="panel" hidden></div>
-  <div id="title">像素堆叠 · 放置农场 v5.1.1 · 田里的小惊喜（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · 滚轮缩放</span></div>
-  <div id="log"></div>
-  <div id="catches" hidden></div>
-  <div id="inv" class="panel"></div>
-  <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
-  <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
-  <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
-  <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
-  <div id="speed" hidden></div>
-  <div id="shop" class="panel" hidden></div>
-  <div id="store" class="panel" hidden></div>
-  <div id="menu" class="panel" hidden></div>
-  <div id="offline" class="panel" hidden></div>
-  <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
-  <button id="mapBtn" class="pbtn" title="小地图（M）">地图 M</button>
-  <div id="tools" hidden></div>
-  <div id="say" class="panel" hidden></div>
   <div id="rlabs"></div>
 </div>
+<div id="ui">
+  <div id="leftDock">
+    <div id="hud">
+      <div class="row"><span id="day">第 1 天</span><span id="clock">06:00</span></div>
+      <div id="act">当前：起床</div>
+      <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span id="storeHud" title="查看仓库（I）" style="cursor:pointer"><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
+      <div id="prices">今日行情：</div>
+      <div id="loveHud" title="去集市逛逛，就能认识店主阿禾。">
+        <i id="loveIco"></i><span id="loveLab">阿禾</span><b id="loveVal">0/100</b>
+        <div class="meter" id="loveBar"><i class="fill" id="loveFill" style="width:0"></i><span class="ticks"></span></div>
+      </div>
+    </div>
+    <div id="loveTip" class="panel" hidden></div>
+    <div id="leftBottom">
+      <div id="catches" hidden></div>
+      <div id="log"></div>
+    </div>
+  </div>
+  <div id="title">像素堆叠 · 放置农场 v5.1.2 · 田里的小惊喜（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · 滚轮缩放</span></div>
+  <div id="rightDock">
+    <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
+    <div id="navBtns">
+      <div id="speed" hidden></div>
+      <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
+      <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
+      <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
+    </div>
+    <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
+    <div id="shop" class="panel" hidden></div>
+    <div id="store" class="panel" hidden></div>
+    <div id="menu" class="panel" hidden></div>
+  </div>
+  <div id="inv" class="panel"></div>
+  <div id="bottomRight">
+    <div id="tools" hidden></div>
+    <button id="mapBtn" class="pbtn" title="小地图（M）">地图 M</button>
+  </div>
+</div>
+<div id="offline" class="panel" hidden></div>
+<div id="say" class="panel" hidden></div>
 <script src="assets/palette.js"></script>
 <script src="assets/sprites.js"></script>
 <script src="sim.js"></script>
