@@ -25,7 +25,10 @@ const ell = (x, y, z, cx, cy, cz, rx, ry, rz) => ((x - cx) / rx) ** 2 + ((y - cy
 
 // ---------- palette (assets/palette.js): every voxel colour is a palette entry; shading only walks down its ramp ----------
 const PAL = window.PF_PALETTE, G = PAL.ramps.green, Wd = PAL.ramps.wood, Rf = PAL.ramps.roof, St = PAL.ramps.stone, Wt = PAL.ramps.water, Ac = PAL.ramps.accent, Ink = PAL.ramps.ink, Sk = PAL.ramps.skin;
-const mkc = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+// Every offscreen canvas is CPU-backed (willReadFrequently on its first getContext). Chrome can drop GPU canvas backings under
+// memory pressure or after a long time in a background tab ("context lost": the canvas turns blank); CPU canvases never do, and
+// the main canvas is CPU-backed too (shadows read it back every frame), so drawing between them needs no GPU readback.
+const mkc = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d', { willReadFrequently: true }); return c; };
 const u32 = h => { const [r, g, b] = hex(h); return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; };
 const OUTL = new Map(); for (const c of PAL.colors) OUTL.set(u32(c), u32(PAL.outlineOf[c] || Ink[0]));
 const INK0 = u32(Ink[0]);
@@ -49,7 +52,7 @@ function pix(rows, outline = true) { const h = rows.length, w = Math.max(...rows
 //   top (normal mostly up) = authored colour; slope (roofs, upper canopy) = same, or one step darker when it faces screen-right;
 //   wall = one step darker, two steps when it faces screen-right. The light is fixed to the screen, so each model keeps
 //   16 lazily built slice sets, one per 22.5 degree sector of its on-screen angle. No gradients, no noise, no AO.
-const NSEC = 16;
+const NSEC = 16, ALLM = [];
 function buildModel(w, d, h, fn, opt = {}) {
   w = Math.round(w); d = Math.round(d); h = Math.round(h);
   const N = w * d * h, vox = new Array(N).fill(null);
@@ -70,20 +73,25 @@ function buildModel(w, d, h, fn, opt = {}) {
       const L = Math.hypot(nx, ny, nz) || 1, Lh = Math.hypot(nx, ny) || 1, cz = nz / L;
       row.push([y * w + x, c, opt.flat ? 0 : cz > 0.9 ? 0 : cz > 0.3 ? 1 : 2, nx / Lh, ny / Lh]); } }
   fctx.putImageData(fimg, 0, 0);
-  const m = { w, d, h, cells, foot, secs: new Array(NSEC), noOutline: !!opt.noOutline };
+  const m = { w, d, h, cells, foot, secs: new Array(NSEC), noOutline: !!opt.noOutline }; ALLM.push(m);
   m.slices = sliceSet(m, 0); return m;
 }
+// One atlas canvas per (model, sector): slice z sits in row z (stride d + 1, a transparent gap so nearest sampling never bleeds).
+// v3.0 made one canvas per slice: ~10 000 canvases and 120 MB+ of backing store after a few minutes, which is what made Chrome
+// drop the canvases and blank the farm. drawSlice() draws one row of the atlas.
 function sliceSet(m, s) {
   if (m.secs[s]) return m.secs[s];
-  const a = s * 2 * Math.PI / NSEC, ca = Math.cos(a), sa = Math.sin(a), out = [];
-  for (let z = 0; z < m.h; z++) { const row = m.cells[z]; if (!row.length) { out.push(null); continue; }
-    const c = mkc(m.w, m.d), g = c.getContext('2d'), img = g.createImageData(m.w, m.d), d32 = new Uint32Array(img.data.buffer);
+  const a = s * 2 * Math.PI / NSEC, ca = Math.cos(a), sa = Math.sin(a), st = m.d + 1, out = { c: null, has: new Array(m.h).fill(false), w: m.w, d: m.d, st, length: 0 };
+  const c = mkc(m.w, Math.max(1, st * m.h)), g = c.getContext('2d'), img = g.createImageData(c.width, c.height), d32 = new Uint32Array(img.data.buffer);
+  for (let z = 0; z < m.h; z++) { const row = m.cells[z]; if (!row.length) continue; out.has[z] = true; out.length++;
+    const off = z * st * m.w;
     for (const [p, col, cls, nx, ny] of row) { const sx = nx * ca - ny * sa; // which way this face points on screen
       const step = cls === 0 ? 0 : cls === 1 ? (sx > 0.35 ? 1 : 0) : (sx > 0.35 ? 2 : 1);
-      d32[p] = u32(PAL.dark(col, step)); }
-    g.putImageData(img, 0, 0); out.push(c); }
+      d32[off + p] = u32(PAL.dark(col, step)); } }
+  g.putImageData(img, 0, 0); out.c = c;
   return (m.secs[s] = out);
 }
+const drawSlice = (g, sl, i, x, y) => g.drawImage(sl.c, 0, i * sl.st, sl.w, sl.d, x, y, sl.w, sl.d);
 const secOf = a => ((Math.round(a / (2 * Math.PI / NSEC)) % NSEC) + NSEC) % NSEC;
 const slicesAt = (m, a) => sliceSet(m, secOf(a));
 
@@ -304,12 +312,12 @@ function clumpPose(x, y, w, lean, t) { // screen-px downwind offset and lift
 // ---------- canvas ----------
 const cv = document.getElementById('game'), ctx = cv.getContext('2d', { willReadFrequently: true });
 cv.width = W; cv.height = H;
-const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const mk = mkc;
 const shMask = new Uint32Array(W * H);
 const shC = mk(W, H), sctx = shC.getContext('2d');
 const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H);
 const GW = Math.ceil((WW + 2 * M) * RS), GH = Math.ceil((WH + 2 * M) * RS);
-const groundBase = mk(GW, GH), ground = mk(GW, GH);
+const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
 let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
 function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
@@ -387,7 +395,7 @@ const F = S.farmer;
 const particles = [];
 let groundDirty = true;
 const fmtT = t => { const m = ((Math.floor(t) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
-function log(msg) { S.log.unshift(fmtT(S.t) + ' ' + msg); S.log.length = Math.min(S.log.length, 4); S.events.push({ day: S.day, t: Math.floor(S.t), msg }); }
+function log(msg) { S.log.unshift(fmtT(S.t) + ' ' + msg); S.log.length = Math.min(S.log.length, 4); S.events.push({ day: S.day, t: Math.floor(S.t), msg }); if (S.events.length > 300) S.events.splice(0, S.events.length - 300); }
 const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { const d = Math.hypot(t.x - F.x, t.y - F.y + 6); if (d < bd) { bd = d; best = t; } } return best; };
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
 
@@ -506,21 +514,27 @@ function proj(x, y) { const rx = x * CA - y * SA, ry = x * SA + y * CA; return [
 // Rotated stacks are rendered at 3x and reduced with a majority (mode) filter: each screen pixel takes the colour that covers
 // most of it, so stripes keep their shape at every angle. Each result gets its own selective outline and is cached per angle.
 const SS = 3, ssC = mk(8, 8), ssG = ssC.getContext('2d', { willReadFrequently: true });
+const STK = new Map(), STK_BUDGET = 16e6; let stkPx = 0; // ~64 MB (CPU) of cached stacks at most, least recently used goes first
 function stackCanvas(m, a) {
-  const map = m._ck || (m._ck = new Map()); let k = map.get(a); if (k) return k;
-  if (map.size > 300) map.clear(); k = {}; map.set(a, k);
+  const map = m._ck || (m._ck = new Map()); let k = map.get(a);
+  if (k) { STK.delete(k); STK.set(k, m); return k; }
+  k = { a }; map.set(a, k); k.done = () => { k.px = k.c.width * k.c.height; stkPx += k.px; STK.set(k, m);
+    while ((stkPx > STK_BUDGET || STK.size > 6000) && STK.size > 1) { const [ok, om] = STK.entries().next().value; STK.delete(ok); om._ck.delete(ok.a); stkPx -= ok.px; ok.c.width = ok.c.height = 0; } };
+  return buildStack(m, a, k);
+}
+function buildStack(m, a, k) {
   const sl = slicesAt(m, a), ca = Math.cos(a), sa = Math.sin(a), r = Math.ceil(Math.hypot(m.w, m.d) / 2) + 2;
   const w = 2 * r, h = Math.ceil(2 * r * K) + m.h + 4; k.ox = r; k.oy = Math.ceil(r * K) + m.h + 1;
   if (m.w * m.d * m.h < 3000) { // small props: plain nearest is stable enough (and fast)
     k.c = mk(w, h); const g = k.c.getContext('2d'); g.imageSmoothingEnabled = false;
-    for (let i = 0; i < m.h; i++) { if (!sl[i]) continue; g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); g.drawImage(sl[i], -m.w / 2, -m.d / 2); }
-    if (!m.noOutline) outlineCanvas(k.c); return k;
+    for (let i = 0; i < m.h; i++) { if (!sl.has[i]) continue; g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); drawSlice(g, sl, i, -m.w / 2, -m.d / 2); }
+    if (!m.noOutline) outlineCanvas(k.c); k.done(); return k;
   }
   const BW = w * SS, BH = h * SS; k.c = mk(w, h);
   if (ssC.width < BW || ssC.height < BH) { ssC.width = Math.max(ssC.width, BW); ssC.height = Math.max(ssC.height, BH); }
   const g = ssG; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, BW, BH); g.imageSmoothingEnabled = false;
-  for (let i = 0; i < m.h; i++) { if (!sl[i]) continue;
-    for (let t = SS - 1; t >= 0; t--) { g.setTransform(ca * SS, sa * K * SS, -sa * SS, ca * K * SS, k.ox * SS, (k.oy - i) * SS + t); g.drawImage(sl[i], -m.w / 2, -m.d / 2); } }
+  for (let i = 0; i < m.h; i++) { if (!sl.has[i]) continue;
+    for (let t = SS - 1; t >= 0; t--) { g.setTransform(ca * SS, sa * K * SS, -sa * SS, ca * K * SS, k.ox * SS, (k.oy - i) * SS + t); drawSlice(g, sl, i, -m.w / 2, -m.d / 2); } }
   g.setTransform(1, 0, 0, 1, 0, 0);
   const src = new Uint32Array(g.getImageData(0, 0, BW, BH).data.buffer), out = new ImageData(w, h), dst = new Uint32Array(out.data.buffer);
   const v = new Uint32Array(SS * SS);
@@ -532,7 +546,7 @@ function stackCanvas(m, a) {
     for (let q = 0; q < n; q++) { const c = v[q]; if (c === best) continue; let cnt = 0; for (let s = 0; s < n; s++) if (v[s] === c) cnt++; if (cnt > bc) { bc = cnt; best = c; } }
     dst[y * w + x] = best >>> 0;
   }
-  k.c.getContext('2d').putImageData(out, 0, 0); if (!m.noOutline) outlineCanvas(k.c); return k;
+  k.c.getContext('2d').putImageData(out, 0, 0); if (!m.noOutline) outlineCanvas(k.c); k.done(); return k;
 }
 function drawStack(c, m, x, y, z, rot) { // z in screen px
   const [sx, sy] = proj(x, y), k = stackCanvas(m, AQ + rot);
@@ -710,7 +724,7 @@ function drawTree(c, o, poseT) { // trunk stack + leaf discs placed relative to 
     if (!k.c) { k.c = mk(2 * T.R, Math.ceil(2 * T.R * K) + T.h + 14); k.g = k.c.getContext('2d', { willReadFrequently: true }); k.g.imageSmoothingEnabled = false; }
     const g = k.g; k.ox = T.R; k.oy = Math.ceil(T.R * K) + T.h + 8; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, k.c.width, k.c.height);
     for (const p of T.parts) { const m = p.m, sl = slicesAt(m, AQ), bx = k.ox + Math.round(p.ox * CA - p.oy * SA), by = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - p.z;
-      for (let i = 0; i < m.h; i++) { if (!sl[i]) continue; g.setTransform(CA, SA * K, -SA, CA * K, bx, by - i); g.drawImage(sl[i], -m.w / 2, -m.d / 2); } }
+      for (let i = 0; i < m.h; i++) { if (!sl.has[i]) continue; g.setTransform(CA, SA * K, -SA, CA * K, bx, by - i); drawSlice(g, sl, i, -m.w / 2, -m.d / 2); } }
     g.setTransform(1, 0, 0, 1, 0, 0);
     for (const [p, dx, dz] of items) { const s = discSprite(p.r, p.tone, !!p.berries);
       const x = k.ox + Math.round(p.ox * CA - p.oy * SA) + dx, y = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - Math.round(p.cz + dz);
@@ -795,12 +809,31 @@ function frame(now) {
 }
 window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, cropArt: v => { CROPI.on = v; } };
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
-{ const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1;
+{ const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
   const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
-  const work = dl => { while (n <= 128 && dl.timeRemaining() > 4) { const base = Math.round(cam.ta / ASTEP);
-      for (const s of [n, -n]) for (const p of big) stackCanvas(p.m, (base + s) * ASTEP + p.rot); n++; }
-    if (n <= 128) idle(work); };
+  const work = dl => { const b = Math.round(cam.ta / ASTEP); if (b !== base) { base = b; n = 1; }
+    while (n <= 128 && dl.timeRemaining() > 4 && stkPx < STK_BUDGET * 0.8) { for (const s of [n, -n]) for (const p of big) stackCanvas(p.m, (base + s) * ASTEP + p.rot); n++; }
+    setTimeout(() => idle(work), n > 128 || stkPx >= STK_BUDGET * 0.8 ? 400 : 0); }; // keep watching: after a manual turn, warm around the new angle
   if (!MANUAL) idle(work); }
+// Watchdog: if the browser ever hands back a blanked canvas anyway (context lost / restored), throw away every cache and rebuild
+// it from the voxel data, instead of drawing an empty farm until reload.
+function cacheBlank() { // the ground is fully painted, and a weed sprite always has some opaque pixels
+  if (groundBase.getContext('2d').getImageData(GW >> 1, GH >> 1, 1, 1).data[3] === 0) return true;
+  const c = SPRITES.weed[0], d = c.getContext('2d').getImageData(0, 0, c.width, c.height).data;
+  for (let i = 3; i < d.length; i += 4) if (d[i]) return false; return true; }
+function rebuildCaches(why) {
+  for (const [k, m] of STK) { m._ck.delete(k.a); } STK.clear(); stkPx = 0;
+  for (const m of ALLM) { m._ck = null; m.secs = new Array(NSEC); m.slices = sliceSet(m, 0); }
+  for (const p of props) if (p.tree) p._ck = null; discC.clear(); buildGroundBase();
+  console.warn('[farm] caches rebuilt:', why); window.__farm.rebuilds = (window.__farm.rebuilds || 0) + 1;
+  if (cacheBlank()) location.reload(); // hand-drawn sprites were lost too: start fresh
+}
+cv.addEventListener('contextlost', e => e.preventDefault());
+cv.addEventListener('contextrestored', () => rebuildCaches('main canvas restored'));
+setInterval(() => { if (!document.hidden && cacheBlank()) rebuildCaches('blank cache detected'); }, 3000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && cacheBlank()) rebuildCaches('blank cache after tab was hidden'); });
+window.__farm.mem = () => ({ stkPx, stk: STK.size, atlasPx: ALLM.reduce((t, m) => t + m.secs.reduce((u, x) => u + (x ? x.c.width * x.c.height : 0), 0), 0) });
+window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clearRect(0, 0, GW, GH); }; // test hook for the watchdog
 buildGroundBase();
 log('早上好！农场里乱糟糟的，先收拾一下');
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
