@@ -8,7 +8,7 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 5;
+  const CURRENT = 6;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -31,9 +31,13 @@
       up.field = lv;
       return Object.assign({}, s, { upgrades: up });
     },
+    // v4.5 animals (migration 6): no pasture, buildings or animals bought, an empty trough, no hay; egg / wool / milk start at the base price
+    6: s => Object.assign({}, s, { upgrades: Object.assign({ pasture: 0, coop: 0, shed: 0, chicken: 0, sheep: 0, cow: 0 }, s.upgrades), animals: [], trough: { feed: 0, water: 0 },
+      inventory: Object.assign({ hay: 0 }, s.inventory), prices: Object.assign({ egg: 1, wool: 1, milk: 1 }, s.prices) }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south']; // levels; max levels live in sim.js
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'shed', 'chicken', 'sheep', 'cow']; // levels; max levels live in sim.js
+  const ANIMAL_IDS = ['chicken', 'sheep', 'cow'], PRODUCT_IDS = ['egg', 'wool', 'milk'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
@@ -58,6 +62,10 @@
     return { id: t.id, x: num(t.x, 0, -400, 600), y: num(t.y, 0, -400, 600), kind: t.kind, v: int(t.v, 0, 0, 99), stage: TREE_STAGES.includes(t.stage) ? t.stage : 'tree',
       age: int(t.age, 0, 0, 999), ripe: t.ripe ? 1 : 0, cd: int(t.cd, 0, 0, 99) };
   }
+  function validAnimal(a) {
+    a = obj(a); if (typeof a.id !== 'string' || !a.id || a.id.length > 20 || !ANIMAL_IDS.includes(a.kind)) return null;
+    return { id: a.id, kind: a.kind, h: int(a.h, 60, 0, 100), cd: int(a.cd, 1, 0, 9), ready: int(a.ready, 0, 0, 3), pet: a.pet ? 1 : 0 };
+  }
   function validOrder(o) {
     o = obj(o);
     if (o.type === 'chop' && typeof o.id === 'string' && o.id.length <= 40) return { type: 'chop', id: o.id };
@@ -81,19 +89,21 @@
         totalSold: int(stats.totalSold, 0), cleared: int(stats.cleared, 0), earned: int(stats.earned, 0), soldToday: int(stats.soldToday, 0),
         todayEarn: int(stats.todayEarn, 0), dayEarn: (Array.isArray(stats.dayEarn) ? stats.dayEarn : []).slice(-7).map(v => int(v, 0)),
       },
-      prices: Object.fromEntries(CROP_IDS.map(k => [k, num(prices[k], 1, 0.8, 1.2)])),
+      prices: Object.fromEntries([...CROP_IDS, ...PRODUCT_IDS].map(k => [k, num(prices[k], 1, 0.8, 1.2)])),
       inventory: {
         water: int(inv.water, 0, 0, 999), waterMax: int(inv.waterMax, 4, 1, 999), store: seeds(inv.store), bag: seeds(inv.bag),
-        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k)).slice(0, 200),
-        wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])),
+        gathered: int(inv.gathered, 0, 0, 1e6), basket: (Array.isArray(inv.basket) ? inv.basket : []).filter(k => CROP_IDS.includes(k) || FRUIT_IDS.includes(k) || PRODUCT_IDS.includes(k)).slice(0, 200),
+        wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
       },
-      farmer: { x: num(f.x, 36, -100, 400), y: num(f.y, 40, -100, 400), sleeping: !!f.sleeping, home: f.home !== false },
+      farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
       upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
       settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
       trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
       orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),
+      animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
+      trough: { feed: int(obj(s.trough).feed, 0, 0, 99), water: obj(s.trough).water ? 1 : 0 },
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }
@@ -152,6 +162,6 @@
     if (sum(m[1]) !== m[2]) throw new Error('存档字符串不完整或被改动过');
     return migrate(JSON.parse(b64d(m[1])));
   }
-  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
+  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, ANIMAL_IDS, PRODUCT_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSave = api;
 })(typeof window !== 'undefined' ? window : globalThis);

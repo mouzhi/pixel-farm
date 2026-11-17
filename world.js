@@ -17,6 +17,10 @@
       apples: [[-120, -70], [-84, -78], [-104, -40]], desc: '3 棵苹果树，还有地方移植树苗' },
     { id: 'south', name: '南坡梯田', rect: [40, 150, 184, 204], gate: { x: 68, y: 150 }, sign: { x: 58, y: 148 }, center: { x: 112, y: 178 },
       field: { c0: 10, r0: 21, cols: 8, rows: 3 }, barrel: { x: 160, y: 164 }, desc: '24 格向阳坡地，适合草莓和西瓜' },
+    // Phase 4: the pasture. coop / shed are where the buildings go once bought; roam: where each kind wanders
+    { id: 'pasture', name: '北牧场', rect: [216, -100, 344, -8], gate: { x: 216, y: -40 }, sign: { x: 212, y: -50 }, center: { x: 280, y: -54 },
+      barrel: { x: 232, y: -22 }, trough: { x: 272, y: -24 }, coop: { x: 248, y: -78 }, shed: { x: 312, y: -76 }, hay: { x: 336, y: -46 },
+      roam: { chicken: [226, -62, 296, -14], sheep: [262, -56, 336, -14], cow: [262, -56, 336, -14] }, desc: '一片草场，能养鸡、羊和牛' },
   ];
   const REGION_IDS = REGIONS.map(r => r.id);
   const region = id => REGIONS.find(r => r.id === id);
@@ -33,6 +37,7 @@
     east: [{ x: 158, y: 54 }, { x: 176, y: 54 }, { x: 176, y: 66 }, { x: 216, y: 66 }],
     orchard: [{ x: 36, y: 42 }, { x: 24, y: 42 }, { x: 10, y: 34 }, { x: -20, y: 22 }, { x: -40, y: 8 }],
     south: [{ x: 68, y: 112 }, { x: 68, y: 150 }],
+    pasture: [{ x: 158, y: 54 }, { x: 176, y: 54 }, { x: 200, y: 54 }, { x: 200, y: -40 }, { x: 216, y: -40 }],
   };
   // fruit trees: fruit per picking, days between pickings, sell price each
   const FRUIT = {
