@@ -72,6 +72,13 @@
     var c = errCodeOf(e);
     return c === 1005 || c === 1006;
   }
+  // Missing or unopened advanced abilities (关注 / 赞赏 / 云存储) should degrade quietly.
+  // Do not treat follow/reward 10003 as this: on follow it means "confirm dialog already open".
+  function isCapabilityDenied(e) {
+    if (isUnauthorized(e)) return true;
+    var msg = String((e && (e.errMsg || e.message)) || '');
+    return /未开通|未授权|无权限|not\s*auth|denied|permission/i.test(msg);
+  }
   function safeParse(raw) {
     if (raw == null) return null;
     if (typeof raw === 'object') return raw;
@@ -531,14 +538,23 @@
     });
   }
 
+  var rewardDisabled = false;
+  function rewardAvailable() {
+    return !rewardDisabled && !!(mini && typeof mini.rewardAuthor === 'function');
+  }
+  function disableReward() {
+    rewardDisabled = true;
+    if (root.PFPlatform && root.PFPlatform.iap) root.PFPlatform.iap.tipsApi = false;
+    if (root.dispatchEvent) root.dispatchEvent(new CustomEvent('pf:reward-unavailable'));
+  }
   function tipAuthor() {
     if (!rewardAvailable()) {
       return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
     }
-    return callMini('rewardAuthor');
-  }
-  function rewardAvailable() {
-    return !!(mini && typeof mini.rewardAuthor === 'function');
+    return callMini('rewardAuthor').then(function (r) { return r; }, function (err) {
+      if (isCapabilityDenied(err)) disableReward();
+      return Promise.reject(err);
+    });
   }
   // share（官方 §3.18，9.53+，门槛 9530）：type=card 分享小工具卡片，身份由容器提供。
   // 仅全屏容器可用；成功只表示分享面板已拉起，不代表已经发出。无分享奖励。
@@ -564,14 +580,22 @@
   // follow_status: -1 失败 / 0 未关注（含未登录） / 1 已关注（含互关） / 2 作者本人。
   // followAuthor reject：20002 用户关闭确认或放弃登录；15404 当日确认次数达上限（10 次/账号/工具）；10003 已有确认框。
   // 业务失败以 follow_status -1 resolve，不是 reject。查询失败也当作 -1，不要把失败结果当最终状态缓存。
+  var followDisabled = false;
   function creatorFollowAvailable() {
-    return !!(mini && typeof mini.followAuthor === 'function' && typeof mini.getFollowStatus === 'function');
+    return !followDisabled && !!(mini && typeof mini.followAuthor === 'function' && typeof mini.getFollowStatus === 'function');
+  }
+  function disableFollow() {
+    followDisabled = true;
+    if (root.dispatchEvent) root.dispatchEvent(new CustomEvent('pf:follow-unavailable'));
   }
   function getFollowStatus() {
     if (!creatorFollowAvailable()) return Promise.resolve(-1);
     return Promise.resolve(mini.getFollowStatus()).then(function (r) {
       return r && typeof r.follow_status === 'number' ? r.follow_status : -1;
-    }, function () { return -1; });
+    }, function (err) {
+      if (isCapabilityDenied(err)) disableFollow();
+      return -1;
+    });
   }
   function followAuthor() {
     if (!creatorFollowAvailable()) {
@@ -579,6 +603,9 @@
     }
     return Promise.resolve(mini.followAuthor()).then(function (r) {
       return r && typeof r.follow_status === 'number' ? r.follow_status : -1;
+    }, function (err) {
+      if (isCapabilityDenied(err)) disableFollow();
+      return Promise.reject(err);
     });
   }
 
@@ -598,7 +625,7 @@
     saveImageAvailable: saveImageAvailable,
     saveFarmImage: saveFarmImage,
     creatorFollow: {
-      available: creatorFollowAvailable(),
+      available: creatorFollowAvailable, // live; 方法缺失或运行时权限失败后为 false
       getStatus: getFollowStatus,
       follow: followAuthor
     },

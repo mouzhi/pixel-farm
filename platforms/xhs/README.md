@@ -67,7 +67,7 @@ redapp dev --dir /workspace/repos/pf-xhs/platforms/xhs/dist --agent
 - 体积：zip 上限 10 MiB（建议 ≤2 MiB），解压 ≤30 MiB。
 
 底栏和右上角按钮用变体 A 圆形木牌图标：主包放 `atlas_hud_128_q90.webp`（首屏：包/仓/店/随/关/榜/赞/速）和 `atlas_128_q90.webp`（全套，含预留的音乐/音效），不要进 `assets/`。图标下不再跟文字标签。游戏日志和台词不再用常驻半透明面板挡农场，改为 HUD 卡片下方一行（最多两行）约 3 秒后淡出的轻提示，没有底框。
-已打包背景音乐和音效。官方预览/提审接口的文件类型白名单不含音频后缀（官方 zip 审计不拒 mp3，但 `preview` 会以「不支持的文件类型」驳回），且 CSP 禁止 `<audio>` 使用 `data:` / `blob:`，因此不能把 `.mp3` 放进 zip，也不能用 `<audio src="data:...">`。打包时把清晨曲和全部音效写成 `assets/audio-data.js` 的 base64，由 `audio.js` 用 Web Audio `decodeAudioData` 播放；午/晚/夜三首为控制首屏解析体积仍走程序生成音乐，文件缺失或解码失败时同样回退到生成器 / ZzFX。默认音乐和音效都关闭，须用户点右上角开关后才出声（规范 10.5.3 禁止自动播放）。右上角「更多」里是官方分享卡片（`share` type=card，9.53+）、保存农场图到相册（`saveImageToPhotosAlbum`，9.42+）和赞赏（`rewardAuthor`，9.53.3+）；缺 API 则隐藏，不和分享/关注/赞赏绑定任何游戏奖励。关闭挽留赞赏默认不开。
+已打包背景音乐和音效。官方预览/提审接口的文件类型白名单不含音频后缀（官方 zip 审计不拒 mp3，但 `preview` 会以「不支持的文件类型」驳回），且 CSP 禁止 `<audio>` 使用 `data:` / `blob:`，因此不能把 `.mp3` 放进 zip，也不能用 `<audio src="data:...">`。音乐按 64 kbps 立体声重编码后写成 base64 JS，由 `audio.js` 用 Web Audio `decodeAudioData` 播放：首屏 `assets/audio-data.js` 只含清晨曲和核心音效；午/晚/夜各一份 `assets/audio-afternoon.js` 等，以及额外音效 `assets/audio-sfx-more.js`，在对应时段临近或需要时再动态插入脚本加载。文件尚未到位或解码失败时回退到程序生成音乐 / ZzFX。默认音乐和音效都关闭，须用户点右上角开关后才出声（规范 10.5.3 禁止自动播放）。关注创作者、云存储、赞赏若容器未注入或返回未授权，入口隐藏，存档静默降级到 Storage / localStorage，不弹错误。右上角「更多」里是官方分享卡片（`share` type=card，9.53+）、保存农场图到相册（`saveImageToPhotosAlbum`，9.42+）和赞赏（`rewardAuthor`，9.53.3+）；缺 API 则隐藏，不和分享/关注/赞赏绑定任何游戏奖励。关闭挽留赞赏默认不开。
 
 
 打包与官方审计：

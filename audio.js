@@ -163,6 +163,63 @@
   function dataFor(slot) { const T = audioData() && audioData().tracks; return (T && T[slot] && !E.failed[slot]) ? T[slot] : null; }
   const hasDataTracks = () => { const T = audioData() && audioData().tracks; return !!(T && (T.morning || T.afternoon || T.evening || T.night)); };
   const hasTracks = () => ['morning', 'afternoon', 'evening', 'night'].some(k => listFor(k).length) || hasDataTracks();
+  const NEXT_SLOT = { morning: 'afternoon', afternoon: 'evening', evening: 'night', night: 'morning' };
+  const SLOT_START = { morning: 330, afternoon: 660, evening: 1020, night: 1200 };
+  const NEAR_MIN = 90; // ~30s of real time at 1x; at 4x still enough to decode the next track
+  function lazyMap() { return window.PF_AUDIO_LAZY || null; }
+  function lazySrc(slot) { const m = lazyMap(); return (m && m[slot]) || ''; }
+  const dataLoad = {}, dataLoadQ = {};
+  function loadDataScript(key, src, cb) {
+    if (!src) { if (cb) cb(false); return; }
+    if (dataLoad[key] === 'ok') { if (cb) cb(true); return; }
+    if (dataLoad[key] === 'fail') { if (cb) cb(false); return; }
+    if (dataLoad[key] === 'loading') { (dataLoadQ[key] = dataLoadQ[key] || []).push(cb); return; }
+    dataLoad[key] = 'loading';
+    dataLoadQ[key] = cb ? [cb] : [];
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = function () {
+      dataLoad[key] = 'ok';
+      const q = dataLoadQ[key] || []; dataLoadQ[key] = null;
+      for (let i = 0; i < q.length; i++) if (q[i]) q[i](true);
+      if (A.ctx) preloadData();
+      if (D.on) monitor();
+    };
+    s.onerror = function () {
+      dataLoad[key] = 'fail';
+      if (key === 'afternoon' || key === 'evening' || key === 'night') E.failed[key] = true;
+      const q = dataLoadQ[key] || []; dataLoadQ[key] = null;
+      for (let i = 0; i < q.length; i++) if (q[i]) q[i](false);
+      if (D.on) monitor();
+    };
+    document.head.appendChild(s);
+  }
+  function gameMinute() {
+    const g = window.__farm, S = g && g.S;
+    return S ? ((S.t % 1440) + 1440) % 1440 : (new Date().getHours() * 60 + new Date().getMinutes());
+  }
+  function minutesUntil(slot) {
+    const start = SLOT_START[slot]; if (start == null) return 9999;
+    if (slotNow() === slot) return 0;
+    return (start - gameMinute() + 1440) % 1440;
+  }
+  function prefetchAudio() {
+    const cur = slotNow(), nxt = NEXT_SLOT[cur];
+    if (lazySrc(cur) && !dataFor(cur) && dataLoad[cur] !== 'fail') loadDataScript(cur, lazySrc(cur));
+    if ((set.music || minutesUntil(nxt) <= NEAR_MIN) && lazySrc(nxt) && !dataFor(nxt) && dataLoad[nxt] !== 'fail') loadDataScript(nxt, lazySrc(nxt));
+    const more = lazyMap() && lazyMap().sfxMore;
+    if (more && set.sfx && dataLoad.sfxMore !== 'ok' && dataLoad.sfxMore !== 'fail') loadDataScript('sfxMore', more);
+  }
+  function lazyPending(slot) {
+    if (dataFor(slot) || !lazySrc(slot) || dataLoad[slot] === 'fail') return false;
+    return true;
+  }
+  function startPrefetchClock() {
+    if (A.prefetchTimer) return;
+    A.prefetchTimer = setInterval(prefetchAudio, 1000);
+    prefetchAudio();
+  }
+
   function b64ToAB(b64) {
     const bin = atob(b64);
     const u = new Uint8Array(bin.length);
@@ -201,8 +258,10 @@
     } catch (e) {}
   }
   function startEmb(slot) {
-    if (!dataFor(slot) || (E.slot === slot && E.src)) return;
+    if (!dataFor(slot) || (E.slot === slot && E.src) || E.starting === slot) return;
+    E.starting = slot;
     decodeTrack(slot, function (buf) {
+      if (E.starting === slot) E.starting = null;
       if (!buf || !D.on || !set.music) return;
       if (slotNow() !== slot) return;
       stopEmb(!!E.src);
@@ -249,14 +308,20 @@
   const audible = () => { const d = D.decks[D.cur]; return !!(d && d.url && !D.failed[d.url] && !d.el.paused && !d.el.ended); };
   function genLevel(on) { // the generator covers any moment without a playable file (launch, loading, a failed file)
     if (on) { if (!G.on && set.music) startGen(); if (G.on) A.genBus.gain.setTargetAtTime(1, t0(), 0.8); clearTimeout(D.genOff); D.genOff = 0; }
-    else if (G.on && !D.genOff) { A.genBus.gain.setTargetAtTime(0, t0(), XF / 3); D.genOff = setTimeout(() => { D.genOff = 0; if (audible()) stopGen(); }, XF * 1000 + 300); }
+    else if (G.on && !D.genOff) { A.genBus.gain.setTargetAtTime(0, t0(), XF / 3); D.genOff = setTimeout(() => { D.genOff = 0; if (audible() || embAudible()) stopGen(); }, XF * 1000 + 300); }
   }
   function monitor() {
     if (!D.on) return;
+    prefetchAudio();
     const slot = slotNow();
     if (dataFor(slot) || (E.slot === slot && E.src)) {
       if (!E.src || E.slot !== slot) startEmb(slot);
       genLevel(!embAudible());
+      return;
+    }
+    if (lazyPending(slot)) {
+      if (E.src) stopEmb(true);
+      genLevel(true);
       return;
     }
     if (E.src) stopEmb(true);
@@ -423,6 +488,8 @@
     A.plays++; A.lastSfx = name;
     if (!(audioData() && audioData().sfx) && FILES[name] && playFile(name, vol)) { A.filePlays++; return true; }
     if (playDataSfx(name, vol)) { A.filePlays++; return true; }
+    const more = lazyMap() && lazyMap().sfxMore;
+    if (more && CORE_NAMES.indexOf(name) < 0 && dataLoad.sfxMore !== 'ok' && dataLoad.sfxMore !== 'fail') loadDataScript('sfxMore', more);
     const t = t0() + 0.01, alias = { bird: 'chirp', unlock: 'buy', cast: 'fish' }[name] || name;
     if (JINGLE[alias]) { JINGLE[alias](t); return true; }
     const p = Z[alias]; if (!p) return false;
@@ -470,10 +537,11 @@
     A.music.gain.setTargetAtTime(set.music ? set.mv * 1.4 : 0, t, 0.4);
     A.sfx.gain.setTargetAtTime(set.sfx ? set.sv : 0, t, 0.05);
     if (set.music) musicOn(); else setTimeout(() => { if (!set.music) musicOff(); }, 1500);
+    prefetchAudio();
   }
   function unlock() {
     if (!build()) return;
-    const go = () => { A.unlocked = A.ctx.state === 'running'; if (A.unlocked) { applyVolumes(); ambience(); idleCalls(); if (!(audioData() && audioData().sfx)) preload(CORE_NAMES); preloadData(); ['pointerdown', 'keydown', 'touchend'].forEach(ev => removeEventListener(ev, unlock, true)); } };
+    const go = () => { A.unlocked = A.ctx.state === 'running'; if (A.unlocked) { applyVolumes(); ambience(); idleCalls(); if (!(audioData() && audioData().sfx)) preload(CORE_NAMES); preloadData(); startPrefetchClock(); ['pointerdown', 'keydown', 'touchend'].forEach(ev => removeEventListener(ev, unlock, true)); } };
     if (A.ctx.state !== 'running') A.ctx.resume().then(go, () => {}); else go();
   }
   ['pointerdown', 'keydown', 'touchend'].forEach(ev => addEventListener(ev, unlock, true));
@@ -497,6 +565,7 @@
   }
   function hud() {
     paintXhsToggles();
+    startPrefetchClock();
     if (window.PF_AUDIO_NO_HUD || document.documentElement.classList.contains('xhs-mobile')) return;
     const wrap = document.getElementById('wrap'); if (!wrap || document.getElementById('audioBar')) return;
     const st = document.createElement('style');
@@ -514,7 +583,7 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hud); else hud();
 
   window.PFAudio = {
-    KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, filePlays: A.filePlays, lastSfx: A.lastSfx, sfxBad: Object.keys(fileBad), mode: (embAudible() ? 'files' : (D.on && audible() ? 'files' : G.on ? 'gen' : 'off')), slot: D.on ? (E.slot || D.slot) : null, track: E.slot ? ('embedded:' + E.slot) : (D.on && D.decks[D.cur] ? D.decks[D.cur].url : null), trackPlays: D.plays + E.plays, failed: Object.keys(D.failed).concat(Object.keys(E.failed)), embedded: !!(audioData()) }),
+    KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, filePlays: A.filePlays, lastSfx: A.lastSfx, sfxBad: Object.keys(fileBad), mode: (embAudible() ? 'files' : (D.on && audible() ? 'files' : G.on ? 'gen' : 'off')), slot: D.on ? (E.slot || D.slot) : null, track: E.slot ? ('embedded:' + E.slot) : (D.on && D.decks[D.cur] ? D.decks[D.cur].url : null), trackPlays: D.plays + E.plays, failed: Object.keys(D.failed).concat(Object.keys(E.failed)), embedded: !!(audioData()), lazy: Object.assign({}, dataLoad), dataTracks: audioData() && audioData().tracks ? Object.keys(audioData().tracks) : [] }),
     setMusic: on => { set.music = !!on; persist(); hud(); const b = document.getElementById('musicBtn'); if (b) b.style.backgroundImage = `url(${IC.music[set.music ? 0 : 1]})`, b.classList.toggle('off', !set.music); paintXhsToggles(); applyVolumes(); },
     setSfx: on => { set.sfx = !!on; persist(); const b = document.getElementById('sfxBtn'); if (b) b.style.backgroundImage = `url(${IC.sfx[set.sfx ? 0 : 1]})`, b.classList.toggle('off', !set.sfx); paintXhsToggles(); applyVolumes(); },
     setVolume: (mv, sv) => { if (mv != null) set.mv = Math.max(0, Math.min(1, mv)); if (sv != null) set.sv = Math.max(0, Math.min(1, sv)); persist(); applyVolumes(); },

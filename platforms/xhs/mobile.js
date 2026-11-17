@@ -341,6 +341,22 @@
     if (!host) return true; // 模拟器里露出入口，真机按方法是否注入决定
     return typeof root.xhs.miniTool[name] === 'function';
   }
+  function hideFollowEntries() {
+    ['xhs-btn-author', 'xhs-board-follow'].forEach(function (id) {
+      var b = doc.getElementById(id);
+      if (b) b.hidden = true;
+    });
+  }
+  function hideRewardEntry() {
+    var tip = doc.getElementById('xhs-btn-tip');
+    if (tip) tip.hidden = true;
+    var share = doc.getElementById('xhs-btn-share');
+    var save = doc.getElementById('xhs-btn-save');
+    var more = doc.getElementById('xhs-btn-more');
+    var any = [share, save, tip].some(function (b) { return b && !b.hidden; });
+    if (more && !any) more.hidden = true;
+    closeMore();
+  }
   function setupExtraApis() {
     var share = doc.getElementById('xhs-btn-share');
     var save = doc.getElementById('xhs-btn-save');
@@ -352,6 +368,8 @@
     var any = [share, save, tip].some(function (b) { return b && !b.hidden; });
     if (more && !any) more.hidden = true;
   }
+  root.addEventListener('pf:follow-unavailable', hideFollowEntries);
+  root.addEventListener('pf:reward-unavailable', hideRewardEntry);
   function toggleMore(ev) {
     if (ev && ev.stopPropagation) ev.stopPropagation();
     var menu = doc.getElementById('xhs-more-menu');
@@ -412,7 +430,8 @@
   }
   function onTipAuthor() {
     closeMore();
-    if (!P.tipAuthor) { if (P.toast) P.toast('这里还不能赞赏'); return; }
+    if (P.rewardAvailable && !P.rewardAvailable()) { hideRewardEntry(); return; }
+    if (!P.tipAuthor) { hideRewardEntry(); return; }
     P.tipAuthor().then(function () {}, function () {});
   }
 
@@ -507,7 +526,7 @@
 
   function onFollowCreator() {
     var api = P.creatorFollow;
-    if (!api || !api.available) return;
+    if (!api || !(typeof api.available === 'function' ? api.available() : api.available)) return;
     if (followBusy) return;
     followBusy = true;
     api.follow().then(function (s) {
@@ -526,11 +545,12 @@
     var api = P.creatorFollow;
     var host = !!(root.xhs && root.xhs.miniTool);
     var btn = doc.getElementById('xhs-btn-author');
-    if (host && !(api && api.available)) {
-      if (btn) btn.hidden = true;
+    var ok = !!(api && (typeof api.available === 'function' ? api.available() : api.available));
+    if (host && !ok) {
+      hideFollowEntries();
       return;
     }
-    if (api && api.available) {
+    if (ok) {
       api.getStatus().then(paintFollow, function () {});
     }
   }

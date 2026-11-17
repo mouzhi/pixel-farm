@@ -68,42 +68,56 @@ def stage() -> None:
     # Official preview/submit allowlist has no audio extensions (preview API
     # rejected in-package .mp3 even though the zip auditor allowed it). CSP also
     # forbids data:/blob: on <audio>, so recorded samples are base64-embedded in
-    # a .js file and decoded with Web Audio. Morning + all SFX are included;
-    # afternoon/evening/night stay on the procedural generator to keep parse cost down.
+    # .js files and decoded with Web Audio. First-screen assets/audio-data.js holds
+    # morning + core SFX only; afternoon/evening/night and extra SFX are separate
+    # assets/ files, loaded lazily by audio.js when that period is near or a
+    # non-core sound is needed. Music is 64 kbps stereo.
     def write_audio_data() -> None:
-        tracks: dict[str, str] = {}
+        def b64(path: Path) -> str:
+            return base64.b64encode(path.read_bytes()).decode("ascii")
+
+        def write_merge(dest: Path, tracks: dict[str, str], sfx: dict[str, str]) -> None:
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            with dest.open("w", encoding="ascii") as fh:
+                fh.write("(function(){var D=window.PF_AUDIO_DATA||(window.PF_AUDIO_DATA={tracks:{},sfx:{}});")
+                fh.write("D.tracks=D.tracks||{};D.sfx=D.sfx||{};")
+                for key, val in tracks.items():
+                    fh.write(f'D.tracks["{key}"]="{val}";')
+                for key, val in sfx.items():
+                    fh.write(f'D.sfx["{key}"]="{val}";')
+                fh.write("})();")
+                fh.write("\n")
+            print(
+                "wrote", dest.relative_to(STAGE),
+                "tracks=", list(tracks),
+                "sfx=", list(sfx) if len(sfx) <= 12 else f"{len(sfx)} keys",
+                "bytes=", dest.stat().st_size,
+            )
+
         morning = ROOT / "audio" / "morning.mp3"
+        tracks_m: dict[str, str] = {}
         if morning.is_file():
-            tracks["morning"] = base64.b64encode(morning.read_bytes()).decode("ascii")
-        sfx: dict[str, str] = {}
-        for folder in (ROOT / "sfx", ROOT / "assets" / "audio" / "sfx"):
-            if not folder.is_dir():
-                continue
-            for src in sorted(folder.glob("*.mp3")):
-                sfx[src.stem] = base64.b64encode(src.read_bytes()).decode("ascii")
-        dest = STAGE / "assets" / "audio-data.js"
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        def emit_map(fh, obj: dict[str, str]) -> None:
-            fh.write("{")
-            first = True
-            for key, val in obj.items():
-                if not first:
-                    fh.write(",")
-                first = False
-                fh.write(f'"{key}":"{val}"')
-            fh.write("}")
-        with dest.open("w", encoding="ascii") as fh:
-            fh.write("window.PF_AUDIO_DATA={tracks:")
-            emit_map(fh, tracks)
-            fh.write(",sfx:")
-            emit_map(fh, sfx)
-            fh.write("};\n")
-        print(
-            "wrote", dest.relative_to(STAGE),
-            "tracks=", list(tracks),
-            "sfx=", len(sfx),
-            "bytes=", dest.stat().st_size,
-        )
+            tracks_m["morning"] = b64(morning)
+        core_sfx: dict[str, str] = {}
+        sfx_dir = ROOT / "sfx"
+        if sfx_dir.is_dir():
+            for src in sorted(sfx_dir.glob("*.mp3")):
+                core_sfx[src.stem] = b64(src)
+        write_merge(STAGE / "assets" / "audio-data.js", tracks_m, core_sfx)
+
+        for slot in ("afternoon", "evening", "night"):
+            src = ROOT / "assets" / "audio" / f"{slot}.mp3"
+            if src.is_file():
+                write_merge(STAGE / "assets" / f"audio-{slot}.js", {slot: b64(src)}, {})
+
+        more_sfx: dict[str, str] = {}
+        more_dir = ROOT / "assets" / "audio" / "sfx"
+        if more_dir.is_dir():
+            for src in sorted(more_dir.glob("*.mp3")):
+                more_sfx[src.stem] = b64(src)
+        if more_sfx:
+            write_merge(STAGE / "assets" / "audio-sfx-more.js", {}, more_sfx)
+
     write_audio_data()
     note_dir = HERE / "note"
     if note_dir.is_dir():

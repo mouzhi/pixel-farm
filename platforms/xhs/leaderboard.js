@@ -204,7 +204,7 @@
     var b = el && el.querySelector('#xhs-board-follow');
     if (!b) return;
     var host = typeof window !== 'undefined' && window.xhs && window.xhs.miniTool;
-    if (host && !(P.creatorFollow && P.creatorFollow.available)) {
+    if (host && !(P.creatorFollow && (typeof P.creatorFollow.available === 'function' ? P.creatorFollow.available() : P.creatorFollow.available))) {
       b.hidden = true;
       return;
     }
