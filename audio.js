@@ -1,9 +1,9 @@
 // 像素农场 · 声音：程序生成的 Lo-Fi 背景音乐 + 程序生成的音效 + 昼夜环境声（鸟叫 / 虫鸣）。
-// No audio files are needed: everything is synthesized with WebAudio at run time, so it costs 0 bytes of assets, works offline
-// (the Xiaohongshu mini tool container has no network) and has no license to track. SFX use ZzFX's sample builder
+// The generator and all SFX are synthesized with WebAudio at run time (0 bytes, works offline, nothing to license). SFX use ZzFX's sample builder
 // (MIT, (c) 2019 Frank Force, https://github.com/KilledByAPixel/ZzFX; see CREDITS.md).
-// Later, real tracks (CC0 or AI-made) can replace the generator: set window.PF_MUSIC_TRACKS = ['assets/audio/a.mp3', ...]
-// before this file loads, or call PFAudio.setTracks([...]); the generator then steps aside and the files play as a playlist.
+// v5.2: four recorded tracks (assets/audio/, ElevenLabs Eleven Music, see CREDITS.md) play by time of day with crossfades;
+// the generator is the fallback when a file cannot load. Override with window.PF_MUSIC_TRACKS (before this file loads) or
+// PFAudio.setTracks({ morning, afternoon, evening, night } | [urls]); setTracks([]) means generator only.
 // Browsers only allow sound after a user gesture, so nothing starts until the first tap / click / key.
 // Settings live in their own localStorage key (a per-device preference, not part of the farm save).
 'use strict';
@@ -15,7 +15,8 @@
   const set = load();
   const persist = () => { try { store && store.setItem(KEY, JSON.stringify(set)); } catch (e) {} };
   const AC = window.AudioContext || window.webkitAudioContext;
-  const A = { ctx: null, unlocked: false, tracks: (window.PF_MUSIC_TRACKS || []).slice(), plays: 0, lastSfx: '' };
+  const A = { ctx: null, // tracks: null = use DEFAULT_TRACKS (set below)
+    unlocked: false, tracks: window.PF_MUSIC_TRACKS !== undefined ? window.PF_MUSIC_TRACKS : null, plays: 0, lastSfx: '' };
   const rnd = (a, b) => a + Math.random() * (b - a), pick = a => a[Math.floor(Math.random() * a.length)];
   const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
 
@@ -26,20 +27,21 @@
     A.ctx = c;
     const comp = c.createDynamicsCompressor(); comp.threshold.value = -18; comp.ratio.value = 3; comp.connect(c.destination);
     A.master = c.createGain(); A.master.gain.value = 0.9; A.master.connect(comp);
-    A.music = c.createGain(); A.music.gain.value = 0; // faded in by applyVolumes()
+    A.music = c.createGain(); A.music.gain.value = 0; A.music.connect(A.master); // faded in by applyVolumes(); files + generator
+    A.genBus = c.createGain(); A.genBus.gain.value = 1; // the generator alone (faded out while a recorded track plays)
     A.tone = c.createBiquadFilter(); A.tone.type = 'lowpass'; A.tone.frequency.value = 2600; A.tone.Q.value = 0.4; // the "warm, slightly muffled" lo-fi tone
-    A.music.connect(A.tone); A.tone.connect(A.master);
+    A.genBus.connect(A.tone); A.tone.connect(A.music);
     A.sfx = c.createGain(); A.sfx.gain.value = 0; A.sfx.connect(A.master);
     A.amb = c.createGain(); A.amb.gain.value = 0.5; A.amb.connect(A.sfx);
     // tape wow: one slow LFO bends the pitch of every key note by a few cents
     A.wow = c.createOscillator(); A.wow.frequency.value = 0.33; A.wowAmt = c.createGain(); A.wowAmt.gain.value = 9; A.wow.connect(A.wowAmt); A.wow.start();
     // Rhodes-like tremolo on the keys bus
     A.keys = c.createGain(); A.keys.gain.value = 0.8; const trem = c.createOscillator(), tg = c.createGain(); trem.frequency.value = 4.2; tg.gain.value = 0.12; trem.connect(tg); tg.connect(A.keys.gain); trem.start();
-    A.keys.connect(A.music);
-    A.drums = c.createGain(); A.drums.gain.value = 0.55; A.drums.connect(A.music);
+    A.keys.connect(A.genBus);
+    A.drums = c.createGain(); A.drums.gain.value = 0.55; A.drums.connect(A.genBus);
     // a short echo for the melody
     A.dly = c.createDelay(1); A.dly.delayTime.value = 0.42; const fb = c.createGain(); fb.gain.value = 0.28; const dl = c.createBiquadFilter(); dl.type = 'lowpass'; dl.frequency.value = 1800;
-    A.dly.connect(dl); dl.connect(fb); fb.connect(A.dly); dl.connect(A.music);
+    A.dly.connect(dl); dl.connect(fb); fb.connect(A.dly); dl.connect(A.genBus);
     A.noise = noiseBuf(2);
     return true;
   }
@@ -81,7 +83,7 @@
   }
   function bass(m, t, len) {
     const c = A.ctx, o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 420;
-    o.type = 'triangle'; o.frequency.value = mtof(m); o.connect(lp); lp.connect(g); g.connect(A.music);
+    o.type = 'triangle'; o.frequency.value = mtof(m); o.connect(lp); lp.connect(g); g.connect(A.genBus);
     env(g, t, 0.02, 0.34, len); o.start(t); o.stop(t + len + 0.05);
   }
   function kick(t, v = 1) {
@@ -98,7 +100,7 @@
   function lead(m, t, len) {
     const c = A.ctx, o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 1500;
     o.type = 'triangle'; o.frequency.value = mtof(m); A.wowAmt.connect(o.detune); o.onended = () => { try { A.wowAmt.disconnect(o.detune); } catch (e) {} };
-    o.connect(lp); lp.connect(g); g.connect(A.music); g.connect(A.dly);
+    o.connect(lp); lp.connect(g); g.connect(A.genBus); g.connect(A.dly);
     env(g, t, 0.03, 0.13, len); o.start(t); o.stop(t + len + 0.1);
   }
   function scheduleStep(st, t) {
@@ -133,21 +135,78 @@
   }
   function startGen() {
     if (G.on) return; G.on = true; if (!G.song) newSong(); G.step = 0; G.next = t0() + 0.15;
-    if (!G.crackle) { const s = A.ctx.createBufferSource(), hp = A.ctx.createBiquadFilter(), g = A.ctx.createGain(); s.buffer = crackleBuf(); s.loop = true; hp.type = 'highpass'; hp.frequency.value = 900; g.gain.value = 0.35; s.connect(hp); hp.connect(g); g.connect(A.music); s.start(); G.crackle = s; }
+    if (!G.crackle) { const s = A.ctx.createBufferSource(), hp = A.ctx.createBiquadFilter(), g = A.ctx.createGain(); s.buffer = crackleBuf(); s.loop = true; hp.type = 'highpass'; hp.frequency.value = 900; g.gain.value = 0.35; s.connect(hp); hp.connect(g); g.connect(A.genBus); s.start(); G.crackle = s; }
     G.timer = setInterval(tick, 60); tick();
   }
   function stopGen() { G.on = false; clearInterval(G.timer); if (G.crackle) { try { G.crackle.stop(); } catch (e) {} G.crackle = null; } }
 
-  // ---------- file playlist (for real tracks later) ----------
-  const P = { el: null, i: 0 };
-  function startFiles() {
-    if (!P.el) { P.el = new Audio(); P.el.preload = 'auto'; P.el.addEventListener('ended', () => { P.i = (P.i + 1) % A.tracks.length; P.el.src = A.tracks[P.i]; P.el.play().catch(() => {}); });
-      try { A.ctx.createMediaElementSource(P.el).connect(A.music); } catch (e) {} }
-    if (!P.el.src) { P.i = Math.floor(Math.random() * A.tracks.length); P.el.src = A.tracks[P.i]; }
-    P.el.play().catch(() => {});
+  // ---------- recorded tracks: one per time of day, crossfaded ----------
+  // PF_MUSIC_TRACKS may be an object { morning, afternoon, evening, night } (each a url or a list of urls) or a plain list
+  // (played at any hour). Files load lazily (only the one playing), loop with a crossfade, and switch with a crossfade when
+  // the farm clock moves into the next part of the day. If a file fails to load, the generator above takes over.
+  // Only <audio> with packaged files is used (no fetch / blob:), which is what the Xiaohongshu container allows.
+  const DEFAULT_TRACKS = { morning: 'assets/audio/morning.mp3', afternoon: 'assets/audio/afternoon.mp3', evening: 'assets/audio/evening.mp3', night: 'assets/audio/night.mp3' };
+  if (A.tracks === null) A.tracks = DEFAULT_TRACKS;
+  const XF = 4, FILE_GAIN = 0.2; // seconds of crossfade; files are mastered near -16 LUFS, the generator sits much lower
+  const D = { decks: [], cur: -1, slot: null, failed: {}, timer: 0, on: false, plays: 0 };
+  function slotNow() {
+    const g = window.__farm, S = g && g.S, T = S ? S.t % 1440 : (new Date().getHours() * 60 + new Date().getMinutes());
+    return T >= 330 && T < 660 ? 'morning' : T >= 660 && T < 1020 ? 'afternoon' : T >= 1020 && T < 1200 ? 'evening' : 'night';
   }
-  const stopFiles = () => { if (P.el) P.el.pause(); };
-  function musicOn() { if (!A.ctx) return; if (A.tracks.length) { stopGen(); startFiles(); } else { stopFiles(); startGen(); } }
+  function listFor(slot) {
+    const t = A.tracks; if (!t) return [];
+    const raw = Array.isArray(t) ? t : [].concat(t[slot] || [], t[slot] ? [] : Object.keys(t).reduce((a, k) => a.concat(t[k]), [])); // a missing slot borrows the others
+    return raw.filter(u => u && !D.failed[u]);
+  }
+  const hasTracks = () => ['morning', 'afternoon', 'evening', 'night'].some(k => listFor(k).length);
+  function deck(i) {
+    if (D.decks[i]) return D.decks[i];
+    const el = new Audio(), g = A.ctx.createGain(), d = { el, g, url: null, routed: false, v: 0, vt: 0 };
+    el.preload = 'auto'; g.gain.value = 0;
+    try { A.ctx.createMediaElementSource(el).connect(g); g.connect(A.music); d.routed = true; } catch (e) {}
+    el.addEventListener('error', () => { if (d.url) { D.failed[d.url] = true; d.url = null; } });
+    return (D.decks[i] = d);
+  }
+  function fadeTo(d, to, sec) {
+    d.vt = to;
+    if (d.routed) { const t = t0(), p = d.g.gain; p.cancelScheduledValues(t); p.setValueAtTime(p.value, t); p.linearRampToValueAtTime(to * FILE_GAIN, t + sec); }
+  }
+  // Ask for a track: it loads on the idle deck (lazily, only now) while whatever is playing keeps playing (the generator at
+  // launch, or the previous track); once it can play through, monitor() crossfades to it.
+  function request(url) {
+    const ni = D.cur === 0 ? 1 : 0, d = deck(ni);
+    if (d.url !== url) { d.url = url; d.el.src = url; d.el.load(); }
+    D.pending = d; D.pendingAt = performance.now();
+  }
+  function swapIn(d) {
+    const old = D.decks[D.cur];
+    try { d.el.currentTime = 0; } catch (e) {}
+    const pr = d.el.play(); if (pr && pr.catch) pr.catch(e => { if (e && e.name !== 'NotAllowedError' && e.name !== 'AbortError' && d.url) D.failed[d.url] = true; });
+    fadeTo(d, 1, XF);
+    if (old && old !== d) { fadeTo(old, 0, XF); const el = old.el; setTimeout(() => { if (D.decks[D.cur] !== old) el.pause(); }, XF * 1000 + 200); }
+    D.cur = D.decks.indexOf(d); D.pending = null; D.plays++;
+  }
+  const audible = () => { const d = D.decks[D.cur]; return !!(d && d.url && !D.failed[d.url] && !d.el.paused && !d.el.ended); };
+  function genLevel(on) { // the generator covers any moment without a playable file (launch, loading, a failed file)
+    if (on) { if (!G.on && set.music) startGen(); if (G.on) A.genBus.gain.setTargetAtTime(1, t0(), 0.8); clearTimeout(D.genOff); D.genOff = 0; }
+    else if (G.on && !D.genOff) { A.genBus.gain.setTargetAtTime(0, t0(), XF / 3); D.genOff = setTimeout(() => { D.genOff = 0; if (audible()) stopGen(); }, XF * 1000 + 300); }
+  }
+  function monitor() {
+    if (!D.on) return;
+    const slot = slotNow(), list = listFor(slot), d = D.decks[D.cur], p = D.pending;
+    if (p && (!p.url || D.failed[p.url])) D.pending = null; // that file failed: try another (or stay on the generator)
+    if (D.pending && p.el.readyState >= 3) swapIn(p);
+    else if (!D.pending) {
+      const playing = d && d.url && !D.failed[d.url] ? d.url : null;
+      if (slot !== D.slot || !playing) { if (list.length) { D.slot = slot; request(list.length > 1 && playing ? pick(list.filter(x => x !== playing)) || list[0] : pick(list)); } }
+      else if (d.el.duration && isFinite(d.el.duration) && d.el.currentTime > d.el.duration - XF - 0.25) { const n = list.length > 1 ? pick(list.filter(x => x !== playing)) : playing; request(n); } // same file: the idle deck usually still holds it, so the swap is instant
+    }
+    genLevel(!audible());
+    for (const q of D.decks) if (q && !q.routed) { q.v += Math.max(-0.07, Math.min(0.07, q.vt - q.v)); q.el.volume = Math.max(0, Math.min(1, q.v * (set.music ? set.mv * 1.4 : 0) * FILE_GAIN * 2)); }
+  }
+  function startFiles() { if (D.on) return; D.on = true; D.slot = null; clearInterval(D.timer); D.timer = setInterval(monitor, 250); monitor(); }
+  function stopFiles() { D.on = false; D.pending = null; clearInterval(D.timer); for (const q of D.decks) if (q) { q.el.pause(); fadeTo(q, 0, 0.05); } D.cur = -1; }
+  function musicOn() { if (!A.ctx) return; if (hasTracks()) { startFiles(); if (!audible()) genLevel(true); } else { stopFiles(); A.genBus.gain.setTargetAtTime(1, t0(), 0.3); startGen(); } }
   function musicOff() { stopGen(); stopFiles(); }
 
   // ---------- SFX ----------
@@ -174,7 +233,7 @@
       f = (frequency += slide += deltaSlide) * Math.cos(modulation * modOffset++);
       t += f + f * noise * (i * i * PI2 % 2 - 1);
       if (jump && ++jump > pitchJumpTime) { frequency += pitchJump; startFrequency += pitchJump; jump = 0; }
-      if (repeatTime && !(++repeat % repeatTime)) { frequency = startFrequency; slide = startSlide; jump ||= 1; }
+      if (repeatTime && !(++repeat % repeatTime)) { frequency = startFrequency; slide = startSlide; jump = jump || 1; }
     }
     return b;
   }
@@ -293,11 +352,12 @@
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', hud); else hud();
 
   window.PFAudio = {
-    KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, lastSfx: A.lastSfx, tracks: A.tracks.length }),
+    KEY, settings: () => Object.assign({}, set), state: () => ({ ctx: A.ctx ? A.ctx.state : 'none', unlocked: A.unlocked, music: set.music, sfx: set.sfx, generating: G.on, song: G.song && { bpm: G.song.bpm, key: G.song.key, bars: G.song.bars }, plays: A.plays, lastSfx: A.lastSfx, mode: D.on ? 'files' : G.on ? 'gen' : 'off', slot: D.on ? D.slot : null, track: D.on && D.decks[D.cur] ? D.decks[D.cur].url : null, trackPlays: D.plays, failed: Object.keys(D.failed) }),
     setMusic: on => { set.music = !!on; persist(); hud(); const b = document.getElementById('musicBtn'); if (b) b.style.backgroundImage = `url(${IC.music[set.music ? 0 : 1]})`, b.classList.toggle('off', !set.music); applyVolumes(); },
     setSfx: on => { set.sfx = !!on; persist(); const b = document.getElementById('sfxBtn'); if (b) b.style.backgroundImage = `url(${IC.sfx[set.sfx ? 0 : 1]})`, b.classList.toggle('off', !set.sfx); applyVolumes(); },
     setVolume: (mv, sv) => { if (mv != null) set.mv = Math.max(0, Math.min(1, mv)); if (sv != null) set.sv = Math.max(0, Math.min(1, sv)); persist(); applyVolumes(); },
-    setTracks: list => { A.tracks = (list || []).slice(); if (A.ctx && set.music) { stopFiles(); if (P.el) P.el.removeAttribute('src'); musicOn(); } },
+    setTracks: t => { A.tracks = t || []; D.failed = {}; if (A.ctx && set.music) { stopFiles(); musicOn(); } },
+    _seekEnd: () => { const d = D.decks[D.cur]; if (d && d.el.duration) d.el.currentTime = d.el.duration - XF - 1; }, // tests
     play: sfx, unlock, _out: () => A.ctx && { ctx: A.ctx, node: A.master }, // tests / recording a preview
  names: () => Object.keys(Z).concat(Object.keys(JINGLE)),
   };

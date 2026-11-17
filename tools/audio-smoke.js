@@ -1,14 +1,17 @@
 // Browser test for sound (used by CI):  node tools/audio-smoke.js
-// Checks: nothing plays before a user gesture; the first tap unlocks the generative music; game events play SFX;
+// Checks: nothing plays before a user gesture; the first tap starts the generator at once, then the time-of-day track
+// (assets/audio/) crossfades in; the farm clock switches tracks; a missing file falls back to the generator; game events play SFX;
 // the music / SFX icons toggle, persist across a reload and do not overlap the other HUD buttons; no page errors.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..');
-const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
+const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.mp3': 'audio/mpeg' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
   if (!p.startsWith(ROOT) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); }
-  res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res);
+  const size = fs.statSync(p).size, m = /bytes=(\d*)-(\d*)/.exec(req.headers.range || ''), type = TYPES[path.extname(p)] || 'application/octet-stream';
+  if (m) { const a = m[1] ? +m[1] : 0, b = m[2] ? +m[2] : size - 1; res.writeHead(206, { 'content-type': type, 'accept-ranges': 'bytes', 'content-range': `bytes ${a}-${b}/${size}`, 'content-length': b - a + 1 }); return fs.createReadStream(p, { start: a, end: b }).pipe(res); }
+  res.writeHead(200, { 'content-type': type, 'accept-ranges': 'bytes', 'content-length': size }); fs.createReadStream(p).pipe(res); // ranges let <audio> seek, as on GitHub Pages
 });
 let failed = 0;
 async function test(name, fn) { try { await fn(); console.log('ok  ', name); } catch (e) { failed++; console.log('FAIL', name, '\n     ', String(e.message).split('\n')[0].slice(0, 300)); } }
@@ -35,6 +38,26 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
     await p.waitForFunction(() => PFAudio.state().unlocked && PFAudio.state().generating, null, { timeout: 5000 });
     await p.waitForTimeout(1500); const s = await p.evaluate(() => PFAudio.state()); assert.strictEqual(s.ctx, 'running'); assert.ok(s.song && s.song.bpm >= 60);
   });
+  await test('recorded track for the time of day crossfades in, then the generator stops', async () => {
+    await p.waitForFunction(() => { const s = PFAudio.state(); return s.mode === 'files' && s.track && s.trackPlays >= 1; }, null, { timeout: 15000 });
+    const s = await p.evaluate(() => PFAudio.state()); assert.ok(s.track.indexOf('assets/audio/' + s.slot + '.mp3') >= 0, s.track + ' / ' + s.slot);
+    await p.waitForFunction(() => !PFAudio.state().generating, null, { timeout: 10000 });
+  });
+  await test('evening on the farm clock switches to the evening track', async () => {
+    await p.evaluate(() => { const S = __farm.S; S.t = Math.floor(S.t / 1440) * 1440 + 17 * 60 + 30; });
+    await p.waitForFunction(() => /evening\.mp3$/.test(PFAudio.state().track || ''), null, { timeout: 15000 });
+  });
+  await test('the track loops with a crossfade at its end', async () => {
+    const n = await p.evaluate(() => { PFAudio._seekEnd(); return PFAudio.state().trackPlays; });
+    await p.waitForFunction(n => PFAudio.state().trackPlays > n && /evening\.mp3$/.test(PFAudio.state().track), n, { timeout: 10000 });
+    await p.waitForTimeout(1000); assert.strictEqual(await p.evaluate(() => PFAudio.state().generating), false);
+  });
+  await test('a missing file falls back to the generator', async () => {
+    await p.evaluate(() => PFAudio.setTracks({ morning: 'assets/audio/missing.mp3', afternoon: 'assets/audio/missing.mp3', evening: 'assets/audio/missing.mp3', night: 'assets/audio/missing.mp3' }));
+    await p.waitForFunction(() => { const s = PFAudio.state(); return s.generating && s.failed.length === 1; }, null, { timeout: 10000 });
+    await p.evaluate(() => PFAudio.setTracks({ morning: 'assets/audio/morning.mp3', afternoon: 'assets/audio/afternoon.mp3', evening: 'assets/audio/evening.mp3', night: 'assets/audio/night.mp3' }));
+    errs.length = 0; // the 404 above is expected
+  });
   await test('game events play sounds', async () => {
     const n = await p.evaluate(async () => { const before = PFAudio.state().plays, ev = d => dispatchEvent(new CustomEvent('pf:farm', { detail: d })), w = () => new Promise(r => setTimeout(r, 300));
       for (const d of [{ type: 'task', kind: 'till', who: 'farmer' }, { type: 'task', kind: 'petpet', an: 'cat' }, { type: 'income', source: 'market', gold: 9 }, { type: 'purchase', who: 'player' }, { type: 'surprise', kind: 'giant' }]) { ev(d); await w(); }
@@ -45,12 +68,12 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
   await test('toggles persist across reload', async () => {
     await p.click('#musicBtn'); await p.click('#sfxBtn');
     assert.deepStrictEqual(await p.evaluate(() => { const s = PFAudio.settings(); return [s.music, s.sfx]; }), [false, false]);
-    await p.waitForTimeout(1800); assert.strictEqual(await p.evaluate(() => PFAudio.state().generating), false);
+    await p.waitForTimeout(1800); assert.deepStrictEqual(await p.evaluate(() => [PFAudio.state().generating, PFAudio.state().mode]), [false, 'off']);
     await p.reload(); await ready();
     assert.ok(await p.evaluate(() => document.getElementById('musicBtn').classList.contains('off') && document.getElementById('sfxBtn').classList.contains('off')));
     await p.mouse.click(640, 300); await p.waitForTimeout(600);
-    const s = await p.evaluate(() => PFAudio.state()); assert.strictEqual(s.generating, false); assert.strictEqual(await p.evaluate(() => PFAudio.play('coin')), false);
-    await p.click('#musicBtn'); await p.waitForFunction(() => PFAudio.state().generating, null, { timeout: 3000 });
+    const s = await p.evaluate(() => PFAudio.state()); assert.strictEqual(s.mode, 'off'); assert.strictEqual(await p.evaluate(() => PFAudio.play('coin')), false);
+    await p.click('#musicBtn'); await p.waitForFunction(() => PFAudio.state().generating || PFAudio.state().mode === 'files', null, { timeout: 3000 });
   });
   await test('a fast farm day with sound on has no errors', async () => {
     await p.evaluate(() => { PFAudio.setSfx(true); __farm.setGameSpeed && __farm.setGameSpeed(4); });
