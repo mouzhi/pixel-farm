@@ -16,10 +16,16 @@ jobs:
           node-version: 20
       - name: Syntax check (node --check)
         run: |
-          for f in game.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js sim.js save.js ui.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
       - name: Headless smoke test
         env:
           CHROME: /usr/bin/google-chrome
         run: node tools/smoke.js
+      - name: Save / sim unit tests
+        run: node tools/save-test.js
+      - name: Save / load browser test
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: node tools/save-smoke.js

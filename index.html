@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v3.3 · 风格A</title>
+<title>像素堆叠 · 放置农场 v4.0</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -23,6 +23,25 @@
   #log div:nth-child(2){opacity:.75}#log div:nth-child(3){opacity:.55}#log div:nth-child(4){opacity:.4}
   .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:96px 24px;image-rendering:pixelated}
   .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}
+  #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px}
+  .panel{position:absolute;color:#fff6dc;font:600 13px/1.5 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:rgba(40,28,22,.86);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35)}
+  #inv{left:50%;bottom:12px;transform:translateX(-50%);display:flex;gap:6px;padding:6px 8px}
+  .slot{width:62px;height:58px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
+  .slot .n{position:absolute;right:3px;top:1px;font-size:13px;color:#ffd76a;text-shadow:1px 1px 0 #000}
+  .slot .k{font-size:11px;font-weight:500;opacity:.8;line-height:1;margin-top:1px}
+  .slot.dim{opacity:.45}
+  .slot canvas,.slot i{width:32px;height:32px;image-rendering:pixelated;display:block}
+  .pips{display:flex;gap:2px;margin-top:2px}.pips b{width:5px;height:5px;background:#3d5f73;box-shadow:0 0 0 1px #10202a}.pips b.on{background:#7ec3e6}
+  .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
+  .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
+  #menuBtn{position:absolute;right:12px;top:66px}
+  #menu{right:12px;top:100px;width:300px;padding:10px 12px}
+  #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
+  #menu textarea{width:100%;box-sizing:border-box;height:64px;font:11px monospace;background:#1a120e;color:#fff6dc;border:2px solid #8a6a44;resize:none}
+  #menu .note{font-weight:500;font-size:12px;opacity:.85}
+  #menu .bad{color:#ffb39a}
+  #offline{left:50%;top:40%;transform:translate(-50%,-50%);padding:14px 18px;min-width:280px;text-align:center;font-size:14px}
+  #offline h3{margin:0 0 6px;font-size:16px;color:#ffd76a}
 </style>
 </head>
 <body>
@@ -32,13 +51,20 @@
     <div class="row"><span id="day">第 1 天</span><span id="clock">06:00</span></div>
     <div id="act">当前：起床</div>
     <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
-    <div><i class="ico carrot"></i><span id="bag">背包：空</span></div>
+    <div id="prices">今日行情：</div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v3.3 · 风格A（自动运行）<br><span style="font-weight:400;opacity:.8">拖动画面 / Q E / ← → 旋转镜头 · R 复位 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v4.0 · 存档和慢节奏（自动运行）<br><span style="font-weight:400;opacity:.8">拖动画面 / Q E / ← → 旋转镜头 · R 复位 · 滚轮缩放</span></div>
   <div id="log"></div>
+  <div id="inv" class="panel"></div>
+  <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
+  <div id="menu" class="panel" hidden></div>
+  <div id="offline" class="panel" hidden></div>
 </div>
 <script src="assets/palette.js"></script>
 <script src="assets/sprites.js"></script>
+<script src="sim.js"></script>
+<script src="save.js"></script>
 <script src="game.js"></script>
+<script src="ui.js"></script>
 </body>
 </html>

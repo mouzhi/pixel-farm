@@ -1,0 +1,10 @@
+{
+  "saveVersion": 1,
+  "clock": { "day": 2, "t": 1900 },
+  "coins": 37,
+  "tiles": [
+    { "c": 0, "r": 0, "tilled": true, "crop": { "type": "carrot", "age": 0 } },
+    { "c": 1, "r": 0, "debris": { "type": "rock", "v": 1, "rot": 0.5 } },
+    { "c": 2, "r": 0, "weed": { "v": 0 } }
+  ]
+}

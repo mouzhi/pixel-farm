@@ -4,8 +4,9 @@
   "description": "Headless test / capture tools for pixel-farm (run from the repo root: npm --prefix tools ci)",
   "scripts": {
     "smoke": "node smoke.js",
-    "check": "node --check ../game.js && node --check ../assets/palette.js && node --check ../assets/sprites.js && for f in *.js; do node --check $f || exit 1; done",
-    "soak": "node soak.js"
+    "check": "node --check ../game.js && node --check ../sim.js && node --check ../save.js && node --check ../ui.js && node --check ../assets/palette.js && node --check ../assets/sprites.js && for f in *.js; do node --check $f || exit 1; done",
+    "soak": "node soak.js",
+    "save": "node save-test.js && node save-smoke.js"
   },
   "dependencies": {
     "playwright-core": "1.65.1"

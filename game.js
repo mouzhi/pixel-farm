@@ -11,11 +11,13 @@ const M = 40;                    // ground margin around the world (world units)
 const Q = new URLSearchParams(location.search);
 let SPEED = +Q.get('speed') || 1;
 const MANUAL = Q.has('manual');
-const MIN_PER_SEC = 5, WALK = 7, WAKE = 6 * 60, BEDTIME = 20 * 60;
+const MIN_PER_SEC = window.PFSim.MIN_PER_SEC, WALK = 7, WAKE = window.PFSim.WAKE, BEDTIME = window.PFSim.BEDTIME; // sim.js: about 5 real minutes a day
 
 // ---------- rng / helpers ----------
 function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
-let rand = mulberry32(+Q.get('seed') || 20261116);
+// the simulation's random stream keeps its state in RNG.a, so it can be saved and restored (same maths as mulberry32)
+const RNG = { a: (+Q.get('seed') || 20261116) | 0 };
+const rand = () => { let a = RNG.a = (RNG.a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 const R = (a, b) => a + rand() * (b - a), RI = (a, b) => Math.floor(R(a, b + 1)), pick = a => a[Math.floor(rand() * a.length)];
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const hexc = {}; const hex = h => hexc[h] || (hexc[h] = (n => [n >> 16 & 255, n >> 8 & 255, n & 255])(parseInt(h.slice(1), 16)));
@@ -462,23 +464,29 @@ addTree(treeDefs.oak[0], 22, 84); addTree(treeDefs.pine[1], 44, 82); addTree(tre
 POND_SOLIDS.push({ x: POND.x + 11, y: POND.y + 5, r: 6 });
 addProp(mossRock, POND.x + 11, POND.y + 5, 0.6);
 // ---------- field ----------
+// Pacing, economy and save rules live in sim.js and save.js (pure, unit-tested); this block is the farm's state machine.
+const SIM = window.PFSim, CROP_IDS = SIM.IDS;
 const tiles = [];
 for (let r = 0; r < FIELD.rows; r++) for (let c = 0; c < FIELD.cols; c++) {
-  tiles.push({ c, r, x: (FIELD.c0 + c) * TILE + TILE / 2, y: (FIELD.r0 + r) * TILE + TILE / 2, debris: null, weed: null, tilled: false, crop: null, wetUntil: -1 });
+  tiles.push({ c, r, x: (FIELD.c0 + c) * TILE + TILE / 2, y: (FIELD.r0 + r) * TILE + TILE / 2, open: SIM.startOpen(c, r), debris: null, weed: null, tilled: false, crop: null, watered: false });
 }
+// clutter is stored as plain data (kind + variant index), so it can be saved; the model is looked up when drawing
+const debrisModel = d => { const a = d.type === 'rock' ? models.rocks : models.branches; return a[d.v % a.length]; };
+const weedSprite = w => models.weeds[w.v % models.weeds.length];
 function spawnClutter(t, pDebris, pWeed) {
   if (t.crop || t.debris || t.weed) return false;
   const v = rand();
-  if (v < pDebris) { const rock = rand() < 0.5; t.debris = { type: rock ? 'rock' : 'branch', m: pick(rock ? models.rocks : models.branches), rot: R(0, 6.28) }; t.tilled = false; return true; }
-  if (v < pDebris + pWeed) { t.weed = { m: pick(models.weeds), rot: R(0, 6.28) }; t.tilled = false; return true; }
+  if (v < pDebris && !t.tilled) { const rock = rand() < 0.5; t.debris = { type: rock ? 'rock' : 'branch', v: RI(0, (rock ? models.rocks : models.branches).length - 1), rot: R(0, 6.28) }; return true; }
+  if (v < pDebris + pWeed) { t.weed = { v: RI(0, models.weeds.length - 1), rot: R(0, 6.28) }; return true; } // weeds no longer undo tilling
   return false;
 }
 tiles.forEach(t => spawnClutter(t, 0.34, 0.42));
 
 // ---------- state ----------
 const S = {
-  day: 1, t: WAKE, coins: 0, storage: 2, soldToday: 0, totalSold: 0, cleared: 0,
-  farmer: { x: DOOR.x, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null, seeds: 0, gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, selling: false, act: 0 },
+  day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [],
+  store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
+  farmer: { x: DOOR.x, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null, bag: SIM.emptySeeds(), gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, act: 0 },
   log: [], events: [], label: '起床',
 };
 const F = S.farmer;
@@ -488,79 +496,92 @@ const fmtT = t => { const m = ((Math.floor(t) % 1440) + 1440) % 1440; return Str
 function log(msg) { S.log.unshift(fmtT(S.t) + ' ' + msg); S.log.length = Math.min(S.log.length, 4); S.events.push({ day: S.day, t: Math.floor(S.t), msg }); if (S.events.length > 300) S.events.splice(0, S.events.length - 300); }
 const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { const d = Math.hypot(t.x - F.x, t.y - F.y + 6); if (d < bd) { bd = d; best = t; } } return best; };
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
+const seedCount = o => CROP_IDS.reduce((n, k) => n + (o[k] || 0), 0);
+const seedText = o => CROP_IDS.filter(k => o[k] > 0).map(k => `${SIM.CROPS[k].name}×${o[k]}`).join('、');
+let onMorning = () => {};
 
 // ---------- farmer AI ----------
+// Phase 1 order: harvest -> (late: water) -> clear -> weed -> store seeds -> plant -> till -> water -> sell / buy seeds -> rest.
+// Crops grow one day overnight if watered that day, so watering only has to happen once, any time before bed.
+function storeTask() { return { label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗胡萝卜种子放进仓库`); S.store.carrot += F.gathered; F.gathered = 0; } }; }
 function chooseTask() {
   const T = S.t % 1440;
-  const ripe = tiles.filter(t => t.crop && t.crop.stage === 3);
-  const growing = tiles.filter(t => t.crop && t.crop.stage < 3);
-  const dry = growing.filter(t => t.wetUntil < S.t);
-  const debris = tiles.filter(t => t.debris), weeds = tiles.filter(t => t.weed);
-  const tilledEmpty = tiles.filter(t => t.tilled && !t.crop);
-  const tillable = tiles.filter(t => !t.tilled && !t.crop && !t.debris && !t.weed);
-  const seedsAvail = S.storage + F.seeds + F.gathered;
+  const open = tiles.filter(t => t.open);
+  const ripe = open.filter(t => t.crop && SIM.ripe(t.crop));
+  const dry = open.filter(t => t.crop && !SIM.ripe(t.crop) && !t.watered);
+  const debris = open.filter(t => t.debris), weeds = open.filter(t => t.weed);
+  const tilledEmpty = open.filter(t => t.tilled && !t.crop && !t.weed);
+  const tillable = open.filter(t => !t.tilled && !t.crop && !t.debris && !t.weed);
+  const bagN = seedCount(F.bag);
 
   if (T >= BEDTIME || T < WAKE - 30) {
     if (F.crops.length && T < BEDTIME + 60) return sellTask();
-    if (F.gathered > 0 && T < BEDTIME + 60) return { label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗种子放进仓库`); S.storage += F.gathered; F.gathered = 0; } };
+    if (F.gathered > 0 && T < BEDTIME + 60) return storeTask();
     return { label: '回家睡觉', to: DOOR, dur: 5, done: () => { F.home = true; F.sleeping = true; log('回到家，躺下睡觉 Zzz'); } };
   }
-  if (F.selling && F.crops.length) return sellTask();
-  F.selling = false;
-  if (F.crops.length >= 10) return sellTask();
+  if (F.crops.length >= SIM.BASKET) return sellTask();
+  if (ripe.length) { const t = rngNear(ripe);
+    return { label: '正在收获', to: standAt(t), tile: t, dur: 4, fx: 'leaf', pose: 'pull', done: () => { if (!t.crop) return; const ty = t.crop.type; F.crops.push(ty); t.crop = null; groundDirty = true; burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8); popText(t.x, t.y, 12, '+1', '#ffffff'); if (rand() < SIM.CROPS[ty].seedBack) F.bag[ty]++; log(`收获了一个${SIM.CROPS[ty].name}`); } }; }
+  if (dry.length && T >= 16 * 60) return waterTask(dry); // late in the day the watering comes first
   if (debris.length) { const t = rngNear(debris); const rock = t.debris.type === 'rock';
     return { label: '正在清理杂物', to: standAt(t), tile: t, dur: rock ? 8 : 6, fx: rock ? 'rock' : 'wood', pose: 'pull', done: () => { t.debris = null; S.cleared++; burst(t.x, t.y, 2, rock ? ['#9a9a92', '#b9b8ad', '#77776f'] : ['#a0703f', '#7a5230'], 10); log(rock ? '搬走了一块石头' : '清走了一根树枝'); groundDirty = true; } }; }
   if (weeds.length) { const t = rngNear(weeds);
     return { label: '正在拔草收集种子', to: standAt(t), tile: t, dur: 6, fx: 'leaf', pose: 'pull', done: () => { t.weed = null; const n = RI(2, 3); F.gathered += n; burst(t.x, t.y, 3, ['#5a9a3a', '#e6c35c', '#3f7a32'], 10); popText(t.x, t.y, 10, '+' + n, '#e6c35c'); log(`拔掉杂草，收集到 ${n} 颗种子`); } }; }
-  if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || S.t % 1440 >= 18 * 60)))) {
-    return { label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗种子放进仓库`); S.storage += F.gathered; F.gathered = 0; } };
+  if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) return storeTask();
+  if (tilledEmpty.length && (bagN > 0 || S.store.carrot > 0 || F.gathered > 0)) {
+    if (bagN <= 0 && F.gathered > 0) { F.bag.carrot += F.gathered; F.gathered = 0; }
+    else if (bagN <= 0) { const n = Math.min(S.store.carrot, tilledEmpty.length + tillable.length); return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => { const m = Math.min(n, S.store.carrot); S.store.carrot -= m; F.bag.carrot += m; log(`从仓库取出 ${m} 颗胡萝卜种子`); } }; }
+    const t = rngNear(tilledEmpty), ty = SIM.pickFromBag(F.bag, S.prices);
+    return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
   }
-  if (ripe.length) { const t = rngNear(ripe);
-    return { label: '正在收获', to: standAt(t), tile: t, dur: 4, fx: 'leaf', pose: 'pull', done: () => { const ty = t.crop.type; F.crops.push(ty); t.crop = null; t.tilled = false; groundDirty = true; burst(t.x, t.y, 4, ['#f0a030', '#8fd35a', '#ffffff'], 8); popText(t.x, t.y, 12, '+1', '#ffffff'); if (rand() < 0.35) { F.gathered++; } log(`收获了一个${CROPS[ty].name}`); } }; }
-  if (dry.length) {
-    if (F.water <= 0) return { label: '正在井边打水', to: WELL_SPOT, dur: 8, fx: 'water', done: () => { F.water = 8; log('在井边装满了水壶'); } };
-    const t = rngNear(dry);
-    return { label: '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => { F.water--; t.wetUntil = S.t + 210; groundDirty = true; burst(t.x, t.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop'); } };
-  }
-  if (tilledEmpty.length && (F.seeds > 0 || S.storage > 0 || F.gathered > 0)) {
-    if (F.seeds <= 0) { if (F.gathered > 0 && S.storage === 0) { F.seeds = F.gathered; F.gathered = 0; } }
-    if (F.seeds <= 0) { const n = Math.min(S.storage, tilledEmpty.length + tillable.length); return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => { S.storage -= n; F.seeds += n; log(`从仓库取出 ${n} 颗种子`); } }; }
-    const t = rngNear(tilledEmpty);
-    return { label: '正在播种', to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { F.seeds--; const r = rand(); t.crop = { type: r < 0.45 ? 'carrot' : r < 0.8 ? 'cabbage' : 'pumpkin', growth: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
-  }
-  if (tillable.length && seedsAvail > tilledEmpty.length && T < 17 * 60) { const t = rngNear(tillable);
+  if (tillable.length && T < 17 * 60) { const t = rngNear(tillable); // tilled soil is permanent, so every open tile gets tilled once
     return { label: '正在开垦土地', to: standAt(t), tile: t, dur: 4, fx: 'dirt', pose: 'hoe', done: () => { t.tilled = true; groundDirty = true; burst(t.x, t.y, 1, ['#8b5a35', '#a06c43', '#6e452a'], 8); } }; }
-  if (F.crops.length && (growing.length === 0 || T >= 17 * 60 + 30 || F.crops.length >= 6)) return sellTask();
+  if (dry.length) return waterTask(dry);
+  if (F.crops.length && (dry.length === 0 || T >= 17 * 60 + 30 || F.crops.length >= 6)) return sellTask();
+  if (tilledEmpty.length && bagN === 0 && S.store.carrot === 0 && F.gathered === 0 && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) return sellTask(); // a trip just to buy seeds
   // nothing urgent: rest or stroll
   F.idleCount++;
-  if (F.idleCount % 3 === 0) { const t = pick(tiles); return { label: '在田边巡视', to: { x: t.x + R(-6, 6), y: FIELD.r0 * TILE - 4 }, dur: 6 }; }
+  if (F.idleCount % 3 === 0) { const t = pick(open); return { label: '在田边巡视', to: { x: t.x + R(-6, 6), y: FIELD.r0 * TILE - 4 }, dur: 6 }; }
   return { label: '坐在池塘边休息', to: BENCH_SPOT, dur: 25, rest: true };
 }
+function waterTask(dry) {
+  if (F.water <= 0) return { label: '正在井边打水', to: WELL_SPOT, dur: 8, fx: 'water', done: () => { F.water = S.waterMax; log(`在井边装满了水壶（${S.waterMax} 格）`); } };
+  const t = rngNear(dry);
+  return { label: '正在浇水', to: standAt(t), tile: t, dur: 3, fx: 'water', pose: 'water', done: () => { if (t.watered || F.water <= 0) return; F.water--; t.watered = true; groundDirty = true; burst(t.x, t.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop'); } };
+}
+// one stop at the stall: sell the whole basket at today's prices, then buy seeds for the empty tiles
 function sellTask() {
-  return { label: F.selling ? '正在卖出作物' : '正在去市场卖菜', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 3, fx: 'coin', done: () => {
-    F.selling = true; const ty = F.crops.shift(); if (!ty) return; const p = CROPS[ty].price;
-    S.coins += p; S.soldToday++; S.totalSold++; popText(STALL.x + R(-4, 4), STALL.y - 3, 26, '+' + p, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'spark');
-    if (!F.crops.length) { log(`卖菜完成，今天共卖出 ${S.soldToday} 个`); F.selling = false; } } };
+  return { label: F.crops.length ? '正在去市场卖菜' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
+    const n = F.crops.length;
+    if (n) { let sum = 0; for (const ty of F.crops) sum += SIM.priceOf(ty, S.prices); F.crops.length = 0;
+      S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
+      popText(STALL.x + R(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'spark');
+      log(`卖出 ${n} 个作物，得 ${sum} 金`); }
+    const open = tiles.filter(t => t.open), need = open.filter(t => !t.crop).length - seedCount(F.bag);
+    if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered);
+      if (p.cost > 0) { S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
+  } };
 }
 
 // ---------- simulation ----------
 function overnight() {
-  S.day++; S.soldToday = 0;
-  let n = 0; tiles.forEach(t => { if (!t.crop && spawnClutter(t, 0.16, 0.24)) n++; });
-  tiles.forEach(t => { if (t.tilled && !t.crop && rand() < 0.4) t.tilled = false; });
-  groundDirty = true; log(`新的一天！夜里长出了 ${n} 处杂草杂物`);
+  S.day++; S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
+  let grew = 0;
+  for (const t of tiles) { // a crop grows one day overnight, only if it was watered that day
+    if (t.crop && t.watered && !SIM.ripe(t.crop)) { t.crop.age++; grew++; const st = SIM.stageOf(t.crop); if (st === 3 && t.crop.stage !== 3) burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); t.crop.stage = st; }
+    t.watered = false;
+  }
+  let n = 0; tiles.forEach(t => { if (t.open && !t.crop && spawnClutter(t, 0.1, 0.14)) n++; });
+  S.prices = SIM.driftPrices(S.prices, rand);
+  groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处杂草杂物`);
+  onMorning();
 }
 function stepSim(dm) {
   const prevDay = Math.floor((S.t - WAKE) / 1440);
   S.t += dm;
-  const T = S.t % 1440;
   if (Math.floor((S.t - WAKE) / 1440) !== prevDay) { // reached 6:00
-    overnight(); if (F.sleeping) { F.sleeping = false; F.home = true; log('起床啦，开始干活'); }
-  }
-  // crops grow while wet
-  for (const t of tiles) if (t.crop && t.crop.stage < 3) {
-    if (t.wetUntil >= S.t) { t.crop.growth += dm; const st = Math.min(3, Math.floor(t.crop.growth / 75)); if (st !== t.crop.stage) { t.crop.stage = st; if (st === 3) burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); } }
-    if (t.wetUntil < S.t && t.wetUntil > S.t - dm - 0.001) groundDirty = true;
+    if (F.sleeping) { F.sleeping = false; F.home = true; }
+    overnight(); log('起床啦，开始干活');
   }
   if (F.sleeping) { S.label = '睡觉中 Zzz'; return; }
   if (!F.task) { F.task = chooseTask(); F.task.work = 0; S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
@@ -861,15 +882,15 @@ function render() {
   tick('ground');
   waterPass(realT); tick('water');
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
-  for (const t of tiles) if (t.tilled || t.crop) drawStack(ctx, models.soil[t.wetUntil >= S.t ? 1 : 0], t.x, t.y, 0, 0);
+  for (const t of tiles) if (t.tilled || t.crop) drawStack(ctx, models.soil[t.watered ? 1 : 0], t.x, t.y, 0, 0);
   for (const d of decals) { const [sx, sy] = proj(d.x, d.y); const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
   tick('soil+decals');
   const list = [];
   for (const p of props) list.push(p);
   for (const b of billboards) list.push(b);
   for (const t of tiles) {
-    if (t.debris) list.push({ m: t.debris.m, x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
-    if (t.weed) list.push({ spr: t.weed.m, x: t.x, y: t.y, sway: 0.8, w: 1 });
+    if (t.debris) list.push({ m: debrisModel(t.debris), x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
+    if (t.weed) list.push({ spr: weedSprite(t.weed), x: t.x, y: t.y, sway: 0.8, w: 1 });
     if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: ['carrot', 'cabbage', 'pumpkin'].indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
       else list.push({ spr: CROP_SPR[Math.min(2, t.crop.stage)], x: t.x, y: t.y, sway: t.crop.stage === 2 ? 0.5 : 0, flat: t.crop.stage === 0 }); }
   }
@@ -982,6 +1003,7 @@ function updateFx(dt) {
   for (const f of fireflies) { f.x += Math.sin(realT * 0.7 + f.ph) * dt * 3; f.y += Math.cos(realT * 0.5 + f.ph) * dt * 2; }
   if (F.home && Math.random() < dt * 2.5) particles.push({ x: HOUSE.x + 9.25, y: HOUSE.y - 4.5, z: 38, vx: 2, vy: -1, vz: 5, c: pick([St[3], Ac[0]]), life: 2.4, kind: 'smoke' });
 }
+let hudPrices = '';
 function hud() {
   const T = S.t % 1440, hh = T / 60;
   const tod = hh < 5 ? '深夜' : hh < 8 ? '清晨' : hh < 11 ? '上午' : hh < 13 ? '中午' : hh < 17 ? '下午' : hh < 19.5 ? '傍晚' : '夜晚';
@@ -989,23 +1011,24 @@ function hud() {
   document.getElementById('clock').textContent = fmtT(S.t);
   document.getElementById('act').textContent = '当前：' + S.label;
   document.getElementById('coins').textContent = S.coins;
-  document.getElementById('seeds').textContent = S.storage;
-  const bag = []; if (F.seeds + F.gathered) bag.push(`种子 ${F.seeds + F.gathered}`); if (F.crops.length) bag.push(`作物 ${F.crops.length}`); if (F.water > 0) bag.push(`水壶 ${F.water}/8`);
-  document.getElementById('bag').textContent = '背包：' + (bag.join(' · ') || '空');
+  document.getElementById('seeds').textContent = S.store.carrot;
+  const pr = CROP_IDS.map(k => { const m = S.prices[k]; return `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${m > 1.02 ? '↑' : m < 0.98 ? '↓' : ''}`; }).join(' · ');
+  if (hudPrices !== pr) { hudPrices = pr; document.getElementById('prices').textContent = '今日行情：' + pr; }
   document.getElementById('log').innerHTML = S.log.map(s => `<div>${s}</div>`).join('');
 }
 
 // ---------- camera: manual only (no auto-rotation). drag / swipe, Q E, ← →, R resets; wheel = integer zoom ----------
 let keyRot = 0, drag = null;
 const ROT_KEYS = { q: -1, Q: -1, ArrowLeft: -1, e: 1, E: 1, ArrowRight: 1 };
-addEventListener('keydown', e => { if (ROT_KEYS[e.key]) { keyRot = ROT_KEYS[e.key]; e.preventDefault(); } if (e.key === 'r' || e.key === 'R') cam.ta = DEFAULT_A; });
+const typing = e => e.target && /^(TEXTAREA|INPUT|BUTTON)$/.test(e.target.tagName); // the save menu has text boxes
+addEventListener('keydown', e => { if (typing(e)) return; if (ROT_KEYS[e.key]) { keyRot = ROT_KEYS[e.key]; e.preventDefault(); } if (e.key === 'r' || e.key === 'R') cam.ta = DEFAULT_A; });
 addEventListener('keyup', e => { if (ROT_KEYS[e.key] === keyRot) keyRot = 0; });
 cv.style.touchAction = 'none';
 cv.addEventListener('pointerdown', e => { drag = e.clientX; cv.setPointerCapture(e.pointerId); document.body.classList.add('grab'); });
 cv.addEventListener('pointermove', e => { if (drag === null) return; cam.ta += (e.clientX - drag) * 0.008; drag = e.clientX; });
 const endDrag = () => { drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
-addEventListener('wheel', e => { zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
+addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
   const cur = document.createElement('div'); cur.id = 'fakecursor'; document.body.appendChild(cur);
   addEventListener('pointermove', e => { cur.style.left = e.clientX + 'px'; cur.style.top = e.clientY + 'px'; }, true);
@@ -1017,7 +1040,7 @@ function advance(dt) {
   if (keyRot) cam.ta += keyRot * dt * 1.8;
   cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;
   // (no camera follow: a drifting camera shifted the whole map by a pixel every few frames)
-  const mult = F.sleeping ? 6 : 1;
+  const mult = F.sleeping ? SIM.SLEEP_MULT : 1;
   let dm = dt * MIN_PER_SEC * SPEED * mult;
   while (dm > 0) { const s = Math.min(dm, 1); stepSim(s); dm -= s; }
   updateFx(dt);
@@ -1055,6 +1078,59 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden && ca
 window.__farm.mem = () => ({ stkPx, stk: STK.size, atlasPx: ALLM.reduce((t, m) => t + m.secs.reduce((u, x) => u + (x ? x.c.width * x.c.height : 0), 0), 0) });
 window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clearRect(0, 0, GW, GH); }; // test hook for the watchdog
 buildGroundBase();
-log('早上好！农场里乱糟糟的，先收拾一下');
+
+// ---------- save / load (rules in save.js, UI in ui.js) ----------
+const GAME_VERSION = '4.0';
+function snapshot() {
+  return {
+    saveVersion: PFSave.CURRENT, gameVersion: GAME_VERSION, createdAt: S.createdAt, savedAt: Date.now(), rng: RNG.a,
+    clock: { day: S.day, t: S.t }, coins: S.coins,
+    stats: { totalSold: S.totalSold, cleared: S.cleared, earned: S.earned, soldToday: S.soldToday, todayEarn: S.todayEarn, dayEarn: S.dayEarn.slice() },
+    prices: Object.assign({}, S.prices),
+    inventory: { water: F.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, F.bag), gathered: F.gathered, basket: F.crops.slice() },
+    farmer: { x: Math.round(F.x * 100) / 100, y: Math.round(F.y * 100) / 100, sleeping: F.sleeping, home: F.home },
+    tiles: tiles.map(t => ({ c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && { type: t.crop.type, age: t.crop.age, rot: t.crop.rot } })),
+    log: S.log.slice(),
+  };
+}
+function restore(s) { // s has been migrated and validated by PFSave
+  RNG.a = s.rng | 0; S.day = s.clock.day; S.t = s.clock.t; S.coins = s.coins; S.createdAt = s.createdAt;
+  Object.assign(S, { totalSold: s.stats.totalSold, cleared: s.stats.cleared, earned: s.stats.earned, soldToday: s.stats.soldToday, todayEarn: s.stats.todayEarn, dayEarn: s.stats.dayEarn.slice() });
+  S.prices = Object.assign(SIM.startPrices(), s.prices); S.waterMax = s.inventory.waterMax; S.store = Object.assign(SIM.emptySeeds(), s.inventory.store);
+  Object.assign(F, { water: Math.min(s.inventory.water, s.inventory.waterMax), bag: Object.assign(SIM.emptySeeds(), s.inventory.bag), gathered: s.inventory.gathered, crops: s.inventory.basket.slice(), task: null, moving: false,
+    x: s.farmer.x, y: s.farmer.y, sleeping: s.farmer.sleeping, home: s.farmer.home || s.farmer.sleeping });
+  const byPos = new Map(s.tiles.map(t => [t.c + ',' + t.r, t]));
+  for (const t of tiles) { const o = byPos.get(t.c + ',' + t.r); if (!o) continue;
+    Object.assign(t, { open: o.open, tilled: o.tilled, watered: o.watered, debris: o.debris, weed: o.weed, crop: o.crop && Object.assign({}, o.crop) });
+    if (t.crop) t.crop.stage = SIM.stageOf(t.crop); }
+  S.log = s.log.slice(); S.label = F.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
+}
+const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };
+function saveNow() {
+  if (SAVE.off) return false;
+  const r = PFSave.write(snapshot()); SAVE.error = r.ok ? null : r.error; if (r.ok) SAVE.at = Date.now(); return r.ok;
+}
+function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; only gold changes
+  const r = SIM.offlineSettle(sec, S.dayEarn); if (!r) return null;
+  S.coins += r.gold; S.earned += r.gold; if (r.gold > 0) log(`离线期间赚了 ${r.gold} 金`);
+  SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
+}
+onMorning = saveNow;
+const boot = PFSave.read();
+SAVE.notes = boot.notes;
+if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); settleOffline((Date.now() - boot.state.savedAt) / 1000); }
+else log('早上好！农场里乱糟糟的，先收拾一下');
+if (!boot.blocked) saveNow();
+setInterval(saveNow, 15000);
+let hiddenAt = 0;
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) { saveNow(); hiddenAt = Date.now(); } // the game pauses while hidden (no animation frames)
+  else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
+});
+addEventListener('pagehide', saveNow);
+Object.assign(window.__farm, { SAVE, snapshot, restore, saveNow, settleOffline, version: GAME_VERSION,
+  reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
+  reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
+  importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();

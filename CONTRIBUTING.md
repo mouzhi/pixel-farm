@@ -64,17 +64,19 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
 - **存档兼容**：见下一节。
 - **README**：如果玩法、URL 参数或操作有变化，同步更新 README。
 
-## 存档兼容（占位，等存档功能上线后补全）
+## 存档兼容
 
-存档功能还没有做，下面是约定好的规则，第一个做存档的 PR 照此实现：
+存档从 v4.0 开始上线（`saveVersion` 1）。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
 
-- 存档放在 `localStorage`，内容是一个 JSON 对象，必须带整数字段 `saveVersion`。
-- 读档时，按顺序依次跑 `migrations[v]`，把存档从 v 升到 v+1，一直升到当前版本。缺字段就用默认值补上，不能报错。
+- 存档放在 `localStorage` 的 `mouzhi/pixel-farm:save`，上一份能读的存档在 `:bak`。键名都带 `mouzhi/pixel-farm:` 前缀，因为同一个 GitHub Pages 域名下的其他项目共用 localStorage。
+- 存档是一个 JSON 对象，带整数 `saveVersion`。读档时按顺序跑 `MIGRATIONS[v]`，把 v-1 升到 v，一直升到 `CURRENT`；然后 `validate()` 补齐所有缺失字段的默认值、限制范围，所以缺字段不会报错。
+- 只存数据，不存对象引用：杂物存种类和变体编号（`{ type, v, rot }`），作物存种类和已长天数，加载时再查模型。体素缓存、粒子、任务、镜头都是派生状态，不进存档。
 - **任何 PR 改了存档结构**（加字段、改字段含义、删字段），都必须：
-  1. 把 `SAVE_VERSION` 加 1；
-  2. 加一个对应的 migration；
-  3. 在 PR 里说明旧存档会被怎样迁移，并附一个旧版本存档样例的加载测试。
-- 不允许出现「升级后旧存档读不出来」或「旧存档被清空」的情况。实在需要重置，也要先备份到另一个 key，并在界面上提示。
+  1. 把 `save.js` 里的 `CURRENT` 加 1；
+  2. 在 `MIGRATIONS` 里追加一个函数，已经发布的迁移函数不能再改；
+  3. 用 `node tools/save-smoke.js --write-fixture` 生成新版本样例前，先把旧样例改名留在 `tools/fixtures/`（每个版本至少留一个 `save-v<N>*.json`），测试会逐个加载；
+  4. 在 PR 里说明旧存档会被怎样迁移。
+- 不允许出现「升级后旧存档读不出来」或「旧存档被清空」的情况。坏档会另存到 `:corrupt:<时间>`，重置前的存档会另存到 `:reset:<时间>`；浏览器里有更新版本的存档时，旧页面只读不写。
 
 ## 部署
 
