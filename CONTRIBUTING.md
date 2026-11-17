@@ -78,6 +78,10 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
   4. 在 PR 里说明旧存档会被怎样迁移。
 - 不允许出现「升级后旧存档读不出来」或「旧存档被清空」的情况。坏档会另存到 `:corrupt:<时间>`，重置前的存档会另存到 `:reset:<时间>`；浏览器里有更新版本的存档时，旧页面只读不写。
 
+## 游玩记录
+
+游玩记录和本机文件夹同步在 `playlog.js`，**不进存档，也不升 `saveVersion`**。数据放在 `localStorage` 的 `mouzhi/pixel-farm:playlog`（独立 schema，目前为 1），最多 365 天摘要 + 2000 条事件。改记录的字段或文件格式时：更新 `playlog.js` 的 `SCHEMA`（或做向后兼容的 `normalize()`）、`tools/playlog-test.js`（聚合）和 `tools/playlog-smoke.js`（浏览器里写到 OPFS / 模拟目录），并在 README「游玩记录和本地同步」里改 schema 说明。目录句柄存在 IndexedDB 的 `mouzhi-pixel-farm` / `fs` / `dir`。写到用户文件夹里的文件是 `pixel-farm-save.json` 和 `pixel-farm-playlog.json`，格式见 README。
+
 ## 部署
 
 - 线上地址：https://mouzhi.github.io/pixel-farm/

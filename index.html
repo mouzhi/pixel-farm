@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v4.7</title>
+<title>像素堆叠 · 放置农场 v4.7.1</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -48,7 +48,8 @@
   #shop .card i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
   #shop .ct{flex:1;min-width:0}#shop .lv{font-weight:500;font-size:11px;opacity:.75}#shop .d{font-weight:500;font-size:12px;opacity:.85}
   #shop .cb{display:flex;flex-direction:column;align-items:flex-end;gap:1px;flex:none}#shop .short{font-size:11px;color:#f0a090;font-weight:500}#shop .done{color:#8fd35a;font-size:18px}
-  #menu{right:12px;top:100px;width:300px;padding:10px 12px}
+  #menu{right:12px;top:100px;width:320px;padding:10px 12px}
+  #syncHint{position:absolute;right:12px;top:42px;font-size:11px;padding:2px 8px;z-index:3}
   #menu .row{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0}
   #menu textarea{width:100%;box-sizing:border-box;height:64px;font:11px monospace;background:#1a120e;color:#fff6dc;border:2px solid #8a6a44;resize:none}
   #menu .note{font-weight:500;font-size:12px;opacity:.85}
@@ -73,10 +74,11 @@
     <div class="row"><span><i class="ico coin"></i>金币 <b id="coins">0</b></span><span><i class="ico seed"></i>仓库种子 <b id="seeds">0</b></span></div>
     <div id="prices">今日行情：</div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v4.7 · 动物分散到各区域、猫猫狗狗（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v4.7.1 · 游玩记录和本地同步（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · 滚轮缩放</span></div>
   <div id="log"></div>
   <div id="catches" hidden></div>
   <div id="inv" class="panel"></div>
+  <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
   <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
   <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
   <div id="speed" hidden></div>
@@ -96,6 +98,7 @@
 <script src="animals.js"></script>
 <script src="fish.js"></script>
 <script src="save.js"></script>
+<script src="playlog.js"></script>
 <script src="fx.js"></script>
 <script src="game.js"></script>
 <script src="ui.js"></script>
