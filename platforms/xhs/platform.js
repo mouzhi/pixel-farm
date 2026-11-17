@@ -532,10 +532,32 @@
   }
 
   function tipAuthor() {
-    if (!mini || typeof mini.rewardAuthor !== 'function') {
-      return Promise.reject(new Error('当前环境暂不支持赞赏'));
+    if (!rewardAvailable()) {
+      return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
     }
-    return mini.rewardAuthor();
+    return callMini('rewardAuthor');
+  }
+  function rewardAvailable() {
+    return !!(mini && typeof mini.rewardAuthor === 'function');
+  }
+  // share（官方 §3.18，9.53+，门槛 9530）：type=card 分享小工具卡片，身份由容器提供。
+  // 仅全屏容器可用；成功只表示分享面板已拉起，不代表已经发出。无分享奖励。
+  function shareAvailable() {
+    return !!(mini && typeof mini.share === 'function');
+  }
+  function shareCard() {
+    if (!shareAvailable()) return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
+    return callMini('share', { type: 'card' });
+  }
+  // saveImageToPhotosAlbum（官方 §3.4，9.42+，门槛 9420）：filePath 为 data: 或 writeTempFile 路径。
+  function saveImageAvailable() {
+    return !!(mini && typeof mini.saveImageToPhotosAlbum === 'function');
+  }
+  function saveFarmImage(filePath) {
+    if (!saveImageAvailable() || !filePath) {
+      return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
+    }
+    return callMini('saveImageToPhotosAlbum', { filePath: filePath });
   }
 
   // 关注创作者：官方 3.15，客户端 9.51+（版本门槛 9510）。无业务参数，只能关注当前小工具作者。
@@ -570,6 +592,11 @@
     postNoteAvailable: postNoteAvailable,
     writeTempFile: writeTempFile,
     tipAuthor: tipAuthor,
+    rewardAvailable: rewardAvailable,
+    shareAvailable: shareAvailable,
+    shareCard: shareCard,
+    saveImageAvailable: saveImageAvailable,
+    saveFarmImage: saveFarmImage,
     creatorFollow: {
       available: creatorFollowAvailable(),
       getStatus: getFollowStatus,

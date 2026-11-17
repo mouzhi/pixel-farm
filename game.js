@@ -1121,10 +1121,11 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
   if (dist > 0.5) { const st = Math.min(dist, WALK * S.eff.walk * (F.spd || 1) * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
+    if (!k.work && k.kind === 'fish') emit('task-start', { kind: 'fish' });
     k.work += dm; F.act += dm; F.moving = false;
     if (k.tick) k.tick(k, dm);
     if (k.fx && Math.random() < dm * 0.5) fxTick(k);
-    if (k.work >= k.dur) { k.done && k.done(); F.task = null; if (k.kind !== 'idle') emit('task', { kind: k.kind }); }
+    if (k.work >= k.dur) { k.done && k.done(); F.task = null; if (k.kind !== 'idle') emit('task', { kind: k.kind, an: k.an ? k.an.kind : k.sfx }); }
   }
   if (me) noteLog('tick', dm, F.task && F.task.kind, F.task && F.task.label); else if (F.task && F.task.kind !== 'idle' && F.task.kind !== 'home') noteLog('work', F.id, dm);
 }
@@ -2208,6 +2209,7 @@ function surpriseNote(ev, x, y) {
   if (!ev) return;
   say(ev.msg); log(ev.msg);
   noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
+  emit('surprise', { kind: ev.kind });
   if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
 }
 

@@ -13,8 +13,11 @@
     'playlog.js',
     'fx.js',
     'game.js',
+    'audio-config.js',
+    'audio.js',
     'ui.js',
-    'leaderboard.js'
+    'leaderboard.js',
+    'assets/audio-data.js'
   ];
   function loadAll() {
     var i = 0;
@@ -31,7 +34,7 @@
       var s = document.createElement('script');
       s.src = scripts[i++];
       s.onload = next;
-      s.onerror = function () { console.error('[farm] failed to load', s.src); };
+      s.onerror = function () { console.error('[farm] failed to load', s.src); if (s.src.indexOf('audio-data') !== -1) next(); };
       document.head.appendChild(s);
     }
     next();

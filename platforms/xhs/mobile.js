@@ -266,16 +266,25 @@
     var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
     speed.hidden = true;
     side.appendChild(speed);
-    // 音乐 / 音效开关预留，等音频接入后再显示
-    var music = ico('xhs-btn-music', 'music', '音乐');
-    var sfx = ico('xhs-btn-sfx', 'sfx', '音效');
-    music.hidden = true;
-    sfx.hidden = true;
+    var music = ico('xhs-btn-music', 'music', '音乐', toggleMusic);
+    var sfx = ico('xhs-btn-sfx', 'sfx', '音效', toggleSfx);
+    music.classList.add('off');
+    sfx.classList.add('off');
     side.appendChild(music);
     side.appendChild(sfx);
+    var moreWrap = doc.createElement('div'); moreWrap.id = 'xhs-more-wrap';
+    var moreMenu = doc.createElement('div'); moreMenu.id = 'xhs-more-menu'; moreMenu.hidden = true;
+    moreMenu.appendChild(ico('xhs-btn-share', 'share', '分享小工具', onShareCard));
+    moreMenu.appendChild(ico('xhs-btn-save', 'save', '保存农场图', onSaveFarm));
+    moreMenu.appendChild(ico('xhs-btn-tip', 'tip', '赞赏作者', onTipAuthor));
+    moreWrap.appendChild(moreMenu);
+    moreWrap.appendChild(ico('xhs-btn-more', 'more', '更多', toggleMore));
+    side.appendChild(moreWrap);
     doc.body.appendChild(side);
     setupFollow();
     setupPostNote();
+    setupExtraApis();
+    paintAudioToggles();
     applyWindowInsets();
     if (root.__farm && __farm.fit) __farm.fit();
   }
@@ -325,6 +334,86 @@
     var host = !!(root.xhs && root.xhs.miniTool);
     var ok = P.postNoteAvailable ? P.postNoteAvailable() : !!(root.xhs && root.xhs.miniTool && typeof root.xhs.miniTool.postNote === 'function');
     if (host && !ok && btn) btn.hidden = true;
+  }
+
+  function apiOnHost(name) {
+    var host = !!(root.xhs && root.xhs.miniTool);
+    if (!host) return true; // 模拟器里露出入口，真机按方法是否注入决定
+    return typeof root.xhs.miniTool[name] === 'function';
+  }
+  function setupExtraApis() {
+    var share = doc.getElementById('xhs-btn-share');
+    var save = doc.getElementById('xhs-btn-save');
+    var tip = doc.getElementById('xhs-btn-tip');
+    var more = doc.getElementById('xhs-btn-more');
+    if (share && !apiOnHost('share')) share.hidden = true;
+    if (save && !apiOnHost('saveImageToPhotosAlbum')) save.hidden = true;
+    if (tip && !apiOnHost('rewardAuthor')) tip.hidden = true;
+    var any = [share, save, tip].some(function (b) { return b && !b.hidden; });
+    if (more && !any) more.hidden = true;
+  }
+  function toggleMore(ev) {
+    if (ev && ev.stopPropagation) ev.stopPropagation();
+    var menu = doc.getElementById('xhs-more-menu');
+    if (!menu) return;
+    menu.hidden = !menu.hidden;
+  }
+  function closeMore() {
+    var menu = doc.getElementById('xhs-more-menu');
+    if (menu) menu.hidden = true;
+  }
+  doc.addEventListener('click', function (e) {
+    var wrap = doc.getElementById('xhs-more-wrap');
+    if (wrap && e.target && wrap.contains(e.target)) return;
+    closeMore();
+  }, true);
+
+  function paintAudioToggles() {
+    var A = root.PFAudio;
+    var set = A && A.settings ? A.settings() : { music: false, sfx: false };
+    var m = doc.getElementById('xhs-btn-music'), s = doc.getElementById('xhs-btn-sfx');
+    if (m) { m.classList.toggle('off', !set.music); m.setAttribute('aria-pressed', String(!!set.music)); }
+    if (s) { s.classList.toggle('off', !set.sfx); s.setAttribute('aria-pressed', String(!!set.sfx)); }
+  }
+  function toggleMusic() {
+    var A = root.PFAudio;
+    if (!A) return;
+    if (A.unlock) A.unlock();
+    A.setMusic(!A.settings().music);
+    paintAudioToggles();
+  }
+  function toggleSfx() {
+    var A = root.PFAudio;
+    if (!A) return;
+    if (A.unlock) A.unlock();
+    A.setSfx(!A.settings().sfx);
+    paintAudioToggles();
+  }
+  function onShareCard() {
+    closeMore();
+    if (!P.shareCard) { if (P.toast) P.toast('这里还不能分享'); return; }
+    P.shareCard().then(function () {}, function () {});
+  }
+  var saveBusy = false;
+  function onSaveFarm() {
+    closeMore();
+    if (saveBusy) return;
+    if (P.saveImageAvailable && !P.saveImageAvailable() && root.xhs && root.xhs.miniTool) return;
+    var live = canvasToJpeg(doc.getElementById('game'), 0.9);
+    if (!live) { if (P.toast) P.toast('没截到画面'); return; }
+    if (!P.saveFarmImage) { if (P.toast) P.toast('这里还不能保存到相册'); return; }
+    saveBusy = true;
+    toNoteUrl(live).then(function (path) {
+      return P.saveFarmImage(path || live);
+    }).then(function () {
+      saveBusy = false;
+      if (P.toast) P.toast('已保存到相册');
+    }, function () { saveBusy = false; });
+  }
+  function onTipAuthor() {
+    closeMore();
+    if (!P.tipAuthor) { if (P.toast) P.toast('这里还不能赞赏'); return; }
+    P.tipAuthor().then(function () {}, function () {});
   }
 
   function canvasToJpeg(cv, quality) {
@@ -668,6 +757,7 @@
     reparentSheets();
     compactHud();
     syncSpeedBtn();
+    paintAudioToggles();
     var mm = doc.getElementById('minimap');
     if (mm && !mm._xhsDefaulted) {
       mm._xhsDefaulted = true;

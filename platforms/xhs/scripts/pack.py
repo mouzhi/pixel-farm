@@ -2,6 +2,7 @@
 """Build an offline 小红书小工具 zip. Does not log in, upload, or submit."""
 from __future__ import annotations
 
+import base64
 import re
 import shutil
 import subprocess
@@ -17,7 +18,7 @@ ZIP = HERE / "pixel-farm-xhs-tool.zip"
 
 JS_FILES = [
     "animals.js", "family.js", "fish.js", "fx.js", "game.js", "playlog.js",
-    "save.js", "sim.js", "surprise.js", "ui.js", "world.js",
+    "save.js", "sim.js", "surprise.js", "ui.js", "world.js", "audio.js",
 ]
 ASSETS = [
     "palette.js", "sprites.js", "chars.png", "crops.png", "hud_icons.png", "palette.png",
@@ -62,6 +63,48 @@ def stage() -> None:
     shutil.copy2(HERE / "atlas_hud_128_q90.webp", STAGE / "atlas_hud_128_q90.webp")
     shutil.copy2(HERE / "atlas_128_q90.webp", STAGE / "atlas_128_q90.webp")
     shutil.copy2(HERE / "note-copy.js", STAGE / "note-copy.js")
+    shutil.copy2(HERE / "audio-config.js", STAGE / "audio-config.js")
+    shutil.copy2(HERE / "atlas_extra_128_q90.webp", STAGE / "atlas_extra_128_q90.webp")
+    # Official preview/submit allowlist has no audio extensions (preview API
+    # rejected in-package .mp3 even though the zip auditor allowed it). CSP also
+    # forbids data:/blob: on <audio>, so recorded samples are base64-embedded in
+    # a .js file and decoded with Web Audio. Morning + all SFX are included;
+    # afternoon/evening/night stay on the procedural generator to keep parse cost down.
+    def write_audio_data() -> None:
+        tracks: dict[str, str] = {}
+        morning = ROOT / "audio" / "morning.mp3"
+        if morning.is_file():
+            tracks["morning"] = base64.b64encode(morning.read_bytes()).decode("ascii")
+        sfx: dict[str, str] = {}
+        for folder in (ROOT / "sfx", ROOT / "assets" / "audio" / "sfx"):
+            if not folder.is_dir():
+                continue
+            for src in sorted(folder.glob("*.mp3")):
+                sfx[src.stem] = base64.b64encode(src.read_bytes()).decode("ascii")
+        dest = STAGE / "assets" / "audio-data.js"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        def emit_map(fh, obj: dict[str, str]) -> None:
+            fh.write("{")
+            first = True
+            for key, val in obj.items():
+                if not first:
+                    fh.write(",")
+                first = False
+                fh.write(f'"{key}":"{val}"')
+            fh.write("}")
+        with dest.open("w", encoding="ascii") as fh:
+            fh.write("window.PF_AUDIO_DATA={tracks:")
+            emit_map(fh, tracks)
+            fh.write(",sfx:")
+            emit_map(fh, sfx)
+            fh.write("};\n")
+        print(
+            "wrote", dest.relative_to(STAGE),
+            "tracks=", list(tracks),
+            "sfx=", len(sfx),
+            "bytes=", dest.stat().st_size,
+        )
+    write_audio_data()
     note_dir = HERE / "note"
     if note_dir.is_dir():
         (STAGE / "note").mkdir(parents=True, exist_ok=True)
