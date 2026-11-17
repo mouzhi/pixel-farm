@@ -94,6 +94,9 @@
         spawn({ x, y, z: z + 5, vx: Math.cos(a) * R(3, 7), vy: Math.sin(a) * 0.25, vz: R(6, 12), life: R(0.3, 0.55), c: pick([WHITE, CREAM, GOLD]), sh: 'spark', s: 1, blink: 1, g: 10 });
       }
       spawn({ x, y, z: z + 6, vx: 0, vy: 0, vz: 1, life: 0.1, c: WHITE, sh: 'star', s: 2, g: 0 });
+    } else if (kind === 'heart') { // v4.7: little hearts that float up from a petted animal (no gravity), blink out at the end
+      const C = cols || [Ac[3]], n = o.n || 3;
+      for (let i = 0; i < n; i++) spawn({ x: x + R(-3, 3), y, z: z + i * 3, vx: R(-1.5, 1.5), vy: 0, vz: R(5, 7), life: R(1.0, 1.3), c: C[i % C.length], sh: 'heart', g: 0, blink: 1 });
     } else if (kind === 'seed') {
       const C = cols || [Wd[4], Ac[0], '#e8d9a0'];
       for (let i = 0; i < (o.n || 4); i++) spawn({ x, y, z, vx: R(-3, 3), vy: R(-2, 2), vz: R(4, 9), life: 0.4, c: pick(C), sh: 'px', s: 1, g: 30 });
@@ -155,6 +158,8 @@
         if (Math.abs(Math.cos(p.ph)) > 0.5) ctx.fillRect(x, y, p.s + 1, 1); else ctx.fillRect(x, y, 1, p.s + 1);
       } else if (p.sh === 'puff') {
         const s = p.s | 0; ctx.fillStyle = c; ctx.fillRect(x - (s >> 1), y - (s >> 1), s, s);
+      } else if (p.sh === 'heart') {
+        ctx.fillStyle = c; ctx.fillRect(x - 2, y, 2, 1); ctx.fillRect(x + 1, y, 2, 1); ctx.fillRect(x - 2, y + 1, 5, 1); ctx.fillRect(x - 1, y + 2, 3, 1); ctx.fillRect(x, y + 3, 1, 1);
       } else if (p.sh === 'spark') {
         ctx.fillStyle = c; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3);
       } else if (p.sh === 'star') {

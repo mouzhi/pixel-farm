@@ -22,8 +22,8 @@ const SECS = +process.argv[3] || 180;
     window.__ft = []; let last = 0; const f = t => { if (last) window.__ft.push(t - last); last = t; requestAnimationFrame(f); }; requestAnimationFrame(f);
   });
   await p.goto(URL); await p.waitForFunction(() => window.__farm && __farm.spritesReady());
-  // PF_ANIMALS=1: buy the pasture, both buildings and every animal, and watch the pen (Phase 4 load)
-  if (process.env.PF_ANIMALS) await p.evaluate(() => { const f = __farm; f.S.coins = 1e6; for (const id of ['pasture', 'coop', 'shed', ...Array(6).fill('chicken'), ...Array(3).fill('sheep'), ...Array(2).fill('cow')]) f.buy(id); f.panTo(280, -54); });
+  // PF_ANIMALS=1: buy every pen, every animal and all six pets (v4.6 load); the rotation sweeps pass all of them
+  if (process.env.PF_ANIMALS) await p.evaluate(() => { const f = __farm; f.S.coins = 1e6; for (const id of ['forest', 'orchard', 'pasture', 'coop', 'sty', 'fold', 'shed', ...Array(6).fill('chicken'), ...Array(3).fill('pig'), ...Array(3).fill('sheep'), ...Array(3).fill('cow'), ...Array(3).fill('cat'), ...Array(3).fill('dog')]) f.buy(id); f.panTo(280, -54); });
   const cdp = await p.context().newCDPSession(p); await cdp.send('Performance.enable');
   const t0 = Date.now(); let i = 0;
   while ((Date.now() - t0) / 1000 < SECS) {

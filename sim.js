@@ -44,13 +44,20 @@
     { id: 'east', name: '东田', icon: 'east', region: 1, levels: [{ cost: 1200, label: '东田', desc: '东边 24 格大田，满地杂物，带水桶' }] },
     { id: 'orchard', name: '果园坡', icon: 'orchard', region: 1, levels: [{ cost: 1500, label: '果园坡', desc: '3 棵苹果树（每 3 天 5 个），可以移植树苗' }] },
     { id: 'south', name: '南坡梯田', icon: 'south', region: 1, levels: [{ cost: 2500, label: '南坡梯田', desc: '南边 24 格坡地，带水桶' }] },
-    { id: 'pasture', name: '北牧场', icon: 'pasture', region: 1, levels: [{ cost: 2000, label: '北牧场', desc: '东北边的草场，带饲料槽和水桶，可以盖鸡舍、牛羊棚' }] },
-    // pasture (Phase 4): buildings, then animals; one level = one more animal
-    { id: 'coop', name: '鸡舍', icon: 'coop', farm: 1, needs: 'pasture', levels: [{ cost: 600, label: '鸡舍', desc: '能养 6 只鸡，鸡蛋下在窝里' }] },
-    { id: 'shed', name: '牛羊棚', icon: 'shed', farm: 1, needs: 'pasture', levels: [{ cost: 1500, label: '牛羊棚', desc: '能养 3 只羊和 2 头牛，旁边堆干草' }] },
-    { id: 'chicken', name: '鸡', icon: 'chicken', farm: 1, needs: 'coop', levels: [200, 220, 250, 280, 300, 340].map((cost, i) => ({ cost, label: `第 ${i + 1} 只鸡`, desc: '每天吃 1 份干草，下 1 个蛋（开心时 2 个）' })) },
-    { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'shed', levels: [800, 900, 1000].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' })) },
-    { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
+    { id: 'pasture', name: '北牧场', icon: 'pasture', region: 1, levels: [{ cost: 2000, label: '北牧场', desc: '东北边的草场，带饲料槽和水桶，可以盖牛棚养牛' }] },
+    // animals (v4.7): each kind has a building in its own place; the building needs its region, one level = one more animal.
+    // Home coop (no region) is the early one; then pigs at the forest edge, sheep on the orchard slope, cows in the north pasture.
+    { id: 'coop', name: '鸡舍', icon: 'coop', farm: 1, levels: [{ cost: 300, label: '鸡舍', desc: '盖在家门口西边，能养 6 只鸡，带小水槽' }] },
+    { id: 'chicken', name: '鸡', icon: 'chicken', farm: 1, needs: 'coop', levels: [100, 130, 170, 220, 280, 340].map((cost, i) => ({ cost, label: `第 ${i + 1} 只鸡`, desc: '每天吃 1 份干草，下 1 个蛋（开心时 2 个）' })) },
+    { id: 'sty', name: '猪圈', icon: 'sty', farm: 1, needs: 'forest', levels: [{ cost: 500, label: '猪圈', desc: '林场路边的猪圈，能养 3 头猪' }] },
+    { id: 'pig', name: '猪', icon: 'pig', farm: 1, needs: 'sty', levels: [400, 480, 560].map((cost, i) => ({ cost, label: `第 ${i + 1} 头猪`, desc: '每天吃 2 份干草，每 2 天在树下拱出 1 颗松露（开心时 2 颗）' })) },
+    { id: 'fold', name: '羊圈', icon: 'fold', farm: 1, needs: 'orchard', levels: [{ cost: 900, label: '羊圈', desc: '果园坡上的羊圈，能养 3 只羊' }] },
+    { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'fold', levels: [700, 800, 900].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' })) },
+    { id: 'shed', name: '牛棚', icon: 'shed', farm: 1, needs: 'pasture', levels: [{ cost: 1500, label: '牛棚', desc: '北牧场的牛棚，能养 3 头牛，旁边堆干草' }] },
+    { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1400, 1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
+    // companions (v4.6): no hay, no product, a small bonus each
+    { id: 'cat', name: '猫', icon: 'cat', pet: 1, levels: [{ cost: 120, label: '橘猫' }, { cost: 180, label: '黑猫' }, { cost: 260, label: '三花猫' }].map(l => Object.assign(l, { desc: '在农场里晒太阳、跟着散步；每天早上叼来 1 颗胡萝卜种子' })) },
+    { id: 'dog', name: '狗', icon: 'dog', pet: 1, levels: [{ cost: 160, label: '柴犬' }, { cost: 240, label: '黑白狗' }, { cost: 320, label: '棕色小狗' }].map(l => Object.assign(l, { desc: '跟着农夫到处走，农夫走路快 3%' })) },
     { id: 'rod', name: '钓竿', icon: 'rod', fish: 1, levels: [{ cost: 400, label: '钢竿', desc: '咬钩更快，更容易钓到少见的鱼' }, { cost: 1600, label: '碳素竿', desc: '再快一些，锦鲤更常见' }] },
     { id: 'coast', name: '海边', icon: 'coast', region: 1, fish: 1, levels: [{ cost: 3500, label: '海边', desc: '东南边的沙滩和码头，看得见海' }] },
     { id: 'searod', name: '海竿', icon: 'searod', fish: 1, needs: 'coast', levels: [{ cost: 2000, label: '大海竿', desc: '能在码头上钓海鱼' }] },
@@ -64,15 +71,16 @@
     return {
       field: lv('field'),
       waterMax: [WATER_MAX0, 8, 16, 30][lv('can')],
-      walk: [1, 1.25, 1.5, 1.8][lv('shoe')],
+      walk: Math.round([1, 1.25, 1.5, 1.8][lv('shoe')] * (1 + 0.03 * lv('dog')) * 1000) / 1000, // v4.7: each dog +3%
       tillDur: lv('hoe') >= 1 ? 2 : 4, till3: lv('hoe') >= 2,
       basket: [BASKET, 20, 40][lv('basket')],
       speedMax: [1, 2, 4][lv('speed')],
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
       axe: lv('axe') > 0,
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
-      coop: lv('coop') > 0, shed: lv('shed') > 0,
-      animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow') },
+      coop: lv('coop') > 0, sty: lv('sty') > 0, fold: lv('fold') > 0, shed: lv('shed') > 0,
+      animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow'), pig: lv('pig') },
+      pets: { cat: lv('cat'), dog: lv('dog') },
       rod: lv('rod'), searod: lv('searod') > 0,
     };
   }

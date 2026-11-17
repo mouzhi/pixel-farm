@@ -8,7 +8,7 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 7;
+  const CURRENT = 8;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -36,10 +36,20 @@
       inventory: Object.assign({ hay: 0 }, s.inventory), prices: Object.assign({ egg: 1, wool: 1, milk: 1 }, s.prices) }),
     // v4.6 fishing: starter bamboo rod (rod level 0 is owned, not bought), no sea rod or coast, empty catch log
     7: s => Object.assign({}, s, { upgrades: Object.assign({ rod: 0, searod: 0, coast: 0 }, s.upgrades), catches: Array.isArray(s.catches) ? s.catches : [] }),
+    // v4.7 animals spread out: the coop moves home (chickens keep their level), the shed is the cows' now, sheep get a fold on
+    // the orchard slope (free for anyone who already had sheep, with the orchard too if it was not bought, so nobody loses an
+    // animal), pigs and pets start at 0. One trough per building; the old pasture trough becomes the shed's (or the coop's).
+    8: s => {
+      const up = Object.assign({ sty: 0, fold: 0, pig: 0, cat: 0, dog: 0 }, s.upgrades);
+      if ((up.sheep | 0) > 0) { up.fold = Math.max(up.fold | 0, 1); up.orchard = Math.max(up.orchard | 0, 1); }
+      const t = s.trough && typeof s.trough === 'object' ? s.trough : {}, old = { feed: t.feed | 0, water: t.water ? 1 : 0 }, empty = () => ({ feed: 0, water: 0 });
+      const troughs = { coop: empty(), sty: empty(), fold: empty(), shed: empty() }; troughs[(up.shed | 0) > 0 ? 'shed' : 'coop'] = old;
+      const out = Object.assign({}, s, { upgrades: up, troughs, prices: Object.assign({ truffle: 1 }, s.prices) }); delete out.trough; return out;
+    },
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'shed', 'chicken', 'sheep', 'cow', 'rod', 'coast', 'searod']; // levels; max levels live in sim.js
-  const ANIMAL_IDS = ['chicken', 'sheep', 'cow'], PRODUCT_IDS = ['egg', 'wool', 'milk'];
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'rod', 'coast', 'searod']; // levels (shop order); max levels live in sim
+  const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -110,7 +120,7 @@
       trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
       orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),
       animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
-      trough: { feed: int(obj(s.trough).feed, 0, 0, 99), water: obj(s.trough).water ? 1 : 0 },
+      troughs: Object.fromEntries(PEN_IDS.map(k => { const t = obj(obj(s.troughs)[k]); return [k, { feed: int(t.feed, 0, 0, 99), water: t.water ? 1 : 0 }]; })),
       catches: (Array.isArray(s.catches) ? s.catches : []).map(validCatch).filter(Boolean).slice(0, 12),
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
@@ -170,6 +180,6 @@
     if (sum(m[1]) !== m[2]) throw new Error('存档字符串不完整或被改动过');
     return migrate(JSON.parse(b64d(m[1])));
   }
-  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, ANIMAL_IDS, PRODUCT_IDS, FISH_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
+  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, ANIMAL_IDS, PRODUCT_IDS, FISH_IDS, PEN_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSave = api;
 })(typeof window !== 'undefined' ? window : globalThis);
