@@ -1,0 +1,16 @@
+{
+  "name": "像素农场",
+  "slogan": "看农夫忙来忙去",
+  "version": "1.0.0",
+  "categories": [],
+  "authorizations": [],
+  "notes": {
+    "appNameMax": 14,
+    "sloganMax": 14,
+    "icon": "JPG/PNG, 1:1, <=5 MiB, web outputs 512x512 JPEG",
+    "cover": "JPG/PNG, 3:4, <=10 MiB",
+    "zip": "<=10 MiB, unzip <=30 MiB, index.html at zip root",
+    "paidMode": "Set on the creator page; paid/free cannot be switched later. Host buyout paywall, not an in-game IAP API.",
+    "source": "thirdAgent when using redapp CLI"
+  }
+}

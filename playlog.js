@@ -74,7 +74,7 @@
   }
 
   function load(store) {
-    storage = store || (typeof localStorage !== 'undefined' ? localStorage : storage);
+    storage = store || (typeof PFPlatform !== 'undefined' && PFPlatform.store && PFPlatform.store()) || (typeof localStorage !== 'undefined' ? localStorage : storage);
     data = emptyData(); cur = null; session = null;
     if (!storage) return data;
     try {

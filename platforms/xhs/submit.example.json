@@ -1,0 +1,11 @@
+{
+  "appName": "像素农场",
+  "slogan": "看农夫忙来忙去",
+  "iconFileId": "REPLACE_AFTER_UPLOAD",
+  "coverFileId": "REPLACE_AFTER_UPLOAD",
+  "version": "1.0.0",
+  "pkgFileId": "REPLACE_AFTER_UPLOAD",
+  "md5": "REPLACE_AFTER_UPLOAD",
+  "categories": ["REPLACE_FROM_redapp_config"],
+  "authorizations": []
+}

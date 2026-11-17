@@ -179,7 +179,7 @@
   }
   // -> { state, from: KEY | BAK, notes: [] } ; state null for a fresh game
   function read(store) {
-    store = store || root.localStorage; const notes = [];
+    store = store || (root.PFPlatform && root.PFPlatform.store && root.PFPlatform.store()) || root.localStorage; const notes = [];
     for (const key of [KEY, BAK]) {
       let raw; try { raw = store.getItem(key); } catch (e) { notes.push('storage-unavailable'); return { state: null, notes }; }
       if (!raw) continue;
@@ -192,7 +192,7 @@
     return { state: null, notes };
   }
   function write(state, store) {
-    store = store || root.localStorage;
+    store = store || (root.PFPlatform && root.PFPlatform.store && root.PFPlatform.store()) || root.localStorage;
     if (blocked) return { ok: false, error: 'blocked: a newer save exists' };
     try {
       const json = JSON.stringify(state), cur = store.getItem(KEY);
@@ -201,7 +201,7 @@
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
   }
   function reset(store) { // keep the old save under :reset:<time> (one copy), then start fresh
-    store = store || root.localStorage;
+    store = store || (root.PFPlatform && root.PFPlatform.store && root.PFPlatform.store()) || root.localStorage;
     try { const cur = store.getItem(KEY); for (let i = store.length - 1; i >= 0; i--) { const k = store.key(i); if (k && k.startsWith(PREFIX + 'reset:')) store.removeItem(k); }
       if (cur) store.setItem(PREFIX + 'reset:' + Date.now(), cur); store.removeItem(KEY); store.removeItem(BAK); blocked = false; return true; } catch (e) { return false; }
   }

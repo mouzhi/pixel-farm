@@ -193,8 +193,8 @@
   }
   $('speed').addEventListener('click', e => { const v = +(e.target.dataset && e.target.dataset.v); if (v) { G.setGameSpeed(v); speedBar(); } });
   // ---- big map: minimap toggle, chop / transplant tools, short messages ----
-  const mm = $('minimap'); if (localStorage.getItem('mouzhi/pixel-farm:ui:map') === '0') mm.hidden = true;
-  const toggleMap = () => { mm.hidden = !mm.hidden; try { localStorage.setItem('mouzhi/pixel-farm:ui:map', mm.hidden ? '0' : '1'); } catch (e) {} G.minimapDraw(); };
+  const mm = $('minimap'); if ((window.PFPlatform && PFPlatform.store && PFPlatform.store() || localStorage).getItem('mouzhi/pixel-farm:ui:map') === '0') mm.hidden = true;
+  const toggleMap = () => { mm.hidden = !mm.hidden; try { (window.PFPlatform && PFPlatform.store && PFPlatform.store() || localStorage).setItem('mouzhi/pixel-farm:ui:map', mm.hidden ? '0' : '1'); } catch (e) {} G.minimapDraw(); };
   $('mapBtn').addEventListener('click', toggleMap);
   let toolKey = '';
   function tools() {
