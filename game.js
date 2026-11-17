@@ -11,11 +11,12 @@ const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // forest margin around the home farm (world units)
 const AN = window.PFAnimals; // v4.5: animal care rules
 const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
-const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
+const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
 let SPEED = +Q.get('speed') || 1;
 const MANUAL = Q.has('manual');
+const PATHDEBUG = Q.has('path'); // ?path=1 draws the walkability grid and current routes
 const MIN_PER_SEC = window.PFSim.MIN_PER_SEC, WALK = 7, WAKE = window.PFSim.WAKE, BEDTIME = window.PFSim.BEDTIME; // sim.js: about 5 real minutes a day
 
 // ---------- rng / helpers ----------
@@ -621,15 +622,28 @@ const particles = [];
 let groundDirty = true;
 const fmtT = t => { const m = ((Math.floor(t) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
 function log(msg) { S.log.unshift(fmtT(S.t) + ' ' + msg); S.log.length = Math.min(S.log.length, 4); S.events.push({ day: S.day, t: Math.floor(S.t), msg }); if (S.events.length > 300) S.events.splice(0, S.events.length - 300); }
-// routes: inside one area the farmer walks straight; between areas he follows the road through the region's gate
-const areaOf = p => WD.areaAt(p.x, p.y) || 'home';
-function routeVia(a, b) {
-  const A = areaOf(a), B = areaOf(b); if (A === B) return [];
-  const out = A !== 'home' && WD.ROUTES[A] ? WD.ROUTES[A].slice().reverse() : [];
-  if (B !== 'home' && WD.ROUTES[B]) out.push(...WD.ROUTES[B]);
-  return out.map(p => ({ x: p.x, y: p.y }));
+// routes: A* on a walkability grid so people and animals go around the house, the pond and fences
+// (dirt roads are cheaper, so they still prefer the lanes between regions). Rebuilt when the map changes.
+let navGrid = null, navVer = 0, navDirty = true, dbgRoutes = [];
+function navState() {
+  return {
+    houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
+    pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
+    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })),
+    rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y }))
+  };
 }
-function travel(a, b) { let d = 0, p = a; for (const q of routeVia(a, b)) { d += Math.hypot(q.x - p.x, q.y - p.y); p = q; } return d + Math.hypot(b.x - p.x, b.y - p.y); }
+function markNavDirty() { navDirty = true; }
+function ensureNav() { if (!navGrid || navDirty) { navGrid = NAV.build(navState()); navVer++; navDirty = false; } return navGrid; }
+function pathTo(a, b, bounds) { return NAV.route(ensureNav(), a, b, bounds ? { bounds } : undefined); }
+function routeVia(a, b, bounds) { return pathTo(a, b, bounds).waypoints; }
+function travel(a, b) { return pathTo(a, b).length; }
+function setWalkTarget(v, x, y) { if (Math.hypot((v.tx || 0) - x, (v.ty || 0) - y) > 0.8) v.via = null; v.tx = x; v.ty = y; }
+function nextHop(v, dest, bounds) {
+  if (!v.via || v._nav !== navVer) { v.via = routeVia(v, dest, bounds); v._nav = navVer; }
+  while (v.via.length && Math.hypot(v.via[0].x - v.x, v.via[0].y - v.y) <= 0.5) v.via.shift();
+  return v.via.length ? v.via[0] : dest;
+}
 const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue; const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01; if (d < bd) { bd = d; best = t; } } return best; };
 const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 }))];
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
@@ -660,6 +674,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   groundDirty = true;
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(); }
+  markNavDirty();
 }
 function buy(id) { // the player's one action: spend gold on the next level of a shop item
   const o = SIM.offer(S.up, S.coins, id, FARMER.wood);
@@ -822,7 +837,7 @@ function yardTask(c) {
   const fx = c.type === 'weed' ? 'leaf' : (c.type === 'rock' || c.type === 'pebble') ? 'rock' : 'wood';
   return { kind: 'tidy', label: labels[c.type], to: standAt(c), tile: c, dur, fx, pose: 'pull', done: () => {
     const i = yard.indexOf(c); if (i < 0) return;
-    yard.splice(i, 1); S.cleared++;
+    yard.splice(i, 1); S.cleared++; if (c.type === 'rock') markNavDirty();
     const yr = yardRng(S.cleared * 2654435761 + S.day * 374761393);
     if (c.type === 'weed' && yr() < 0.7) { F.gathered++; S.flow.weed++; popText(c.x, c.y, 10, '+1', '#e6c35c'); }
     else {
@@ -896,7 +911,7 @@ function transplantTask(o) {
 // ---- v4.5 / v4.7 animal tasks ----
 const animalSpot = a => { const v = AV.get(a.id), P = PENS[penOfKind(a.kind)]; return { x: v ? v.x : P.bld.x, y: v ? v.y : P.bld.y + 14, an: a }; };
 function feedTask(pen) { const P = PENS[pen];
-  return { label: `正在往${P.name}的饲料槽里添干草`, to: troughSpot(pen), tile: P.trough, dur: 6, fx: 'hay', pose: 'pull', done: () => {
+  return { label: `正在往${P.name}的饲料槽里添干草`, to: troughSpot(pen), tile: P.trough, sfx: AN.KINDS && Object.keys(AN.KINDS).find(k => AN.KINDS[k].home === pen), dur: 6, fx: 'hay', pose: 'pull', done: () => {
     const n = Math.min(S.hay, AN.penNeed(S.animals, pen) - S.troughs[pen].feed); if (n <= 0) return;
     S.hay -= n; S.troughs[pen].feed += n; burst(P.trough.x, P.trough.y, 4, [Ac[1], Wd[4], Ac[2]], 8, 'leaf'); log(`往${P.name}的饲料槽添了 ${n} 份干草（仓库还剩 ${S.hay} 份）`); } };
 }
@@ -929,7 +944,7 @@ function petTask(a) {
     if (v) { v.hold = 0; hearts(v.x, v.y); } a.pet = 1; } };
 }
 function patPetTask(p) { const v = petView(p), name = AN.PETS[p.kind].coats.find(c => c.id === p.coat).name; v.hold = 1;
-  return { label: `正在摸摸${name}`, to: { x: v.x - 7, y: v.y + 1 }, tile: v, dur: 4, pose: 'pull', done: () => { v.hold = 0; hearts(v.x, v.y); p.patted = 1; log(`摸了摸${name}，它很开心`); } };
+  return { label: `正在摸摸${name}`, to: { x: v.x - 7, y: v.y + 1 }, tile: v, sfx: p.kind, dur: 4, pose: 'pull', done: () => { v.hold = 0; hearts(v.x, v.y); p.patted = 1; log(`摸了摸${name}，它很开心`); } };
 }
 function hearts(x, y, z = 10) { burst(x, y, z, [Ac[3], Rf[3]], 3, 'heart'); } // fx.js draws them as little pixel hearts
 const PRODUCT_COL = { egg: [Ac[0], St[3]], wool: [Ac[0], St[3]], milk: [Ac[0], Wt[4]], truffle: [Wd[1], Wd[2]] };
@@ -1044,23 +1059,28 @@ function fishSpot(water) { if (water === 'sea') { const r = WD.region('coast'); 
 function fishTask(water) {
   const spot = fishSpot(water), wait = FS.waitTime(S.eff.rod, rand);
   return { kind: 'fish', label: water === 'sea' ? '正在码头海钓' : '正在池塘边钓鱼', to: spot.stand, tile: spot.hook, hook: spot.hook, water, phase: 'cast',
-    dur: FS.CAST + wait + FS.BITE + FS.REEL, wait, rest: true, tick: fishTick, done: fishDone };
+    dur: FS.CAST + wait + FS.BITE + FS.REEL + FS.SHOW, wait, rest: true, tick: fishTick, done: fishDone };
 }
 function fishTick(k) {
-  const c = FS.CAST, wt = c + k.wait, b = wt + FS.BITE, w = k.work, prev = k.phase;
-  k.phase = w < c ? 'cast' : w < wt ? 'wait' : w < b ? 'bite' : 'reel';
+  const c = FS.CAST, wt = c + k.wait, b = wt + FS.BITE, r0 = b + FS.REEL, w = k.work, prev = k.phase;
+  k.phase = w < c ? 'cast' : w < wt ? 'wait' : w < b ? 'bite' : w < r0 ? 'reel' : 'show';
   k.rest = k.phase === 'cast' || k.phase === 'wait'; k.pose = (k.phase === 'bite' || k.phase === 'reel') ? 'pull' : null;
-  const labels = { cast: k.water === 'sea' ? '正在码头抛竿' : '正在池塘边抛竿', wait: '静静等鱼上钩', bite: '有鱼咬钩了！', reel: '正在收线' };
-  k.label = labels[k.phase]; S.label = k.label;
-  if (prev !== 'bite' && k.phase === 'bite') burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#c8e8f0', '#ffffff'], 10, 'splash');
+  const labels = { cast: k.water === 'sea' ? '正在码头抛竿' : '正在池塘边抛竿', wait: '静静等鱼上钩', bite: '有鱼咬钩了！', reel: '正在收线', show: '把鱼收进篮子' };
+  k.label = labels[k.phase]; if (F === FARMER) S.label = k.label;
+  if (prev !== 'bite' && k.phase === 'bite') {
+    if (!k.result) k.result = FS.roll(k.water, S.eff.rod, rand);
+    burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#c8e8f0', '#ffffff'], 10, 'splash');
+  }
+  if (prev !== 'reel' && k.phase === 'reel' && k.result && !k.result.miss && FS.isRare(k.result.fish) && window.PF_FX)
+    PF_FX.play('glow', k.hook.x, k.hook.y, 6);
 }
 function fishDone() {
-  const k = F.task, r = FS.roll(k.water, S.eff.rod, rand);
+  const k = F.task, r = k.result || FS.roll(k.water, S.eff.rod, rand);
   if (r.miss) { log('浮标动了一下，没钓上来'); popText(k.hook.x, k.hook.y, 8, '空钩', '#c8e8f0'); burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#ffffff'], 4, 'splash'); return; }
   if (F.crops.length >= BASK()) { log('篮子满了，这条鱼只好放回去'); return; }
   F.crops.push(r.fish);
   S.catches.unshift({ id: r.fish, name: r.name, gold: r.gold, water: k.water, day: S.day }); S.catches.length = Math.min(12, S.catches.length);
-  log(`钓到一条${r.name}（${r.gold} 金）`); popText(k.hook.x, k.hook.y, 12, r.name, r.col); burst(k.hook.x, k.hook.y, 4, [r.col, '#ffffff'], 6, 'spark');
+  log(`钓到一条${r.name}（${r.gold} 金）`); popText(F.x, F.y, 16, r.name, r.col); burst(F.x, F.y, 8, r.rare ? [r.col, '#fff2a8', '#ffffff', '#ffd76a'] : [r.col, '#ffffff'], r.rare ? 10 : 6, 'spark');
 }
 
 // ---------- simulation ----------
@@ -1091,6 +1111,7 @@ function overnight() {
     for (const k of g.rare) { const ev = SU.catToast(k, cropNames()); surpriseNote(ev, HOUSE.x, HOUSE.y + 6); bits.push(`一颗${SIM.CROPS[k].name}种子`); }
     log(`猫咪在门口放了${bits.join('、')}`); }
   familyMorning();
+  markNavDirty();
   groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
   onMorning();
 }
@@ -1113,7 +1134,8 @@ function stepSim(dm) {
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = chooseTask(); F.task.work = 0; F.task.via = routeVia(F, F.task.to).concat(F.task.via || []); if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (!F.task) { F.task = chooseTask(); F.task.work = 0; F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  else if (F._nav !== navVer) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
@@ -1121,7 +1143,7 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
   if (dist > 0.5) { const st = Math.min(dist, WALK * S.eff.walk * (F.spd || 1) * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
-    if (!k.work && k.kind === 'fish') emit('task-start', { kind: 'fish' });
+    if (!k.work && k.kind === 'fish') emit('task-start', { kind: 'fish' }); // v5.2: audio.js casts the line
     k.work += dm; F.act += dm; F.moving = false;
     if (k.tick) k.tick(k, dm);
     if (k.fx && Math.random() < dm * 0.5) fxTick(k);
@@ -1460,15 +1482,19 @@ function stepAnimals(dm) {
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE;
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
     if (v.hold) { v.graze = 0; continue; }
-    if (night) { const P = PENS[penOfKind(a.kind)], home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; v.tx = home.x; v.ty = home.y; v.wait = 0; }
-    const dx = v.tx - v.x, dy = v.ty - v.y, d = Math.hypot(dx, dy);
+    const P = PENS[penOfKind(a.kind)], roam = { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 };
+    if (night) { const home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; setWalkTarget(v, home.x, home.y); v.wait = 0; }
+    const hop = nextHop(v, { x: v.tx, y: v.ty }, roam), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, ASPEED[a.kind] * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.graze = 0;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
     if (night) { v.graze = 0; continue; }
     v.wait -= dm; v.graze = v.wait > 0 && (Math.floor(v.wait / 6) % 2 === 0);
-    if (v.wait <= 0) { const R0 = PENS[penOfKind(a.kind)].roam, far = anRng() < 0.3;
-      v.tx = Math.max(R0[0], Math.min(R0[2], far ? R0[0] + anRng() * (R0[2] - R0[0]) : v.x + (anRng() - 0.5) * 24));
-      v.ty = Math.max(R0[1], Math.min(R0[3], far ? R0[1] + anRng() * (R0[3] - R0[1]) : v.y + (anRng() - 0.5) * 14));
+    if (v.wait <= 0) { const R0 = P.roam, far = anRng() < 0.3;
+      let tx = Math.max(R0[0], Math.min(R0[2], far ? R0[0] + anRng() * (R0[2] - R0[0]) : v.x + (anRng() - 0.5) * 24));
+      let ty = Math.max(R0[1], Math.min(R0[3], far ? R0[1] + anRng() * (R0[3] - R0[1]) : v.y + (anRng() - 0.5) * 14));
+      const snap = NAV.nearestWalkable(ensureNav(), tx, ty, 12, null);
+      if (snap) { tx = Math.max(R0[0] - 2, Math.min(R0[2] + 2, snap.x)); ty = Math.max(R0[1] - 2, Math.min(R0[3] + 2, snap.y)); }
+      setWalkTarget(v, tx, ty);
       v.wait = 20 + anRng() * 50; }
   }
 }
@@ -1486,15 +1512,15 @@ function stepPets(dm) {
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
     if (v.hold) { v.pose = 2; continue; }
     let speed = dog ? 4.2 : 2.4;
-    if (night || F.home) { v.tx = DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6); v.ty = DOOR.y + 5 + (k % 2) * 3; v.wait = 0; }
+    if (night || F.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; }
     else if (dog) { const side = F.fx >= 0 ? 1 : -1, c = [[-side, 3], [side, 3], [-side, -4], [side, -4]].map(([sx, oy]) => [F.x + sx * (9 + k * 6), F.y + oy + k * 2]).find(([x, y]) => dry(x, y));
       if (!c) { v.pose = 2; continue; } const [bx, by] = c, far = Math.hypot(bx - v.x, by - v.y); // never wait in the pond
-      if (far > 10) { v.tx = bx; v.ty = by; } if (far > 26) speed = WALK * S.eff.walk * 1.15; }
+      if (far > 10) setWalkTarget(v, bx, by); if (far > 26) speed = WALK * S.eff.walk * 1.15; }
     else { // cat: nap somewhere sunny, sometimes come and sit by the farmer
       const d0 = Math.hypot(v.tx - v.x, v.ty - v.y);
       if (d0 < 0.4) { v.wait -= dm; if (v.wait <= 0) { const spots = WD.NAP_SPOTS.filter(napOpen), near = petRng() < 0.25 && (WD.areaAt(F.x, F.y) === 'home' || S.eff.regions.includes(WD.areaAt(F.x, F.y)));
-        const n = near && dry(F.x + 8, F.y + 4) ? { x: F.x + 8, y: F.y + 4 } : spots[Math.floor(petRng() * spots.length)]; v.tx = n.x + (petRng() - 0.5) * 6 + k * 5; v.ty = n.y + (petRng() - 0.5) * 4; v.wait = 60 + petRng() * 150; v.idle = 0; } } }
-    const dx = v.tx - v.x, dy = v.ty - v.y, d = Math.hypot(dx, dy);
+        const n = near && dry(F.x + 8, F.y + 4) ? { x: F.x + 8, y: F.y + 4 } : spots[Math.floor(petRng() * spots.length)]; setWalkTarget(v, n.x + (petRng() - 0.5) * 6 + k * 5, n.y + (petRng() - 0.5) * 4); v.wait = 60 + petRng() * 150; v.idle = 0; } } }
+    const hop = nextHop(v, { x: v.tx, y: v.ty }), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, speed * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.idle = 0; v.pose = Math.floor(v.step / 2.5) % 2;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
     v.idle += dm; v.pose = night || F.home || v.idle > (dog ? 90 : 12) ? 3 : 2;
@@ -1522,7 +1548,7 @@ function setView(o, t) {
   else { o.spr = t.age >= (t.kind === 'wild' ? 5 : 3) ? SAPLING[1] : SAPLING[0]; o.sway = 0.6; }
 }
 function treeView(t) { let o = TV.get(t.id); if (!o) { o = { x: t.x, y: t.y, rot: 0, z: 0, lean: 0, leanV: 0, tick: (treeN++ % 6) / 6, sim: t }; TV.set(t.id, o); setView(o, t); } return o; }
-function treeChanged(t) { const o = TV.get(t.id); if (o) { o.sim = t; setView(o, t); } }
+function treeChanged(t) { const o = TV.get(t.id); if (o) { o.sim = t; setView(o, t); } markNavDirty(); }
 function resetTreeViews() { for (const o of TV.values()) if (o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.clear(); }
 // ---- v5.0 house tiers: the house prop swaps to a bigger model (built once per tier); the woodpile moves out of the annex ----
 const HOUSE_MODELS = [models.house]; let houseTierShown = 0;
@@ -1601,6 +1627,16 @@ function farmerPose(P = F) {
   const sx = P.fx * CA - P.fy * SA, sy = P.fx * SA + P.fy * CA; // facing turned into screen space
   const side = Math.abs(sx) > Math.abs(sy) * 0.9, flip = sx < 0;
   const k = P.task;
+  // fishing: always face the water (the pond stand is on the right bank, so at the default camera that is left)
+  if (!P.moving && k && k.kind === 'fish' && k.hook) {
+    const [px] = proj(P.x, P.y), [hx] = proj(k.hook.x, k.hook.y), face = hx < px;
+    if (k.pose === 'pull' && k.work > 0) {
+      const q = SEQ.pull, u = k.phase === 'reel' ? Math.min(1, Math.max(0, (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL)) : 0.35;
+      const fr = u < 0.45 ? 3 : u < 0.8 ? 2 : 1;
+      return { row: 'pull', fr: q.includes(fr) ? fr : q[Math.min(q.length - 1, fr)], flip: face };
+    }
+    return { row: 'idle_side', fr: 0, flip: face, dir: 'walk_side' };
+  }
   if (!P.moving && k && k.pose && k.work > 0) { const q = SEQ[k.pose]; return { row: k.pose, fr: q[Math.floor(realT * 6) % q.length], flip: Math.abs(sx) < 0.05 ? false : flip }; }
   const dir = side ? 'walk_side' : sy > 0 ? 'walk_front' : 'walk_back';
   if (P.moving) return { row: dir, fr: Math.floor(realT * 8) % 4, flip: side && flip, dir };
@@ -1809,7 +1845,10 @@ function drawPondLeaves() {
   for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); }
   for (const [x, y, c, sh] of pondDecor) { ctx.fillStyle = c; if (sh === 1) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } else if (sh === 2) ctx.fillRect(x, y, 1, 2); else ctx.fillRect(x, y, 1, 1); }
 }
-// style A: a whole-pixel rod, line and bobber. The line is a Bresenham of 1px ink; the bobber bobs 1 px while waiting and jerks on a bite.
+// style A: a whole-pixel rod, line and bobber. The line is a Bresenham of 1px ink. Pose maths live in PFFish.pose:
+// the rod points at the water (up and left at the pond's right bank), the bobber bobs, a bite dips it, and a catch
+// arcs the fish out toward the fisher. Rare fish glow (same gold rim + plus-spark as a glowing crop) and a heart emote
+// floats up from the head.
 function linePx(x0, y0, x1, y1, col) {
   x0 = Math.round(x0); y0 = Math.round(y0); x1 = Math.round(x1); y1 = Math.round(y1);
   const dx = Math.abs(x1 - x0), dy = Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1;
@@ -1817,22 +1856,82 @@ function linePx(x0, y0, x1, y1, col) {
   ctx.fillStyle = col;
   while (true) { ctx.fillRect(x, y, 1, 1); if (x === x1 && y === y1) break; const e2 = 2 * err; if (e2 > -dy) { err -= dy; x += sx; } if (e2 < dx) { err += dx; y += sy; } }
 }
-function drawFishing() {
-  const k = F.task; if (!k || k.kind !== 'fish' || F.moving || F.home || !k.hook) return;
-  const [fx, fy] = proj(F.x, F.y), [hx0, hy0] = proj(k.hook.x, k.hook.y);
-  const pose = farmerPose(), flip = pose.flip ? -1 : 1;
-  const tipx = Math.round(fx) + flip * 8, tipy = Math.round(fy) - 18;
-  const hipx = Math.round(fx) + flip * 2, hipy = Math.round(fy) - 10;
-  let u = 1; // how far the line has gone: 0 at the start of the cast, 1 once it is waiting
-  if (k.phase === 'cast') u = Math.min(1, k.work / FS.CAST);
-  else if (k.phase === 'reel') u = Math.max(0.15, 1 - (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL);
-  const hx = fx + (hx0 - fx) * u, hy = fy + (hy0 - fy) * u;
-  const bob = k.phase === 'wait' ? Math.round(Math.sin(realT * 2.2)) : k.phase === 'bite' ? Math.round(Math.sin(realT * 14) * 2) : 0;
-  const bx = Math.round(hx), by = Math.round(hy) + bob;
-  linePx(hipx, hipy, tipx, tipy, Wd[2]); // the rod
-  if (u > 0.05) linePx(tipx, tipy, bx, by - 2, Ink[0]);
+function drawRod(grip, tip, look) {
+  const dx = tip.x - grip.x, dy = tip.y - grip.y, L = Math.hypot(dx, dy) || 1, px = -dy / L, py = dx / L;
+  linePx(grip.x + px, grip.y + py, tip.x + px, tip.y + py, look.ink);
+  linePx(grip.x, grip.y, tip.x, tip.y, look.shaft);
+  linePx(grip.x - px * 0.4, grip.y - py * 0.4, grip.x + dx * 0.35, grip.y + dy * 0.35, look.hi);
+  const gx = Math.round(grip.x), gy = Math.round(grip.y);
+  ctx.fillStyle = look.ink; ctx.fillRect(gx - 1, gy - 1, 3, 3);
+  ctx.fillStyle = look.wrap; ctx.fillRect(gx - 1, gy, 3, 2);
+  ctx.fillStyle = look.tip; ctx.fillRect(Math.round(tip.x), Math.round(tip.y) - 1, 1, 2);
+}
+function drawBobber(x, y) {
+  const bx = Math.round(x), by = Math.round(y);
+  ctx.fillStyle = Ink[0]; ctx.fillRect(bx - 1, by - 3, 3, 5);
   ctx.fillStyle = Rf[2]; ctx.fillRect(bx - 1, by - 2, 2, 2);
-  ctx.fillStyle = Ac[0]; ctx.fillRect(bx - 1, by - 3, 2, 1);
+  ctx.fillStyle = Ac[0]; ctx.fillRect(bx - 1, by, 2, 1);
+}
+function drawTinyFish(x, y, col, dir, glow, t) {
+  const bx = Math.round(x), by = Math.round(y), s = dir < 0 ? -1 : 1;
+  const pix = (ox, oy, c) => { ctx.fillStyle = c; ctx.fillRect(bx + ox * s - (s < 0 ? 1 : 0), by + oy, 1, 1); };
+  const body = [[-3, 0], [-2, -1], [-2, 0], [-2, 1], [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, 0], [2, -1], [2, 1], [3, 0]];
+  if (glow) { // plus-sparks around the fish (same language as a glowing crop), then the body on top so it stays readable
+    const ph = Math.abs(Math.floor((t || 0) * 5 + bx + by)) % 6;
+    ctx.fillStyle = ph % 2 ? '#ffffff' : '#ffd76a';
+    ctx.fillRect(bx - 2 + (ph % 3), by - 6, 5, 1); ctx.fillRect(bx, by - 7, 1, 5);
+    ctx.fillRect(bx + 5, by - 1 + (ph % 2), 1, 1);
+    ctx.fillRect(bx - 5, by + 2, 1, 1);
+  }
+  for (const [ox, oy] of body) { pix(ox - 1, oy, Ink[0]); pix(ox + 1, oy, Ink[0]); pix(ox, oy - 1, Ink[0]); pix(ox, oy + 1, Ink[0]); }
+  for (const [ox, oy] of body) pix(ox, oy, col);
+  pix(-1, 0, Ac[0]); pix(0, 1, Ac[0]);
+  pix(-2, -1, Ink[0]);
+}
+function drawFishEmote(e) {
+  const x = Math.round(e.x), y = Math.round(e.y);
+  ctx.globalAlpha = Math.max(0, Math.min(1, e.a));
+  ctx.fillStyle = Ink[0]; ctx.fillRect(x - 5, y - 6, 11, 9); ctx.fillRect(x - 1, y + 3, 3, 2);
+  ctx.fillStyle = Ac[0]; ctx.fillRect(x - 4, y - 5, 9, 7);
+  ctx.fillStyle = Ink[0]; ctx.fillRect(x, y + 2, 1, 2);
+  // little heart
+  ctx.fillStyle = Ac[3];
+  ctx.fillRect(x - 2, y - 3, 2, 1); ctx.fillRect(x + 1, y - 3, 2, 1);
+  ctx.fillRect(x - 2, y - 2, 5, 1); ctx.fillRect(x - 1, y - 1, 3, 1); ctx.fillRect(x, y, 1, 1);
+  ctx.globalAlpha = 1;
+}
+function fishPhaseU(k) {
+  if (k.phase === 'cast') return Math.min(1, k.work / FS.CAST);
+  if (k.phase === 'wait') return 1;
+  if (k.phase === 'bite') return Math.min(1, (k.work - FS.CAST - k.wait) / FS.BITE);
+  if (k.phase === 'reel') return Math.min(1, (k.work - FS.CAST - k.wait - FS.BITE) / FS.REEL);
+  if (k.phase === 'show') return Math.min(1, (k.work - FS.CAST - k.wait - FS.BITE - FS.REEL) / FS.SHOW);
+  return 1;
+}
+function drawFishing() {
+  for (const P of actors()) {
+    const k = P.task; if (!k || k.kind !== 'fish' || P.moving || P.home || !k.hook) continue;
+    const [fx, fy] = proj(P.x, P.y), [hx0, hy0] = proj(k.hook.x, k.hook.y);
+    const look = FS.rodLook(S.eff.rod, k.water === 'sea' && S.eff.searod);
+    const p = FS.pose(Math.round(fx), Math.round(fy), Math.round(hx0), Math.round(hy0), k.phase || 'wait', fishPhaseU(k), realT, k.result);
+    drawRod(p.grip, p.tip, look);
+    if (p.lineEnd) {
+      if (p.bob.slack) {
+        const mx = (p.tip.x + p.lineEnd.x) / 2, my = (p.tip.y + p.lineEnd.y) / 2 + p.bob.slack;
+        linePx(p.tip.x, p.tip.y, mx, my, Ink[0]); linePx(mx, my, p.lineEnd.x, p.lineEnd.y - 2, Ink[0]);
+      } else linePx(p.tip.x, p.tip.y, p.lineEnd.x, p.lineEnd.y - (p.fish ? 0 : 2), Ink[0]);
+    }
+    if (p.bob.show) drawBobber(p.bob.x, p.bob.y);
+    if (p.fish) {
+      const col = (k.result && k.result.col) || (k.result && FS.fishOf(k.result.fish) && FS.fishOf(k.result.fish).col) || '#cf6a3c';
+      drawTinyFish(p.fish.x, p.fish.y, col, p.fish.dir, p.fish.glow, realT);
+      if (p.fish.glow && window.PF_FX) {
+        const slot = Math.floor(realT / 0.45);
+        if (k._glowSlot !== slot) { k._glowSlot = slot; PF_FX.play('glow', P.x + (k.hook.x - P.x) * (1 - p.fish.p), P.y + (k.hook.y - P.y) * (1 - p.fish.p), 8 + p.fish.p * 6); }
+      }
+    }
+    if (p.emote) drawFishEmote(p.emote);
+  }
 }
 
 let realT = 0;
@@ -1927,6 +2026,18 @@ function render() {
     for (let i = 0; i < 3; i++) { const ph = (realT * 0.5 + i / 3) % 1; ctx.globalAlpha = 1 - ph; pixText('Z', sx + 6 + ph * 18 + Math.sin(ph * 6) * 3, sy - 80 - ph * 26, '#f4f0ff', ph > 0.5 ? 2 : 1); }
     ctx.globalAlpha = 1;
   }
+  if (PATHDEBUG || dbgRoutes.length) drawPathOverlay();
+}
+function actorRoutes() {
+  const out = [];
+  for (const a of actors()) if (a.task && a.task.via && a.task.via.length) out.push({ points: [{ x: a.x, y: a.y }, ...a.task.via, a.task.to], color: a === FARMER ? '#ffe566' : '#b6f27a' });
+  for (const v of AV.values()) if (v.via && v.via.length) out.push({ points: [{ x: v.x, y: v.y }, ...v.via, { x: v.tx, y: v.ty }], color: '#7ec8ff' });
+  for (const v of PV.values()) if (v.via && v.via.length) out.push({ points: [{ x: v.x, y: v.y }, ...v.via, { x: v.tx, y: v.ty }], color: '#ff9ed1' });
+  return out;
+}
+function drawPathOverlay() {
+  const routes = dbgRoutes.length ? dbgRoutes : actorRoutes();
+  NAV.draw(ctx, ensureNav(), (x, y) => proj(x, y), routes, { showDirt: !!PATHDEBUG && PATHDEBUG !== 'routes' });
 }
 // Trees are composed in plain pixel arrays (trunk stack + clump sprites + outline), then put once: no canvas read-back per pose,
 // which matters with ~100 trees all re-posing at 10 Hz and every one re-laid while the camera turns.
@@ -2027,6 +2138,7 @@ function hud() {
   document.getElementById('clock').textContent = fmtT(S.t);
   document.getElementById('act').textContent = '当前：' + S.label;
   document.getElementById('coins').textContent = S.coins;
+  const woodEl = document.getElementById('wood'); if (woodEl) woodEl.textContent = FARMER.wood;
   document.getElementById('seeds').textContent = seedCount(S.store);
   const arrow = m => m > 1.02 ? '↑' : m < 0.98 ? '↓' : '';
   const pr = S.eff.crops.map(k => `${SIM.CROPS[k].name} ${SIM.priceOf(k, S.prices)}${arrow(S.prices[k])}`).concat(AN.PRODUCT_IDS.filter(k => S.animals.some(a => AN.KINDS[a.kind].product === k)).map(k => `${AN.PRODUCTS[k].name} ${priceOfAny(k)}${arrow(S.prices[k])}`)).join(' · ');
@@ -2169,7 +2281,7 @@ function frame(now) {
   if (dt > 0) noteLog('sampleFps', 1 / dt);
   advance(dt); render(); hud(); requestAnimationFrame(frame);
 }
-window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
+window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
 { const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
   const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
@@ -2199,7 +2311,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.1.1';
+const GAME_VERSION = '5.2.3';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2209,7 +2321,7 @@ function surpriseNote(ev, x, y) {
   if (!ev) return;
   say(ev.msg); log(ev.msg);
   noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
-  emit('surprise', { kind: ev.kind });
+  emit('surprise', { kind: ev.kind }); // v5.2: audio.js plays a jingle
   if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
 }
 
@@ -2301,11 +2413,35 @@ Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
-  importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; } });
+  importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
+  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes,
+  setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
 const MM = { el: document.getElementById('minimap'), s: 0.5, base: null };
+// coin from the HUD sprite sheet, drawn beside region prices (same icon as the shop)
+const MM_HUD = new Image();
+let mmCoin = null;
+function mmCoinBadge() {
+  if (mmCoin) return mmCoin;
+  if (!MM_HUD.complete || !MM_HUD.naturalWidth) return null;
+  const s = 10, c = document.createElement('canvas'); c.width = s; c.height = s;
+  const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+  g.drawImage(MM_HUD, 0, 0, 32, 32, 0, 0, s, s);
+  return mmCoin = c;
+}
+function mmCoinReady() { mmCoin = null; MM.base = null; if (typeof minimapDraw === 'function') minimapDraw(); }
+MM_HUD.onload = mmCoinReady;
+MM_HUD.src = 'assets/hud_icons.png';
+if (MM_HUD.complete && MM_HUD.naturalWidth) mmCoinReady();
+function fillCoinPrice(g, n, cx, cy) {
+  const label = String(n), badge = mmCoinBadge(), ih = 10, gap = 2;
+  g.font = '600 10px sans-serif'; g.textAlign = 'left'; g.textBaseline = 'middle';
+  const tw = g.measureText(label).width, total = (badge ? ih + gap : 0) + tw, x = Math.round(cx - total / 2), y = Math.round(cy);
+  if (badge) g.drawImage(badge, x, y - (ih >> 1));
+  g.fillStyle = '#ffd76a'; g.fillText(label, x + (badge ? ih + gap : 0), y);
+}
 function minimapBase() {
   if (!MM.el) return; const w = Math.round((WORLD.x1 - WORLD.x0) * MM.s), h = Math.round((WORLD.y1 - WORLD.y0) * MM.s);
   MM.el.width = w; MM.el.height = h; const b = MM.base = MM.base || mkc(w, h), g = b.getContext('2d'); b.width = w; b.height = h;
@@ -2315,8 +2451,8 @@ function minimapBase() {
   for (const p of props) if (p.big) { const [x, y] = P(p.x, p.y); g.fillStyle = p.house ? Rf[2] : Wd[2]; g.fillRect(Math.round(x) - 5, Math.round(y) - 4, 10, 8); }
   for (const r of WD.REGIONS) if (!regionOpen(r.id)) { const [x0, y0] = P(r.rect[0], r.rect[1]), [x1, y1] = P(r.rect[2], r.rect[3]);
     g.fillStyle = 'rgba(20,14,10,0.45)'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = '#e8c78a'; g.setLineDash([3, 2]); g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); g.setLineDash([]);
-    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
-    g.fillStyle = '#ffd76a'; g.fillText(SIM.shopItem(r.id).levels[0].cost + ' 金', (x0 + x1) / 2, (y0 + y1) / 2 + 10); }
+    g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
+    fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
 }
 function minimapDraw() {
   if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');

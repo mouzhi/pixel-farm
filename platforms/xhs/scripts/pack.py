@@ -17,7 +17,7 @@ STAGE = HERE / ".stage"
 ZIP = HERE / "pixel-farm-xhs-tool.zip"
 
 JS_FILES = [
-    "animals.js", "family.js", "fish.js", "fx.js", "game.js", "playlog.js",
+    "animals.js", "family.js", "fish.js", "fx.js", "game.js", "path.js", "playlog.js",
     "save.js", "sim.js", "surprise.js", "ui.js", "world.js", "audio.js",
 ]
 ASSETS = [
@@ -31,6 +31,13 @@ OPTIONAL_CHAIN_FIX = (
     "(function (m) { if (m && m.addEventListener) m.addEventListener('change', fit); })"
     "(matchMedia('(resolution: ' + (window.devicePixelRatio || 1) + 'dppx'));"
 )
+
+# Chrome 61 does not support ??. These are the known sites in game.js.
+NULLISH_FIXES = [
+    ("p.bend ?? p.w", "(p.bend != null ? p.bend : p.w)"),
+    ("s.ax ?? 18", "(s.ax != null ? s.ax : 18)"),
+    ("s.ay ?? 35", "(s.ay != null ? s.ay : 35)"),
+]
 
 
 def official_audit_scripts() -> tuple[Path, Path]:
@@ -127,11 +134,26 @@ def stage() -> None:
                 shutil.copy2(img, STAGE / "note" / img.name)
 
     game = (STAGE / "game.js").read_text()
+    patched = []
     if OPTIONAL_CHAIN in game:
-        (STAGE / "game.js").write_text(game.replace(OPTIONAL_CHAIN, OPTIONAL_CHAIN_FIX, 1))
-        print("patched optional chaining in staged game.js")
+        game = game.replace(OPTIONAL_CHAIN, OPTIONAL_CHAIN_FIX, 1)
+        patched.append("optional-chaining")
     else:
         print("warn: optional-chaining site not found in game.js, leaving as-is", file=sys.stderr)
+    for src, dst in NULLISH_FIXES:
+        if src in game:
+            game = game.replace(src, dst)
+            patched.append(src)
+    (STAGE / "game.js").write_text(game)
+    if patched:
+        print("patched staged game.js:", ", ".join(patched))
+    leftover = []
+    for staged in STAGE.rglob("*.js"):
+        text = staged.read_text(errors="ignore")
+        if "?." in text or "??" in text:
+            leftover.append(str(staged.relative_to(STAGE)))
+    if leftover:
+        print("warn: staged JS still contains ?. or ?? :", ", ".join(leftover), file=sys.stderr)
 
     src = (ROOT / "index.html").read_text()
     out = re.sub(r'\s*<script src="[^"]+"></script>\s*', "\n", src)

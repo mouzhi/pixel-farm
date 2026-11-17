@@ -5,6 +5,7 @@
     'assets/sprites.js',
     'sim.js',
     'world.js',
+    'path.js',
     'animals.js',
     'fish.js',
     'family.js',

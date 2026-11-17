@@ -6,6 +6,19 @@
  */
 (function (root) {
   'use strict';
+  // Chrome 61 / Android 8.1: Object.fromEntries is ES2019 (Chrome 73+).
+  if (typeof Object.fromEntries !== 'function') {
+    Object.fromEntries = function (iter) {
+      var o = {}, i, e, a;
+      if (iter && typeof iter.forEach === 'function') {
+        iter.forEach(function (p) { if (p) o[p[0]] = p[1]; });
+        return o;
+      }
+      a = iter ? (Array.from ? Array.from(iter) : []) : [];
+      for (i = 0; i < a.length; i++) { e = a[i]; if (e) o[e[0]] = e[1]; }
+      return o;
+    };
+  }
   var mini = root.xhs && root.xhs.miniTool;
   var isXhs = !!(mini && (typeof mini.setStorage === 'function' || typeof mini.getStorage === 'function'));
   var KEY_MAX = 1024 * 1024;      // official: 1 MB per key

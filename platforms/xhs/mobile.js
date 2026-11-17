@@ -210,6 +210,18 @@
     if (coins && coins.parentElement && !coins.parentElement.classList.contains('xhs-coins')) {
       coins.parentElement.classList.add('xhs-coins');
     }
+    var wood = doc.getElementById('wood');
+    var woodHud = doc.getElementById('woodHud') || (wood && wood.parentElement);
+    if (woodHud && !woodHud.classList.contains('xhs-wood')) woodHud.classList.add('xhs-wood');
+    placeSheets();
+  }
+
+  function placeSheets() {
+    var hud = doc.getElementById('hud');
+    if (!hud) return;
+    var r = hud.getBoundingClientRect();
+    if (!(r.height > 0)) return;
+    doc.documentElement.style.setProperty('--xhs-sheet-top', Math.round(r.bottom + 8) + 'px');
   }
 
   function buildChrome() {
@@ -325,7 +337,8 @@
       rootEl.style.setProperty('--xhs-right-clear', Math.round(rightClear) + 'px');
       if (shareTop != null) rootEl.style.setProperty('--xhs-share-top', Math.round(shareTop) + 'px');
       if (shareRight != null) rootEl.style.setProperty('--xhs-share-right', Math.round(shareRight) + 'px');
-    }, function () {});
+      placeSheets();
+    }, function () { placeSheets(); });
   }
   P.applyWindowInsets = applyWindowInsets;
 

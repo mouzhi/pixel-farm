@@ -111,28 +111,54 @@
     $('inv').innerHTML = h;
   }
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
-  const shop = $('shop'); let shopKey = '';
+  const shop = $('shop'); let shopKey = '', shopFocus = '';
+  const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
+  const uiStore = () => (window.PFPlatform && PFPlatform.store && PFPlatform.store()) || (typeof localStorage !== 'undefined' ? localStorage : null);
+  const shopTabs = () => SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }];
+  const readShopTab = () => { try { const st = uiStore(), v = st && st.getItem(SHOP_TAB_KEY); if (v && shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
+  let shopTab = readShopTab();
+  const setShopTab = id => { if (!shopTabs().some(t => t.id === id)) return; shopTab = id; try { const st = uiStore(); if (st) st.setItem(SHOP_TAB_KEY, id); } catch (e) {} };
+  const costChip = (n, kind) => `<span class="cost"><i class="ico ${kind}"></i><span class="amt">${n}</span></span>`;
+  const priceChips = (gold, wood) => `<span class="price">${costChip(gold, 'coin')}${wood ? costChip(wood, 'wood') : ''}</span>`;
+  function sectionFor(it, tabId) {
+    if (tabId === 'tools' && it.fish) return '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）';
+    if (tabId === 'build' && it.home) return '房子（木材 + 金币；房子越大，能住的家人越多）';
+    if (tabId === 'build' && it.farm) return '棚子';
+    if (tabId === 'animals' && it.pet) return '小伙伴（猫猫狗狗，不吃干草）';
+    if (tabId === 'animals' && it.farm) return '养殖（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）';
+    return '';
+  }
   function drawShop(force) {
-    const S = G.S, key = [S.coins, G.F.wood, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
+    const S = G.S, tabs = shopTabs();
+    if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
+    const key = [shopTab, S.coins, G.F.wood, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
     if (!force && key === shopKey) return; shopKey = key;
-    let h = `<div class="shead"><b>商店</b><span>金币 <b style="color:#ffd76a">${S.coins}</b> · 木材 <b style="color:#e0b880">${G.F.wood}</b></span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="cards">`;
+    const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
+    let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
+    const tab = tabs.find(t => t.id === shopTab) || tabs[0];
     let sec = '';
-    for (const id of SIM.SHOP_IDS) {
+    for (const id of tab.ids) {
       const o = SIM.offer(S.up, S.coins, id, G.F.wood), it = o.item, n = it.levels.length, lv = o.have;
-      const s2 = it.home ? '房子（木材 + 金币；房子越大，能住的家人越多）' : it.fish ? '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）' : it.pet ? '小伙伴（猫猫狗狗，不吃干草）' : it.farm ? '动物（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）' : it.region ? '区域（大地图上用篱笆围着的地方）' : '工具和解锁'; if (s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
+      const s2 = sectionFor(it, tab.id); if (s2 && s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
       const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
-      h += `<div class="card${o.maxed ? ' max' : ''}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
+      const short = o.locked ? `<span class="short lock">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${o.short ? costChip(o.short, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>`;
+      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
-          `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${o.cost} 金${o.wood ? ` + ${o.wood} 木` : ''}</button>${o.locked ? `<span class="short">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short">还差 ${[o.short ? o.short + ' 金' : '', o.shortWood ? o.shortWood + ' 木材' : ''].filter(Boolean).join('、')}</span>`}</div>`) + '</div>';
+          `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
     shop.innerHTML = h + '</div>';
+    if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
-  const toggleShop = v => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; drawShop(true); } };
-  shop.addEventListener('click', e => { const d = e.target && e.target.dataset; if (!d) return;
+  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; drawShop(true); } };
+  shop.addEventListener('click', e => {
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look]'); if (!el || !shop.contains(el)) return;
+    const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
+    if (d.tab) { setShopTab(d.tab); drawShop(true); }
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
-    if (d.buy) { const r = G.buy(d.buy); drawShop(true); speedBar(); if (!r.ok) e.target.classList.add('shake'); } });
+    if (d.buy) { const r = G.buy(d.buy); drawShop(true); speedBar(); if (!r.ok) el.classList.add('shake'); }
+  });
   $('shopBtn').addEventListener('click', () => toggleShop());
 
   const store = $('store'); let storeKey = '';
@@ -149,15 +175,15 @@
     return '<i></i>';
   }
   function storeCard(row, extra) {
-    const gold = row.gold ? `${row.gold} 金` : (row.unit != null && row.kind === 'seed' ? `收购 ${row.unit} 金` : '');
+    const gold = row.gold ? costChip(row.gold, 'coin') : (row.unit != null && row.kind === 'seed' ? `收购 ${costChip(row.unit, 'coin')}` : '');
     const unit = row.n && row.unit && row.gold ? `×${row.unit}` : '';
-    return `<div class="card">${rowIcon(row)}<div class="ct"><div><b>${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${esc(unit ? unit + ' · ' + gold : gold)}</span>` : ''}</div></div>`;
+    return `<div class="card">${rowIcon(row)}<div class="ct"><div><b>${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${unit ? unit + ' · ' + gold : gold}</span>` : ''}</div></div>`;
   }
   function drawStore(force) {
     const S = G.S, data = G.storehouse(), key = JSON.stringify(data) + !!atlas;
     if (!force && key === storeKey) return; storeKey = key;
     const cards = rows => rows.map(r => storeCard(r)).join('') || '<div class="empty">空空的</div>';
-    let h = `<div class="shead"><b>仓库</b><span>今日可卖 <b style="color:#ffd76a">${data.sellGold}</b> 金</span><button class="pbtn x" data-a="close" title="关闭（I / Esc）">✕</button></div>`;
+    let h = `<div class="shead"><b>仓库</b><span class="wallet">今日可卖 ${costChip(data.sellGold, 'coin')}</span><button class="pbtn x" data-a="close" title="关闭（I / Esc）">✕</button></div>`;
     h += `<div class="sec">仓库种子</div><div class="cards">${cards(data.store)}</div>`;
     h += `<div class="sec">随身种子</div><div class="cards">${cards(data.bag)}</div>`;
     if (data.familyBag.length) h += `<div class="sec">家人身上的种子</div><div class="cards">${cards(data.familyBag)}</div>`;
@@ -175,9 +201,10 @@
   store.addEventListener('click', e => { const d = e.target && e.target.dataset; if (d && d.a === 'close') toggleStore(false); });
   $('storeBtn').addEventListener('click', () => toggleStore());
   $('storeHud').addEventListener('click', () => toggleStore(true));
+  if ($('woodHud')) $('woodHud').addEventListener('click', () => toggleStore(true));
   addEventListener('pointerdown', e => {
     if (store.hidden) return;
-    if (store.contains(e.target) || $('storeBtn').contains(e.target) || $('storeHud').contains(e.target)) return;
+    if (store.contains(e.target) || $('storeBtn').contains(e.target) || $('storeHud').contains(e.target) || ($('woodHud') && $('woodHud').contains(e.target))) return;
     toggleStore(false);
   });
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
@@ -215,7 +242,7 @@
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return; if (e.key === 'm' || e.key === 'M') toggleMap(); });
   // locked regions get a crisp label over their sign: name, price, and a click opens the shop
   const labs = {}; for (const r of PFWorld.REGIONS) { const d = document.createElement('div'); d.className = 'rlab panel'; d.hidden = true;
-    d.innerHTML = `未解锁 · ${esc(r.name)}<br><b>${SIM.shopItem(r.id).levels[0].cost} 金</b> · 商店购买`; d.title = r.desc; d.addEventListener('click', () => toggleShop(true)); $('rlabs').appendChild(d); labs[r.id] = d; }
+    d.innerHTML = `未解锁 · ${esc(r.name)}<br>${costChip(SIM.shopItem(r.id).levels[0].cost, 'coin')} · 商店购买`; d.title = r.desc; d.addEventListener('click', () => toggleShop(true, { tab: 'land', focus: r.id })); $('rlabs').appendChild(d); labs[r.id] = d; }
   (function place() { const S = G.S, vw = innerWidth, vh = innerHeight;
     for (const r of PFWorld.REGIONS) { const d = labs[r.id]; if (S.eff.regions.includes(r.id)) { d.hidden = true; continue; }
       const c = G.toClient(r.sign.x, r.sign.y), on = c.x > 90 && c.x < vw - 90 && c.y - 52 > 64 && c.y < vh - 64; // keep clear of the HUD panels at the top and bottom
@@ -300,7 +327,7 @@
   showOffline(G.SAVE.offline);
   const loveHud = $('loveHud'), loveTip = $('loveTip'), loveIco = $('loveIco');
   if (loveIco) { loveIco.style.backgroundImage = 'url(' + ICONS.heart + ')'; loveIco.style.backgroundRepeat = 'no-repeat'; }
-  function placeLoveTip() { if (!loveHud || !loveTip) return; const r = $('hud').getBoundingClientRect(); loveTip.style.top = Math.round(r.bottom + 6) + 'px'; }
+  function placeLoveTip() { if (loveTip) loveTip.style.top = ''; } // v5.1.2: tip sits in the left dock under the HUD, no floating offset
   function drawLoveTip() {
     if (!loveTip || loveTip.hidden || !G.loveStatus) return;
     const love = G.loveStatus();

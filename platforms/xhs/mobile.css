@@ -77,12 +77,18 @@ html.xhs-mobile #speed { display: none !important; }
 
 html.xhs-mobile #day, html.xhs-mobile #clock { font-size: 12px; }
 /* hide the '金币' label, keep the coin icon + number */
-html.xhs-mobile #hud .xhs-coins { font-size: 0; }
+html.xhs-mobile #hud .xhs-coins,
+html.xhs-mobile #hud .xhs-wood { font-size: 0; }
 html.xhs-mobile #hud .xhs-coins .ico,
 html.xhs-mobile #hud .xhs-coins b,
-html.xhs-mobile #hud #coins { font-size: 12px; }
-html.xhs-mobile #hud .ico { width: 16px; height: 16px; background-size: 64px 16px; margin-right: 2px; vertical-align: -3px; }
+html.xhs-mobile #hud #coins,
+html.xhs-mobile #hud .xhs-wood .ico,
+html.xhs-mobile #hud .xhs-wood b,
+html.xhs-mobile #hud #wood { font-size: 12px; }
+/* hud_icons.png is 5×16 at display size (coin seed carrot cabbage wood) */
+html.xhs-mobile #hud .ico { width: 16px; height: 16px; background-size: 80px 16px; margin-right: 2px; vertical-align: -3px; }
 html.xhs-mobile #hud .ico.coin { background-position: 0 0; }
+html.xhs-mobile #hud .ico.wood { background-position: -64px 0; }
 html.xhs-mobile #loveHud { margin: 2px 0 0; font-size: 12px; gap: 4px; }
 html.xhs-mobile #loveVal { font-size: 12px; color: #ffd76a; }
 html.xhs-mobile #loveTip {
@@ -311,10 +317,11 @@ html.xhs-mobile #offline {
   position: fixed;
   left: max(8px, var(--xhs-safe-left));
   right: max(8px, var(--xhs-safe-right));
-  top: auto;
-  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
+  /* sit below the HUD card (JS sets --xhs-sheet-top) so the overlay stays out of capsule / HUD */
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h) + 4px);
   width: auto;
-  max-height: min(72vh, calc(100dvh - var(--xhs-top-clear) - var(--xhs-bar-h) - 12px));
+  max-height: none;
   transform: none;
   border-radius: 0;
   overflow: auto;
@@ -332,6 +339,57 @@ html.xhs-mobile #store[hidden],
 html.xhs-mobile #menu[hidden],
 html.xhs-mobile #xhs-board[hidden],
 html.xhs-mobile #offline[hidden] { display: none !important; }
+
+/* 商店分类页签与金币/木材筹码：沿用木头按钮，触控 ≥44px，不挡系统区 */
+html.xhs-mobile #shop .shead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+html.xhs-mobile #shop .shead .wallet,
+html.xhs-mobile #store .shead .wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffd76a;
+  font-weight: 600;
+}
+html.xhs-mobile #shop .shead .wallet .cost:last-child { color: #e0b880; }
+html.xhs-mobile #shop .shead .x { margin-left: auto; min-width: 44px; min-height: 44px; }
+html.xhs-mobile #shop .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+html.xhs-mobile #shop .tabs .pbtn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 0;
+  background: #e8c78a;
+  color: #3a2a20;
+  border: 2px solid #3a2a20;
+  box-shadow: 2px 2px 0 #3a2a20;
+}
+html.xhs-mobile #shop .tabs .pbtn.on {
+  background: #ffd76a;
+  box-shadow: inset 0 0 0 2px #3a2a20, 2px 2px 0 #3a2a20;
+}
+html.xhs-mobile .cost .ico {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  background-size: 80px 16px;
+}
+html.xhs-mobile .cost .ico.wood { background-position: -64px 0; }
+html.xhs-mobile #shop .card .cb > .pbtn,
+html.xhs-mobile #shop .card .cb > .short {
+  min-height: 44px;
+}
 
 html.xhs-mobile .xhs-board-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 html.xhs-mobile .xhs-board-hd b { flex: 1; font-size: 15px; }
@@ -364,7 +422,7 @@ html.xhs-mobile #xhs-toast {
   transform: translateX(-50%);
   width: max-content;
   max-width: min(220px, calc(100vw - 128px));
-  z-index: 22;
+  z-index: 21;
   margin: 0;
   padding: 0;
   background: none;

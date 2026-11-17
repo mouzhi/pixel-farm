@@ -136,6 +136,37 @@ ok('fish: starter rod is owned at level 0, shop upgrades and sea rod lock, price
   assert(sea.ev > 25 && sea.ev < 55, 'sea ev ' + sea.ev);
   s = 1; for (let i = 0; i < 200; i++) { const w = FS.waitTime(0, rnd); assert(w >= 38 && w <= 54, 'wait ' + w); }
 });
+ok('fish: rare flags, rod looks, and the screen-space pose points the rod at the water', () => {
+  assert(FS.isRare('koi') && FS.isRare('sword') && FS.isRare('tuna') && FS.isRare('snapper'));
+  assert(!FS.isRare('crucian') && !FS.isRare('carp') && !FS.isRare('sardine') && !FS.isRare('bass'));
+  s = 1; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  let seen = 0; s = 1; for (let i = 0; i < 4000; i++) { const r = FS.roll('pond', 2, rnd); if (!r.miss && r.fish === 'koi') { seen++; assert.strictEqual(r.rare, true); } }
+  assert(seen > 0, 'carbon rod can still roll a glowing koi');
+  const b = FS.rodLook(0, false), st = FS.rodLook(1, false), c = FS.rodLook(2, false), sea = FS.rodLook(0, true);
+  assert.strictEqual(b.id, 'bamboo'); assert.strictEqual(st.id, 'steel'); assert.strictEqual(c.id, 'carbon'); assert.strictEqual(sea.id, 'searod');
+  assert.notStrictEqual(b.shaft, st.shaft); assert.notStrictEqual(st.shaft, c.shaft); assert.notStrictEqual(sea.wrap, b.wrap);
+  const wait = FS.pose(100, 80, 70, 95, 'wait', 1, 0);
+  assert(wait.faceLeft && wait.tip.x < wait.grip.x && wait.tip.y < wait.grip.y, 'pond: rod points up and left toward the hook ' + JSON.stringify(wait.tip));
+  assert(wait.bob.show && Math.abs(wait.bob.y - 95) < 1.5, 'bobber rests on the water');
+  const right = FS.pose(100, 80, 130, 95, 'wait', 1, 0);
+  assert(!right.faceLeft && right.tip.x > right.grip.x, 'rod follows a hook on the right');
+  const bite = FS.pose(100, 80, 70, 95, 'bite', 0.5, 0.2);
+  assert(bite.bob.y >= 95 + 2, 'bobber dips on a bite: ' + bite.bob.y);
+  const koi = { miss: false, fish: 'koi', col: '#e06a2c', rare: 1 };
+  const mid = FS.pose(100, 80, 70, 95, 'reel', 0.4, 0, koi);
+  assert(mid.fish && mid.fish.glow, 'rare fish glows on the way out');
+  assert(mid.fish.x > 70 && mid.fish.x < 100, 'fish arcs toward the farmer: ' + mid.fish.x);
+  assert(mid.fish.y < 95 - 4, 'fish is out of the water: ' + mid.fish.y);
+  const land = FS.pose(100, 80, 70, 95, 'show', 0.3, 0, koi);
+  assert(land.fish && land.fish.landed && land.fish.glow, 'glow lasts after landing');
+  assert(land.emote && land.emote.a > 0 && land.emote.y < 80 - 20, 'a happy emote floats above the head');
+  const miss = FS.pose(100, 80, 70, 95, 'reel', 0.4, 0, { miss: true });
+  assert(!miss.fish && !miss.emote, 'a miss has no fish and no emote');
+  const common = FS.pose(100, 80, 70, 95, 'show', 0.3, 0, { miss: false, fish: 'crucian', rare: 0 });
+  assert(common.fish && !common.fish.glow && !common.emote, 'a common catch does not glow or emote');
+  const early = FS.pose(100, 80, 70, 95, 'cast', 0.3, 0);
+  assert(early.tip.y < early.grip.y && early.tip.x < early.grip.x, 'cast already aims at the pond');
+});
 ok('animals: each kind is gated by its region and its building; coop is a home building with no region', () => {
   const up = SIM.emptyUpgrades(), lock = id => SIM.offer(up, 1e5, id).locked;
   assert(SIM.offer(up, 1e5, 'coop').ok); assert.strictEqual(lock('chicken'), 'coop'); assert(SIM.offer(up, 1e5, 'cat').ok && SIM.offer(up, 1e5, 'dog').ok);
@@ -266,6 +297,12 @@ ok('chop drops: about 60% of chops drop something; fruit, flower, rare seed, coi
   for (const d of WD.DROPS) assert(Math.abs(n[d.id] / N - d.p) < 0.02, d.id); assert(Math.abs(n.none / N - 0.4) < 0.02);
 });
 ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
+ok('shop tabs cover every item once', () => {
+  const ids = SIM.SHOP_TABS.flatMap(t => t.ids);
+  assert.deepStrictEqual(ids.slice().sort(), SIM.SHOP_IDS.slice().sort());
+  assert.strictEqual(new Set(ids).size, ids.length);
+  for (const t of SIM.SHOP_TABS) assert(t.name && t.ids.length, t.id);
+});
 ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
   assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);
