@@ -1,10 +1,10 @@
-// 像素堆叠 · 放置农场 v2 —— all art is generated in code: voxel functions -> slices (sprite stacking),
+// 像素堆叠 · 放置农场 v3 · 风格 A —— all art is generated in code: voxel functions -> slices (sprite stacking),
 // plus a hand-authored 2D billboard farmer (the usual hybrid in sprite-stacking games).
 'use strict';
 (() => {
 // ---------- config ----------
 const W = 426, H = 266;          // low-res framebuffer, integer upscaled (3x on 1280x800)
-const RS = 5 / 3;                // screen px per world unit (world logic still uses 8-unit tiles)
+const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // ground margin around the world (world units)
@@ -23,273 +23,266 @@ const hash3 = (x, y, z) => { let n = x * 374761393 + y * 668265263 + z * 2147483
 function pick2(r, a) { return a[Math.floor(r() * a.length)]; }
 const ell = (x, y, z, cx, cy, cz, rx, ry, rz) => ((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2 + ((z - cz) / rz) ** 2;
 
-// ---------- voxel model -> slices ----------
-function buildModel(w, d, h, fn) {
+// ---------- palette (assets/palette.js): every voxel colour is a palette entry; shading only walks down its ramp ----------
+const PAL = window.PF_PALETTE, G = PAL.ramps.green, Wd = PAL.ramps.wood, Rf = PAL.ramps.roof, St = PAL.ramps.stone, Wt = PAL.ramps.water, Ac = PAL.ramps.accent, Ink = PAL.ramps.ink, Sk = PAL.ramps.skin;
+const mkc = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+const u32 = h => { const [r, g, b] = hex(h); return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; };
+const OUTL = new Map(); for (const c of PAL.colors) OUTL.set(u32(c), u32(PAL.outlineOf[c] || Ink[0]));
+const INK0 = u32(Ink[0]);
+// selective outline: every transparent pixel touching the object takes the darkest colour of the neighbour's ramp
+function outlineCanvas(c) {
+  const w = c.width, h = c.height, g = c.getContext('2d', { willReadFrequently: true }), img = g.getImageData(0, 0, w, h), d = new Uint32Array(img.data.buffer), o = new Uint32Array(d.length);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const i = y * w + x; if (d[i] >>> 24) continue;
+    const n = (y < h - 1 && d[i + w] >>> 24) ? i + w : (x > 0 && d[i - 1] >>> 24) ? i - 1 : (x < w - 1 && d[i + 1] >>> 24) ? i + 1 : (y > 0 && d[i - w] >>> 24) ? i - w : -1;
+    if (n >= 0) o[i] = OUTL.get(d[n] | 0xff000000) || INK0; }
+  for (let i = 0; i < d.length; i++) if (o[i]) d[i] = o[i];
+  g.putImageData(img, 0, 0); return c;
+}
+// tiny hand-drawn 2D sprites (decals and billboards): rows of legend characters
+const PIXK = { d: G[1], m: G[2], g: G[3], l: G[4], h: G[5], w: Wd[1], b: Wd[2], t: Wd[3], s: Wd[4], k: Wd[5], c: Ac[0], y: Ac[1], o: Ac[2], p: Ac[3], r: Rf[2], R: Rf[3], e: St[2], E: St[3], a: Wt[2], A: Wt[3], u: Wt[1], i: Ink[0] };
+function pix(rows, outline = true) { const h = rows.length, w = Math.max(...rows.map(r => r.length)), c = mkc(w + 2, h + 2), g = c.getContext('2d');
+  rows.forEach((r, y) => [...r].forEach((ch, x) => { if (PIXK[ch]) { g.fillStyle = PIXK[ch]; g.fillRect(x + 1, y + 1, 1, 1); } }));
+  return outline ? outlineCanvas(c) : c; }
+
+// ---------- voxel model -> slices (sprite stacking) ----------
+// Shading follows the surface normal (taken from the occupancy around each surface voxel, so any roof pitch or sphere works):
+//   top (normal mostly up) = authored colour; slope (roofs, upper canopy) = same, or one step darker when it faces screen-right;
+//   wall = one step darker, two steps when it faces screen-right. The light is fixed to the screen, so each model keeps
+//   16 lazily built slice sets, one per 22.5 degree sector of its on-screen angle. No gradients, no noise, no AO.
+const NSEC = 16;
+function buildModel(w, d, h, fn, opt = {}) {
   w = Math.round(w); d = Math.round(d); h = Math.round(h);
-  const vox = new Array(w * d * h).fill(null);
+  const N = w * d * h, vox = new Array(N).fill(null);
   const id = (x, y, z) => (z * d + y) * w + x;
-  for (let z = 0; z < h; z++) for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) { const c = fn(x, y, z); if (c) vox[id(x, y, z)] = hex(c); }
-  const get = (x, y, z) => (x < 0 || y < 0 || z < 0 || x >= w || y >= d || z >= h) ? null : vox[id(x, y, z)];
-  const slices = [];
-  const foot = document.createElement('canvas'); foot.width = w; foot.height = d;
-  const fctx = foot.getContext('2d'); const fimg = fctx.createImageData(w, d);
-  for (let z = 0; z < h; z++) {
-    const c = document.createElement('canvas'); c.width = w; c.height = d;
-    const cx = c.getContext('2d'); const img = cx.createImageData(w, d); let any = false;
-    for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) {
-      const v = get(x, y, z); if (!v) continue; any = true;
-      let f;
-      if (!get(x, y, z + 1)) f = 1.08;                       // top face: lit
-      else { const edge = !get(x - 1, y, z) || !get(x + 1, y, z) || !get(x, y - 1, z) || !get(x, y + 1, z); f = edge ? 0.84 : 0.92; }
-      f *= 0.86 + 0.14 * Math.min(1, (z + 1) / Math.max(4, h * 0.4)); // ambient occlusion near ground
-      const p = (y * w + x) * 4;
-      img.data[p] = clamp(v[0] * f, 0, 255); img.data[p + 1] = clamp(v[1] * f, 0, 255); img.data[p + 2] = clamp(v[2] * f, 0, 255); img.data[p + 3] = 255;
-      fimg.data[p + 3] = 255;
-    }
-    cx.putImageData(img, 0, 0); slices.push(any ? c : null);
-  }
+  for (let z = 0; z < h; z++) for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) { const c = fn(x, y, z); if (c) { vox[id(x, y, z)] = c; if (!PAL.rampOf[c] && !PAL.darkOf[c]) console.warn('off-palette colour', c); } }
+  const solid = (x, y, z) => z < 0 ? true : (x < 0 || y < 0 || x >= w || y >= d || z >= h) ? false : !!vox[id(x, y, z)];
+  const foot = mkc(w, d), fctx = foot.getContext('2d'), fimg = fctx.createImageData(w, d);
+  const cells = []; // per slice: [pixel, colour, class (0 top, 1 slope, 2 wall), nx, ny]
+  for (let z = 0; z < h; z++) { const row = []; cells.push(row);
+    for (let y = 0; y < d; y++) for (let x = 0; x < w; x++) { const c = vox[id(x, y, z)]; if (!c) continue; fimg.data[(y * w + x) * 4 + 3] = 255;
+      const exposed = !solid(x, y, z + 1) || !solid(x - 1, y, z) || !solid(x + 1, y, z) || !solid(x, y - 1, z) || !solid(x, y + 1, z);
+      if (!exposed) { row.push([y * w + x, c, 2, 0, 1]); continue; }
+      let nx = 0, ny = 0, nz = 0;
+      if (fn.normal) { [nx, ny, nz] = fn.normal(x, y, z); const L = Math.hypot(nx, ny, nz) || 1, Lh = Math.hypot(nx, ny) || 1, cz = nz / L; // analytic (round shapes)
+        row.push([y * w + x, c, opt.flat ? 0 : cz > 0.72 ? 0 : cz > 0.22 ? 1 : 2, nx / Lh, ny / Lh]); continue; }
+      for (let dz = -2; dz <= 2; dz++) for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) { const q = dx * dx + dy * dy + dz * dz; if (q === 0 || q > 6) continue;
+        if (!solid(x + dx, y + dy, z + dz)) { nx += dx; ny += dy; nz += dz; } }
+      const L = Math.hypot(nx, ny, nz) || 1, Lh = Math.hypot(nx, ny) || 1, cz = nz / L;
+      row.push([y * w + x, c, opt.flat ? 0 : cz > 0.9 ? 0 : cz > 0.3 ? 1 : 2, nx / Lh, ny / Lh]); } }
   fctx.putImageData(fimg, 0, 0);
-  return { w, d, h, slices, foot };
+  const m = { w, d, h, cells, foot, secs: new Array(NSEC), noOutline: !!opt.noOutline };
+  m.slices = sliceSet(m, 0); return m;
 }
-
-// ---------- palette ----------
-const P = {
-  grass: ['#7fb24a', '#86b94f', '#78a845', '#8fc257'], grassDark: '#5f8f37', flower: ['#f4e27a', '#f29bb5', '#ffffff', '#b9a2f0'],
-  dirt: '#c9a46b', dirtD: '#b08a55', soil: '#8b5a35', soilF: '#6e452a', soilH: '#a06c43', wet: '#5c3a24', wetF: '#48301d', wetH: '#6e4a30',
-  wood: '#a0703f', woodD: '#7a5230', woodDD: '#5c3d22', woodL: '#c9a36b', stone: '#9a9a92', stoneD: '#77776f', stoneL: '#b9b8ad',
-  roof: '#c75a47', roofD: '#a8473a', roofL: '#d9705a', wall: '#ecd8ad', wallD: '#d9c08f', barn: '#b2453a', barnD: '#8f342c', white: '#f3ecd8',
-  water: '#3f7fa8', waterM: '#5b9cc4', waterL: '#8cc6dc', glass: '#9fd3e6', glassL: '#d8f0f8',
-};
-
-// ---------- buildings (authored at screen resolution) ----------
-function gableRoof(x, y, z, o) { // ridge along x; returns colour, 'fill' for gable interior, or null
-  const k = z - o.z0; if (k < 0) return null;
-  const a = o.y0 + k, b = o.y1 - k; if (a > b || x < o.x0 || x > o.x1 || y < a || y > b) return null;
-  const shell = y <= a + 1 || y >= b - 1;
-  if (!shell) return (x >= o.fx0 && x <= o.fx1) ? 'fill' : null;
-  if (a + 2 >= b) return o.ridge;                           // ridge cap
-  if (x <= o.x0 + 1 || x >= o.x1 - 1) return o.trim;       // barge boards
-  // courses are 4 slices tall: the roof rises 1 slice per voxel, so each slice shows only ~0.75 screen px of roof and
-  // anything finer than ~3 px would alias into moire once rotated
-  const row = Math.floor(k / 4), col = Math.floor((x + (row % 2) * 3) / 6);
-  if (k % 4 === 3) return o.dark;                           // shadow line under each course
-  if (k % 4 === 0 && (x + (row % 2) * 3) % 6 === 0) return o.dark; // tile joints, staggered
-  return (col * 7 + row * 3) % 5 === 0 ? o.alt : o.base;
+function sliceSet(m, s) {
+  if (m.secs[s]) return m.secs[s];
+  const a = s * 2 * Math.PI / NSEC, ca = Math.cos(a), sa = Math.sin(a), out = [];
+  for (let z = 0; z < m.h; z++) { const row = m.cells[z]; if (!row.length) { out.push(null); continue; }
+    const c = mkc(m.w, m.d), g = c.getContext('2d'), img = g.createImageData(m.w, m.d), d32 = new Uint32Array(img.data.buffer);
+    for (const [p, col, cls, nx, ny] of row) { const sx = nx * ca - ny * sa; // which way this face points on screen
+      const step = cls === 0 ? 0 : cls === 1 ? (sx > 0.35 ? 1 : 0) : (sx > 0.35 ? 2 : 1);
+      d32[p] = u32(PAL.dark(col, step)); }
+    g.putImageData(img, 0, 0); out.push(c); }
+  return (m.secs[s] = out);
 }
+const secOf = a => ((Math.round(a / (2 * Math.PI / NSEC)) % NSEC) + NSEC) % NSEC;
+const slicesAt = (m, a) => sliceSet(m, secOf(a));
+
+const ellN = (cx, cy, cz, rx, ry, rz) => (x, y, z) => [(x + 0.5 - cx) / (rx * rx), (y + 0.5 - cy) / (ry * ry), (z + 0.5 - cz) / (rz * rz)];
+// ---------- buildings (voxel = 1 screen px; walls 1 px per slice) ----------
+// gable roof with the ridge along y: slopes face +-x, the gable triangle faces the viewer (like the A mock)
+function gableY(x, y, z, o) {
+  const k = z - o.z0; if (k < 0 || y < o.y0 || y > o.y1) return null;
+  const a = o.x0 + k / o.pitch, b = o.x1 - k / o.pitch; if (x < a || x > b) return null;
+  const shell = x < a + 2.6 || x > b - 2.6;
+  if (!shell) return (y >= o.fy0 && y <= o.fy1) ? 'fill' : null;
+  if (b - a < 4) return o.ridge;
+  if (y <= o.y0 + 1 || y >= o.y1 - 1) return o.trim;          // barge boards along the gable edge
+  return (k % 6 === 5) ? o.line : o.base;                      // one dark line per 6-slice course, nothing finer (D: low detail)
+}
+function win(u, v, u0, v0, s = 10) { // window on a wall: u along the wall, v = z
+  const du = u - u0, dv = v - v0; if (du < 0 || du >= s || dv < 0 || dv >= s) return null;
+  if (du <= 1 || du >= s - 2 || dv <= 1 || dv >= s - 2) return Ac[0];
+  if (du === (s >> 1)) return Ac[0];
+  return (du >= 2 && du <= 3 && dv >= s - 5) ? Wt[3] : Wt[2];
+}
+const HOUSE_DIM = { w: 70, d: 58, chim: [53, 20, 74] }; // chimney top (model px) for the smoke
 function houseModel() {
-  const w = 56, d = 46, h = 52, X0 = 4, X1 = 51, Y0 = 6, Y1 = 39, ZW = 24;
-  const roof = { z0: ZW + 1, x0: 1, x1: 54, y0: 3, y1: 42, fx0: X0, fx1: X1, base: P.roof, alt: P.roofL, dark: P.roofD, ridge: '#7e342b', trim: '#6b3a2a' };
-  const win = (u, v, u0, v0) => { const du = u - u0, dv = v - v0; if (du < 0 || du > 8 || dv < 0 || dv > 8) return null; if (du === 0 || du === 8 || dv === 0 || dv === 8) return P.woodDD; if (du === 4 || dv === 4) return P.woodD; return (du + dv < 6 && du < 3) ? P.glassL : P.glass; };
-  return buildModel(w, d, h, (x, y, z) => {
-    if (z === 0 && x >= X0 - 1 && x <= X1 + 1 && y >= Y0 - 1 && y <= Y1 + 1) return (x + y) % 5 ? P.stoneD : P.stone;
-    if (x >= 40 && x <= 44 && y >= 13 && y <= 17 && z >= 28 && z <= 50) { if (z >= 49) return '#4a2e26'; return ((z % 3 === 0) || ((x + (Math.floor(z / 3) % 2) * 2) % 4 === 0)) ? '#c8b8a0' : '#8e4a3a'; }
-    // front step + flower boxes
-    if (y >= Y1 + 1 && y <= Y1 + 3 && x >= 22 && x <= 33 && z <= 1) return z === 1 ? P.stoneL : P.stone;
-    if (y === Y1 + 1 && z >= 7 && z <= 9 && ((x >= 8 && x <= 18) || (x >= 37 && x <= 47))) return z === 9 ? ['#f29bb5', '#f4e27a', '#ffffff', '#e0574a'][(x * 7) % 4] : P.woodD;
-    if (y === Y1 + 1 && z === 10 && ((x >= 8 && x <= 18) || (x >= 37 && x <= 47)) && x % 2) return '#5ea444';
-    if (z >= 1 && z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
-      const front = y === Y1, back = y === Y0, sideL = x === X0, sideR = x === X1;
-      if (!(front || back || sideL || sideR)) return P.wall;
-      if ((x <= X0 + 1 || x >= X1 - 1) && (y <= Y0 + 1 || y >= Y1 - 1)) return P.woodDD;   // corner posts
-      if (z === 12 || z === ZW || z === 1) return P.woodD;                                   // beams
+  const { w, d } = HOUSE_DIM, X0 = 8, X1 = 61, Y0 = 8, Y1 = 49, ZW = 34;
+  const roof = { z0: ZW + 1, pitch: 0.92, x0: 3, x1: 66, y0: 4, y1: 53, fy0: Y0, fy1: Y1, base: Rf[2], line: Rf[1], ridge: Rf[1], trim: Wd[2] };
+  return buildModel(w, d, 76, (x, y, z) => {
+    if (x >= 51 && x <= 56 && y >= 17 && y <= 23 && z >= 44 && z <= 74) return z >= 72 ? St[1] : (z % 6 === 0 ? St[1] : St[2]);   // chimney
+    if (z <= 2 && x >= X0 - 1 && x <= X1 + 1 && y >= Y0 - 1 && y <= Y1 + 1) return (z === 2 || (x + 2 * Math.floor(z / 2)) % 7) ? St[2] : St[1];
+    if (z <= 1 && y > Y1 + 1 && y <= Y1 + 4 && x >= 28 && x <= 41) return St[3];                                                    // step
+    if (y >= Y1 + 1 && y <= Y1 + 2 && z >= 8 && z <= 11 && ((x >= 13 && x <= 24) || (x >= 45 && x <= 56)))                          // flower boxes
+      return z === 11 ? ((x % 3 === 0) ? Ac[3] : (x % 3 === 1) ? G[3] : Ac[1]) : Wd[2];
+    if (z >= 3 && z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
+      const front = y >= Y1 - 1, back = y <= Y0 + 1, sideL = x <= X0 + 1, sideR = x >= X1 - 1;
+      if (!(front || back || sideL || sideR)) return Wd[4];
+      if ((sideL || sideR) && (front || back)) return Wd[2];                                  // corner posts
+      if (z >= ZW - 1) return Wd[2];                                                        // eave beam
       if (front) {
-        if (x >= 23 && x <= 32 && z <= 20) { if (x === 23 || x === 32 || z === 20) return P.woodDD; if (x === 30 && z === 10) return '#f0d060'; return (x % 2) ? '#7a4a2a' : '#6b4226'; }
-        const wv = win(x, z, 9, 9) || win(x, z, 38, 9); if (wv) return wv;
+        if (x >= 29 && x <= 40 && z <= 24) { if (x <= 30 || x >= 39 || z >= 23) return Wd[1]; if (x === 37 && z === 13) return Ac[1]; return x === 34 || x === 35 ? Wd[1] : Wd[2]; }
+        const wv = win(x, z, 13, 12) || win(x, z, 47, 12); if (wv) return wv;
       }
-      if (back) { const wv = win(x, z, 12, 9) || win(x, z, 35, 9); if (wv) return wv; }
-      if (sideL || sideR) { const wv = win(y, z, 18, 9); if (wv) return wv; }
-      if ((front || back) && (x === 21 || x === 34) && z > 12) return P.woodD;               // braces
-      return z < 12 ? P.wall : P.wallD;
+      if (sideL || sideR) { const wv = win(y, z, 24, 12); if (wv) return wv; }
+      if (back) { const wv = win(x, z, 30, 12); if (wv) return wv; }
+      return (z - 3) % 5 === 4 ? Wd[3] : Wd[4];                                              // plank courses
     }
-    const r = gableRoof(x, y, z, roof); if (r === 'fill') return (x === X0 || x === X1) ? ((z - ZW) % 6 === 0 ? P.woodD : P.wall) : P.wall; return r;
+    const r = gableY(x, y, z, roof);
+    if (r === 'fill') { if (y >= Y1 - 1 || y <= Y0 + 1) { const wv = win(x, z, 30, 43); if (wv) return wv; } return (z - 3) % 5 === 4 ? Wd[3] : Wd[4]; }
+    return r;
   });
 }
+const BARN_DIM = { w: 64, d: 52 };
 function barnModel() {
-  const w = 50, d = 42, h = 48, X0 = 4, X1 = 45, Y0 = 5, Y1 = 36, ZW = 22;
-  const roof = { z0: ZW + 1, x0: 1, x1: 48, y0: 2, y1: 39, fx0: X0, fx1: X1, base: '#6d5e52', alt: '#7c6c5e', dark: '#54473e', ridge: '#40362f', trim: '#e8e0cc' };
-  return buildModel(w, d, h, (x, y, z) => {
-    if (z === 0 && x >= X0 - 1 && x <= X1 + 1 && y >= Y0 - 1 && y <= Y1 + 1) return P.stoneD;
-    if (z <= 1 && y >= Y1 + 1 && y <= Y1 + 4 && x >= 15 && x <= 34) return (y % 2) ? P.woodL : P.wood; // ramp
-    if (z >= 1 && z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
-      const front = y === Y1, edge = front || y === Y0 || x === X0 || x === X1;
-      if (!edge) return P.barn;
-      if ((x <= X0 + 1 || x >= X1 - 1) && (y <= Y0 + 1 || y >= Y1 - 1)) return P.white;
-      if (z === ZW) return P.white;
-      if (front && x >= 16 && x <= 33 && z <= 18) {
-        const u = x - 16, v = z - 1, half = u <= 8 ? u : u - 9;
-        if (u === 0 || u === 17 || u === 8 || u === 9 || v === 17 || v === 0) return P.white;
-        if (Math.abs(half - v * 8 / 17) < 0.9 || Math.abs(8 - half - v * 8 / 17) < 0.9) return P.white;
-        return (x % 2) ? '#8f342c' : '#7e2e27';
-      }
-      if (!front && y !== Y0 && z >= 8 && z <= 13 && ((y >= 14 && y <= 18) || (y >= 23 && y <= 27))) return (z === 8 || z === 13) ? P.white : '#3a2a22';
-      return (x + y) % 3 === 0 ? P.barnD : P.barn;
+  const { w, d } = BARN_DIM, X0 = 6, X1 = 57, Y0 = 8, Y1 = 43, ZW = 28;
+  const roof = { z0: ZW + 1, pitch: 0.95, x0: 2, x1: 61, y0: 4, y1: 47, fy0: Y0, fy1: Y1, base: St[2], line: St[1], ridge: St[1], trim: Ac[0] };
+  return buildModel(w, d, 62, (x, y, z) => {
+    if (z <= 1 && x >= X0 - 1 && x <= X1 + 1 && y >= Y0 - 1 && y <= Y1 + 1) return St[2];
+    if (z <= 1 && y > Y1 + 1 && y <= Y1 + 5 && x >= 19 && x <= 44) return Wd[3];                                                   // ramp
+    if (z >= 2 && z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
+      const front = y >= Y1 - 1, back = y <= Y0 + 1, sideL = x <= X0 + 1, sideR = x >= X1 - 1;
+      if (!(front || back || sideL || sideR)) return Rf[3];
+      if ((sideL || sideR) && (front || back)) return Ac[0];
+      if (z >= ZW - 1) return Ac[0];
+      if (front && x >= 21 && x <= 42 && z <= 22) { const u = x - 21, v = z - 2;
+        if (u <= 1 || u >= 20 || v >= 19 || u === 10 || u === 11) return Ac[0];
+        const hu = u < 10 ? u - 2 : u - 12; if (Math.abs(hu - v * 7 / 18) < 1 || Math.abs(7 - hu - v * 7 / 18) < 1) return Ac[0];
+        return Rf[2]; }
+      if ((sideL || sideR) && z >= 12 && z <= 19 && y >= 22 && y <= 29) return (z <= 13 || z >= 18 || y <= 23 || y >= 28) ? Ac[0] : Ink[1];
+      return (front || back) ? ((x % 6 === 0) ? Rf[2] : Rf[3]) : ((y % 6 === 0) ? Rf[2] : Rf[3]);   // vertical boards
     }
-    if (y === Y1 && x >= 20 && x <= 29 && z >= 26 && z <= 32) { if (x === 20 || x === 29 || z === 26 || z === 32) return P.white; return z <= 28 ? '#e8c878' : '#3a2a22'; } // loft with hay
-    const r = gableRoof(x, y, z, roof); if (r === 'fill') return (x % 3 === 0) ? P.barnD : P.barn; return r;
+    const r = gableY(x, y, z, roof);
+    if (r === 'fill') { if (y >= Y1 - 1 && x >= 26 && x <= 37 && z >= 34 && z <= 44) return (x <= 27 || x >= 36 || z <= 35 || z >= 43) ? Ac[0] : (z <= 38 ? Ac[1] : Ink[1]);
+      return (y >= Y1 - 1 || y <= Y0 + 1) ? ((x % 6 === 0) ? Rf[2] : Rf[3]) : Rf[3]; }
+    return r;
   });
 }
-function stallModel(part) { // part 'back' (shelf, back posts, awning) or 'front' (counter, front posts): the keeper stands between them
-  const w = 40, d = 22, h = 42, keep = y => part === 'back' ? y <= 9 : y >= 10;
-  return buildModel(w, d, h, (x, y, z) => {
+function stallModel(part) { // 'back' (shelf, back posts, awning) or 'front' (counter, front posts): the keeper stands between them
+  const w = 48, d = 28, keep = y => part === 'back' ? y <= 11 : y >= 12;
+  return buildModel(w, d, 46, (x, y, z) => {
     if (!keep(y)) return null;
-    const post = (x <= 2 || x >= 37) && (y <= 2 || (y >= 17 && y <= 19));
-    if (post && x >= 1 && x <= 38 && z <= 35) return (x + z) % 4 ? P.woodD : P.woodDD;
-    if (x >= 2 && x <= 37 && y >= 13 && y <= 20 && z <= 11) { if (z === 11) return P.woodL; if (y === 20 && z === 10) return P.woodD; return (x % 5 === 0) ? P.woodD : P.wood; }
-    for (const [x0, col, col2] of [[5, '#f08a2a', '#4f9a3a'], [15, '#9fd36a', '#6aae3e'], [25, '#e0574a', '#f29bb5']]) {
-      if (x >= x0 && x <= x0 + 8 && y >= 14 && y <= 20) { if (z === 12 || ((x === x0 || x === x0 + 8 || y === 14 || y === 20) && z <= 14)) return P.woodL; if (z >= 13 && z <= 15 && ((x + y * 3 + z) % 3)) return z === 15 && (x + y) % 4 === 0 ? col2 : col; }
-    }
-    if (y >= 1 && y <= 3 && x >= 4 && x <= 35 && z <= 18 && z >= 15 && x % 8 !== 3) return (z === 18) ? '#f0a030' : '#c9a36b'; // back shelf
-    if (y >= 1 && y <= 3 && x >= 4 && x <= 35 && z === 14) return P.woodD;
-    if (z >= 35 && z <= 40) { const yb = (40 - z) * 4; if (y >= yb - 1 && y <= yb + 4 && x >= 0 && x <= 39) { const scallop = z === 35 && y >= 19 && (x % 4 === 3); if (scallop) return null; return (Math.floor(x / 4) % 2) ? '#d2474a' : '#f2e6c8'; } }
+    const post = (x <= 2 || x >= 45) && (y <= 2 || (y >= 22 && y <= 24));
+    if (post && z <= 38) return Wd[2];
+    if (x >= 3 && x <= 44 && y >= 16 && y <= 25 && z <= 13) { if (z >= 12) return Wd[4]; return (x % 8 === 0) ? Wd[2] : Wd[3]; }     // counter
+    for (const [x0, col] of [[6, Ac[2]], [19, G[4]], [32, Rf[3]]])                                                               // produce crates
+      if (x >= x0 && x <= x0 + 9 && y >= 17 && y <= 24) { if (z === 14 || (z <= 16 && (x === x0 || x === x0 + 9 || y === 17 || y === 24))) return Wd[4]; if (z >= 15 && z <= 17) return col; }
+    if (y >= 1 && y <= 4 && x >= 4 && x <= 43 && z >= 16 && z <= 21) return z === 16 ? Wd[2] : (z <= 20 && x % 10 !== 4) ? Ac[1] : null; // back shelf of sacks
+    if (z >= 38 && z <= 45) { const yb = (45 - z) * 3.8; if (y >= yb - 1 && y <= yb + 4) return (Math.floor(x / 6) % 2) ? Rf[3] : Ac[0]; } // striped awning
     return null;
   });
 }
 function wellModel() {
-  return buildModel(20, 20, 30, (x, y, z) => {
-    const dd = Math.hypot(x - 9.5, y - 9.5);
-    if (z <= 6 && dd >= 5.2 && dd <= 8.2) { const course = Math.floor(z / 2); return ((Math.floor(Math.atan2(y - 9.5, x - 9.5) * 4 + course * 0.5) + course) % 2) ? P.stone : (z % 2 ? P.stoneD : P.stoneL); }
-    if (z === 3 && dd < 5.2) return dd < 2.5 ? '#2f6a90' : P.water;
-    if ((x <= 2 || x >= 17) && y >= 9 && y <= 10 && z >= 7 && z <= 22) return P.woodD;
-    if (z === 19 && y >= 9 && y <= 10 && x >= 1 && x <= 18) return P.wood;
-    if (x === 10 && y === 10 && z >= 13 && z <= 18) return '#d8c8a0';
-    if (x >= 8 && x <= 12 && y >= 8 && y <= 12 && z >= 9 && z <= 12) return (z === 12) ? '#5b86a2' : '#7aa6c2';
-    const r = gableRoof(x, y, z, { z0: 22, x0: 0, x1: 19, y0: 2, y1: 17, fx0: 99, fx1: -1, base: P.roof, alt: P.roofL, dark: P.roofD, ridge: '#7e342b', trim: '#6b3a2a' });
+  return buildModel(24, 24, 40, (x, y, z) => {
+    const dd = Math.hypot(x - 11.5, y - 11.5);
+    if (z <= 8 && dd >= 6.5 && dd <= 10.5) return (z === 8) ? St[3] : (z % 4 === 0 ? St[1] : St[2]);
+    if (z === 5 && dd < 6.5) return Wt[1];
+    if ((x <= 2 || x >= 21) && y >= 11 && y <= 12 && z >= 9 && z <= 28) return Wd[2];
+    if (z === 24 && y >= 11 && y <= 12 && x >= 2 && x <= 21) return Wd[3];
+    if (x >= 10 && x <= 13 && y >= 10 && y <= 13 && z >= 13 && z <= 16) return Wd[4];               // bucket
+    const r = gableY(x, y, z, { z0: 28, pitch: 1.0, x0: 0, x1: 23, y0: 2, y1: 21, fy0: 99, fy1: -1, base: Rf[2], line: Rf[1], ridge: Rf[1], trim: Wd[2] });
     return r === 'fill' ? null : r;
   });
 }
-function fenceModel() { return buildModel(13, 2, 10, (x, y, z) => (x <= 1 || x >= 11) ? (z < 10 ? (z === 9 ? P.woodL : P.wood) : null) : ((z === 4 || z === 7) && y === 1) ? (x % 4 ? P.woodL : P.wood) : null); }
-// small props, continuous shapes
-const benchModel = buildModel(15, 6, 8, (x, y, z) => (z === 4 && y <= 3) ? (x % 3 ? P.woodL : P.wood) : ((x === 1 || x === 13) && z < 4 && y <= 3) ? P.woodD : (y === 0 && z >= 5 && z <= 7 && x >= 1 && x <= 13) ? (z === 6 ? P.woodD : P.wood) : null);
-const hayModel = buildModel(15, 12, 10, (x, y, z) => ell(x, y, z, 7, 5.5, 0.5, 7.2, 5.6, 9) < 1 ? (((x + z * 2) % 4 === 0) ? '#cfa850' : (z > 6 ? '#f0d890' : '#e8c878')) : null);
-const crateModel = buildModel(8, 8, 8, (x, y, z) => (x === 0 || x === 7 || y === 0 || y === 7 || z === 7 || z === 0) ? (((x === 0 || x === 7) && (y === 0 || y === 7)) || z === 7 && (x + y) % 3 === 0 ? P.woodD : P.wood) : null);
-const logsModel = buildModel(13, 8, 7, (x, y, z) => { for (const [cy, cz] of [[1.5, 1.5], [4.5, 1.5], [3, 4.2], [6.5, 1.5]]) if (Math.hypot(y - cy, z - cz) < 1.7) return (x === 0 || x === 12) ? (Math.hypot(y - cy, z - cz) < 0.8 ? '#a07a48' : '#d9b47a') : (z > cz ? P.woodD : P.woodDD); return null; });
-const mailModel = buildModel(5, 7, 13, (x, y, z) => (x === 2 && y === 3 && z < 8) ? P.woodD : (z >= 8 && z <= 11 && x >= 1 && x <= 3) ? (x === 3 && y === 6 && z === 11 ? '#e0574a' : z === 11 ? '#6b97d6' : '#4f7fbf') : (x === 4 && y === 2 && z >= 10 && z <= 12) ? '#e0574a' : null);
-const cattailModel = buildModel(5, 5, 12, (x, y, z) => ((x === 1 && y === 2) || (x === 3 && y === 1)) && z < 10 ? (z >= 7 && x === 1 ? '#7a5230' : '#5ea444') : (x === 2 && y === 3 && z < 6 ? '#4f8f3a' : null));
-const lilyModel = buildModel(6, 6, 1, (x, y) => (Math.hypot(x - 2.5, y - 2.5) < 2.9 && !(x >= 3 && y <= 1)) ? ((x === 2 && y === 3) ? '#f29bb5' : '#5ea444') : null);
+function fenceModel() { return buildModel(17, 3, 13, (x, y, z) => (x <= 2) ? (z < 13 ? Wd[3] : null) : (y === 1 && (z === 4 || z === 5 || z === 9 || z === 10)) ? Wd[4] : null); } // one post + two rails that run into the next post
+// small props: clean shapes, one or two colours each
+const benchModel = buildModel(18, 7, 10, (x, y, z) => (z === 5 && y <= 4) ? Wd[4] : ((x <= 1 || x >= 16) && z < 5 && y <= 4) ? Wd[2] : (y === 0 && z >= 6 && z <= 9 && x >= 1 && x <= 16) ? (z === 9 ? Wd[4] : Wd[3]) : null);
+const hayModel = buildModel(18, 14, 12, Object.assign((x, y, z) => ell(x + 0.5, y + 0.5, z + 0.5, 9, 7, 0.5, 8.6, 6.6, 11) < 1 ? (z === 6 ? Wd[4] : Ac[1]) : null, { normal: ellN(9, 7, 0.5, 8.6, 6.6, 11) }));
+const crateModel = buildModel(10, 10, 10, (x, y, z) => (x <= 0 || x >= 9 || y <= 0 || y >= 9 || z >= 9 || z <= 0) ? ((((x <= 0 || x >= 9) && (y <= 0 || y >= 9)) || ((z >= 9 || z <= 0) && (x <= 0 || x >= 9 || y <= 0 || y >= 9))) ? Wd[2] : Wd[4]) : null);
+const logsModel = buildModel(16, 10, 9, (x, y, z) => { for (const [cy, cz] of [[2, 2], [7, 2], [4.5, 6]]) { const r = Math.hypot(y - cy, z - cz); if (r < 2.4) return (x === 0 || x === 15) ? (r < 1.1 ? Wd[3] : Wd[5]) : Wd[2]; } return null; });
+const mailModel = buildModel(7, 9, 17, (x, y, z) => (x === 3 && y === 4 && z < 10) ? Wd[2] : (z >= 10 && z <= 14 && x >= 1 && x <= 5 && y >= 1) ? Rf[3] : (x === 6 && y === 3 && z >= 12 && z <= 16) ? Ac[1] : null);
 // field clutter
 function rockModel(seed) {
-  const r = mulberry32(seed), w = 10, d = 8, h = 6, cx = 4.5 + r(), cy = 3.5;
-  return buildModel(w, d, h, (x, y, z) => { const e = ell(x, y, z, cx, cy, 0.3, 4.6, 3.6, 5.2) + (hash3(x >> 1, y >> 1, z >> 1 + seed) - 0.5) * 0.35; if (e > 1) return null;
-    if (z >= 4 && hash3(x, y, seed) < 0.35) return '#7d9a4a'; const n = (cx - x) * 0.2 + (cy - y) * 0.2 + z * 0.3; return n > 1 ? P.stoneL : n > 0 ? P.stone : P.stoneD; });
+  const r = mulberry32(seed), cx = 5.5 + r(), cy = 4.5;
+  const f = (x, y, z) => ell(x + 0.5, y + 0.5, z + 0.5, cx, cy, 0.2, 5.4, 4.3, 6.8) > 1 ? null : St[2]; f.normal = ellN(cx, cy, 0.2, 5.4, 4.3, 6.8);
+  return buildModel(12, 10, 8, f);
 }
 function branchModel(seed) {
-  const r = mulberry32(seed), ang = 0.18;
-  return buildModel(15, 6, 3, (x, y, z) => {
-    const cy = 2.5 + (x - 7) * ang; if (Math.abs(y - cy) < 1 && z <= 1) return z ? P.wood : P.woodD;
-    if (x >= 9 && x <= 12 && Math.abs(y - (cy + 1 + (x - 9))) < 0.7 && z === 0) return P.wood;
-    if (x >= 3 && x <= 5 && Math.abs(y - (cy - 1 - (x - 3) * 0.8)) < 0.7 && z === 0) return P.woodD;
-    if ((x === 13 && Math.abs(y - (cy + 4)) < 1) || (x === 1 && Math.abs(y - cy) < 1.2)) return z <= 1 ? '#5ea444' : null;
-    return null;
-  });
-}
-function weedModel(seed) {
-  const r = mulberry32(seed); const blades = [];
-  for (let i = 0; i < 11; i++) { const a = r() * 6.28, rr = r() * 3; blades.push([4 + Math.cos(a) * rr, 4 + Math.sin(a) * rr, 3 + Math.floor(r() * 6), Math.cos(a) * 0.25, Math.sin(a) * 0.25, r() < 0.45]); }
-  return buildModel(9, 9, 9, (x, y, z) => {
-    for (const [bx, by, bh, lx, ly, seedHead] of blades) if (Math.round(bx + lx * z) === x && Math.round(by + ly * z) === y && z < bh) return (seedHead && z >= bh - 2) ? '#e6c35c' : (z < 2 ? '#3f7a32' : z < 5 ? '#5a9a3a' : '#7fbf4a');
-    if (z === 0 && ell(x, y, 0, 4, 4, 0, 3.6, 3.6, 1) < 1) return '#4f8f3a';
+  const ang = 0.18 + (seed % 3) * 0.05;
+  return buildModel(18, 8, 4, (x, y, z) => {
+    const cy = 3.5 + (x - 9) * ang; if (Math.abs(y - cy) < 1.3 && z <= 2) return Wd[3];
+    if (x >= 11 && x <= 15 && Math.abs(y - (cy + 1.5 + (x - 11) * 0.9)) < 0.8 && z <= 1) return Wd[3];
+    if ((x === 16 || x === 1) && Math.abs(y - cy) < 1.5 && z <= 2) return G[3];
     return null;
   });
 }
 const CROPS = {
-  carrot: { name: '胡萝卜', price: 9, top: '#f08a2a' },
-  cabbage: { name: '卷心菜', price: 13, top: '#a5d96a' },
-  pumpkin: { name: '南瓜', price: 21, top: '#f0a030' },
+  carrot: { name: '胡萝卜', price: 9, top: Ac[2] },
+  cabbage: { name: '卷心菜', price: 13, top: G[4] },
+  pumpkin: { name: '南瓜', price: 21, top: Ac[2] },
 };
-function leafy(x, y, z, cx, cy, n, hgt, spread, c1, c2) { // n leaves fanning out from a centre, rising with z
-  for (let i = 0; i < n; i++) { const a = i / n * 6.28 + 0.4, t = z / hgt; if (t > 1) continue; const rr = spread * Math.sin(t * Math.PI * 0.85);
-    if (Math.hypot(x - (cx + Math.cos(a) * rr), y - (cy + Math.sin(a) * rr)) < 0.9 + t * 0.6) return z > hgt * 0.65 ? c2 : c1; }
-  return null;
-}
-function cropModels(type) {
-  const s0 = buildModel(7, 7, 2, (x, y, z) => { const dd = Math.hypot(x - 3, y - 3); if (z === 0 && dd < 2.6) return '#6e452a'; if (z === 1 && dd < 1.6) return (x === 3 && y === 3) ? '#e8d9a0' : '#7a5030'; return null; });
-  const s1 = buildModel(5, 5, 5, (x, y, z) => { if (x === 2 && y === 2 && z < 4) return '#6aae3e'; if (z >= 3 && ((x === 1 && y === 2) || (x === 3 && y === 2) || (x === 2 && z === 4 && y !== 2))) return '#8fd35a'; return null; });
-  const s2 = buildModel(9, 9, 8, (x, y, z) => leafy(x, y, z, 4, 4, 5, 8, 3.4, '#4f9a3a', '#8fd35a') || (x === 4 && y === 4 && z < 5 ? '#4f9a3a' : null));
-  let s3;
-  if (type === 'carrot') s3 = buildModel(10, 10, 12, (x, y, z) => {
-    if (z <= 2 && ell(x, y, z, 4.5, 4.5, -0.5, 2.6, 2.6, 3.4) < 1) return z === 2 ? '#f6a040' : '#f08a2a';
-    return leafy(x, y, z - 2, 4.5, 4.5, 6, 10, 3.6, '#3f8a34', '#8fd35a');
-  });
-  else if (type === 'cabbage') s3 = buildModel(12, 12, 9, (x, y, z) => { const e = ell(x, y, z, 5.5, 5.5, 3, 5.6, 5.6, 5.2); if (e < 0.4) return '#d4f09a'; if (e < 0.62) return '#b5e07a';
-    if (e < 1) { const a = Math.atan2(y - 5.5, x - 5.5); return (Math.floor(a * 3 + z * 0.3) % 2) ? '#7fc24a' : '#5ea444'; } return null; });
-  else s3 = buildModel(13, 12, 10, (x, y, z) => {
-    if (x >= 6 && x <= 6 && y >= 5 && y <= 6 && z >= 7 && z <= 9) return z === 9 ? '#5ea444' : '#7a5230';
-    if (z <= 1 && ell(x, y, 0, 11, 9.5, 0, 2.2, 2.2, 1) < 1) return '#4f9a3a';
-    const e = ell(x, y, z, 6, 5.5, 3.2, 5.8, 5.2, 4.2); if (e < 1) { const a = Math.atan2(y - 5.5, x - 6); return (Math.floor((a + 3.2) * 2.2) % 2) ? '#f0a030' : '#d9822a'; } return null;
-  });
-  return [s0, s1, s2, s3];
-}
+// tilled soil: a flat two-slice tile (furrow + ridges), rendered through the same rotation cache, so its rows never crawl
+function soilModel(wet) { const base = wet ? Wd[0] : Wd[1], ridge = wet ? Wd[1] : Wd[2];
+  return buildModel(17, 17, 2, (x, y, z) => z === 0 ? base : (y % 4 === 1 || y % 4 === 2) && y < 16 ? ridge : null, { noOutline: true }); }
+// 2D sprites
+const SPRITES = {
+  weed: [pix(['....y...y..', '.y..g..mg..', '.g..m.gm...', '..m.mgm..y.', '..mmgmm.gm.', '...dmmmgm..', '.dmdmmdmd..', '..ddmddd...']),
+         pix(['..y.....', '..g..g..', '.gm.gm.y', '..mgmm.g', '.dmmmdm.', '..ddmd..']),
+         pix(['.g...g.', '.mg.gm.', '..mgm..', 'g.mmm.g', '.dmdmd.', '..ddd..'])],
+  seed: pix(['.bbb.', 'bbcbb'], false),
+  sprout: pix(['g.g', 'gmg', '.m.']),
+  young: pix(['..g.g..', 'ggm.mgg', 'gmm.mmg', '.mmdmm.', '..ddd..']),
+  tufts: [pix(['.m.m.', 'm.m.m'], false), pix(['m.m', '.m.'], false), pix(['.l.', 'l.l'], false), pix(['m..m', '.mm.'], false)],
+  dirtTufts: [pix(['.t.t.', 't.t.t'], false), pix(['e.', '.E'], false)],
+  flowers: [pix(['.c.', 'cyc', '.c.'], false), pix(['.p.', 'pyp', '.p.'], false), pix(['y'], false), pix(['c.', '.c'], false)],
+  lily: pix(['.ggg.', 'ggmgp', '.gmg.']),
+  cattail: pix(['.w..', '.w.w', '.w.w', '.m.w', 'm..m', 'm.m.', 'mm..', '.m..']),
+  basket: pix(['tttttt', 'sstsst', '.ssss.']),
+};
 
-// ---------- layered trees (trunk + dark inside + leaf clumps / pine tiers), authored at screen resolution ----------
-// A tree is several small stacks sharing one origin, so leaf clumps can move by whole pixels while the trunk stays still.
-const LEAF = { dark: '#2e5e2c', mid: '#4a8a36', light: '#6cb446', hi: '#a6d86a', inside: '#22401f' };
-function part(box, fn) { const [x0, x1, y0, y1, z0, z1] = box; const m = buildModel(x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1, (x, y, z) => fn(x + x0, y + y0, z + z0));
+// ---------- style-A trees: round canopies built from shaded leaf discs around a dark core, one outline per tree ----------
+// A sphere looks the same from every side, so each leaf clump is a flat disc with fixed 3-tone banding (light from the
+// upper left), and only the disc *positions* turn with the camera. That keeps canopies crisp: no voxel speckle, no crawl.
+// The trunk is a small voxel stack. Discs move by whole pixels in the wind; the whole tree is cached per pose.
+function part(box, fn) { const [x0, x1, y0, y1, z0, z1] = box, f = (x, y, z) => fn(x + x0, y + y0, z + z0); if (fn.normal) f.normal = (x, y, z) => fn.normal(x + x0, y + y0, z + z0);
+  const m = buildModel(x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1, f);
   return { m, ox: x0 + m.w / 2, oy: y0 + m.d / 2, z: z0 }; }
-function clumpFn(cx, cy, cz, r, rz, rr, fruit) { // one ball of leaves lit from up-left; 2x2 bright tufts, a dark rim underneath
-  return (x, y, z) => { const e = ell(x + 0.5, y + 0.5, z + 0.5, cx, cy, cz, r, r, rz); if (e > 1 - rr() * 0.1) return null;
-    const n = ((cx - x - 0.5) * 0.45 + (cy - y - 0.5) * 0.45 + (z + 0.5 - cz) * 0.85) / r;
-    if (fruit && n > -0.1 && n < 0.35 && hash3(x >> 1, y >> 1, z >> 1) < 0.045) return '#d9473c';
-    const tuft = ((x >> 1) + (y >> 1) * 2 + (z >> 1)) % 5;
-    if (n > 0.55) return tuft < 2 ? LEAF.hi : LEAF.light;
-    if (n > 0.18) return tuft === 0 ? LEAF.light : LEAF.mid;
-    if (n > -0.25) return tuft === 0 ? LEAF.dark : LEAF.mid;
-    return LEAF.dark; };
+const discC = new Map();
+function discSprite(r, tone, berries) { // tone 0 = upper clump (bright), 1 = lower clump, 2 = core (flat dark)
+  const key = r + '|' + tone + '|' + berries; if (discC.has(key)) return discC.get(key);
+  const rx = r, ry = Math.round(r * 0.92), c = mkc(2 * rx + 1, 2 * ry + 1), g = c.getContext('2d'), img = g.createImageData(c.width, c.height), d = new Uint32Array(img.data.buffer);
+  const ramp = tone === 0 ? [G[4], G[3], G[2], G[1]] : [G[3], G[2], G[1], G[1]];
+  for (let j = 0; j < c.height; j++) for (let i = 0; i < c.width; i++) {
+    const u = (i - rx) / (rx + 0.5), v = (j - ry) / (ry + 0.5), q = u * u + v * v; if (q > 1) continue;
+    if (tone === 2) { d[j * c.width + i] = u32(G[1]); continue; }
+    const nz = Math.sqrt(1 - q), l = -0.5 * u - 0.62 * v + 0.6 * nz; // light from the upper left, a little toward the viewer
+    let b = l > 0.78 ? 0 : l > 0.42 ? 1 : l > 0.02 ? 2 : 3;
+    if (b === 0 && tone === 0 && q > 0.12) b = 1;                 // keep the brightest green to a small cap
+    let col = ramp[b];
+    if (berries && b <= 1 && hash3(i, j, r) < 0.05) col = Ac[3];
+    d[j * c.width + i] = u32(col);
+  }
+  g.putImageData(img, 0, 0); const o = { c, rx, ry }; discC.set(key, o); return o;
+}
+function discFoot(ps) { // shadow footprint of the canopy (screen px, centred)
+  let R = 4; for (const p of ps) R = Math.max(R, Math.hypot(p.ox, p.oy) + p.r);
+  const w = Math.ceil(2 * R), foot = mkc(w, w), g = foot.getContext('2d'); g.fillStyle = '#000';
+  for (const p of ps) { g.beginPath(); g.arc(R + p.ox, R + p.oy, p.r * 0.95, 0, 7); g.fill(); }
+  return { w, d: w, h: 0, foot, slices: [], cx: 0, cy: 0 };
 }
 function oakDef(seed) {
-  const r = mulberry32(seed), parts = [], clumps = [];
-  const H = 17 + Math.floor(r() * 3), CR = 12.5 + r() * 1.7, fruit = r() < 0.5;
-  parts.push(part([-6, 5, -6, 5, 0, H + 3], (x, y, z) => {
-    const inTrunk = x >= -2 && x <= 1 && y >= -2 && y <= 1 && z <= H;
-    const root = z <= 1 && Math.abs(x + 0.5) + Math.abs(y + 0.5) <= 4.5 - z * 1.5;
-    const limbA = z >= H - 6 && Math.abs(x - (z - (H - 7)) * 0.8) < 1 && y >= -1 && y <= 0;
-    const limbB = z >= H - 4 && Math.abs(-x - 1 - (z - (H - 5)) * 0.8) < 1 && y >= -2 && y <= -1;
-    if (inTrunk || root || limbA || limbB) { if (x < -1 && y < 0) return '#5c3d22'; if ((z + (x & 1)) % 5 === 0) return '#5c3d22'; return x >= 1 ? '#9a6a3e' : '#7a5230'; }
-    return null; }));
-  const cz = H + 8.5;
-  const inside = part([-16, 15, -16, 15, H - 2, H + 17], (x, y, z) => ell(x + 0.5, y + 0.5, z + 0.5, 0, 0, cz - 0.5, CR - 2.3, CR - 2.3, 8.7) < 1 ? LEAF.inside : null);
-  const spots = [[1, -1, cz + 6.5, 6.0 + r()], [-3, 2, cz + 5, 5.4 + r()]];
-  const ring = (n, rad, z, size) => { const a0 = r() * 6.28; for (let i = 0; i < n; i++) { const a = a0 + i / n * 6.28 + (r() - 0.5) * 0.4; spots.push([Math.cos(a) * rad, Math.sin(a) * rad, z + (r() - 0.5) * 2.2, size + r() * 1.1]); } };
-  ring(7, CR - 5, cz + 1.1, 5.3); ring(6, CR - 3.8, cz - 4.2, 5.0);
-  for (const [x, y, z, rad] of spots) {
-    const b = [Math.floor(x - rad), Math.ceil(x + rad), Math.floor(y - rad), Math.ceil(y + rad), Math.max(0, Math.floor(z - rad * 0.85)), Math.ceil(z + rad * 0.85)];
-    const p = part(b, clumpFn(x, y, z, rad, rad * 0.85, r, fruit));
-    p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(x, y, (z - cz) * 0.7) / (CR - 2.8)); clumps.push(p);
-  }
-  return { kind: 'oak', parts, inside, clumps, push: 3.0, period: 2.2, damp: 0.35, h: H + 23, union: unionModel([...parts, inside, ...clumps]) };
-}
-function pineDef(seed) {
-  const r = mulberry32(seed), tiers = [];
-  const trunk = part([-1, 0, -1, 0, 0, 12], (x) => x === 0 ? '#7a5230' : '#5c3d22');
-  const N = 5; let base = 5;
-  for (let i = 0; i < N; i++) {
-    const R0 = 11 - i * 1.9, th = i === N - 1 ? 12 : 9;
-    const p = part([-12, 11, -12, 11, base, base + th - 1], (x, y, z) => { const t = (z - base) / th, rad = R0 * (1 - t * 0.74); const dd = Math.hypot(x + 0.5, y + 0.5);
-      const a = Math.atan2(y + 0.5, x + 0.5), jag = 0.9 * Math.max(0, Math.sin(a * 7 + i * 1.3)); // branch tips
-      if (dd > rad + jag - r() * 0.5) return null;
-      const n = ((-x - 0.5) * 0.5 + (-y - 0.5) * 0.5) / Math.max(1, rad) + t * 0.9;
-      if (z <= base + 1 && dd > rad - 2.2) return '#1f4630';
-      if (n > 0.8 && ((x + z) & 1)) return '#6aa874';
-      return n > 0.62 ? '#4f9460' : n > 0.15 ? '#2f6b45' : '#24553a'; });
-    p.up = (base + th / 2) / 44; tiers.push(p); base += th - 2;
-  }
-  return { kind: 'pine', parts: [trunk], tiers, push: 4.5, period: 2.8, damp: 0.22, h: base + 2, union: unionModel([trunk, ...tiers]) };
+  const r = mulberry32(seed), parts = [], discs = [];
+  const T = 18 + Math.floor(r() * 4), CR = 22 + r() * 3, cz = T + 16;
+  parts.push(part([-5, 4, -5, 4, 0, T + 6], (x, y, z) => {
+    const inTrunk = x >= -3 && x <= 2 && y >= -3 && y <= 2;
+    const root = z <= 2 && Math.abs(x + 0.5) + Math.abs(y + 0.5) <= 6.5 - z * 1.4;
+    return (inTrunk || root) ? Wd[2] : null; }));
+  discs.push({ ox: 0, oy: 0, cz: cz - 1, r: Math.round(CR - 4), tone: 2, w: 0.3 });                 // dark core
+  const ring = (n, rad, z, size, tone) => { const a0 = r() * 6.28; for (let i = 0; i < n; i++) { const a = a0 + i / n * 6.28 + (r() - 0.5) * 0.35;
+    discs.push({ ox: Math.cos(a) * rad, oy: Math.sin(a) * rad, cz: z + (r() - 0.5) * 2, r: Math.round(size + r() * 2), tone }); } };
+  ring(6, CR - 10, cz - 5, 10, 1); ring(5, CR - 13, cz + 4, 10, 0);
+  discs.push({ ox: (r() - 0.5) * 3, oy: (r() - 0.5) * 3, cz: cz + 9, r: Math.round(11 + r() * 2), tone: 0 });  // crown
+  for (const p of discs) if (p.w === undefined) p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(p.ox, p.oy, (p.cz - cz) * 0.7) / (CR - 10));
+  return { kind: 'oak', parts, discs, push: 3.0, period: 2.2, damp: 0.35, h: cz + 24, union: discFoot(discs) };
 }
 function bushDef(seed) {
-  const r = mulberry32(seed), clumps = [];
-  const inside = part([-8, 7, -8, 7, 0, 8], (x, y, z) => ell(x + 0.5, y + 0.5, z + 0.5, 0, 0, 3, 6.5, 6.5, 5) < 1 ? LEAF.inside : null);
-  const spots = [[0, 0, 6, 4.6]]; for (let i = 0; i < 4; i++) { const a = r() * 1.2 + i * 1.57; spots.push([Math.cos(a) * 3.6, Math.sin(a) * 3.6, 3.8, 4.0 + r() * 0.6]); }
-  for (const [x, y, z, rad] of spots) { const p = part([Math.floor(x - rad), Math.ceil(x + rad), Math.floor(y - rad), Math.ceil(y + rad), Math.max(0, Math.floor(z - rad)), Math.ceil(z + rad)], (xx, yy, zz) => {
-      const c = clumpFn(x, y, z, rad, rad, r, false)(xx, yy, zz); if (c && c !== LEAF.dark && hash3(xx, yy, zz + seed) < 0.03) return pick2(r, ['#f4e27a', '#f29bb5', '#ffffff']); return c; });
-    p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(x, y) / 3.6); clumps.push(p); }
-  return { kind: 'bush', parts: [], inside, clumps, push: 1.7, period: 1.0, damp: 0.35, h: 11, union: unionModel([inside, ...clumps]) };
+  const r = mulberry32(seed), discs = [], berries = seed % 2 === 1;
+  discs.push({ ox: 0, oy: 0, cz: 6, r: 9, tone: 2, w: 0.3 });
+  for (let i = 0; i < 4; i++) { const a = r() * 1.2 + i * 1.57; discs.push({ ox: Math.cos(a) * 4.5, oy: Math.sin(a) * 4.5, cz: 5, r: 6 + Math.round(r()), tone: 1, berries }); }
+  discs.push({ ox: 0, oy: 0, cz: 9, r: 7, tone: 0, berries });
+  for (const p of discs) if (p.w === undefined) p.w = 0.35 + 0.65 * Math.min(1, Math.hypot(p.ox, p.oy) / 4.5);
+  return { kind: 'bush', parts: [], discs, push: 1.7, period: 1.0, damp: 0.35, h: 18, union: discFoot(discs) };
 }
-function unionModel(ps) { // combined footprint, used only for the shadow (screen px, centred at cx, cy)
-  let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9, h = 0; for (const p of ps) { x0 = Math.min(x0, p.ox - p.m.w / 2); x1 = Math.max(x1, p.ox + p.m.w / 2); y0 = Math.min(y0, p.oy - p.m.d / 2); y1 = Math.max(y1, p.oy + p.m.d / 2); h = Math.max(h, p.z + p.m.h); }
-  const w = Math.ceil(x1 - x0), d = Math.ceil(y1 - y0); const foot = document.createElement('canvas'); foot.width = w; foot.height = d; const c = foot.getContext('2d');
-  for (const p of ps) c.drawImage(p.m.foot, Math.round(p.ox - p.m.w / 2 - x0), Math.round(p.oy - p.m.d / 2 - y0));
-  return { w, d, h, foot, slices: [], cx: (x0 + x1) / 2 / RS, cy: (y0 + y1) / 2 / RS };
-}
-
 // ---------- wind: gust patches crossing the map + a breeze around them (world units) ----------
 const GUSTS = [];
 { const gr = mulberry32(4242); for (let i = 0; i < 6; i++) GUSTS.push({ t0: i * 20 / 6 + (i === 3 ? -2.0 : 0), speed: 18 + gr() * 6, cy: gr() * WH, hh: i % 3 === 0 ? 0 : 16 + gr() * 8, len: 10 + gr() * 7, str: 0.5 + gr() * 0.75 }); }
@@ -302,7 +295,7 @@ function windField(x, y, spread) { let s = 0; const al = x + 0.25 * y;
 if (Q.has('nowind')) GUSTS.forEach(g => g.str = 0);
 const gustAt = (x, y) => windField(x, y, 1), breezeAt = (x, y) => Math.min(1.6 * windField(x, y, 2.2), 1);
 const phaseAt = (x, y, t) => 2 * Math.PI * (t / WAVE_T - (x + 0.25 * y) / WAVE_L);
-const TS = 1.9; // tree art scale vs v1: motion amplitudes grow with it, still whole pixels
+const TS = 2.2; // wind amplitude scale for the bigger style-A trees: motion stays in whole pixels
 function clumpPose(x, y, w, lean, t) { // screen-px downwind offset and lift
   const b = breezeAt(x, y), g = gustAt(x, y), a = phaseAt(x, y, t);
   return [Math.round(lean * w + TS * w * (0.9 * b + 1.3 * g) * (0.5 - 0.5 * Math.cos(a))), Math.round(TS * w * (0.75 * b + 0.5 * g) * Math.max(Math.sin(a), 0))];
@@ -312,12 +305,12 @@ function clumpPose(x, y, w, lean, t) { // screen-px downwind offset and lift
 const cv = document.getElementById('game'), ctx = cv.getContext('2d', { willReadFrequently: true });
 cv.width = W; cv.height = H;
 const mk = (w, h) => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-const objC = mk(W, H), octx = objC.getContext('2d', { willReadFrequently: true });
+const shMask = new Uint32Array(W * H);
 const shC = mk(W, H), sctx = shC.getContext('2d');
 const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H);
 const GW = Math.ceil((WW + 2 * M) * RS), GH = Math.ceil((WH + 2 * M) * RS);
 const groundBase = mk(GW, GH), ground = mk(GW, GH);
-[ctx, octx, sctx].forEach(c => c.imageSmoothingEnabled = false);
+[ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
 let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
 function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
   const dpr = window.devicePixelRatio || 1, vw = Math.floor(innerWidth * dpr), vh = Math.floor(innerHeight * dpr);
@@ -330,48 +323,46 @@ function fit() { // largest whole multiple of the buffer in *device* pixels, pla
 addEventListener('resize', fit); fit();
 matchMedia(`(resolution: ${window.devicePixelRatio || 1}dppx)`).addEventListener?.('change', fit);
 
+
 // ---------- billboard sprites (SpriteCook sheet, see assets/sprites.js) ----------
-const ART_Q = Q.get('art') || '';
 const SPR = { ok: false, img: new Image(), rows: {} };
-if (window.PF_SPRITES) { const s = window.PF_SPRITES; s.rows.forEach((n, i) => SPR.rows[n.replace('anim_', '')] = i); SPR.fw = s.fw; SPR.fh = s.fh; SPR.img.onload = () => { SPR.ok = true; SPR.flip = mk(SPR.img.width, SPR.img.height); const c = SPR.flip.getContext('2d'); c.translate(SPR.img.width, 0); c.scale(-1, 1); c.drawImage(SPR.img, 0, 0); }; SPR.img.src = s.src; }
+if (window.PF_SPRITES) { const s = window.PF_SPRITES; s.rows.forEach((n, i) => SPR.rows[n.replace('anim_', '')] = i); SPR.fw = s.fw; SPR.fh = s.fh; SPR.ax = s.ax ?? 18; SPR.ay = s.ay ?? 35; SPR.frames = s.frames || {};
+  SPR.img.onload = () => { SPR.ok = true; SPR.flip = mk(SPR.img.width, SPR.img.height); const c = SPR.flip.getContext('2d'); c.translate(SPR.img.width, 0); c.scale(-1, 1); c.drawImage(SPR.img, 0, 0); }; SPR.img.src = s.src; }
+const CROPI = { ok: false, img: new Image() }; // SpriteCook ripe crops: carrot / cabbage / pumpkin (16x16)
+if (window.PF_CROPS) { CROPI.img.onload = () => CROPI.ok = true; CROPI.img.src = window.PF_CROPS.src; }
 
-const CROPI = { ok: false, img: new Image() }; // SpriteCook crop billboards: sprout, ripe carrot / cabbage / pumpkin (16x16); ?art=vox keeps voxel crops
-if (window.PF_CROPS && ART_Q !== 'vox') { CROPI.img.onload = () => CROPI.ok = true; CROPI.img.src = window.PF_CROPS.src; }
-
-// ---------- world layout (world units; 1 tile = 8) ----------
-const HOUSE = { x: 36, y: 25 }, BARN = { x: 156, y: 25 }, WELL = { x: 98, y: 20 }, STALL = { x: 160, y: 100 }, POND = { x: 34, y: 98, rx: 17, ry: 11 }, BENCH = { x: 62, y: 106 };
-const DOOR = { x: 36, y: 41 }, BARN_DOOR = { x: 156, y: 41 }, WELL_SPOT = { x: 98, y: 29 }, STALL_SPOT = { x: 160, y: 111 }, BENCH_SPOT = { x: 62, y: 110 };
-const KEEPER = { x: 160, y: 97.6 };
+// ---------- world layout (world units; 1 tile = 8 units = 16 px) ----------
+const HOUSE = { x: 36, y: 24 }, BARN = { x: 158, y: 26 }, WELL = { x: 100, y: 22 }, STALL = { x: 160, y: 100 }, POND = { x: 34, y: 100, rx: 16, ry: 10 }, BENCH = { x: 64, y: 108 };
+const DOOR = { x: 36, y: 40 }, BARN_DOOR = { x: 158, y: 41 }, WELL_SPOT = { x: 100, y: 31 }, STALL_SPOT = { x: 160, y: 111 }, BENCH_SPOT = { x: 64, y: 112 };
+const KEEPER = { x: 160, y: 97.4 };
 const FIELD = { c0: 9, r0: 7, cols: 6, rows: 4 }; // tiles x 72..120, y 56..88
 const props = [];
 const addProp = (m, x, y, rot = 0, o = {}) => { const p = Object.assign({ m, x, y, rot, z: 0 }, o); props.push(p); return p; };
 const models = {
   house: houseModel(), barn: barnModel(), stallB: stallModel('back'), stallF: stallModel('front'), well: wellModel(), fence: fenceModel(),
-  rocks: [1, 2, 3, 4].map(s => rockModel(s * 31)), branches: [1, 2].map(s => branchModel(s * 17)), weeds: [1, 2, 3, 4].map(s => weedModel(s * 53)),
-  crops: { carrot: cropModels('carrot'), cabbage: cropModels('cabbage'), pumpkin: cropModels('pumpkin') },
+  rocks: [1, 2, 3].map(s => rockModel(s * 31)), branches: [1, 2].map(s => branchModel(s * 17)), weeds: SPRITES.weed,
+  soil: [soilModel(false), soilModel(true)],
 };
-// ?art=sc swaps in the SpriteCook four-view house carved into voxels (v1 experiment; it reads worse, so it is opt-in)
-const PFA = window.PF_ASSETS || {}; const ART = Q.get('art') || '';
-function assetModel(a, sc) { const f = sc || 1; return buildModel(a.w * f, a.d * f, a.h * f, (x, y, z) => { const v = a.vox[(Math.floor(z / f) * a.d + Math.floor(y / f)) * a.w + Math.floor(x / f)]; return v ? a.pal[v - 1] : null; }); }
-if (PFA.house && ART === 'sc') models.house = assetModel(PFA.house, 2);
 addProp(models.house, HOUSE.x, HOUSE.y, 0, { big: 1 });
 addProp(models.barn, BARN.x, BARN.y, 0, { big: 1 });
 addProp(models.stallB, STALL.x, STALL.y, 0, { big: 1, dy: -4.5 });
 addProp(models.stallF, STALL.x, STALL.y, 0, { big: 1, dy: 3.5 });
 addProp(models.well, WELL.x, WELL.y, 0);
 addProp(benchModel, BENCH.x, BENCH.y, 0);
-addProp(hayModel, 182, 44, 0.3); addProp(crateModel, 134, 40, 0.2); addProp(crateModel, 137, 45, -0.4); addProp(logsModel, 62, 22, Math.PI / 2);
-addProp(mailModel, 20, 46, 0); addProp(crateModel, 178, 108, 0.1); addProp(hayModel, 138, 116, 1.2);
-for (let i = 0; i < 6; i++) addProp(cattailModel, POND.x + Math.cos(i * 1.1 + 2) * (POND.rx + 1), POND.y + Math.sin(i * 1.1 + 2) * (POND.ry + 1), i);
-for (let x = 4; x < 66; x += 8) addProp(models.fence, x + 4, 50, 0);
+addProp(hayModel, 182, 46, 0.3); addProp(crateModel, 134, 44, 0.2); addProp(logsModel, 64, 22, 0.15);
+addProp(mailModel, 16, 45, 0); addProp(crateModel, 178, 110, 0.1); addProp(hayModel, 140, 118, 1.2);
+const billboards = []; // small 2D sprites standing in the world (depth sorted with everything else)
+for (let i = 0; i < 6; i++) billboards.push({ spr: SPRITES.cattail, x: POND.x + Math.cos(i * 1.1 + 2) * (POND.rx + 1), y: POND.y + Math.sin(i * 1.1 + 2) * (POND.ry + 1), sway: 0.5, flip: i % 2 });
+for (let x = 4; x < 58; x += 8) if (x + 4 < 30 || x + 4 > 42) addProp(models.fence, x + 4, 50, 0); // gap for the path
 for (let x = 76; x < 130; x += 8) addProp(models.fence, x + 4, 124, 0);
 for (let y = 56; y < 120; y += 8) addProp(models.fence, 2, y + 4, Math.PI / 2);
-const treeSpots = [[6, 8], [16, 2], [72, 4], [124, 4], [186, 8], [190, 72], [188, 94], [6, 72], [10, 126], [52, 128], [140, 128], [186, 130], [204, 36], [-8, 40], [100, 138], [-8, 104], [204, 116], [62, 146], [150, -8], [40, -10]];
-const treeDefs = { oak: [1, 2, 3, 4, 5].map(s => oakDef(s * 77)), pine: [1, 2, 3].map(s => pineDef(s * 91)), bush: [1, 2, 3].map(s => bushDef(s * 13)) };
+const postM = buildModel(3, 3, 13, () => Wd[3]); for (const [x, y] of [[60, 50], [28, 50], [132, 124], [2, 120]]) addProp(postM, x, y, 0); // posts closing each run
+const treeSpots = [[2, 2], [74, 6], [124, 4], [188, 4], [6, 62], [190, 66], [190, 124], [6, 128], [54, 134], [104, 138], [146, 134],
+  [-16, 30], [-16, 96], [210, 96], [80, -16], [160, -18], [30, -16], [210, 30], [214, 150], [24, 150], [-14, 150]];
+const treeDefs = { oak: [1, 2, 3, 4].map(s => oakDef(s * 77)), bush: [1, 2, 3].map(s => bushDef(s * 13)) };
 const addTree = (def, x, y) => props.push({ tree: def, m: def.union, x, y, rot: 0, z: 0, lean: 0, leanV: 0 });
-treeSpots.forEach(([x, y], i) => addTree(i % 3 === 2 ? treeDefs.pine[i % 3] : treeDefs.oak[i % 5], x, y));
-[[58, 66], [128, 62], [132, 94], [12, 30], [172, 62], [110, 114], [88, 114], [192, 50]].forEach(([x, y], i) => addTree(treeDefs.bush[i % 3], x, y));
-const lilies = [0, 1, 2, 3].map(i => addProp(lilyModel, POND.x - 9 + i * 6, POND.y - 3 + (i % 2) * 6, i, { lily: i }));
+treeSpots.forEach(([x, y], i) => addTree(treeDefs.oak[i % 4], x, y));
+[[58, 40], [12, 44], [134, 66], [56, 80], [182, 52], [112, 114], [86, 116], [132, 103]].forEach(([x, y], i) => addTree(treeDefs.bush[i % 3], x, y));
 // ---------- field ----------
 const tiles = [];
 for (let r = 0; r < FIELD.rows; r++) for (let c = 0; c < FIELD.cols; c++) {
@@ -503,34 +494,33 @@ function popText(x, y, z, s, c) { particles.push({ x, y, z, vx: 0, vy: 0, vz: 10
 
 
 // ---------- rendering helpers ----------
-const DEFAULT_A = Q.has('angle') ? +Q.get('angle') : 0.42;
+const DEFAULT_A = Q.has('angle') ? +Q.get('angle') : 0.22;
 const cam = { x: WW / 2, y: WH / 2 + 2, a: DEFAULT_A, ta: DEFAULT_A };
 let CA = Math.cos(cam.a), SA = Math.sin(cam.a);
 // The camera never drifts: it is fixed on the farm centre, and its screen offset is snapped to whole pixels once per frame.
-// Every object then keeps the same sub-pixel phase between frames, so nothing re-rounds and shimmers (v2's soft follow did).
+// Every object then keeps the same sub-pixel phase between frames, so nothing re-rounds and shimmers.
 let CX = 0, CY = 0;
-const ASTEP = Math.PI * 2 / 256; let AQ = 0; // the picture turns in 1.4 degree steps (under 1px of travel at a building's edge), so per-angle caches get reused
-function setCam() { AQ = Math.round(cam.a / ASTEP) * ASTEP; CA = Math.cos(AQ); SA = Math.sin(AQ); CX = Math.round(W / 2 - (cam.x * CA - cam.y * SA) * RS); CY = Math.round(H / 2 + 10 - (cam.x * SA + cam.y * CA) * K * RS); }
+const ASTEP = Math.PI * 2 / 256; let AQ = 0; // the picture turns in 1.4 degree steps, so per-angle caches get reused
+function setCam() { AQ = Math.round(cam.a / ASTEP) * ASTEP; CA = Math.cos(AQ); SA = Math.sin(AQ); CX = Math.round(W / 2 - (cam.x * CA - cam.y * SA) * RS); CY = Math.round(H / 2 + 44 - (cam.x * SA + cam.y * CA) * K * RS); }
 function proj(x, y) { const rx = x * CA - y * SA, ry = x * SA + y * CA; return [CX + rx * RS, CY + ry * K * RS, ry]; }
 // Rotated stacks are rendered at 3x and reduced with a majority (mode) filter: each screen pixel takes the colour that covers
-// most of it. Plain nearest-neighbour rotation picks one arbitrary texel per pixel, so 1px stripes (shingles, beams, planks)
-// broke up differently at every angle and the building textures seemed to crawl while turning. Results are cached per angle.
+// most of it, so stripes keep their shape at every angle. Each result gets its own selective outline and is cached per angle.
 const SS = 3, ssC = mk(8, 8), ssG = ssC.getContext('2d', { willReadFrequently: true });
 function stackCanvas(m, a) {
   const map = m._ck || (m._ck = new Map()); let k = map.get(a); if (k) return k;
   if (map.size > 300) map.clear(); k = {}; map.set(a, k);
-  const ca = Math.cos(a), sa = Math.sin(a), r = Math.ceil(Math.hypot(m.w, m.d) / 2) + 1;
-  if (m.w * m.d * m.h < 8000) { // small props: too little surface detail to crawl, plain nearest is fine (and fast)
-    k.c = mk(2 * r, Math.ceil(2 * r * K) + m.h + 2); const g = k.c.getContext('2d'); g.imageSmoothingEnabled = false; k.ox = r; k.oy = Math.ceil(r * K) + m.h;
-    for (let i = 0; i < m.h; i++) { const sl = m.slices[i]; if (!sl) continue; g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); g.drawImage(sl, -m.w / 2, -m.d / 2); }
-    return k;
+  const sl = slicesAt(m, a), ca = Math.cos(a), sa = Math.sin(a), r = Math.ceil(Math.hypot(m.w, m.d) / 2) + 2;
+  const w = 2 * r, h = Math.ceil(2 * r * K) + m.h + 4; k.ox = r; k.oy = Math.ceil(r * K) + m.h + 1;
+  if (m.w * m.d * m.h < 3000) { // small props: plain nearest is stable enough (and fast)
+    k.c = mk(w, h); const g = k.c.getContext('2d'); g.imageSmoothingEnabled = false;
+    for (let i = 0; i < m.h; i++) { if (!sl[i]) continue; g.setTransform(ca, sa * K, -sa, ca * K, k.ox, k.oy - i); g.drawImage(sl[i], -m.w / 2, -m.d / 2); }
+    if (!m.noOutline) outlineCanvas(k.c); return k;
   }
-  const w = 2 * r, h = Math.ceil(2 * r * K) + m.h + 2, BW = w * SS, BH = h * SS;
-  k.c = mk(w, h); k.ox = r; k.oy = Math.ceil(r * K) + m.h;
+  const BW = w * SS, BH = h * SS; k.c = mk(w, h);
   if (ssC.width < BW || ssC.height < BH) { ssC.width = Math.max(ssC.width, BW); ssC.height = Math.max(ssC.height, BH); }
   const g = ssG; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, BW, BH); g.imageSmoothingEnabled = false;
-  for (let i = 0; i < m.h; i++) { const sl = m.slices[i]; if (!sl) continue;
-    for (let t = SS - 1; t >= 0; t--) { g.setTransform(ca * SS, sa * K * SS, -sa * SS, ca * K * SS, k.ox * SS, (k.oy - i) * SS + t); g.drawImage(sl, -m.w / 2, -m.d / 2); } }
+  for (let i = 0; i < m.h; i++) { if (!sl[i]) continue;
+    for (let t = SS - 1; t >= 0; t--) { g.setTransform(ca * SS, sa * K * SS, -sa * SS, ca * K * SS, k.ox * SS, (k.oy - i) * SS + t); g.drawImage(sl[i], -m.w / 2, -m.d / 2); } }
   g.setTransform(1, 0, 0, 1, 0, 0);
   const src = new Uint32Array(g.getImageData(0, 0, BW, BH).data.buffer), out = new ImageData(w, h), dst = new Uint32Array(out.data.buffer);
   const v = new Uint32Array(SS * SS);
@@ -542,19 +532,11 @@ function stackCanvas(m, a) {
     for (let q = 0; q < n; q++) { const c = v[q]; if (c === best) continue; let cnt = 0; for (let s = 0; s < n; s++) if (v[s] === c) cnt++; if (cnt > bc) { bc = cnt; best = c; } }
     dst[y * w + x] = best >>> 0;
   }
-  k.c.getContext('2d').putImageData(out, 0, 0); return k;
+  k.c.getContext('2d').putImageData(out, 0, 0); if (!m.noOutline) outlineCanvas(k.c); return k;
 }
-function drawStack(c, m, x, y, z, rot, sway) { // z and sway in screen px
-  const [sx, sy] = proj(x, y); const a = AQ + rot, ca = Math.cos(a), sa = Math.sin(a);
-  const bx = Math.round(sx), by = Math.round(sy);
-  if (!sway && m.h >= 6 && !m.noCache) { const k = stackCanvas(m, a); c.drawImage(k.c, bx - k.ox, by - Math.round(z) - k.oy); return; }
-  for (let i = 0; i < m.h; i++) {
-    const sl = m.slices[i]; if (!sl) continue;
-    let ox = 0; if (sway) ox = Math.round(sway * (i / m.h) ** 2);
-    c.setTransform(ca, sa * K, -sa, ca * K, bx + ox, by - Math.round(z) - i);
-    c.drawImage(sl, -m.w / 2, -m.d / 2);
-  }
-  c.setTransform(1, 0, 0, 1, 0, 0);
+function drawStack(c, m, x, y, z, rot) { // z in screen px
+  const [sx, sy] = proj(x, y), k = stackCanvas(m, AQ + rot);
+  c.drawImage(k.c, Math.round(sx) - k.ox, Math.round(sy) - Math.round(z) - k.oy);
 }
 function drawFoot(c, m, x, y, rot, ox, oy) {
   const [sx, sy] = proj(x + ox, y + oy); const a = AQ + rot, ca = Math.cos(a), sa = Math.sin(a);
@@ -564,48 +546,44 @@ function vnoise(x, y, s) { const h = (i, j) => { let n = i * 374761393 + j * 668
   const i = Math.floor(x), j = Math.floor(y), fx = x - i, fy = y - j, u = fx * fx * (3 - 2 * fx), v = fy * fy * (3 - 2 * fy);
   return (h(i, j) * (1 - u) + h(i + 1, j) * u) * (1 - v) + (h(i, j + 1) * (1 - u) + h(i + 1, j + 1) * u) * v; }
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map(v => v / 16);
-const pathSegs = [[DOOR.x, DOOR.y, DOOR.x, 54], [DOOR.x, 54, 68, 54], [68, 54, 124, 54], [124, 54, 124, 92], [68, 54, 68, 92], [68, 92, 124, 92], [124, 54, 156, 54], [156, 54, BARN_DOOR.x, BARN_DOOR.y], [98, 54, WELL_SPOT.x, WELL_SPOT.y], [124, 92, 140, 92], [140, 92, 140, STALL_SPOT.y], [140, STALL_SPOT.y, STALL_SPOT.x + 6, STALL_SPOT.y], [68, 92, 68, BENCH_SPOT.y], [68, BENCH_SPOT.y, BENCH_SPOT.x, BENCH_SPOT.y]];
+const pathSegs = [[DOOR.x, DOOR.y, DOOR.x, 54], [DOOR.x, 54, 68, 54], [68, 54, 124, 54], [124, 54, 124, 92], [68, 54, 68, 92], [68, 92, 124, 92], [124, 54, 158, 54], [158, 54, BARN_DOOR.x, BARN_DOOR.y], [100, 54, WELL_SPOT.x, WELL_SPOT.y], [124, 92, 140, 92], [140, 92, 140, STALL_SPOT.y], [140, STALL_SPOT.y, STALL_SPOT.x + 6, STALL_SPOT.y], [68, 92, 68, BENCH_SPOT.y], [68, BENCH_SPOT.y, BENCH_SPOT.x, BENCH_SPOT.y], [DOOR.x, 54, DOOR.x, 66]];
 function segDist(px, py, [x1, y1, x2, y2]) { const dx = x2 - x1, dy = y2 - y1, l = dx * dx + dy * dy || 1; let t = ((px - x1) * dx + (py - y1) * dy) / l; t = clamp(t, 0, 1); return Math.hypot(px - x1 - t * dx, py - y1 - t * dy); }
+const pathD = (x, y) => { let pd = 99; for (const s of pathSegs) pd = Math.min(pd, segDist(x, y, s)); return pd; };
+const YARD = { x0: 68, x1: 124, y0: 52, y1: 92 }; // packed-dirt yard around the field (like the mock)
+const inYard = (x, y, pad = 0) => x > YARD.x0 - pad && x < YARD.x1 + pad && y > YARD.y0 - pad && y < YARD.y1 + pad;
+// ground: flat palette areas only (grass, dirt, water). All texture lives in decals that never rotate, so nothing crawls.
+function groundAt(x, y) { // -> [palette colour, kind]
+  const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2;
+  if (e < 1) return [e > 0.72 ? Wt[1] : Wt[2], 'water'];
+  if (e < 1.18) return [Wd[3], 'shore'];
+  const wob = (vnoise(x / 3, y / 3, 7) - 0.5) * 1.6;
+  const pd = pathD(x, y), pw = 4.2 + wob;
+  const yd = Math.max(YARD.x0 - x, x - YARD.x1, YARD.y0 - y, y - YARD.y1) + wob * 0.6;
+  if (pd < pw || yd < 0) return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt'];
+  const out = Math.max(-x, x - WW, -y, y - WH, 0);
+  if (out > 14 + vnoise(x / 6, y / 6, 3) * 10) return [G[2], 'grass'];
+  return [G[3], 'grass'];
+}
 function buildGroundBase() { // one ground pixel per screen pixel (world unit = RS px)
-  const g = groundBase.getContext('2d'), img = g.createImageData(GW, GH), d = img.data;
-  for (let py = 0; py < GH; py++) for (let px = 0; px < GW; px++) {
-    const x = px / RS - M, y = py / RS - M; let col;
-    const n = vnoise(x / 9, y / 9, 1) * 0.7 + vnoise(x / 3, y / 3, 2) * 0.3;
-    col = P.grass[n < 0.35 ? 2 : n < 0.55 ? 0 : n < 0.72 ? 1 : 3];
-    const blade = hash3(px >> 1, py, 7) ; // little 1x2 grass tufts
-    if (blade > 0.93 && hash3(px >> 1, py + 1, 7) <= 0.93) col = P.grassDark; else if (blade > 0.985) col = '#a6d06a';
-    if (vnoise(x / 14, y / 14, 11) > 0.66 && hash3(px >> 1, py >> 1, 5) < 0.035) col = P.flower[Math.floor(vnoise(x / 14, y / 14, 12) * 4)];
-    let pd = 99; for (const s of pathSegs) pd = Math.min(pd, segDist(x, y, s));
-    const pw = 3.4 + vnoise(x / 4, y / 4, 7) * 1.2;
-    if (pd < pw) col = (pd > pw - 0.7) ? P.dirtD : (hash3(px >> 1, py >> 1, 9) > 0.9 ? '#d8b98a' : hash3(px, py, 4) > 0.85 ? P.dirtD : P.dirt);
-    const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2;
-    if (e < 1) col = e < 0.35 ? P.water : e < 0.72 ? P.waterM : (e < 0.86 ? P.waterL : P.waterM); else if (e < 1.22) col = e < 1.1 ? '#b9a77a' : '#5f8a3a';
-    const out = Math.max(-x, x - WW, -y, y - WH, 0);
-    let c = hex(col); if (out > 0) { const f = Math.max(0.55, 1 - out / 60); c = c.map(v => v * f); }
-    const p = (py * GW + px) * 4; d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; d[p + 3] = 255;
-  }
+  const g = groundBase.getContext('2d'), img = g.createImageData(GW, GH), d = new Uint32Array(img.data.buffer);
+  for (let py = 0; py < GH; py++) for (let px = 0; px < GW; px++) d[py * GW + px] = u32(groundAt(px / RS - M, py / RS - M)[0]);
   g.putImageData(img, 0, 0);
 }
-function buildGround() {
-  const g = ground.getContext('2d', { willReadFrequently: true }); g.drawImage(groundBase, 0, 0);
-  const img = g.getImageData(0, 0, GW, GH), d = img.data;
-  const put = (px, py, col) => { const c = hex(col), p = (py * GW + px) * 4; d[p] = c[0]; d[p + 1] = c[1]; d[p + 2] = c[2]; };
-  for (const t of tiles) {
-    const X0 = Math.round((t.x - 4 + M) * RS), X1 = Math.round((t.x + 4 + M) * RS) - 1, Y0 = Math.round((t.y - 4 + M) * RS), Y1 = Math.round((t.y + 4 + M) * RS) - 1, wet = t.wetUntil >= S.t;
-    for (let py = Y0; py <= Y1; py++) for (let px = X0; px <= X1; px++) {
-      const lx = px - X0, ly = py - Y0, edgeX = px === X0 || px === X1, edgeY = py === Y0 || py === Y1;
-      if (t.tilled || t.crop) { if (edgeX && edgeY) continue; const f = ly % 4; // ridges and furrows
-        const c = f === 0 ? (wet ? P.wetH : P.soilH) : f === 3 ? (wet ? P.wetF : P.soilF) : (wet ? P.wet : P.soil);
-        put(px, py, (edgeX || edgeY) ? (wet ? P.wetF : P.soilF) : (f !== 3 && hash3(px, py, 3) > 0.92 ? (wet ? P.wetF : P.soilF) : c)); }
-      else { const n = vnoise(px * 0.5, py * 0.5, 3); if (edgeX && edgeY) continue; put(px, py, n > 0.64 ? '#a99a5c' : n > 0.4 ? '#93a84f' : '#86a347'); }
-    }
-  }
-  g.putImageData(img, 0, 0); groundDirty = false;
+function buildGround() { groundDirty = false; }
+// decals: grass tufts, flowers, pebbles; placed in the world but drawn upright, like billboards lying on the ground
+const decals = [];
+{ const r = mulberry32(777), blocked = (x, y) => { const k = groundAt(x, y)[1];
+    return Math.hypot(x - HOUSE.x, (y - HOUSE.y) * 1.2) < 22 || Math.hypot(x - BARN.x, (y - BARN.y) * 1.2) < 20 || (x > 66 && x < 126 && y > 50 && y < 94 && k !== 'grass'); };
+  for (let i = 0; i < 900 && decals.length < 330; i++) { const x = -M * 0.8 + r() * (WW + M * 1.6), y = -M * 0.8 + r() * (WH + M * 1.6); const k = groundAt(x, y)[1];
+    if (blocked(x, y)) continue;
+    if (k === 'grass') { const v = r(); decals.push({ x, y, c: v < 0.12 ? SPRITES.flowers[Math.floor(r() * 4)] : SPRITES.tufts[Math.floor(r() * 4)] }); }
+    else if (k === 'dirt' && r() < 0.25) decals.push({ x, y, c: SPRITES.dirtTufts[Math.floor(r() * 2)] }); }
+  for (let i = 0; i < 4; i++) decals.push({ x: POND.x - 9 + i * 6, y: POND.y - 3 + (i % 2) * 5, c: SPRITES.lily, lily: i });
 }
 const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111' };
 function pixText(s, x, y, col, sc = 1) {
   const w = s.length * 4 * sc - sc; x = Math.round(x - w / 2); y = Math.round(y);
-  for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : '#2a1e1a';
+  for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0];
     [...s].forEach((ch, i) => { const g = FONT[ch]; if (!g) return; for (let k = 0; k < 15; k++) if (g[k] === '1') { const gx = x + (i * 4 + k % 3) * sc, gy = y + Math.floor(k / 3) * sc;
       if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); }
 }
@@ -613,142 +591,149 @@ function dayLight(T) { const h = T / 60; if (h >= 6.3 && h < 17.5) return 0; if 
 function warmth(T) { const h = T / 60; const a = Math.max(0, 1 - Math.abs(h - 18.3) / 1.6), b = Math.max(0, 1 - Math.abs(h - 6) / 1.2); return Math.max(a, b * 0.8); }
 
 // ---------- billboards: the farmer and the keeper are flat 2D sprites standing upright at their feet ----------
-const SEQ = { hoe: [0, 1, 1, 2, 3, 3], pull: [1, 2, 3, 3, 2], water: [1, 2, 3, 3, 3, 2] };
+const SEQ = { hoe: [1, 2, 3, 3, 2, 1], pull: [1, 2, 3, 3, 2], water: [1, 2, 3, 3, 2, 1] };
 function farmerPose() {
   const sx = F.fx * CA - F.fy * SA, sy = F.fx * SA + F.fy * CA; // facing turned into screen space
   const side = Math.abs(sx) > Math.abs(sy) * 0.9, flip = sx < 0;
   const k = F.task;
   if (!F.moving && k && k.pose && k.work > 0) { const q = SEQ[k.pose]; return { row: k.pose, fr: q[Math.floor(realT * 6) % q.length], flip: Math.abs(sx) < 0.05 ? false : flip }; }
   const dir = side ? 'walk_side' : sy > 0 ? 'walk_front' : 'walk_back';
-  if (F.moving) return { row: (side && F.crops.length) ? 'carry' : dir, fr: Math.floor(realT * 8) % 4, flip: side && flip, dir };
-  if (k && k.rest) return { row: 'walk_front', fr: 0, flip: false, dir: 'walk_front' };
-  return { row: dir, fr: 0, flip: side && flip, dir };
+  if (F.moving) return { row: dir, fr: Math.floor(realT * 8) % 4, flip: side && flip, dir };
+  const idle = side ? 'idle_side' : sy > 0 ? 'idle_front' : 'idle_back';
+  if (k && k.rest) return { row: 'idle_front', fr: 0, flip: false, dir: 'walk_front' };
+  return { row: SPR.rows[idle] !== undefined ? idle : dir, fr: 0, flip: side && flip, dir };
 }
 function drawBillboard(c, o, alpha = 1) {
   const [sx, sy] = proj(o.x, o.y); const r = SPR.rows[o.row]; if (r === undefined || !SPR.ok) return;
-  const fw = SPR.fw, fh = SPR.fh, src = o.flip ? SPR.flip : SPR.img, fx = o.flip ? SPR.img.width - (o.fr + 1) * fw : o.fr * fw;
-  const dx = Math.round(sx) - 18, dy = Math.round(sy) - 35 - Math.round(o.z || 0);
+  const fw = SPR.fw, fh = SPR.fh, n = SPR.frames[o.row] || 4, fr = o.fr % n, src = o.flip ? SPR.flip : SPR.img, fx = o.flip ? SPR.img.width - (fr + 1) * fw : fr * fw;
+  const dx = Math.round(sx) - (o.flip ? fw - 1 - SPR.ax : SPR.ax), dy = Math.round(sy) - SPR.ay - Math.round(o.z || 0);
   c.globalAlpha = alpha; c.drawImage(src, fx, r * fh, fw, fh, dx, dy, fw, fh);
-  if (o.basket) drawBasket(c, dx, dy, o);
+  if (o.basket && o.row !== 'walk_back') drawBasket(c, Math.round(sx), dy + SPR.ay, o);
   c.globalAlpha = 1;
 }
-function drawBasket(c, dx, dy, o) { // little wicker basket of the last crop, held in front (hidden from behind)
-  if (o.row === 'walk_back') return;
-  const bx = dx + (o.row === 'walk_front' ? 13 : o.flip ? 7 : 19), by = dy + 21, top = CROPS[o.basket].top;
-  c.fillStyle = '#2a1e1a'; c.fillRect(bx - 1, by, 12, 7); c.fillRect(bx, by - 2, 10, 2);
-  c.fillStyle = top; c.fillRect(bx + 1, by - 2, 8, 3); c.fillStyle = '#ffffff'; c.globalAlpha *= 0.6; c.fillRect(bx + 2, by - 2, 2, 1); c.globalAlpha = 1;
-  c.fillStyle = '#c9a36b'; c.fillRect(bx, by + 1, 10, 5); c.fillStyle = '#a0703f'; for (let i = 0; i < 10; i += 2) c.fillRect(bx + i, by + 2 + (i % 4 ? 1 : 0), 1, 2);
-  c.fillStyle = '#7a5230'; c.fillRect(bx, by + 5, 10, 1);
+function drawBasket(c, fx, fy, o) { // little basket of the last crop, held at the hip (hidden from behind)
+  const b = SPRITES.basket, bx = fx + (o.row === 'walk_front' ? 1 : o.flip ? -9 : 2), by = fy - 12;
+  c.fillStyle = CROPS[o.basket].top; c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
+  c.drawImage(b, bx, by);
 }
-function bbShadow(c, o) { const [sx, sy] = proj(o.x, o.y); const x = Math.round(sx), y = Math.round(sy); c.fillStyle = '#000';
-  c.fillRect(x - 5, y - 2, 11, 4); c.fillRect(x - 7, y - 1, 15, 2); }
+function bbShadow(c, o, wide = 1) { const [sx, sy] = proj(o.x, o.y); const x = Math.round(sx), y = Math.round(sy); c.fillStyle = '#000';
+  c.fillRect(x - 4 * wide, y - 1, 9 * wide, 3); c.fillRect(x - 6 * wide, y, 13 * wide, 1); }
+function drawSpr(c, o, poseT) { // small 2D sprite anchored at its bottom centre; optional wind sway of the top half
+  const [sx, sy] = proj(o.x, o.y), s = o.spr, x = Math.round(sx) - (s.width >> 1), y = Math.round(sy) - s.height + 2;
+  if (!o.sway) { c.drawImage(s, x, y); return; }
+  const [dx] = clumpPose(o.x, o.y, o.sway, 0, poseT), cut = s.height >> 1;
+  c.drawImage(s, 0, 0, s.width, cut, x + dx, y, s.width, cut); c.drawImage(s, 0, cut, s.width, s.height - cut, x, y + cut, s.width, s.height - cut);
+}
+const CROP_SPR = [SPRITES.seed, SPRITES.sprout, SPRITES.young];
+function drawCrop(c, o, poseT) { // ripe crops are SpriteCook billboards; the leafy top half sways with the trees' wind
+  const [sx, sy] = proj(o.x, o.y), x = Math.round(sx) - 8, y = Math.round(sy) - 13, u = o.ci * 16;
+  const [dx] = clumpPose(o.x, o.y, 0.45, 0, poseT);
+  if (o.flip) { c.save(); c.translate(x + 16, 0); c.scale(-1, 1); c.drawImage(CROPI.img, u, 0, 16, 9, -dx, y, 16, 9); c.drawImage(CROPI.img, u, 9, 16, 7, 0, y + 9, 16, 7); c.restore(); return; }
+  c.drawImage(CROPI.img, u, 0, 16, 9, x + dx, y, 16, 9); c.drawImage(CROPI.img, u, 9, 16, 7, x, y + 9, 16, 7);
+}
 
 // ---------- render ----------
 let realT = 0;
 const leaves = [], fireflies = [];
-let layerDirty = false;
-function flush() { if (!layerDirty) return; outlineLayer(); ctx.drawImage(objC, 0, 0); octx.clearRect(0, 0, W, H); layerDirty = false; }
+const SHADE = new Map(); for (const c of PAL.colors) SHADE.set(u32(c), u32(PAL.dark(c, 1)));
+function applyShadows() { // shadow = the same ground colour one ramp step darker (stays on the palette)
+  const m = new Uint32Array(sctx.getImageData(0, 0, W, H).data.buffer), img = ctx.getImageData(0, 0, W, H), d = new Uint32Array(img.data.buffer);
+  for (let i = 0; i < d.length; i++) if (m[i] >>> 24) { const s = SHADE.get(d[i]); if (s) d[i] = s; }
+  ctx.putImageData(img, 0, 0);
+}
+const PROF = Q.has('prof') ? (window.__prof = {}) : null; let _pt = 0; const tick = k => { if (!PROF) return; const t = performance.now(); PROF[k] = (PROF[k] || 0) + t - _pt; _pt = t; };
 function render() {
-  setCam();
-  if (groundDirty) buildGround();
-  const T = S.t % 1440, night = dayLight(T), warm = warmth(T);
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = '#1b2a24'; ctx.fillRect(0, 0, W, H);
+  setCam(); if (PROF) _pt = performance.now();
+  const T = S.t % 1440, night = dayLight(T), warm = warmth(T), poseT = Math.floor(realT * 10) / 10;
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = G[2]; ctx.fillRect(0, 0, W, H);
   const [gx, gy] = proj(-M, -M);
-  ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy)); ctx.drawImage(ground, 0, 0); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy)); ctx.drawImage(groundBase, 0, 0); ctx.setTransform(1, 0, 0, 1, 0, 0);
+  tick('ground');
+  // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
+  for (const t of tiles) if (t.tilled || t.crop) drawStack(ctx, models.soil[t.wetUntil >= S.t ? 1 : 0], t.x, t.y, 0, 0);
+  for (const d of decals) { const [sx, sy] = proj(d.x, d.y); const bob = d.lily !== undefined && Math.sin(realT * 1.5 + d.lily) > 0.6 ? 1 : 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
+  tick('soil+decals');
   const list = [];
   for (const p of props) list.push(p);
+  for (const b of billboards) list.push(b);
   for (const t of tiles) {
     if (t.debris) list.push({ m: t.debris.m, x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
-    if (t.weed) list.push({ m: t.weed.m, x: t.x, y: t.y, rot: t.weed.rot, z: 0, sway: 1 });
-    if (t.crop) { if (CROPI.ok && CROPI.on !== false && t.crop.stage === 3) list.push({ cbb: 1 + ['carrot', 'cabbage', 'pumpkin'].indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
-      else list.push({ m: models.crops[t.crop.type][t.crop.stage], x: t.x, y: t.y, rot: t.crop.rot, z: 0, sway: t.crop.stage >= 2 ? 0.8 : 0 }); }
+    if (t.weed) list.push({ spr: t.weed.m, x: t.x, y: t.y, sway: 0.8, w: 1 });
+    if (t.crop) { if (t.crop.stage === 3 && CROPI.ok) list.push({ ci: ['carrot', 'cabbage', 'pumpkin'].indexOf(t.crop.type), x: t.x, y: t.y, flip: t.crop.rot > 3.14 });
+      else list.push({ spr: CROP_SPR[Math.min(2, t.crop.stage)], x: t.x, y: t.y, sway: t.crop.stage === 2 ? 0.5 : 0, flat: t.crop.stage === 0 }); }
   }
   let farmerD = null;
   if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y, basket: F.crops.length ? F.crops[F.crops.length - 1] : null }, farmerPose()); list.push(farmerD); }
   const selling = F.task && F.task.to === STALL_SPOT && !F.moving && !F.home;
-  list.push({ bb: 1, x: KEEPER.x, y: KEEPER.y, row: 'keeper', fr: selling ? Math.floor(realT * 5) % 4 : (Math.floor(realT * 0.8) % 5 === 4 ? 1 : 0), flip: false });
-  lilies.forEach(l => { l.z = Math.sin(realT * 1.5 + l.lily) > 0.6 ? 1 : 0; });
+  list.push({ bb: 1, x: KEEPER.x, y: KEEPER.y, row: selling && SPR.rows.keeper_wave !== undefined ? 'keeper_wave' : 'keeper', fr: selling ? Math.floor(realT * 5) : (Math.floor(realT * 0.8) % 5 === 4 ? 1 : 0), flip: false });
   for (const o of list) o.depth = proj(o.x, o.y + (o.dy || 0))[2] + (o.bb ? 0.3 : 0);
   list.sort((a, b) => a.depth - b.depth);
-  // shadows (one layer, so they never double-darken)
+  // shadows: one mask, then the ground under it steps one palette shade darker
   sctx.clearRect(0, 0, W, H);
-  const sun = clamp((T - 6 * 60) / (12 * 60), 0, 1), sdx = (sun - 0.5) * -1.2, shA = 0.3 * (1 - night * 0.8);
-  for (const o of list) { if (o.lily || o.cbb !== undefined) continue; if (o.bb) { bbShadow(sctx, o); continue; } const s = o.m.h / RS * 0.25; drawFoot(sctx, o.m, o.x + (o.m.cx || 0), o.y + (o.m.cy || 0), o.rot, sdx * s, 0.35 * s); }
-  ctx.globalAlpha = shA; ctx.drawImage(shC, 0, 0); ctx.globalAlpha = 1;
-  // stacks go into a layer that gets one outline pass; a billboard (already outlined) flushes the layer first, so depth order still holds
-  const poseT = Math.floor(realT * 10) / 10;
+  const sun = clamp((T - 6 * 60) / (12 * 60), 0, 1), sdx = (sun - 0.5) * -1.2;
+  for (const o of list) { if (o.flat || o.ci !== undefined) continue; if (o.bb) { bbShadow(sctx, o); continue; } if (o.spr) { if (o.w) bbShadow(sctx, o); continue; }
+    const s = o.m.h / RS * 0.25; drawFoot(sctx, o.m, o.x + (o.m.cx || 0), o.y + (o.m.cy || 0), o.rot, sdx * s, 0.35 * s); }
+  tick('list+shadowmask');
+  if (night < 0.9) applyShadows();
+  tick('applyShadows');
   for (const o of list) {
-    if (o.bb) { flush(); drawBillboard(ctx, o); continue; }
-    layerDirty = true;
-    if (o.tree) { drawTree(octx, o, poseT); continue; }
-    if (o.cbb !== undefined) { drawCrop(octx, o, poseT); continue; }
-    let sway = 0; if (o.sway) { const [dx] = clumpPose(o.x, o.y, o.sway, 0, poseT); sway = dx * CA; }
-    drawStack(octx, o.m, o.x, o.y, o.z || 0, o.rot || 0, sway);
+    if (o.bb) { drawBillboard(ctx, o); continue; }
+    if (o.tree) { drawTree(ctx, o, poseT); tick('o.tree'); continue; }
+    if (o.ci !== undefined) { drawCrop(ctx, o, poseT); continue; }
+    if (o.spr) { drawSpr(ctx, o, poseT); continue; }
+    drawStack(ctx, o.m, o.x, o.y, o.z || 0, o.rot || 0); tick(o.m.w * o.m.d * o.m.h >= 3000 ? 'o.big' : 'o.small');
   }
-  flush();
+  tick('objects');
   if (farmerD) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
   for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); ctx.fillStyle = p.c; const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), p.kind === 'drop' ? 1 : s, p.kind === 'drop' ? 3 : s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
-  for (let i = 0; i < 6; i++) { const a = i * 1.3 + Math.floor(realT * 0.8 + i) * 2.1; const gx2 = POND.x + Math.cos(a) * POND.rx * 0.6, gy2 = POND.y + Math.sin(a * 1.7) * POND.ry * 0.6; if ((Math.floor(realT * 3 + i * 1.7)) % 4 === 0) { const [sx, sy] = proj(gx2, gy2); ctx.fillStyle = '#e8f6ff'; ctx.fillRect(Math.round(sx), Math.round(sy), 3, 1); } }
+  for (let i = 0; i < 6; i++) { const a = i * 1.3 + Math.floor(realT * 0.8 + i) * 2.1; const gx2 = POND.x + Math.cos(a) * POND.rx * 0.6, gy2 = POND.y + Math.sin(a * 1.7) * POND.ry * 0.6; if ((Math.floor(realT * 3 + i * 1.7)) % 4 === 0) { const [sx, sy] = proj(gx2, gy2); ctx.fillStyle = Wt[3]; ctx.fillRect(Math.round(sx), Math.round(sy), 3, 1); } }
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (night > 0) lighting(night, T);
   if (night > 0.5) for (const f of fireflies) { const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
   for (const p of particles) if (p.text) { const [sx, sy] = proj(p.x, p.y); pixText(p.text, sx, sy - p.z * RS, p.c); }
+  tick('fx+light');
   if (F.sleeping || (F.home && night > 0.7)) {
     const [sx, sy] = proj(HOUSE.x + 8, HOUSE.y - 5);
-    for (let i = 0; i < 3; i++) { const ph = (realT * 0.5 + i / 3) % 1; ctx.globalAlpha = 1 - ph; pixText('Z', sx + 6 + ph * 18 + Math.sin(ph * 6) * 3, sy - 58 - ph * 26, '#f4f0ff', ph > 0.5 ? 2 : 1); }
+    for (let i = 0; i < 3; i++) { const ph = (realT * 0.5 + i / 3) % 1; ctx.globalAlpha = 1 - ph; pixText('Z', sx + 6 + ph * 18 + Math.sin(ph * 6) * 3, sy - 80 - ph * 26, '#f4f0ff', ph > 0.5 ? 2 : 1); }
     ctx.globalAlpha = 1;
   }
 }
-function drawCrop(c, o, poseT) { // flat billboard; the leafy top half sways with the same wind as the trees
-  const [sx, sy] = proj(o.x, o.y), x = Math.round(sx) - 8, y = Math.round(sy) - 12, u = o.cbb * 16;
-  const [dx] = clumpPose(o.x, o.y, 0.45, 0, poseT);
-  if (o.flip) { c.save(); c.translate(x + 16, 0); c.scale(-1, 1); c.drawImage(CROPI.img, u, 0, 16, 9, 0 - dx, y, 16, 9); c.drawImage(CROPI.img, u, 9, 16, 7, 0, y + 9, 16, 7); c.restore(); return; }
-  c.drawImage(CROPI.img, u, 0, 16, 9, x + dx, y, 16, 9); c.drawImage(CROPI.img, u, 9, 16, 7, x, y + 9, 16, 7);
-}
-function drawTree(c, o, poseT) { // parts placed relative to the tree's whole-pixel origin, so the result can be cached per pose
+function drawTree(c, o, poseT) { // trunk stack + leaf discs placed relative to the tree's whole-pixel origin, cached per pose
   const T = o.tree, items = [];
-  const rel = p => [Math.round(p.ox * CA - p.oy * SA), Math.round((p.ox * SA + p.oy * CA) * K), p.ox * SA + p.oy * CA];
-  if (T.inside) items.push([T.inside, 0, 0]);
-  for (const p of T.parts) items.push([p, 0, 0]);
-  if (T.clumps) { const cl = T.clumps.map(p => [p, rel(p)[2]]).sort((a, b) => a[1] - b[1]);
-    for (const [p] of cl) { const [dx, dz] = clumpPose(o.x + p.ox / RS, o.y + p.oy / RS, p.w, o.lean, poseT); items.push([p, dx, dz]); } }
-  if (T.tiers) for (const p of T.tiers) { const bend = Math.round(o.lean * p.up * p.up * 1.6); const [dx, dz] = clumpPose(o.x, o.y, 0.35 + 0.65 * p.up, 0, poseT); items.push([p, bend + dx, Math.min(dz, 2)]); }
+  for (const p of T.discs) { const [dx, dz] = clumpPose(o.x + p.ox / RS, o.y + p.oy / RS, p.w, o.lean, poseT); items.push([p, dx, dz, p.ox * SA + p.oy * CA]); }
+  items.sort((a, b) => (a[0].tone === 2 ? -1e3 : a[3]) - (b[0].tone === 2 ? -1e3 : b[3]) || a[0].cz - b[0].cz); // dark core first
   const key = AQ + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
   const k = o._ck || (o._ck = {});
   if (k.key !== key) {
-    if (!T.R) { T.R = 0; for (const p of [...T.parts, ...(T.clumps || []), ...(T.tiers || []), ...(T.inside ? [T.inside] : [])]) T.R = Math.max(T.R, Math.hypot(p.ox, p.oy) + Math.hypot(p.m.w, p.m.d) / 2); T.R = Math.ceil(T.R) + 10; }
-    if (!k.c) { k.c = mk(2 * T.R, Math.ceil(2 * T.R * K) + T.h + 12); k.g = k.c.getContext('2d'); k.g.imageSmoothingEnabled = false; }
+    if (!T.R) { T.R = 8; for (const p of T.discs) T.R = Math.max(T.R, Math.hypot(p.ox, p.oy) + p.r); T.R = Math.ceil(T.R) + 12; }
+    if (!k.c) { k.c = mk(2 * T.R, Math.ceil(2 * T.R * K) + T.h + 14); k.g = k.c.getContext('2d', { willReadFrequently: true }); k.g.imageSmoothingEnabled = false; }
     const g = k.g; k.ox = T.R; k.oy = Math.ceil(T.R * K) + T.h + 8; g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, k.c.width, k.c.height);
-    for (const [p, dxw, dz] of items) { const [rx, ry] = rel(p); const m = p.m;
-      const bx = k.ox + rx + Math.round(dxw * CA), by = k.oy + ry + Math.round(dxw * SA * K) - Math.round(p.z + dz);
-      for (let i = 0; i < m.h; i++) { const sl = m.slices[i]; if (!sl) continue; g.setTransform(CA, SA * K, -SA, CA * K, bx, by - i); g.drawImage(sl, -m.w / 2, -m.d / 2); } }
-    g.setTransform(1, 0, 0, 1, 0, 0); k.key = key;
+    for (const p of T.parts) { const m = p.m, sl = slicesAt(m, AQ), bx = k.ox + Math.round(p.ox * CA - p.oy * SA), by = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - p.z;
+      for (let i = 0; i < m.h; i++) { if (!sl[i]) continue; g.setTransform(CA, SA * K, -SA, CA * K, bx, by - i); g.drawImage(sl[i], -m.w / 2, -m.d / 2); } }
+    g.setTransform(1, 0, 0, 1, 0, 0);
+    for (const [p, dx, dz] of items) { const s = discSprite(p.r, p.tone, !!p.berries);
+      const x = k.ox + Math.round(p.ox * CA - p.oy * SA) + dx, y = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - Math.round(p.cz + dz);
+      g.drawImage(s.c, x - s.rx, y - s.ry); }
+    outlineCanvas(k.c); k.key = key;
   }
   const [sx, sy] = proj(o.x, o.y); c.drawImage(k.c, Math.round(sx) - k.ox, Math.round(sy) - k.oy);
-}
-function outlineLayer() { // transparent pixels next to the finished layer turn into a dark outline
-  const img = octx.getImageData(0, 0, W, H), d = img.data, out = new Uint8Array(W * H);
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-    const i = y * W + x; if (d[i * 4 + 3]) continue;
-    if (d[(i - 1) * 4 + 3] || d[(i + 1) * 4 + 3] || d[(i - W) * 4 + 3] || d[(i + W) * 4 + 3]) out[i] = 1;
-  }
-  for (let i = 0; i < W * H; i++) if (out[i]) { d[i * 4] = 42; d[i * 4 + 1] = 30; d[i * 4 + 2] = 26; d[i * 4 + 3] = 210; }
-  octx.putImageData(img, 0, 0);
 }
 function lighting(night, T) {
   const lights = [];
   const hz = (x, y, z, r, s = 1) => { const [sx, sy] = proj(x, y); lights.push([sx, sy - z, r, s]); };
-  if (T >= 17 * 60 + 30 || T < WAKE + 30) { hz(HOUSE.x - 9, HOUSE.y + 10, 13, 42); hz(HOUSE.x + 8.4, HOUSE.y + 10, 13, 42); hz(HOUSE.x, HOUSE.y - 10, 13, 30); }
-  hz(STALL.x, STALL.y, 24, 36, 0.8); hz(BARN_DOOR.x, BARN_DOOR.y, 16, 26, 0.6); hz(WELL.x, WELL.y, 14, 20, 0.5);
+  if (T >= 17 * 60 + 30 || T < WAKE + 30) { hz(HOUSE.x - 8.5, HOUSE.y + 10.5, 17, 46); hz(HOUSE.x + 8.5, HOUSE.y + 10.5, 17, 46); hz(HOUSE.x - 13, HOUSE.y, 17, 34); }
+  hz(STALL.x, STALL.y, 30, 40, 0.8); hz(BARN_DOOR.x, BARN_DOOR.y, 16, 26, 0.6); hz(WELL.x, WELL.y, 14, 20, 0.5);
   if (!F.home) hz(F.x, F.y, 14, 40);
-  const d = litImg.data, A = night * 0.7;
-  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    let L = 0; for (const [lx, ly, r, s] of lights) { const dd = Math.hypot(x - lx, (y - ly) * 1.25) / r; if (dd < 1) L = Math.max(L, (1 - dd) * s); }
-    const q = Math.min(1, Math.floor(L * 4 + BAYER[(y & 3) * 4 + (x & 3)]) / 3);
-    const p = (y * W + x) * 4;
-    d[p] = 14 + (255 - 14) * q; d[p + 1] = 18 + (180 - 18) * q; d[p + 2] = 52 + (90 - 52) * q; d[p + 3] = 255 * (A * (1 - q) + 0.18 * night * q);
-  }
+  const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer);
+  d32.fill(((Math.round(255 * A) << 24) | (52 << 16) | (18 << 8) | 14) >>> 0); // unlit night tint everywhere, then only the light boxes
+  for (const [lx, ly, r] of lights) { const x0 = Math.max(0, Math.floor(lx - r)), x1 = Math.min(W - 1, Math.ceil(lx + r)), y0 = Math.max(0, Math.floor(ly - r / 1.25)), y1 = Math.min(H - 1, Math.ceil(ly + r / 1.25));
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+      let L = 0; for (const [lx2, ly2, r2, s2] of lights) { const dd = Math.hypot(x - lx2, (y - ly2) * 1.25) / r2; if (dd < 1) L = Math.max(L, (1 - dd) * s2); }
+      const q = Math.min(1, Math.floor(L * 4 + BAYER[(y & 3) * 4 + (x & 3)]) / 3);
+      const p = (y * W + x) * 4;
+      d[p] = 14 + (255 - 14) * q; d[p + 1] = 18 + (180 - 18) * q; d[p + 2] = 52 + (90 - 52) * q; d[p + 3] = 255 * (A * (1 - q) + 0.18 * night * q);
+    } }
   lctx.putImageData(litImg, 0, 0); ctx.drawImage(litC, 0, 0);
 }
 function updateFx(dt) {
@@ -757,11 +742,11 @@ function updateFx(dt) {
   windT += dt;
   for (const o of props) if (o.tree) { const T = o.tree, k = 2 * Math.PI / T.period, g = gustAt(o.x, o.y);
     o.leanV += (k * k * (T.push * g - o.lean) - 2 * T.damp * k * o.leanV) * dt; o.lean += o.leanV * dt;
-    if (T.kind === 'oak' && Math.random() < dt * g * 0.6) leaves.push({ x: o.x + R(-6, 6), y: o.y + R(-6, 6), z: T.h - 8, ph: R(0, 6), c: pick(['#6cb446', '#c9a336', '#a6d86a']) }); }
+    if (T.kind === 'oak' && Math.random() < dt * g * 0.6) leaves.push({ x: o.x + R(-10, 10), y: o.y + R(-10, 10), z: T.h - 14, ph: R(0, 6), c: pick([G[4], Ac[1], G[3]]) }); }
   for (let i = leaves.length - 1; i >= 0; i--) { const l = leaves[i]; l.z -= 9 * dt; l.ph += dt * 3; l.x += dt * (2 + 10 * gustAt(l.x, l.y)); if (l.z <= 0) leaves.splice(i, 1); }
   if (!fireflies.length) for (let i = 0; i < 18; i++) fireflies.push({ x: R(10, 80), y: R(80, 122), z: R(2, 9), ph: R(0, 6) });
   for (const f of fireflies) { f.x += Math.sin(realT * 0.7 + f.ph) * dt * 3; f.y += Math.cos(realT * 0.5 + f.ph) * dt * 2; }
-  if (F.home && Math.random() < dt * 2.5) particles.push({ x: HOUSE.x + 8.4, y: HOUSE.y - 4.8, z: 31, vx: 2, vy: -1, vz: 5, c: pick(['#d8d4cc', '#c4c0b8']), life: 2.4, kind: 'smoke' });
+  if (F.home && Math.random() < dt * 2.5) particles.push({ x: HOUSE.x + 9.25, y: HOUSE.y - 4.5, z: 38, vx: 2, vy: -1, vz: 5, c: pick([St[3], Ac[0]]), life: 2.4, kind: 'smoke' });
 }
 function hud() {
   const T = S.t % 1440, hh = T / 60;
