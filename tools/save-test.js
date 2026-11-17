@@ -69,19 +69,39 @@ ok('v2 keeps bought levels and rejects junk', () => {
   const v2 = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), { saveVersion: 2, upgrades: { can: 2, speed: 1, bogus: 5, hoe: -3 }, settings: { speed: 3 } }));
   assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1);
 });
-ok('v3 -> v4: regions and axe not bought, trees rebuilt, orders empty, tiles on the home field, yard kept', () => {
+ok('v3 -> current: regions and axe not bought, trees rebuilt, orders empty, tiles on the home field, yard kept', () => {
   const v2 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v3-day4.json'), 'utf8')), s = SAVE.migrate(v2);
-  assert.strictEqual(v2.saveVersion, 3); assert.strictEqual(s.saveVersion, 4); assert.deepStrictEqual(s.yard, v2.yard);
+  assert.strictEqual(v2.saveVersion, 3); assert.strictEqual(s.saveVersion, SAVE.CURRENT); assert.deepStrictEqual(s.yard, v2.yard);
   for (const id of ['axe', 'forest', 'east', 'orchard', 'south']) assert.strictEqual(s.upgrades[id], 0);
   for (const id of Object.keys(v2.upgrades)) assert.strictEqual(s.upgrades[id], v2.upgrades[id]);
   assert.strictEqual(s.trees, null); assert.deepStrictEqual(s.orders, []); assert.strictEqual(s.inventory.wood, 0); assert.deepStrictEqual(s.inventory.saplings, { apple: 0, orange: 0 });
-  assert(s.tiles.every(t => t.f === 'home')); assert.strictEqual(s.coins, v2.coins);
+  assert(s.tiles.every(t => t.f === 'home')); assert.strictEqual(s.coins, v2.coins); assert.strictEqual(s.upgrades.field, 0);
 });
 ok('v4 keeps trees and orders, drops bad ones', () => {
   const base = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v3-day4.json'), 'utf8')));
   const trees = WD.defaultTrees(); trees[0].stage = 'stump'; trees.push({ id: 'x', x: 1, y: 2, kind: 'pear', v: 0, stage: 'tree', age: 0, ripe: 0, cd: 0 });
   const s = SAVE.migrate(Object.assign(base, { trees, orders: [{ type: 'chop', id: 'w1' }, { type: 'plant', kind: 'orange', x: 20, y: 70 }, { type: 'dance' }] }));
   assert.strictEqual(s.trees.length, trees.length - 1); assert.strictEqual(s.trees[0].stage, 'stump'); assert.strictEqual(s.orders.length, 2);
+});
+ok('v4 -> v5: old field levels map up, never lose open tiles', () => {
+  const base = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v4-day4.json'), 'utf8'));
+  const withField = (field, openHome) => SAVE.migrate(Object.assign({}, base, {
+    upgrades: Object.assign({}, base.upgrades, { field }),
+    tiles: base.tiles.map(t => (t.f || 'home') === 'home' ? Object.assign({}, t, { open: openHome(t) }) : t),
+  }));
+  // published v4 rungs: 0→12, 1→18, 2→24
+  const a = withField(0, t => t.c < 4 && t.r < 3);
+  assert.strictEqual(a.saveVersion, 5); assert.strictEqual(a.upgrades.field, 0);
+  const b = withField(1, t => t.r < 3);
+  assert.strictEqual(b.upgrades.field, 2); // 18 open tiles → 20-tile rung, never shrink
+  const c = withField(2, () => true);
+  assert.strictEqual(c.upgrades.field, 3);
+  // already-open tiles win if they are ahead of the stored level
+  const d = withField(0, t => t.r < 3);
+  assert.strictEqual(d.upgrades.field, 2);
+  const e = withField(1, () => true);
+  assert.strictEqual(e.upgrades.field, 3);
+  assert.deepStrictEqual([12, 16, 18, 20, 24].map(SIM.fieldLevelForOpen), [0, 1, 2, 2, 3]);
 });
 ok('save.js and world.js agree on fruit; every region is a shop item', () => {
   assert.deepStrictEqual(SAVE.FRUIT_IDS, WD.FRUIT_IDS);
@@ -133,8 +153,7 @@ ok('shop effects: base and fully upgraded', () => {
   assert.deepStrictEqual(b.crops, ['carrot', 'cabbage', 'pumpkin']);
   const max = {}; for (const id of SIM.SHOP_IDS) max[id] = SIM.shopItem(id).levels.length; const m = SIM.effects(max);
   assert.deepStrictEqual([m.waterMax, m.walk, m.basket, m.speedMax, m.till3, m.tillDur], [30, 1.8, 40, 4, true, 2]); assert.deepStrictEqual(m.crops, SIM.IDS);
-  const open = lv => { let c = 0; for (let r = 0; r < 4; r++) for (let x = 0; x < 6; x++) c += SIM.isOpen(x, r, lv); return c; };
-  assert.deepStrictEqual([0, 1, 2].map(open), [12, 18, 24]);
+  assert.deepStrictEqual([0, 1, 2, 3].map(SIM.homeOpenCount), [12, 16, 20, 24]);
 });
 ok('crop ladder: each unlock earns more per tile-day than the last', () => {
   const v = k => SIM.netPerDay(k, SIM.startPrices(), false);

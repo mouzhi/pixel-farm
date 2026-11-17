@@ -4,7 +4,7 @@
 // export -> import round trip; reset starts over and keeps a copy; Phase 3: regions, chop and transplant orders, fruit.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
-const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures');
+const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures'), SAVE = require('../save.js');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
@@ -85,7 +85,7 @@ async function test(name, fn) {
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => { __farm.saveNow(); const v = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:save'));
       return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: __farm.S.speed, yard: v.yard && v.yard.length, kinds: [...new Set((v.yard || []).map(c => c.type))] }; });
-    assert.strictEqual(r.v, 4); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
+    assert.strictEqual(r.v, SAVE.CURRENT); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
     assert(r.yard >= 8, 'old save should get a yard to tidy: ' + r.yard); assert(r.kinds.every(k => ['rock', 'branch', 'weed', 'pebble'].includes(k)));
     assert.deepStrictEqual(p.errs, []);
   });
@@ -113,17 +113,17 @@ async function test(name, fn) {
     await p.evaluate(() => { __farm.S.coins = 1000; }); await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden]) [data-buy="field"]');
     await p.click('#shop [data-buy="field"]'); await p.click('#shop [data-buy="speed"]');
     let r = await p.evaluate(() => ({ coins: __farm.S.coins, up: Object.assign({}, __farm.S.up), open: __farm.tiles.filter(t => t.open).length, poor: __farm.buy('watermelon') }));
-    assert.strictEqual(r.coins, 1000 - 150 - 600); assert.strictEqual(r.up.field, 1); assert.strictEqual(r.up.speed, 1); assert.strictEqual(r.open, 18);
-    assert.deepStrictEqual(r.poor, { ok: false, reason: 'short', short: 2500 - 250 });
+    assert.strictEqual(r.coins, 1000 - 60 - 600); assert.strictEqual(r.up.field, 1); assert.strictEqual(r.up.speed, 1); assert.strictEqual(r.open, 16);
+    assert.deepStrictEqual(r.poor, { ok: false, reason: 'short', short: 2500 - 340 });
     await p.waitForSelector('#speed:not([hidden]) [data-v="2"]'); await p.click('#speed [data-v="2"]');
     assert.strictEqual(await p.evaluate(() => __farm.S.speed), 2);
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     r = await p.evaluate(() => ({ coins: __farm.S.coins, field: __farm.S.up.field, open: __farm.tiles.filter(t => t.open).length, speed: __farm.S.speed, bar: !document.getElementById('speed').hidden }));
-    assert.deepStrictEqual(r, { coins: 250, field: 1, open: 18, speed: 2, bar: true }); assert.deepStrictEqual(p.errs, []);
+    assert.deepStrictEqual(r, { coins: 340, field: 1, open: 16, speed: 2, bar: true }); assert.deepStrictEqual(p.errs, []);
   });
   await test('wide hoe tills 3x3, harvests drop seeds, strawberries regrow', async ctx => {
     const p = await open(ctx);
-    const r = await p.evaluate(() => { const S = __farm.S, T = __farm.tiles; S.coins = 1e5; for (const id of ['field', 'field', 'hoe', 'hoe', 'strawberry', 'basket', 'basket']) __farm.buy(id);
+    const r = await p.evaluate(() => { const S = __farm.S, T = __farm.tiles; S.coins = 1e5; for (const id of ['field', 'field', 'field', 'hoe', 'hoe', 'strawberry', 'basket', 'basket']) __farm.buy(id);
       for (const t of T) { t.debris = t.weed = null; t.tilled = false; t.crop = null; }
       __farm.F.bag = { carrot: 0, cabbage: 0, pumpkin: 0, strawberry: 0, watermelon: 0 }; S.store = Object.assign({}, __farm.F.bag); __farm.F.gathered = 0;
       __farm.advance(12, 10); const tilled = T.filter(t => t.tilled).length;

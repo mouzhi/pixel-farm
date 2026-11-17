@@ -4,7 +4,7 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 20, RNG = process.argv[3];
-const ORDER = ['can', 'field', 'shoe', 'hoe', 'basket', 'field', 'speed', 'can', 'axe', 'forest', 'strawberry', 'east', 'shoe', 'basket', 'orchard', 'watermelon', 'speed', 'south', 'hoe', 'can', 'shoe'];
+const ORDER = ['field', 'can', 'field', 'shoe', 'hoe', 'basket', 'field', 'speed', 'can', 'axe', 'forest', 'strawberry', 'east', 'shoe', 'basket', 'orchard', 'watermelon', 'speed', 'south', 'hoe', 'can', 'shoe'];
 // Phase 3 player: once he has the axe and the forest he marks 2 trees a day, and plants every sapling on the next free spot of a fixed list
 const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]); for (const [x, y] of [[20, 70], [30, 96], [176, 24], [184, 100], [12, 120]]) PLANT.push([x, y]);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png' };

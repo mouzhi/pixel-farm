@@ -8,7 +8,7 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 4;
+  const CURRENT = 5;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -19,6 +19,18 @@
     // v4.3 big map: no region or axe bought, the default forest (trees: null), no orders, no wood or saplings; tiles are the home field
     4: s => Object.assign({}, s, { upgrades: Object.assign({ axe: 0, forest: 0, east: 0, orchard: 0, south: 0 }, s.upgrades), trees: null, orders: [],
       inventory: Object.assign({ wood: 0, saplings: { apple: 0, orange: 0 } }, s.inventory), tiles: (s.tiles || []).map(t => Object.assign({ f: 'home' }, t)) }),
+    // v4.3.1 early field rungs: published v4 levels were 0→12, 1→18, 2→24; new levels are 0→12, 1→16, 2→20, 3→24.
+    // Old field 1 (18 tiles) becomes 2 (20 tiles, never lose any); old field 2 stays fully open at 3.
+    // If the save already has more home tiles open than the bought level would cover, raise the level to match.
+    5: s => {
+      const up = Object.assign({}, s.upgrades);
+      const old = Math.max(0, up.field | 0);
+      let lv = old >= 2 ? 3 : old >= 1 ? 2 : 0;
+      const n = (s.tiles || []).filter(t => (t.f || 'home') === 'home' && t.open !== false).length;
+      if (n >= 21) lv = Math.max(lv, 3); else if (n >= 17) lv = Math.max(lv, 2); else if (n >= 13) lv = Math.max(lv, 1);
+      up.field = lv;
+      return Object.assign({}, s, { upgrades: up });
+    },
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
   const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south']; // levels; max levels live in sim.js

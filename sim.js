@@ -25,7 +25,11 @@
   const IDS = Object.keys(CROPS);
   // ---- shop: every item is a ladder of levels; upgrades[id] = how many levels are bought ----
   const SHOP = [
-    { id: 'field', name: '家门口的田', icon: 'field', levels: [{ cost: 150, label: '开垦东侧 6 格', desc: '田地 12 → 18 格' }, { cost: 250, label: '开垦最后 6 格', desc: '田地 18 → 24 格', }] },
+    { id: 'field', name: '家门口的田', icon: 'field', levels: [
+      { cost: 60, label: '开垦 4 格', desc: '田地 12 → 16 格' },
+      { cost: 130, label: '再开 4 格', desc: '田地 16 → 20 格' },
+      { cost: 250, label: '开垦最后 4 格', desc: '田地 20 → 24 格' },
+    ] },
     { id: 'can', name: '水壶', icon: 'can', levels: [{ cost: 80, label: '铜水壶', desc: '装 8 格水' }, { cost: 600, label: '银水壶', desc: '装 16 格水' }, { cost: 2000, label: '金水壶', desc: '装 30 格水' }] },
     { id: 'shoe', name: '鞋子', icon: 'shoe', levels: [{ cost: 200, label: '布鞋', desc: '走路 ×1.25' }, { cost: 800, label: '皮靴', desc: '走路 ×1.5' }, { cost: 2500, label: '风行靴', desc: '走路 ×1.8' }] },
     { id: 'hoe', name: '锄头', icon: 'hoe', levels: [{ cost: 250, label: '钢锄头', desc: '开垦快一倍' }, { cost: 3000, label: '宽锄头', desc: '一锄翻 3×3' }] },
@@ -66,9 +70,23 @@
     const L = it.levels[have];
     return { id, item: it, have, level: L, cost: L.cost, ok: coins >= L.cost, short: Math.max(0, L.cost - coins) };
   }
-  // 12 of the 24 home tiles are open at the start; the field upgrade opens the east 6 (rows 0-2), then the last row
+  // 12 of the 24 home tiles are open at the start; each field upgrade opens 4 more tiles (12 → 16 → 20 → 24)
+  // field 0: west 4 cols × first 3 rows. field 1: + east 2 cols of the first 2 rows.
+  // field 2: + the rest of row 2 and the west 2 of row 3. field 3: the last 4 of row 3.
   const START_COLS = 4, START_ROWS = 3;
-  const isOpen = (c, r, field) => (field >= 2) || (field >= 1 ? r < START_ROWS : c < START_COLS && r < START_ROWS);
+  const HOME_COLS = 6, HOME_ROWS = 4;
+  function isOpen(c, r, field) {
+    field = field | 0;
+    if (field >= 3) return true;
+    if (field >= 2) return r < 3 || (r === 3 && c < 2);
+    if (field >= 1) return r < 2 || (r === 2 && c < START_COLS);
+    return c < START_COLS && r < START_ROWS;
+  }
+  function homeOpenCount(field) {
+    let n = 0; for (let r = 0; r < HOME_ROWS; r++) for (let c = 0; c < HOME_COLS; c++) if (isOpen(c, r, field)) n++; return n;
+  }
+  // lowest field level whose isOpen covers at least `n` already-open home tiles (never shrink a save)
+  function fieldLevelForOpen(n) { n = n | 0; return n >= 21 ? 3 : n >= 17 ? 2 : n >= 13 ? 1 : 0; }
   const startOpen = (c, r) => isOpen(c, r, 0);
   const emptySeeds = () => Object.fromEntries(IDS.map(k => [k, 0]));
   const startPrices = () => Object.fromEntries(IDS.map(k => [k, 1]));
@@ -135,7 +153,7 @@
     return { awaySec, days: Math.round(days * 100) / 100, capped: awaySec / DAY_REAL_SEC * OFFLINE_RATE > OFFLINE_CAP_DAYS, avg: Math.round(avg), gold: Math.floor(avg * days) };
   }
   const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC,
-    CROPS, IDS, SHOP, SHOP_IDS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, isOpen, startOpen, emptySeeds, startPrices,
+    CROPS, IDS, SHOP, SHOP_IDS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
     ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);
