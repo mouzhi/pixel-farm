@@ -243,7 +243,7 @@ const SPRITES = {
 // on its lower right, with a deep separation edge along the clump's lower right. A dark "inside" copy of every clump sits
 // behind it and never moves, so a clump lifted by the wind never opens a hole. Only clump *positions* turn with the camera
 // (a ball looks the same from every side), so canopies stay crisp at every angle. Trunks are small voxel stacks.
-// Species: broad oak (green or sunlit olive), dark back-row oak, layered pine (tiers ride a bending trunk), birch, bush.
+// Species: broad oak (green or sunlit olive), dark back-row oak, layered pine (still trunk, only the top tiers sway), birch, bush.
 function part(box, fn) { const [x0, x1, y0, y1, z0, z1] = box, f = (x, y, z) => fn(x + x0, y + y0, z + z0); if (fn.normal) f.normal = (x, y, z) => fn.normal(x + x0, y + y0, z + z0);
   const m = buildModel(x1 - x0 + 1, y1 - y0 + 1, z1 - z0 + 1, f, { noOutline: true });
   m.nearest = true;
@@ -325,7 +325,7 @@ function oakDef(seed, ramp = 'oak', sc = 1) {
   const n = Math.round((14 + r() * 5) * Math.min(1.1, sc));
   for (let i = 0; i < n; i++) { const f = (i + 0.5) / n, zz = 1 - f * 1.4, rad = Math.sqrt(Math.max(0.04, 1 - zz * zz)), a = i * 2.39996 + r() * 0.4;
     discs.push({ ox: Math.cos(a) * rad * CR * 0.74, oy: Math.sin(a) * rad * CR * 0.74, cz: cz0 + zz * CZ, r: Math.max(4, Math.round((zz > 0.55 ? 6 : 7.5) * sc + r() * 2)), ramp, seed: (seed + i) % 6, sh: zz > 0.35 ? 0 : zz > -0.1 ? 1 : 2 }); }
-  return finishTree({ kind: 'oak', parts, discs, push: 2.2, period: 2.2, damp: 0.35, h: Math.ceil(cz0 + CZ + 12) }, cz0, CR * 0.8);
+  return finishTree({ kind: 'oak', parts, discs, push: 0.75, period: 5.5, damp: 1.05, h: Math.ceil(cz0 + CZ + 12) }, cz0, CR * 0.8);
 }
 function birchDef(seed, sc = 1) {
   const r = mulberry32(seed), parts = [], discs = [], T = Math.round((32 + r() * 8) * sc), lean = (r() - 0.5) * 0.12;
@@ -334,28 +334,28 @@ function birchDef(seed, sc = 1) {
   const n = Math.round(8 + r() * 3), cz0 = T * 0.78;
   for (let i = 0; i < n; i++) { const f = (i + 0.5) / n, zz = 1 - f * 1.8, a = i * 2.39996 + r(), rad = (0.45 + 0.55 * Math.sqrt(Math.max(0, 1 - zz * zz * 0.6))) * 8 * sc;
     discs.push({ ox: Math.cos(a) * rad + lean * cz0 * 0.5, oy: Math.sin(a) * rad * 0.8, cz: cz0 + zz * 12 * sc, r: Math.round(4 + r() * 2), ramp: 'birch', seed: (seed + i) % 6, sh: zz > 0.2 ? 0 : 1 }); }
-  return finishTree({ kind: 'birch', parts, discs, push: 2.0, period: 1.8, damp: 0.3, h: Math.ceil(cz0 + 14 * sc + 10) }, cz0, 9 * sc);
+  return finishTree({ kind: 'birch', parts, discs, push: 0.7, period: 4.8, damp: 1.05, h: Math.ceil(cz0 + 14 * sc + 10) }, cz0, 9 * sc);
 }
 function pineDef(seed, ramp = 'pine', sc = 1) {
   const r = mulberry32(seed), parts = [], discs = [], H = Math.round((62 + r() * 16) * sc), n = 5 + Math.floor(r() * 2), R0 = (16 + r() * 4) * sc;
   parts.push(part([-2, 2, -2, 2, 0, H - 6], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? Wd[1] : null));
   const base = 10 * sc, step = (H - 8 - base) / n;
   for (let i = 0; i < n; i++) { const up = (i + 0.5) / n;
-    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(4, Math.round(R0 * (1 - i / (n + 0.6)) + 2)), ramp, seed: (seed + i) % 3, tier: 1, w: 0.25 + 0.6 * up, bend: (i / n) ** 2 }); }
-  discs.push({ ox: 0, oy: 0, cz: Math.round(base + n * step), r: 3, ramp, seed: 1, tier: 1, w: 0.9, bend: 1 });
-  return finishTree({ kind: 'pine', parts, discs, push: 3.6, period: 2.8, damp: 0.22, h: H + 8, bendTrunk: 1 }, 0, 1);
+    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(4, Math.round(R0 * (1 - i / (n + 0.6)) + 2)), ramp, seed: (seed + i) % 3, tier: 1, w: up > 0.62 ? 0.2 + 0.25 * up : 0 }); }
+  discs.push({ ox: 0, oy: 0, cz: Math.round(base + n * step), r: 3, ramp, seed: 1, tier: 1, w: 0.4 });
+  return finishTree({ kind: 'pine', parts, discs, push: 0.3, period: 8.0, damp: 1.2, h: H + 8 }, 0, 1);
 }
 function bushDef(seed, ramp = 'oak') {
   const r = mulberry32(seed), discs = [], berries = seed % 2 === 1;
   for (let i = 0; i < 5; i++) { const a = r() * 1.2 + i * 1.257; discs.push({ ox: Math.cos(a) * 5, oy: Math.sin(a) * 4, cz: 5 + r() * 2, r: 5 + Math.round(r()), ramp, seed: i, berries, sh: 1 }); }
   discs.push({ ox: 0, oy: 0, cz: 9, r: 6, ramp, seed: 5, berries });
-  return finishTree({ kind: 'bush', parts: [], discs, push: 1.4, period: 1.0, damp: 0.35, h: 18 }, 6, 5);
+  return finishTree({ kind: 'bush', parts: [], discs, push: 0.55, period: 3.6, damp: 1.0, h: 18 }, 6, 5);
 }
 // ---------- wind: gust patches crossing the map + a breeze around them (world units) ----------
 const GUSTS = [];
 { const gr = mulberry32(4242); for (let i = 0; i < 6; i++) GUSTS.push({ t0: i * 20 / 6 + (i === 3 ? -2.0 : 0), speed: 18 + gr() * 6, cy: gr() * WH, hh: i % 3 === 0 ? 0 : 16 + gr() * 8, len: 10 + gr() * 7, str: 0.5 + gr() * 0.75 }); }
 let windT = 0;
-const WAVE_T = 1.54, WAVE_L = 26;
+const WAVE_T = 5.4, WAVE_L = 36; // slower, longer traveling breeze (was 1.54 s / 26)
 const wrap = (v, lo, hi) => { const L = hi - lo; return ((v - lo) % L + L) % L + lo; };
 function windField(x, y, spread) { let s = 0; const al = x + 0.25 * y;
   for (const g of GUSTS) { const path = g.speed * 20; const d = wrap(al - g.speed * (windT - g.t0), -path / 2, path / 2);
@@ -363,10 +363,22 @@ function windField(x, y, spread) { let s = 0; const al = x + 0.25 * y;
 if (Q.has('nowind')) GUSTS.forEach(g => g.str = 0);
 const gustAt = (x, y) => windField(x, y, 1), breezeAt = (x, y) => Math.min(1.6 * windField(x, y, 2.2), 1);
 const phaseAt = (x, y, t) => 2 * Math.PI * (t / WAVE_T - (x + 0.25 * y) / WAVE_L);
-const TS = 2.2; // wind amplitude scale for the bigger style-A trees: motion stays in whole pixels
-function clumpPose(x, y, w, lean, t) { // screen-px downwind offset and lift
+const TS = 0.7; // mostly 0–1 px; gust peaks on broadleaf can reach 2. Motion stays in whole pixels
+function windPose(x, y, t) { // unrounded unit sway at a point: downwind px, upward lift
   const b = breezeAt(x, y), g = gustAt(x, y), a = phaseAt(x, y, t);
-  return [Math.round(lean * w + TS * w * (0.9 * b + 1.3 * g) * (0.5 - 0.5 * Math.cos(a))), Math.round(TS * w * (0.75 * b + 0.5 * g) * Math.max(Math.sin(a), 0))];
+  return [TS * (0.9 * b + 1.3 * g) * (0.5 - 0.5 * Math.cos(a)), TS * (0.75 * b + 0.5 * g) * Math.max(Math.sin(a), 0)];
+}
+function clumpPose(x, y, w, lean, t) { // billboards / crops: integer offset
+  const [dx, dz] = windPose(x, y, t);
+  return [Math.round(lean * w + dx * w), Math.round(dz * w)];
+}
+function discSway(o, p, poseT, unit) { // one canopy clump; the whole tree shares one wind sample so layers do not shear
+  if (!(p.w > 0)) return [0, 0];
+  const pine = o.tree.kind === 'pine', cap = pine ? 1 : 2, [wx, wz] = unit || windPose(o.x, o.y, poseT);
+  let dx = Math.round(wx * p.w + o.lean * (p.bend ?? p.w)), dz = pine ? 0 : Math.round(wz * p.w);
+  if (dx > cap) dx = cap; else if (dx < -cap) dx = -cap;
+  if (dz > cap) dz = cap; else if (dz < 0) dz = 0;
+  return [dx, dz];
 }
 
 // ---------- canvas ----------
@@ -900,6 +912,8 @@ function render() {
 }
 // Trees are composed in plain pixel arrays (trunk stack + clump sprites + outline), then put once: no canvas read-back per pose,
 // which matters with ~100 trees all re-posing at 10 Hz and every one re-laid while the camera turns.
+// Trunks are fixed. Every clump on a tree shares one wind sample (the trunk position), scaled by weight, so the canopy
+// sways as a whole instead of each tier jumping on its own phase. Pines also cap at 1 px and drop the vertical lift.
 function spritePixels(c) { return c.d32 || (c.d32 = new Uint32Array(c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer)); }
 function stackPixels(m, a) { const k = stackCanvas(m, a); if (!k.d32) k.d32 = new Uint32Array(k.c.getContext('2d').getImageData(0, 0, k.c.width, k.c.height).data.buffer); return k; }
 function blit(dst, dw, dh, src, sw, sh, x0, y0, shiftOf) {
@@ -914,13 +928,11 @@ function outlineBuf(d, w, h) { if (OBUF.length < d.length) OBUF = new Uint32Arra
   for (let i = 0; i < d.length; i++) if (o[i]) d[i] = o[i];
 }
 function treeCache(o, poseT) { // trunk stack + leaf clumps placed relative to the tree's whole-pixel origin, cached per pose
-  const T = o.tree, items = [];
-  for (const p of T.discs) { let dx = 0, dz = 0;
-    if (p.w > 0) { const q = clumpPose(o.x + p.ox / RS, o.y + p.oy / RS, p.w, 0, poseT); dx = q[0] + Math.round(o.lean * (p.bend ?? p.w)); dz = q[1]; }
+  const T = o.tree, items = [], unit = windPose(o.x, o.y, poseT);
+  for (const p of T.discs) { const [dx, dz] = discSway(o, p, poseT, unit);
     items.push([p, dx, dz, p.inside ? -1e3 + p.cz * 0.01 : (p.ox * SA + p.oy * CA) * K + p.cz * 0.6]); }
   items.sort((a, b) => a[3] - b[3]); // inside layer first, then back to front and low to high
-  const bend = T.bendTrunk ? Math.round(o.lean) : 0;
-  const key = AQ + '|' + bend + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
+  const key = AQ + '|' + items.map(i => i[1] + ',' + i[2]).join(';');
   const k = o._ck || (o._ck = {});
   if (k.key !== key) {
     if (!T.R) { T.R = 8; for (const p of T.discs) T.R = Math.max(T.R, Math.hypot(p.ox, p.oy) + p.r + 2); T.R = Math.ceil(T.R) + 6; }
@@ -928,7 +940,7 @@ function treeCache(o, poseT) { // trunk stack + leaf clumps placed relative to t
       k.buf = new Uint32Array(n); k.img = new ImageData(new Uint8ClampedArray(k.buf.buffer), k.c.width, k.c.height); }
     const cw = k.c.width, ch = k.c.height, d = k.buf; k.ox = T.R; k.oy = Math.ceil(T.R * K) + T.h + 8; d.fill(0);
     for (const p of T.parts) { const s = stackPixels(p.m, AQ), bx = k.ox + Math.round(p.ox * CA - p.oy * SA) - s.ox, by = k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - p.z - s.oy;
-      blit(d, cw, ch, s.d32, s.c.width, s.c.height, bx, by, bend ? y => Math.round(o.lean * clamp((s.oy - y) / p.m.h, 0, 1) ** 2) : null); } // a pine trunk bends: lean * up^2
+      blit(d, cw, ch, s.d32, s.c.width, s.c.height, bx, by, null); } // trunks never move
     for (const [p, dx, dz] of items) { const s = clumpSprite(p), px = spritePixels(s.c);
       blit(d, cw, ch, px, s.c.width, s.c.height, k.ox + Math.round(p.ox * CA - p.oy * SA) + dx - s.rx, k.oy + Math.round((p.ox * SA + p.oy * CA) * K) - Math.round(p.cz + dz) - s.ry); }
     outlineBuf(d, cw, ch); k.g.putImageData(k.img, 0, 0); k.key = key; k.d32 = d;
