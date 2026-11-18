@@ -45,7 +45,7 @@ ok('seeding an old save keeps unseen cells empty and does not drop catch or rare
 ok('achievements are listed; later-phase ones stay locked until those features exist', () => {
   assert.strictEqual(CX.ACHIEVEMENTS.length, 21);
   const later = CX.ACHIEVEMENTS.filter(a => a.later).map(a => a.id);
-  assert.deepStrictEqual(later.sort(), ['herding', 'newhouse', 'nightlight', 'party', 'sprinkler'].sort());
+  assert.deepStrictEqual(later.sort(), ['newhouse']);
   const due = CX.dueAchievements({ day: 40, coins: 10000, upgrades: {}, family: {}, achievements: [], streaks: CX.emptyStreaks() });
   assert(!due.some(u => later.includes(u.id)));
   assert(due.some(u => u.id === 'gold1000'));

@@ -1761,7 +1761,7 @@ function installTask(sp) {
 }
 function sprinklerTick() {
   if (!S.works.sprinklers.length) return; const cov = sprCover();
-  S.works.sprinklers.forEach((s, i) => { if (s._c) return; let n = 0; // v5.7.0: not while someone carries it for (const t of cov[i] || []) if (t.open && t.crop && !t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.watered = true; n++; }
+  S.works.sprinklers.forEach((s, i) => { if (s._c) return; let n = 0; /* v5.7.0: not while someone carries it */ for (const t of cov[i] || []) if (t.open && t.crop && !t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.watered = true; n++; }
     if (n) { groundDirty = true; s.spray = realT + 2.5; s.wday = S.day; } });
 }
 // workshops: what someone carrying goods would hand in (index flags into the basket), so the stall run keeps them
