@@ -1,4 +1,4 @@
-// Browser smoke for the v5.4.0 collection book, wandering dogs and ornamental pond fish: node tools/codex-smoke.js
+// Browser smoke for the v5.4.1 collection book, wandering dogs and ornamental pond fish: node tools/codex-smoke.js
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
@@ -25,13 +25,13 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.4.0 and a fresh save is v10 with an empty book', async ctx => {
+  await test('version 5.4.1 and a fresh save is v10 with an empty book', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const s = __farm.snapshot();
       return { v: __farm.version, sv: s.saveVersion, entries: Object.keys(s.codex.entries).length, food: s.inventory.fishFood, pond: (s.pondFish || []).length, btn: !!document.getElementById('codexBtn') };
     });
-    assert.strictEqual(r.v, '5.4.0'); assert.strictEqual(r.sv, 10); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
+    assert.strictEqual(r.v, '5.4.1'); assert.strictEqual(r.sv, 10); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
     assert.deepStrictEqual(p.errs, []);
   });
 
@@ -48,17 +48,39 @@ async function test(name, fn) {
       const tabs = [...box.querySelectorAll('[data-tab]')].map(b => b.textContent);
       const cells = box.querySelectorAll('.cell:not(.locked)').length;
       const locked = box.querySelectorAll('.cell.locked').length;
-      box.querySelector('[data-key="fish:koi"]').click();
-      const detail = box.querySelector('.detail').textContent;
+      const koiIco = box.querySelector('[data-key="fish:koi"] .ico');
+      const lockedIco = box.querySelector('.cell.locked .ico');
+      const sw = box.querySelectorAll('.sw').length;
+      const koiBg = koiIco ? getComputedStyle(koiIco).backgroundImage : '';
+      const lockedBg = lockedIco ? getComputedStyle(lockedIco).backgroundImage : '';
+      const qMarks = [...box.querySelectorAll('.cell.locked .nm')].filter(el => el.textContent === '？').length;
+      const koiCell = box.querySelector('[data-key="fish:koi"]');
+      const qEl = box.querySelector('.cell.locked .nm');
+      const headEl = box.querySelector('.shead b');
+      const colors = { koiClass: koiCell.className, koiColor: getComputedStyle(koiCell.querySelector('.nm')).color, qColor: qEl ? getComputedStyle(qEl).color : '', headColor: headEl ? getComputedStyle(headEl).color : '' };
+      koiCell.click();
+      const detailEl = box.querySelector('.detail');
+      const detail = detailEl.textContent;
+      colors.detailColor = getComputedStyle(detailEl).color;
       box.querySelector('[data-tab="ach"]').click();
       const ach = box.textContent;
       box.querySelector('[data-tab="ms"]').click();
       const ms = box.textContent;
-      return { hidden: box.hidden, tabs, cells, locked, detail, ach, ms };
+      return Object.assign({ hidden: box.hidden, tabs, cells, locked, detail, ach, ms, sw, koiBg, lockedBg, qMarks }, colors);
     });
     assert.strictEqual(r.hidden, false);
     assert.deepStrictEqual(r.tabs, ['图鉴', '成就', '里程碑']);
     assert(r.cells >= 1 && r.locked >= 8);
+    assert.strictEqual(r.sw, 0, 'no colour swatches in the book');
+    assert(/data:image/.test(r.koiBg), 'discovered koi uses a pixel sprite');
+    assert(/data:image/.test(r.lockedBg), 'unseen cells use a silhouette, not a question mark');
+    assert(r.qMarks >= 8);
+    assert(r.koiClass && /r-epic/.test(r.koiClass), 'koi name is marked very-rare');
+    const dark = (c) => { const m = /rgb\((\d+),\s*(\d+),\s*(\d+)\)/.exec(c || ''); if (!m) return true; return +m[1] + +m[2] + +m[3] < 200; };
+    assert(!dark(r.koiColor), 'discovered name should be a light rarity colour, got ' + r.koiColor);
+    assert(!dark(r.qColor), 'unseen ？ should be a light label, got ' + r.qColor);
+    assert(!dark(r.detailColor), 'help text should be light, got ' + r.detailColor);
+    assert(!dark(r.headColor), 'header should be light, got ' + r.headColor);
     assert(/第 4 天/.test(r.detail) && /一共遇到 1 次/.test(r.detail));
     assert(/这波是真的/.test(r.ach) && /第 4 天/.test(r.ach));
     assert(/农场开张/.test(r.ms));
@@ -128,7 +150,7 @@ async function test(name, fn) {
       const s = __farm.snapshot();
       return { sv: s.saveVersion, v: __farm.version, bass: !!(s.codex.entries && s.codex.entries['fish:bass']), sword: !!(s.codex.entries && s.codex.entries['fish:sword']), food: s.inventory.fishFood, coins: s.coins };
     });
-    assert.strictEqual(r.sv, 10); assert.strictEqual(r.v, '5.4.0'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
+    assert.strictEqual(r.sv, 10); assert.strictEqual(r.v, '5.4.1'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
     assert.deepStrictEqual(p.errs, []);
     await p.close();
   });

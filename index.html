@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.4.0</title>
+<title>像素堆叠 · 放置农场 v5.4.1</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -120,28 +120,35 @@
     #hud .row.res{gap:6px 10px}
   }
 
-  #codex{position:relative;right:auto;top:auto;bottom:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
-  #codex .shead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}#codex .shead b:first-child{font-size:16px}#codex .shead .x{margin-left:auto;padding:0 7px}
+  #codex{position:relative;right:auto;top:auto;bottom:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px;color:#fff6dc}
+  #codex .shead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}#codex .shead b:first-child{font-size:16px;color:#ffd76a}#codex .shead .x{margin-left:auto;padding:0 7px}
   #codex .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
   #codex .tabs .pbtn{padding:2px 8px;font-size:12px}
-  #codex .sec{font-size:12px;opacity:.7;margin:8px 0 4px}
-  #codex .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:5px}
-  #codex .cell{background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 2px 3px;text-align:center;cursor:pointer;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
-  #codex .cell .nm{font-size:11px;font-weight:500;line-height:1.2}
-  #codex .cell.locked{opacity:.55;cursor:default}
+  #codex .sec{font-size:12px;margin:8px 0 4px;color:#e8c78a;opacity:1}
+  #codex .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:5px}
+  #codex .cell{background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:5px 2px 4px;text-align:center;cursor:pointer;min-height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff6dc}
+  #codex .cell .nm{font-size:12px;font-weight:600;line-height:1.2;color:#fff6dc}
+  #codex .cell.r-common .nm{color:#bff0a0}
+  #codex .cell.r-rare .nm{color:#8cc6dc}
+  #codex .cell.r-epic .nm{color:#ffb86a}
+  #codex .cell.locked{opacity:1;cursor:default}
+  #codex .cell.locked .nm{color:#e8c78a;font-weight:600}
   #codex .cell.on{border-color:#e8c78a}
-  #codex .sw{width:16px;height:10px;image-rendering:pixelated;display:block}
-  #codex .q{font-size:18px;color:#8a6a44;line-height:1}
-  #codex .detail{font-weight:500;font-size:12px;opacity:.9;margin:6px 0 2px;min-height:1.4em}
+  #codex .ico{display:block;image-rendering:pixelated;image-rendering:crisp-edges;background-repeat:no-repeat;background-position:center;flex:none}
+  #codex .cell.locked .ico{opacity:.95}
+  #codex .q{font-size:18px;color:#e8c78a;line-height:1}
+  #codex .detail{font-weight:500;font-size:12px;margin:6px 0 2px;min-height:1.4em;color:#f3e2b8;opacity:1}
   #codex .cards{display:flex;flex-direction:column;gap:5px}
-  #codex .card{display:flex;align-items:flex-start;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:5px 6px}
-  #codex .card.locked{opacity:.55}
-  #codex .card .nm{font-weight:600}
-  #codex .card .hint{font-weight:500;font-size:12px;opacity:.8}
+  #codex .card{display:flex;align-items:flex-start;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:5px 6px;color:#fff6dc}
+  #codex .card.locked{opacity:1}
+  #codex .card.locked .nm{color:#e8c78a}
+  #codex .card.locked .hint{color:#f3e2b8}
+  #codex .card .nm{font-weight:600;color:#fff6dc}
+  #codex .card .hint{font-weight:500;font-size:12px;color:#f3e2b8;opacity:1}
   #codex .card .when{font-size:11px;color:#ffd76a;margin-left:auto;flex:none;white-space:nowrap}
   #codex .badge{color:#ffd76a;font-size:14px;flex:none}
-  #codex .later{font-size:11px;opacity:.7}
-  #codex .empty{opacity:.7;font-weight:500;padding:4px 2px}
+  #codex .later{font-size:11px;color:#e8c78a;opacity:1}
+  #codex .empty{color:#f3e2b8;font-weight:500;padding:4px 2px}
 </style>
 </head>
 <body>
@@ -167,7 +174,7 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.4.0 · 图鉴、狗的日常和池塘观赏鱼（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.4.1 · 图鉴换成像素图标（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
@@ -203,6 +210,7 @@
 <script src="family.js"></script>
 <script src="surprise.js"></script>
 <script src="codex.js"></script>
+  <script src="codex_icons.js"></script>
 <script src="save.js"></script>
 <script src="playlog.js"></script>
 <script src="fx.js"></script>

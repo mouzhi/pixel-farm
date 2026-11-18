@@ -248,13 +248,60 @@
   // ---- v5.4.0 collection book: 图鉴 / 成就 / 里程碑, next to the storehouse button ----
   const BOOK = window.PFCodex, codexEl = $('codex');
   let codexTab = 'book', codexKey = '', codexFocus = '';
-  function cellSw(it) {
-    if (it.col) return `<i class="sw" style="background:${it.col}"></i>`;
+  const ICN = window.PFCodexIcons;
+  if (ICN) {
+    if (ICN.fishURL('goldfish')) ICONS.goldfish = ICN.fishURL('goldfish');
+    if (ICN.fishURL('koi')) ICONS.koi = ICN.fishURL('koi');
+  }
+  function icoTag(url, cls, w, h) {
+    if (!url) return '';
+    return `<i class="ico ${cls || ''}" style="width:${w}px;height:${h}px;background-image:url(${url});background-size:${w}px ${h}px"></i>`;
+  }
+  function canvasImg(c) {
+    const g = c.getContext('2d');
+    return { w: c.width, h: c.height, px: new Uint8ClampedArray(g.getImageData(0, 0, c.width, c.height).data) };
+  }
+  function decorateCrop(type, mode, seen) {
+    const src = G.cropFrame && G.cropFrame(type);
+    if (!src) return cropIcon(type);
+    const pad = mode === 'glow' ? 3 : 2, scale = mode === 'giant' ? 2 : 1;
+    const c = document.createElement('canvas');
+    c.width = src.width * scale + pad * 2; c.height = src.height * scale + pad * 2;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
+    if (mode === 'glow') {
+      const im = g.getImageData(0, 0, c.width, c.height), d = im.data, w = c.width, h = c.height;
+      const aat = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : d[(y * w + x) * 4 + 3];
+      const gold = [255, 215, 106, 255], cream = [255, 246, 220, 255], extra = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (aat(x, y)) continue;
+        if (aat(x - 1, y) || aat(x + 1, y) || aat(x, y - 1) || aat(x, y + 1)) extra.push(x, y);
+      }
+      for (let i = 0; i < extra.length; i += 2) {
+        const x = extra[i], y = extra[i + 1], j = (y * w + x) * 4, col = (x + y) % 2 ? gold : cream;
+        d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255;
+      }
+      g.putImageData(im, 0, 0);
+      g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
+    }
+    let img = canvasImg(c);
+    if (!seen && ICN) img = ICN.silhouette(img);
+    const url = ICN ? ICN.urlOf(img) : c.toDataURL();
+    const show = mode === 'giant' ? 1.5 : 2, dw = Math.round(c.width * show), dh = Math.round(c.height * show);
+    return icoTag(url, 'crop', dw, dh);
+  }
+  function cellArt(it, seen) {
+    if (ICN && it.group === 'fish' && ICN.has('fish', it.id)) {
+      const url = seen ? ICN.fishURL(it.id) : ICN.silURL('fish', it.id);
+      return icoTag(url, 'fish', 72, 48);
+    }
+    if (ICN && it.group === 'rare' && ICN.has('rare', it.id)) {
+      const url = seen ? ICN.rareURL(it.id) : ICN.silURL('rare', it.id);
+      return icoTag(url, 'rare', 48, 48);
+    }
+    if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     if (ICONS[it.id] || ICONS[it.type]) return icon(it.id || it.type);
-    if (it.group === 'glow') return icon(it.type) || icon('field');
-    if (it.group === 'giant') return icon(it.type) || icon('field');
-    if (it.group === 'rare') return it.type === 'truffle' ? icon('truffle') : icon('egg') || '<i class="sw" style="background:#ffd76a"></i>';
-    return '<i class="sw" style="background:#8a6a44"></i>';
+    return '<i class="ico"></i>';
   }
   function drawCodex(force) {
     if (!codexEl || !BOOK) return;
@@ -278,8 +325,9 @@
         h += '<div class="grid">';
         for (const it of g.items) {
           const e = BOOK.entryOf(S.codex, it.key);
-          if (e) h += `<button type="button" class="cell${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellSw(it)}<span class="nm">${esc(it.name)}</span></button>`;
-          else h += `<div class="cell locked"><span class="q">?</span><span class="nm">？</span></div>`;
+          const tier = BOOK.rarityOf ? BOOK.rarityOf(it) : (it.rarity || 'common');
+          if (e) h += `<button type="button" class="cell r-${esc(tier)}${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellArt(it, true)}<span class="nm">${esc(it.name)}</span></button>`;
+          else h += `<div class="cell locked">${cellArt(it, false)}<span class="nm">？</span></div>`;
         }
         h += '</div>';
       }
