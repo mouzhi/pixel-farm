@@ -431,7 +431,7 @@
           const e = BOOK.entryOf(S.codex, it.key);
           const tier = BOOK.rarityOf ? BOOK.rarityOf(it) : (it.rarity || 'common');
           if (e) h += `<button type="button" class="cell r-${esc(tier)}${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellArt(it, true)}<span class="nm">${esc(it.name)}</span></button>`;
-          else h += `<div class="cell locked">${cellArt(it, false)}<span class="nm">？</span></div>`;
+          else h += `<div class="cell locked" data-lock="${it.key}">${cellArt(it, false)}<span class="nm">？</span></div>`;
         }
         h += '</div>';
       }

@@ -69,7 +69,9 @@
     for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) out.push([i, j]);
     return out; }
   // every cell under the box is plain grass (not a path, not a door front, not a fence, water, tree or building)
-  function onGrass(g, b, grass) { for (const [i, j] of cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h || g.cost[j * g.w + i] !== grass) return false; } return true; }
+  // `own`: the box the thing being moved blocks right now (its own cells count as grass, so it can shift a little)
+  function onGrass(g, b, grass, own) { const mine = new Set(own ? cellsOf(g, own).map(([i, j]) => j * g.w + i) : []);
+    for (const [i, j] of cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return false; const k = j * g.w + i; if (g.cost[k] !== grass && !mine.has(k)) return false; } return true; }
   // cells reachable from `from` (4-neighbour flood over walkable cells, `extra` boxes counted as blocked)
   function reach(g, from, extra) {
     const blk = new Uint8Array(g.w * g.h); for (const b of extra || []) for (const [i, j] of cellsOf(g, b)) if (i >= 0 && j >= 0 && i < g.w && j < g.h) blk[j * g.w + i] = 1;

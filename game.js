@@ -1901,12 +1901,14 @@ function entrySpots() { const L = NAV.LAYOUT, out = [L.DOOR, L.BARN_DOOR, L.WELL
   for (const id of PW.WORK_IDS) if (S.works.works[id] && S.works.works[id].at) out.push(PWA.doorOf(id));
   return out; }
 // skip: { what, ref } of the thing being moved (it does not collide with itself)
-function placeOk(x, y, what, id, skip) {
+function placeOk(x, y, what, id, skip, self) { // self: the order being carried out (it does not collide with itself)
   x = Math.round(x * 2) / 2; y = Math.round(y * 2) / 2; const box = thingBox(what, id, x, y), res = (ok, why) => ({ ok, why, box, x, y });
   const pts = [{ x, y }, { x: box[0], y: box[1] }, { x: box[2], y: box[1] }, { x: box[0], y: box[3] }, { x: box[2], y: box[3] }];
   if (!pts.every(p => ownGround(p.x, p.y))) return res(false, '这里还没解锁');
   if (!pts.every(p => groundAt(p.x, p.y)[1] === 'grass')) return res(false, '只能放在草地上，不能压在路、水边或桥上');
-  const g = ensureNav(); if (!DC.onGrass(g, box, NAV.GRASS)) return res(false, '这里挡路了（路、门口、篱笆或别的东西）');
+  const g = ensureNav(), cur = skip && skip.what !== 'spr' ? thingNow({ op: 'move', what: skip.what, ref: skip.ref }) : null;
+  const own = cur ? thingBlock(skip.what, skip.what === 'decor' ? decorById(skip.ref) : id, cur.x, cur.y) : null;
+  if (!DC.onGrass(g, box, NAV.GRASS, own)) return res(false, '这里挡路了（路、门口、篱笆或别的东西）');
   if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && ptIn(t, box, 5))) return res(false, '不能放在田里');
   if (yard.some(c => ptIn(c, box, 3))) return res(false, '这里有杂物，等家人收拾完再放');
   const hb = NAV.houseBox(S.eff.house || 0); if (boxHit(box, [hb.x0, hb.y0, hb.x1, hb.y1], 8)) return res(false, '离房子太近');
@@ -1915,7 +1917,7 @@ function placeOk(x, y, what, id, skip) {
   if (S.trees.some(t => ptIn(t, box, 6)) || S.orders.some(o => o.type === 'plant' && ptIn(o, box, 8))) return res(false, '离树太近');
   const me = (w, r) => skip && skip.what === w && skip.ref === r;
   for (const p of S.decor.placed) if (!me('decor', p.u) && boxHit(box, DC.boxOf(p.x, p.y, DC.CATALOG[p.id].foot), 1)) return res(false, '这里已经有东西了');
-  for (const q of S.decor.orders) if (!(skip && q.what === skip.what && q.ref === skip.ref) && boxHit(box, thingBox(q.what, q.id || (q.what === 'decor' ? decorById(q.ref) : null) || 'flowerpot', q.x, q.y), 1)) return res(false, '这里已经约好要放别的了');
+  for (const q of S.decor.orders) if (q !== self && !(skip && q.what === skip.what && q.ref === skip.ref) && boxHit(box, thingBox(q.what, q.id || (q.what === 'decor' ? decorById(q.ref) : null) || 'flowerpot', q.x, q.y), 1)) return res(false, '这里已经约好要放别的了');
   for (const wid of PW.WORK_IDS) { const w = S.works.works[wid]; if (!w || !w.at || me('work', wid)) continue; const p = PW.workPos(w); if (boxHit(box, workBox(p.x, p.y), 1)) return res(false, '这里已经有东西了'); }
   const hs = PWA.hiveSpots(); for (let i = 0; i < hs.length; i++) if (hs[i] && !me('hive', i) && ptIn(hs[i], box, 4)) return res(false, '这里已经有东西了');
   for (let i = 0; i < S.works.sprinklers.length; i++) if (!me('spr', i) && ptIn(S.works.sprinklers[i], box, 3)) return res(false, '这里已经有东西了');
@@ -1958,7 +1960,7 @@ function setCarried(q, on) { if (q.what === 'hive' && S.works.hives[q.ref]) S.wo
 function dropOrder(q) { S.decor.orders = S.decor.orders.filter(o => o !== q); setCarried(q, false); for (const a of actors()) if (a._carry === q.u) a._carry = null; autoCache.key = ''; }
 function settle(q) { // put it down at q.x, q.y (checked again: the ground may have changed since the click)
   const id = q.id || (q.what === 'decor' ? decorById(q.ref) : null), skip = q.op === 'move' ? { what: q.what, ref: q.ref } : null;
-  let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip);
+  let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q);
   if (!r.ok) { dropOrder(q); log(`${thingName(q)}没法放到那里（${r.why}），留在原处`); return false; }
   const x = q.what === 'spr' ? Math.round(q.x * 10) / 10 : r.x, y = q.what === 'spr' ? Math.round(q.y * 10) / 10 : r.y;
   if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
@@ -1991,8 +1993,8 @@ function decorBoard(post, T) {
   if (!D.orders.some(q => !q.mine)) for (const id of Object.keys(D.inv)) { const want = (D.inv[id] | 0) - D.orders.filter(q => q.op === 'place' && q.id === id).length; if (want <= 0) continue;
     const sp = autoSpot(id); if (sp) { orderThing('place', 'decor', null, id, sp.x, sp.y, false); break; } }
   for (const q of D.orders) { if (q.st === 1 || !thingNow(q)) continue;
-    if (BUILD_LIKE(q)) post('carry', q.mine ? 64 : 24, { x: q.x - 9, y: q.y + 6 }, () => buildTask(q), 'dc:' + q.u, 'yard');
-    else { const at = thingNow(q); post('carry', q.mine ? 64 : 24, { x: at.x - 5, y: at.y + 3 }, () => carryPickTask(q), 'dc:' + q.u, 'yard'); } }
+    if (BUILD_LIKE(q)) post('carry', q.mine ? 64 : 40, { x: q.x - 9, y: q.y + 6 }, () => buildTask(q), 'dc:' + q.u, 'yard');
+    else { const at = thingNow(q); post('carry', q.mine ? 64 : 40, { x: at.x - 5, y: at.y + 3 }, () => carryPickTask(q), 'dc:' + q.u, 'yard'); } }
 }
 // ---- the party: an evening now and then (decided in the morning), the family and maybe a guest or two from the next town ----
 const partyArea = () => S.decor.placed.find(p => p.id === 'party') || null;
