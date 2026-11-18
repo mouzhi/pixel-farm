@@ -66,6 +66,19 @@ function lateGame() {
   return SAVE.migrate(base);
 }
 
+ok('published xhs v1.0.0 (save v9) migrates cleanly to v10', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v9-day4.json'), 'utf8'));
+  assert.strictEqual(raw.saveVersion, 9);
+  const s = SAVE.migrate(raw);
+  assert.strictEqual(s.saveVersion, 10);
+  assert(s.codex && typeof s.codex === 'object');
+  assert(Array.isArray(s.achievements));
+  assert(Array.isArray(s.milestones));
+  assert(s.streaks && typeof s.streaks === 'object');
+  assert.strictEqual((s.inventory && s.inventory.fishFood) | 0, 0);
+  assert(Array.isArray(s.pondFish));
+});
+
 ok('late-game compact JSON stays under the 1MB key cap', () => {
   const s = lateGame();
   const json = JSON.stringify(s);
@@ -210,6 +223,10 @@ function saveObj(at, day, extra) {
 function waitReady(P) {
   return Promise.resolve(P.ready);
 }
+// Cloud merge is intentionally backgrounded so the first frame is not blocked.
+function waitCloud(P) {
+  return waitReady(P).then(function () { return new Promise(function (r) { setTimeout(r, 120); }); });
+}
 
 ok('cloud stamp / isNewer: later savedAt wins; equal time uses larger day', () => {
   // load a platform just for the helpers
@@ -276,7 +293,7 @@ function cloudCases() {
         local: { [KEY]: JSON.stringify(localSave) },
         cloudItems: [{ id: 'aaaaaaaaaaaaaaaaaaaaaaaa', collection: 'farm', content: cloudSave }]
       });
-      return waitReady(P).then(() => {
+      return waitCloud(P).then(() => {
         const got = JSON.parse(P.store().getItem(KEY));
         assert.strictEqual(got.savedAt, 200, 'cloud-newer must be adopted');
         assert.strictEqual(got.clock.day, 9);
@@ -295,7 +312,7 @@ function cloudCases() {
         cloudItems: [{ id: 'bbbbbbbbbbbbbbbbbbbbbbbb', collection: 'farm', content: cloudSave }],
         failOnQuery: false
       });
-      return waitReady(P).then(() => {
+      return waitCloud(P).then(() => {
         const got = JSON.parse(P.store().getItem(KEY));
         assert.strictEqual(got.savedAt, 300, 'local-newer must be kept');
         assert.strictEqual(got.clock.day, 12);

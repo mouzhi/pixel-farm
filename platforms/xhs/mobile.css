@@ -75,6 +75,7 @@ html.xhs-mobile #loveBar,
 html.xhs-mobile #menuBtn,
 html.xhs-mobile #shopBtn,
 html.xhs-mobile #storeBtn,
+html.xhs-mobile #codexBtn,
 html.xhs-mobile #mapBtn,
 html.xhs-mobile #speed { display: none !important; }
 
@@ -332,6 +333,7 @@ html.xhs-mobile #inv .slot { width: 44px; height: 44px; min-width: 44px; min-hei
 /* 面板：木头/羊皮纸像素框，不要圆角底板 */
 html.xhs-mobile #shop,
 html.xhs-mobile #store,
+html.xhs-mobile #codex,
 html.xhs-mobile #menu,
 html.xhs-mobile #xhs-board,
 html.xhs-mobile #offline {
@@ -357,6 +359,7 @@ html.xhs-mobile #offline {
 }
 html.xhs-mobile #shop[hidden],
 html.xhs-mobile #store[hidden],
+html.xhs-mobile #codex[hidden],
 html.xhs-mobile #menu[hidden],
 html.xhs-mobile #xhs-board[hidden],
 html.xhs-mobile #offline[hidden] { display: none !important; }
@@ -504,4 +507,53 @@ html.xhs-mobile .pbtn {
 }
 @media (orientation: landscape) {
   html.xhs-mobile .rlab { display: none; }
+}
+
+/* 图鉴 / 存档：暂无木牌格，用同色圆底 + 字，保证 ≥44px 可点 */
+html.xhs-mobile .xhs-ico-codex i,
+html.xhs-mobile .xhs-ico-menu i {
+  position: relative;
+  background: #6a3e24;
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 2px #3a2a20, 2px 2px 0 #3a2a20;
+  border-radius: 50%;
+  box-sizing: border-box;
+}
+html.xhs-mobile .xhs-ico-codex i::after,
+html.xhs-mobile .xhs-ico-menu i::after {
+  position: absolute;
+  left: 0; right: 0; top: 0; bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff6dc;
+  text-shadow: 1px 1px 0 #1a120e;
+  line-height: 48px;
+  text-align: center;
+}
+html.xhs-mobile .xhs-ico-codex i::after { content: "鉴"; }
+html.xhs-mobile .xhs-ico-menu i::after { content: "档"; }
+html.xhs-mobile #codex .shead,
+html.xhs-mobile #codex .tabs,
+html.xhs-mobile #menu .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+html.xhs-mobile #codex .tabs .pbtn,
+html.xhs-mobile #menu .pbtn,
+html.xhs-mobile #codex .shead .x {
+  min-height: 44px;
+  min-width: 44px;
+}
+html.xhs-mobile #codex .cell {
+  min-height: 44px;
+  min-width: 44px;
+}
+html.xhs-mobile #menu textarea {
+  max-width: 100%;
+  font-size: 13px;
 }

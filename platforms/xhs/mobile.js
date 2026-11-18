@@ -124,7 +124,7 @@
   }
 
   function reparentSheets() {
-    ['shop', 'store', 'menu', 'offline', 'loveTip', 'speed'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'menu', 'offline', 'loveTip', 'speed'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (el && el.parentNode !== doc.body) doc.body.appendChild(el);
     });
@@ -135,7 +135,7 @@
   }
 
   function closeSheets(except) {
-    ['shop', 'store', 'menu', 'xhs-board'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'menu', 'xhs-board'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (el && el !== except) el.hidden = true;
     });
@@ -150,14 +150,20 @@
     var shopB = doc.getElementById('xhs-btn-shop');
     var boardB = doc.getElementById('xhs-btn-board');
     var followB = doc.getElementById('xhs-follow');
+    var codexB = doc.getElementById('xhs-btn-codex');
+    var menuB = doc.getElementById('xhs-btn-menu');
     var dock = doc.getElementById('xhs-inv-dock');
     var shop = doc.getElementById('shop');
     var store = doc.getElementById('store');
     var board = doc.getElementById('xhs-board');
+    var codex = doc.getElementById('codex');
+    var menu = doc.getElementById('menu');
     if (bag) bag.classList.toggle('on', !!(dock && !dock.hidden));
     if (storeB) storeB.classList.toggle('on', !!(store && !store.hidden));
     if (shopB) shopB.classList.toggle('on', !!(shop && !shop.hidden));
     if (boardB) boardB.classList.toggle('on', !!(board && !board.hidden));
+    if (codexB) codexB.classList.toggle('on', !!(codex && !codex.hidden));
+    if (menuB) menuB.classList.toggle('on', !!(menu && !menu.hidden));
     if (followB) followB.classList.toggle('on', !!P.followFarmer);
   }
   P._markTabs = markIcons;
@@ -283,6 +289,20 @@
 
     var side = doc.createElement('div'); side.id = 'xhs-side';
     side.appendChild(ico('xhs-btn-note', 'note', '发笔记', onPostNote));
+    side.appendChild(ico('xhs-btn-codex', 'codex', '图鉴', function () {
+      var btn = doc.getElementById('codexBtn');
+      closeSheets(doc.getElementById('codex'));
+      if (btn) btn.click();
+      else toggleEl(doc.getElementById('codex'));
+      markIcons();
+    }));
+    side.appendChild(ico('xhs-btn-menu', 'menu', '存档', function () {
+      var btn = doc.getElementById('menuBtn');
+      closeSheets(doc.getElementById('menu'));
+      if (btn) btn.click();
+      else toggleEl(doc.getElementById('menu'));
+      markIcons();
+    }));
     var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
     speed.hidden = true;
     side.appendChild(speed);

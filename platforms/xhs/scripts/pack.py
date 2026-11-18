@@ -19,9 +19,10 @@ ZIP = HERE / "pixel-farm-xhs-tool.zip"
 JS_FILES = [
     "animals.js", "family.js", "fish.js", "fx.js", "game.js", "path.js", "playlog.js",
     "save.js", "sim.js", "surprise.js", "ui.js", "world.js", "audio.js",
+    "wood.js", "kids.js", "weather.js", "insects.js", "codex.js", "codex_icons.js",
 ]
 ASSETS = [
-    "palette.js", "sprites.js", "chars.png", "crops.png", "hud_icons.png", "palette.png",
+    "palette.js", "sprites.js", "family_sprites.js", "chars.png", "crops.png", "hud_icons.png", "palette.png",
 ]
 
 OPTIONAL_CHAIN = (
@@ -38,6 +39,27 @@ NULLISH_FIXES = [
     ("s.ax ?? 18", "(s.ax != null ? s.ax : 18)"),
     ("s.ay ?? 35", "(s.ay != null ? s.ay : 35)"),
 ]
+
+
+def b64_mp3(path: Path, *, music: bool = False) -> str:
+    """Embed an mp3 as base64. Long music tracks are re-encoded to 64 kbps stereo
+    when ffmpeg is available, so the zip stays well under the 10 MiB cap."""
+    data = path.read_bytes()
+    if music and shutil.which("ffmpeg") and path.stat().st_size > 700_000:
+        import tempfile
+        tmp = Path(tempfile.mkstemp(suffix=".mp3")[1])
+        try:
+            r = subprocess.run(
+                ["ffmpeg", "-y", "-i", str(path), "-codec:a", "libmp3lame", "-b:a", "64k", "-ac", "2", str(tmp)],
+                capture_output=True,
+            )
+            if r.returncode == 0 and tmp.stat().st_size > 1000:
+                data = tmp.read_bytes()
+                print(f"reencoded {path.name} {path.stat().st_size} -> {len(data)} bytes @64k")
+        finally:
+            if tmp.exists():
+                tmp.unlink()
+    return base64.b64encode(data).decode("ascii")
 
 
 def official_audit_scripts() -> tuple[Path, Path]:
@@ -80,8 +102,8 @@ def stage() -> None:
     # None of these are on the boot critical path: audio.js lazy-loads them after
     # the first frames or when the player turns sound on. Music is 64 kbps stereo.
     def write_audio_data() -> None:
-        def b64(path: Path) -> str:
-            return base64.b64encode(path.read_bytes()).decode("ascii")
+        def b64(path: Path, music: bool = False) -> str:
+            return b64_mp3(path, music=music)
 
         def write_merge(dest: Path, tracks: dict[str, str], sfx: dict[str, str]) -> None:
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -102,9 +124,11 @@ def stage() -> None:
             )
 
         morning = ROOT / "audio" / "morning.mp3"
+        if not morning.is_file():
+            morning = ROOT / "assets" / "audio" / "morning.mp3"
         tracks_m: dict[str, str] = {}
         if morning.is_file():
-            tracks_m["morning"] = b64(morning)
+            tracks_m["morning"] = b64(morning, music=True)
         core_sfx: dict[str, str] = {}
         sfx_dir = ROOT / "sfx"
         if sfx_dir.is_dir():
@@ -115,7 +139,7 @@ def stage() -> None:
         for slot in ("afternoon", "evening", "night"):
             src = ROOT / "assets" / "audio" / f"{slot}.mp3"
             if src.is_file():
-                write_merge(STAGE / "assets" / f"audio-{slot}.js", {slot: b64(src)}, {})
+                write_merge(STAGE / "assets" / f"audio-{slot}.js", {slot: b64(src, music=True)}, {})
 
         more_sfx: dict[str, str] = {}
         more_dir = ROOT / "assets" / "audio" / "sfx"
