@@ -26,6 +26,8 @@
   const gr = P ? P.green : ['#1f3a22', '#2e5a2c', '#3f7a32', '#5a9a3a', '#8fd35a', '#c8f08a'], rf = P ? P.roof : ['#4a1c1c', '#7a2a24', '#b8432f', '#d9826a'];
   const ICONS = {
     can: CAN, basket: BASKET,
+    town: pixIcon(['', '      kk', '     krrk', '    krrrrk   kk', '   krrrrrrk krrk', '  kkkkkkkkkkrrrrk', '   kwwwwwwkkkkkkk', '   kwbwwbwk kwwk', '   kwwwwwwk kwdk', '   kwwddwwk kwdk', '   kkkddkkkkkkkk', '  gggg  gggg'],
+      { k: ink, r: rf[2], w: wd[5] || wd[4], b: '#4fa3cf', d: wd[1], g: gr[3] }), // v5.8.0 the town
     shoe: pixIcon(['', '', '', '    kkkk', '   kbbbbk', '   kbttbk', '   kbbbbk', '   kbbbbkk', '   kbbbbbbkkk', '  kbbbbbbbbbbk', '  kbtttbbbbbbbk', '  kkkkkkkkkkkkk', '  kdddddddddddk', '   kkkkkkkkkkk'].map(r => r.padEnd(16)),
       { k: ink, b: wd[2], t: wd[4], d: wd[1] }),
     hoe: pixIcon(['', '            kk', '           kbk', '          kbk', '         kbk', '        kbk', '       kbk', '      kbk', '     kbk', '  kkkbk', ' kssskk', ' kseeek', ' kseek', '  kkk'].map(r => r.padEnd(16)),
@@ -254,6 +256,7 @@
     if (tabId === 'tools' && it.fish) return '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）';
     if (tabId === 'build' && it.home) return '房子（木材 + 金币；房子越大，能住的家人越多）';
     if (tabId === 'build' && it.lumber) return '伐木（木材不够时，农夫会自己去林场砍树）';
+    if (tabId === 'land' && it.p10) return '隔壁镇子（东大道尽头：买下大道、孩子上过一天学之后才能开镇门）';
     if (tabId === 'build' && it.p8) return '第二套棚舍（盖在选成「牧场」的地块里，满员后的新动物住进去）';
     if (tabId === 'build' && it.farm) return '棚子';
     if (tabId === 'works' && it.id === 'sprinkler') return '浇水（装在田边，每台管一排 8 格）';

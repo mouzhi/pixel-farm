@@ -202,6 +202,7 @@
   }
   // east-road school walk: follow the existing east route, then step off the current map's east edge (phase 7 has no town yet)
   function schoolExit(ctx) {
+    if (ctx && ctx.school) return ctx.school; // v5.8.0: the game passes town.js's route (the road, the town gate, the school)
     const world = ctx.world || { x1: 352 };
     const gate = { x: 216, y: 66 };
     const edge = { x: (world.x1 != null ? world.x1 : 352) + 12, y: 66 };

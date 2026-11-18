@@ -105,7 +105,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { v: f.version, sv: s.saveVersion, day: s.clock.day, decor: s.decor, plots: Object.keys(s.plots).length, house: s.upgrades.house, placedLater: s2.decor.placed.length, animals: s.animals.length }; });
     await p.screenshot({ path: path.join(OUT, 'v570_fixture_day59.png') });
     const empty = JSON.stringify({ inv: {}, placed: [], orders: [], party: { last: 0, at: 0, tonight: 0, guests: 0 }, got: {}, n: 1, moon: 0 });
-    const bad = r.v !== VERSION ? 'version' : r.sv !== 13 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.decor) !== empty ? 'decor not empty' : r.placedLater ? 'decor appeared' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : null;
+    const bad = r.v !== VERSION ? 'version' : r.sv !== 14 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.decor) !== empty ? 'decor not empty' : r.placedLater ? 'decor appeared' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'v570_fixture_day59.png', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close();
   }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

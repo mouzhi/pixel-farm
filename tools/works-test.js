@@ -81,7 +81,7 @@ ok('save: works round-trips through valid(); junk is dropped', () => {
 ok('save: the day-59 manor fixture (v10) migrates to v12 append-only', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8'));
   const s = SAVE.migrate(JSON.parse(JSON.stringify(raw)));
-  assert.strictEqual(s.saveVersion, 13); assert.deepStrictEqual(s.works, PW.empty());
+  assert.strictEqual(s.saveVersion, 14); assert.deepStrictEqual(s.works, PW.empty());
   for (const id of ['sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2']) assert.strictEqual(s.upgrades[id], 0, id);
   for (const k of Object.keys(raw.upgrades)) assert.strictEqual(s.upgrades[k], raw.upgrades[k], k);
   assert.strictEqual(s.coins, raw.coins); assert.strictEqual(s.clock.day, raw.clock.day); assert.strictEqual(s.animals.length, raw.animals.length);

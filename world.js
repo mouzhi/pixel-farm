@@ -5,7 +5,9 @@
 'use strict';
 (function (root) {
   const TILE = 8;
-  const WORLD = { x0: -256, y0: -208, x1: 448, y1: 384 };           // v5.5.0: 88 x 74 tiles (was 64 x 50, -160..352 x -112..288); old coordinates did not move, the ring is plots.js
+  const WORLD = { x0: -256, y0: -208, x1: 640, y1: 384 };           // v5.8.0: +24 tiles east for the town (town.js); everything west of 448 is unchanged
+  const WORLD55 = { x0: -256, y0: -208, x1: 448, y1: 384 };         // the v5.5.0 map: its scattered decals and forest keep their old random layout
+            // v5.5.0: 88 x 74 tiles (was 64 x 50, -160..352 x -112..288); old coordinates did not move, the ring is plots.js
   const HOME = { x0: 0, y0: 0, x1: 192, y1: 128 };                  // the original farm
   // rect: the fenced clearing; field: a tile block (c0/r0 in world tiles); gate: where the path enters; barrel: local water
   const REGIONS = [
@@ -128,7 +130,7 @@
     .map(([x, y, v], i) => ({ id: 'h' + i, x, y, kind: 'wild', v, stage: 'tree', age: 0, ripe: 0, cd: 0 }));
   // v5.0 house: tiers after the starting cabin; each adds a room (pop = people who can live there). Wood + gold.
   const HOUSE_TIERS = [{ name: '小木屋', pop: 1, woodCap: 100 }, { name: '大木屋', pop: 2, woodCap: 200 }, { name: '二层农舍', pop: 3, woodCap: 400 }, { name: '庄园', pop: 4, woodCap: 800 }];
-  const api = { PENS, PEN_IDS, NAP_SPOTS, TILE, WORLD, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
+  const api = { PENS, PEN_IDS, NAP_SPOTS, TILE, WORLD, WORLD55, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
     MAX_ORDERS, fruitTree, defaultTrees, treeOvernight, pickFruit, chopYield, choppable, regrows, DROPS, EXTRA_TREES, HOUSE_TIERS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorld = api;
 })(typeof window !== 'undefined' ? window : globalThis);
