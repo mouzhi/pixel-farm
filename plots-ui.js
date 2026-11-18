@@ -70,6 +70,32 @@
   const box = document.getElementById('rlabs'), labs = {};
   if (box) for (const p of PL.PLOTS) { const d = document.createElement('div'); d.className = 'rlab panel'; d.hidden = true; d.title = p.desc;
     d.addEventListener('click', () => G.openPlot && G.openPlot(p.id)); box.appendChild(d); labs[p.id] = d; }
+  // Every price sign on the map (the old regions' from ui.js, whose rAF runs first, and the ring's above) is laid out once per frame:
+  // each keeps its anchor if it can, else steps up / down / sideways to the first spot that hits neither another sign nor the HUD
+  // (panels, buttons, the title, the minimap and the strip where the achievement toast appears); with no free spot it hides.
+  const HUD_IDS = ['hud', 'title', 'minimap', 'log', 'catches', 'inv', 'menuBtn', 'shopBtn', 'storeBtn', 'codexBtn', 'mapBtn', 'speed', 'tools', 'loveTip', 'syncHint'];
+  const SIZE = new WeakMap(); let hud = [], hudAt = 0;
+  const hit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+  const STEPS = [[0, 0], [0, -1], [0, 1], [-0.55, 0], [0.55, 0], [-0.55, -1], [0.55, -1], [-0.55, 1], [0.55, 1], [0, -2], [0, 2]];
+  function hudRects(now) {
+    if (now - hudAt < 500 && hud.length) return hud; hudAt = now; hud = [];
+    for (const id of HUD_IDS) { const e = document.getElementById(id); if (!e || e.hidden) continue; const r = e.getBoundingClientRect(); if (r.width > 0 && r.height > 0) hud.push([r.left - 4, r.top - 4, r.right + 4, r.bottom + 4]); }
+    const vw = innerWidth; hud.push([vw / 2 - 160, 70, vw / 2 + 160, 106]); // #say: the achievement toast (top 76px, centred), reserved so a toast never sits on a sign
+    return hud;
+  }
+  function declutter() {
+    const all = box ? box.children : [], vw = innerWidth, vh = innerHeight, H = hudRects(performance.now()), placed = [];
+    for (const d of all) { if (d.hidden) continue;
+      let sz = SIZE.get(d); if (!sz || sz.html !== d.innerHTML) { sz = { html: d.innerHTML, w: d.offsetWidth, h: d.offsetHeight }; SIZE.set(d, sz); }
+      const ax = d._ax = parseFloat(d.style.left), ay = parseFloat(d.style.top), w = sz.w, h = sz.h; let ok = false;
+      for (const [sx, sy] of STEPS) { const x = ax + sx * (w + 6), y = ay + sy * (h + 4), r = [x - w / 2, y - h, x + w / 2, y];
+        if (r[0] < 2 || r[2] > vw - 2 || r[1] < 2 || r[3] > vh - 2) continue;
+        if (H.some(b => hit(r, b)) || placed.some(b => hit(r, b))) continue;
+        placed.push(r); if (sx || sy) { d.style.left = Math.round(x) + 'px'; d.style.top = Math.round(y) + 'px'; } ok = true; break; }
+      if (!ok) d.hidden = true; }
+  }
+  G.signRects = () => [...(box ? box.children : [])].filter(d => !d.hidden).map(d => { const r = d.getBoundingClientRect(); return { text: d.textContent, x0: r.left, y0: r.top, x1: r.right, y1: r.bottom }; });
+  G.hudRects = () => hudRects(-1e9).map(r => r.slice());
   let labKey = '';
   (function place() { const S = G.S, vw = innerWidth, vh = innerHeight, open = PL.gateOpen(S.family), key = open + JSON.stringify(S.plots);
     if (key !== labKey) { labKey = key; for (const p of PL.PLOTS) { const needs = p.needs && !S.plots[p.needs];
@@ -77,6 +103,7 @@
     for (const p of PL.PLOTS) { const d = labs[p.id]; if (S.plots[p.id]) { d.hidden = true; continue; }
       const c = G.toClient(p.sign.x, p.sign.y), dy = open ? 52 : 40, on = c.x > 90 && c.x < vw - 90 && c.y - dy > 64 && c.y < vh - 64;
       d.hidden = !on; if (on) { d.style.left = Math.round(c.x) + 'px'; d.style.top = Math.round(c.y - dy) + 'px'; } }
+    declutter();
     requestAnimationFrame(place); })();
   window.PFPlotsUI = { listHtml, detailHtml, icon, ICON };
 })();

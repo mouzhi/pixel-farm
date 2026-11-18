@@ -119,6 +119,24 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs, []);
   });
 
+  await test('price signs: at the default zoom no sign overlaps another sign or the HUD, wherever the camera is', async ctx => {
+    for (const [vw, vh] of [[1280, 800], [1600, 1000], [1024, 640]]) {
+      const p = await ctx.newPage(); await p.setViewportSize({ width: vw, height: vh }); p.errs = []; p.on('pageerror', e => p.errs.push(String(e)));
+      await p.goto(`${base}/index.html?manual`); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI && __farm.signRects, null, { timeout: 20000 });
+      await p.evaluate(() => { const f = __farm, S = f.S; S.family.met = 1; S.family.moved = 1; S.coins = 60000; f.refreshUI(); });
+      for (const [x, y] of [[96, 96], [24, 300], [200, -150], [-120, 100], [380, 60], [-150, -120], [100, 340]]) {
+        await p.evaluate(([x, y]) => { __farm.setAngle(0); __farm.panTo(x, y); __farm.advance(0.05, 1); }, [x, y]);
+        await p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+        const r = await p.evaluate(() => ({ signs: __farm.signRects(), hud: __farm.hudRects() }));
+        const hit = (a, b) => a.x0 < b.x1 - 0.5 && b.x0 < a.x1 - 0.5 && a.y0 < b.y1 - 0.5 && b.y0 < a.y1 - 0.5;
+        for (let i = 0; i < r.signs.length; i++) for (let j = i + 1; j < r.signs.length; j++)
+          assert(!hit(r.signs[i], r.signs[j]), `${vw}x${vh} @${x},${y}: ${r.signs[i].text} overlaps ${r.signs[j].text}`);
+        for (const s of r.signs) for (const h of r.hud) assert(!hit(s, { x0: h[0] + 4, y0: h[1] + 4, x1: h[2] - 4, y1: h[3] - 4 }), `${vw}x${vh} @${x},${y}: ${s.text} under the HUD ${JSON.stringify(h)}`);
+      }
+      assert.deepStrictEqual(p.errs, []); await p.close();
+    }
+  });
+
   const USER = process.env.PF_USER_SAVE;
   if (USER && fs.existsSync(USER)) await test('a real player save loads in v5.5.0, keeps everything, buys a plot and plays a day', async ctx => {
     const raw = JSON.parse(fs.readFileSync(USER, 'utf8')), save = raw.save || raw, p = await open(ctx);
