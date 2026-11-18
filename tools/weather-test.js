@@ -1,6 +1,6 @@
 // Unit tests for light rain and insects (no browser):  node tools/weather-test.js
 'use strict';
-const assert = require('assert');
+const assert = require('assert'), fs = require('fs'), path = require('path');
 const WX = require('../weather.js'), INS = require('../insects.js'), CX = require('../codex.js'), SAVE = require('../save.js');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 
@@ -154,6 +154,9 @@ ok('a kid with a net standing next to an insect catches it (then it is released)
     hasNet: true, kids: [{ x: b.x, y: b.y, id: 'kid0' }], rng: () => 0
   });
   assert(evs && evs.length === 1 && evs[0].id === b.id, evs);
+  assert.strictEqual(evs[0].kidId, 'kid0');
+  assert.strictEqual(evs[0].kidX, b.x);
+  assert.strictEqual(evs[0].kidY, b.y);
   assert.strictEqual(INS.list().filter(x => x.id === b.id).length, 0);
 });
 
@@ -165,6 +168,23 @@ ok('book insect sprites stay 24×24; catchSprite is exported for the catch popup
   }
   assert.strictEqual(typeof INS.catchSprite, 'function');
   assert.strictEqual(INS.catchSprite('white', 2), null); // no document in Node
+});
+
+ok('index.html scripts are cache-busted with the current version', () => {
+  const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
+  assert(scripts.length >= 20, 'scripts ' + scripts.length);
+  for (const s of scripts) assert(/\?v=5\.5\.0$/.test(s), 'missing cache bust: ' + s);
+  assert(html.indexOf('v5.5.0') >= 0);
+});
+
+ok('forceCatch can attach the catching kid so the popup can sit above their head', () => {
+  INS.reset();
+  const ev = INS.forceCatch('swallow', 8, 80, 80, { id: 'kid1', x: 72, y: 76 });
+  assert(ev && ev.kind === 'swallow');
+  assert.strictEqual(ev.kidId, 'kid1');
+  assert.strictEqual(ev.kidX, 72);
+  assert.strictEqual(ev.kidY, 76);
 });
 
 console.log(n + ' tests ok');
