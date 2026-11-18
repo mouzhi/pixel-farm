@@ -1401,6 +1401,19 @@ function burst(x, y, z, cols, n, kind) { // short pixel VFX; ?nofx turns this of
   if (window.PF_FX) PF_FX.play(kind || 'bits', x, y, z, { cols, n });
 }
 function popText(x, y, z, s, c) { particles.push({ x, y, z, vx: 0, vy: 0, vz: 10, c, life: 1.6, text: s }); }
+let lastCatch = null;
+function noteBugCatch(ev) { // float the book sprite + name for a moment; the yard itself only has tiny dots
+  if (!ev) return;
+  lastCatch = { line: null, url: (INS && INS.bugURL) ? INS.bugURL(ev.kind, true) : '', at: Date.now() };
+  if (INS && INS.catchSprite) {
+    const spr = INS.catchSprite(ev.kind, 1);
+    if (spr) particles.push({ x: ev.x, y: ev.y, z: 14, vx: 0, vy: 0, vz: 3, life: 2.2, spr, kind: 'icon' });
+  }
+  popText(ev.x, ev.y, 28, ev.name, '#fff6dc');
+  burst(ev.x, ev.y, 16, ['#fff6dc', '#8fd35a', '#ffd76a'], 8, 'spark');
+  log(`孩子用捕虫网捉到一只${ev.name}，看了一眼就放走了`);
+  lastCatch.line = S.log[0];
+}
 
 
 // ---------- rendering helpers ----------
@@ -2498,7 +2511,10 @@ function hud() {
   if (loveHud) { loveHud.title = [love.todayText, love.hint].filter(Boolean).join(' · '); loveHud.classList.toggle('dim', !love.met && !love.moved); }
   const loveTip = document.getElementById('loveTip');
   if (loveTip && !loveTip.hidden) loveTip.innerHTML = (love.todayText ? `<div>${love.todayText}</div>` : '') + `<div class="hint">${love.hint}</div>`;
-  document.getElementById('log').innerHTML = S.log.map(s => `<div>${s}</div>`).join('');
+  document.getElementById('log').innerHTML = S.log.map((s, i) => {
+    if (i === 0 && lastCatch && lastCatch.line === s && lastCatch.url) return `<div><img class="log-bug" alt="" src="${lastCatch.url}">${s}</div>`;
+    return `<div>${s}</div>`;
+  }).join('');
   const box = document.getElementById('catches');
   if (box) {
     const today = S.catches.filter(c => c.day === S.day), recent = S.catches.slice(0, 8);
@@ -2711,7 +2727,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.5';
+const GAME_VERSION = '5.4.6';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2843,7 +2859,7 @@ function tickWeather(dt) {
     for (const ev of evs || []) {
       if (BOOK) BOOK.record(S.codex, ev.key, ev.day || S.day);
       noteProgress({ caughtBug: true });
-      log(`孩子用捕虫网捉到一只${ev.name}，看了一眼就放走了`);
+      noteBugCatch(ev);
     }
   }
 }
@@ -2891,7 +2907,7 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
-  forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
+  noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
