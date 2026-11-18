@@ -201,6 +201,37 @@ def stage() -> None:
         raise SystemExit("staged index.html still has query-string script src; offline zip must use bare paths")
     (STAGE / "index.html").write_text(out)
     print("wrote staged index.html")
+    move_out_of_assets()
+
+
+# 1.1.1: the container's static-resource optimisation (official doc §2.7, client 9.53.3+, new
+# releases only) may move files under the package-root assets/ off the main package and fetch
+# them on demand; it is meant for deferrable images and fonts, and entry JS/CSS must stay
+# outside assets/. Our assets/ held boot-critical scripts (palette.js, sprites.js,
+# family_sprites.js) and first-screen PNGs. If those are not fetched, game.js never runs and the
+# whole HUD becomes dead buttons. Ship them in the main package under res/ instead.
+PKG_RES = "res"
+
+
+def move_out_of_assets() -> None:
+    src = STAGE / "assets"
+    if not src.is_dir():
+        return
+    dst = STAGE / PKG_RES
+    if dst.exists():
+        shutil.rmtree(dst)
+    src.rename(dst)
+    changed = []
+    for f in STAGE.rglob("*"):
+        if not f.is_file() or f.suffix not in {".js", ".css", ".html"}:
+            continue
+        if f.parent == dst and f.name.startswith("audio-"):
+            continue  # base64 audio payloads have no paths
+        text = f.read_text(errors="ignore")
+        if "assets/" in text:
+            f.write_text(text.replace("assets/", PKG_RES + "/"))
+            changed.append(str(f.relative_to(STAGE)))
+    print("moved assets/ ->", PKG_RES + "/ ; rewrote paths in:", ", ".join(sorted(changed)))
 
 
 def write_zip() -> None:

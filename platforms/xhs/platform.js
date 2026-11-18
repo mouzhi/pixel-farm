@@ -21,6 +21,74 @@
   }
   var mini = root.xhs && root.xhs.miniTool;
   var isXhs = !!(mini && (typeof mini.setStorage === 'function' || typeof mini.getStorage === 'function'));
+
+  // 1.1.1：端能力按「方法存在 + 客户端版本」双重判断。官方文档（§3.6、§3.19）：
+  // SDK 方法存在不代表客户端已支持，旧客户端会静默忽略、调用一直等待，入口就成了点不动的死按钮。
+  // buildVersion 去掉末三位编译序号后比较，例如 9530123 → 9530。
+  var MIN_CLIENT = {
+    saveImageToPhotosAlbum: 9420,
+    getWindowInfo: 9490,
+    followAuthor: 9510, getFollowStatus: 9510,
+    submitScore: 9510, getRankList: 9510, getMyRank: 9510,
+    addCloudStorage: 9510, updateCloudStorage: 9510, queryCloudStorage: 9510, removeCloudStorage: 9510,
+    share: 9530,
+    rewardAuthor: 9533, setCloseRetentionEnabled: 9533
+  };
+  // 赞赏（§3.19）是内测能力，入口展示前要先确认本工具的赞赏开关已开通；本包没有开通，入口不展示。
+  var REWARD_ENABLED = false;
+  var clientVer = 0;
+  function getMini() {
+    var m = root.xhs && root.xhs.miniTool;
+    if (m && !mini) mini = m; // 容器晚注入时补上
+    return m || mini || null;
+  }
+  function readBuild(lo) {
+    var env = lo && lo.miniToolEnv;
+    return Number(env && env.buildVersion) || 0;
+  }
+  function clientVersion() {
+    if (!clientVer) {
+      var b = readBuild(root.xhs && root.xhs.launchOptions);
+      if (b) clientVer = Math.floor(b / 1000);
+    }
+    return clientVer;
+  }
+  function supports(name) {
+    var m = getMini();
+    if (!m || typeof m[name] !== 'function') return false;
+    var need = MIN_CLIENT[name];
+    if (!need) return true;
+    return clientVersion() >= need;
+  }
+  function probeClientVersion() {
+    if (clientVersion()) return Promise.resolve(clientVer);
+    var m = getMini();
+    if (!m || typeof m.getLaunchOptions !== 'function') return Promise.resolve(0);
+    return withTimeout(callMini('getLaunchOptions'), 1500).then(function (r) {
+      var b = readBuild(r && r.value);
+      if (b && !clientVer) clientVer = Math.floor(b / 1000);
+      if (clientVer && root.dispatchEvent) root.dispatchEvent(new CustomEvent('pf:caps'));
+      return clientVer;
+    });
+  }
+  // 用户点按触发的端能力：超时后 reject（errCode -2），按钮不会永远卡在「忙」。
+  function callMiniTimed(name, args, ms) {
+    return new Promise(function (resolve, reject) {
+      var done = false;
+      var t = setTimeout(function () {
+        if (done) return;
+        done = true;
+        reject({ errCode: -2, errMsg: name + ':fail timeout' });
+      }, ms || 8000);
+      callMini(name, args).then(function (r) {
+        if (done) return;
+        done = true; clearTimeout(t); resolve(r);
+      }, function (e) {
+        if (done) return;
+        done = true; clearTimeout(t); reject(e);
+      });
+    });
+  }
   var KEY_MAX = 1024 * 1024;      // official: 1 MB per key
   var TOTAL_MAX = 10 * 1024 * 1024; // official: 10 MB per tool
   function utf8Bytes(s) { return unescape(encodeURIComponent(String(s))).length; }
@@ -157,11 +225,12 @@
   function callMini(name, args) {
     return new Promise(function (resolve, reject) {
       try {
-        if (!mini || typeof mini[name] !== 'function') {
+        var m = getMini();
+        if (!m || typeof m[name] !== 'function') {
           reject({ errCode: 0, errMsg: 'unsupported:' + name });
           return;
         }
-        Promise.resolve(mini[name](args)).then(resolve, reject);
+        Promise.resolve(m[name](args)).then(resolve, reject);
       } catch (e) { reject(e); }
     });
   }
@@ -175,10 +244,7 @@
   var oversizedToast = false;
 
   function cloudMethodsPresent() {
-    return !!(mini &&
-      typeof mini.addCloudStorage === 'function' &&
-      typeof mini.updateCloudStorage === 'function' &&
-      typeof mini.queryCloudStorage === 'function');
+    return supports('addCloudStorage') && supports('updateCloudStorage') && supports('queryCloudStorage');
   }
   function probeCloud() {
     var out = {
@@ -598,6 +664,7 @@
     });
   }
 
+  probeClientVersion();
   var ready = hydrate().then(function () { refreshCloudState(); }, function () {
     if (!syncStore) syncStore = wrapStore(memoryStore());
     refreshCloudState();
@@ -609,13 +676,13 @@
   // 文档没有话题/标签、也没有小工具卡片绑定字段；话题写入正文 #标签。
   // 成功只表示发布页被唤起且用户点了发布，不代表笔记过审。用户取消按失败静默处理。
   function postNoteAvailable() {
-    return !!(mini && typeof mini.postNote === 'function');
+    return supports('postNote');
   }
   function writeTempFile(data) {
-    if (!mini || typeof mini.writeTempFile !== 'function' || !data) {
+    if (!supports('writeTempFile') || !data) {
       return Promise.resolve(data);
     }
-    return callMini('writeTempFile', { data: data }).then(function (r) {
+    return callMiniTimed('writeTempFile', { data: data }, 5000).then(function (r) {
       return (r && r.filePath) || data;
     }, function () { return data; });
   }
@@ -637,17 +704,17 @@
     if (!media || !(hasImg || hasVid || hasLive)) {
       return Promise.reject({ errCode: 0, errMsg: 'mediaInfo required' });
     }
-    return callMini('postNote', {
+    return callMiniTimed('postNote', {
       title: title,
       content: content,
       pageType: opts.pageType || copy.pageType || 'photo_publish',
       mediaInfo: media
-    });
+    }, 15000);
   }
 
   var rewardDisabled = false;
   function rewardAvailable() {
-    return !rewardDisabled && !!(mini && typeof mini.rewardAuthor === 'function');
+    return REWARD_ENABLED && !rewardDisabled && supports('rewardAuthor');
   }
   function disableReward() {
     rewardDisabled = true;
@@ -658,7 +725,7 @@
     if (!rewardAvailable()) {
       return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
     }
-    return callMini('rewardAuthor').then(function (r) { return r; }, function (err) {
+    return callMiniTimed('rewardAuthor', undefined, 15000).then(function (r) { return r; }, function (err) {
       if (isCapabilityDenied(err)) disableReward();
       return Promise.reject(err);
     });
@@ -666,21 +733,21 @@
   // share（官方 §3.18，9.53+，门槛 9530）：type=card 分享小工具卡片，身份由容器提供。
   // 仅全屏容器可用；成功只表示分享面板已拉起，不代表已经发出。无分享奖励。
   function shareAvailable() {
-    return !!(mini && typeof mini.share === 'function');
+    return supports('share');
   }
   function shareCard() {
     if (!shareAvailable()) return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
-    return callMini('share', { type: 'card' });
+    return callMiniTimed('share', { type: 'card' }, 15000);
   }
   // saveImageToPhotosAlbum（官方 §3.4，9.42+，门槛 9420）：filePath 为 data: 或 writeTempFile 路径。
   function saveImageAvailable() {
-    return !!(mini && typeof mini.saveImageToPhotosAlbum === 'function');
+    return supports('saveImageToPhotosAlbum');
   }
   function saveFarmImage(filePath) {
     if (!saveImageAvailable() || !filePath) {
       return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
     }
-    return callMini('saveImageToPhotosAlbum', { filePath: filePath });
+    return callMiniTimed('saveImageToPhotosAlbum', { filePath: filePath }, 15000);
   }
 
   // 关注创作者：官方 3.15，客户端 9.51+（版本门槛 9510）。无业务参数，只能关注当前小工具作者。
@@ -689,7 +756,7 @@
   // 业务失败以 follow_status -1 resolve，不是 reject。查询失败也当作 -1，不要把失败结果当最终状态缓存。
   var followDisabled = false;
   function creatorFollowAvailable() {
-    return !followDisabled && !!(mini && typeof mini.followAuthor === 'function' && typeof mini.getFollowStatus === 'function');
+    return !followDisabled && supports('followAuthor') && supports('getFollowStatus');
   }
   function disableFollow() {
     followDisabled = true;
@@ -697,7 +764,7 @@
   }
   function getFollowStatus() {
     if (!creatorFollowAvailable()) return Promise.resolve(-1);
-    return Promise.resolve(mini.getFollowStatus()).then(function (r) {
+    return callMiniTimed('getFollowStatus', undefined, 5000).then(function (r) {
       return r && typeof r.follow_status === 'number' ? r.follow_status : -1;
     }, function (err) {
       if (isCapabilityDenied(err)) disableFollow();
@@ -708,7 +775,7 @@
     if (!creatorFollowAvailable()) {
       return Promise.reject({ errCode: 0, errMsg: 'unsupported' });
     }
-    return Promise.resolve(mini.followAuthor()).then(function (r) {
+    return callMiniTimed('followAuthor', undefined, 20000).then(function (r) {
       return r && typeof r.follow_status === 'number' ? r.follow_status : -1;
     }, function (err) {
       if (isCapabilityDenied(err)) disableFollow();
@@ -737,7 +804,11 @@
       follow: followAuthor
     },
     // 整包买断由小红书支付墙处理，进入工具即视为已解锁。道具级内购官方能力清单（2026-11-13）尚未公开。
-    iap: { hostBuyout: true, itemApi: false, tipsApi: !!(mini && mini.rewardAuthor) },
+    iap: { hostBuyout: true, itemApi: false, tipsApi: rewardAvailable() },
+    supports: supports,
+    clientVersion: clientVersion,
+    probeClientVersion: probeClientVersion,
+    callMiniTimed: callMiniTimed,
     flush: flushNow,
     keyMaxBytes: KEY_MAX,
     totalMaxBytes: TOTAL_MAX,

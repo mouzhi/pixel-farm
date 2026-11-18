@@ -2,11 +2,18 @@
 (function (root) {
   'use strict';
   var P = root.PFPlatform || (root.PFPlatform = {});
-  var mini = root.xhs && root.xhs.miniTool;
-  var hasApi = !!(mini && typeof mini.submitScore === 'function' && typeof mini.getRankList === 'function' && typeof mini.getMyRank === 'function');
-  var isHost = !!(root.xhs && root.xhs.miniTool);
-  var mock = !isHost; // 本地 / 模拟器没有容器 API，用预览数据
+  // 1.1.1：排行榜是 9.51+ 内测能力。只有「方法已注入 + 客户端版本够 + 没被拒绝」时奖杯面板才出现「排行榜」页签；
+  // 1.1.0 在旧客户端上一直停在「载入中…」，被拒绝（1005）时也停在「载入中…」，现在都不会了。
+  // 没有容器时不再展示假的预览榜单。
+  function hasApiNow() {
+    if (P.supports) return P.supports('submitScore') && P.supports('getRankList') && P.supports('getMyRank');
+    return false;
+  }
+  var hasApi = hasApiNow();
+  var mock = false;
   var denied = false;
+  function rankUsable() { return !denied && hasApiNow(); }
+  var RANK_TIMEOUT_MS = 6000;
   var SUBMIT_MS = 60000;
   var CACHE_MS = 45000;
   var SCORE_MAX = 1000000;
@@ -33,11 +40,8 @@
 
   function callApi(name, args) {
     return new Promise(function (resolve, reject) {
-      if (!hasApi) { reject({ errCode: 0, errMsg: 'unsupported' }); return; }
-      var fn = mini[name];
-      try {
-        Promise.resolve(fn.call(mini, args)).then(resolve, reject);
-      } catch (e) { reject(e); }
+      if (!hasApiNow() || !P.callMiniTimed) { reject({ errCode: 0, errMsg: 'unsupported' }); return; }
+      P.callMiniTimed(name, args, RANK_TIMEOUT_MS).then(resolve, reject);
     });
   }
 
@@ -48,11 +52,12 @@
 
   function handleErr(e, loading) {
     var c = errCode(e);
-    if (c === 1005 || c === 1006) { markDenied(); return '排行榜未授权，已隐藏入口'; }
+    if (c === 1005 || c === 1006 || c === 10003) { markDenied(); return '排行榜暂未开放'; }
+    if (c === -2) return '排行榜没有响应，稍后再试';
     if (c === 2002) return '榜单正在准备，稍后再看';
     if (c === 2009) return '请求太频繁，稍后再试';
     if (c === 1004) return '分数超出榜单范围';
-    if (!hasApi && isHost) return '当前客户端还不支持排行榜（需要 9.51 以上）';
+    if (!hasApiNow()) return '当前小红书版本还看不了排行榜';
     return loading || '暂时看不到排行榜';
   }
 
@@ -95,7 +100,7 @@
     var s = scores();
     if (s[1] === lastSent[1] && s[2] === lastSent[2]) return;
     lastSubmitAt = now;
-    if (mock || !hasApi) { lastSent[1] = s[1]; lastSent[2] = s[2]; return; }
+    if (!rankUsable()) { lastSent[1] = s[1]; lastSent[2] = s[2]; return; }
     function one(board, score) {
       if (score === lastSent[board]) return Promise.resolve();
       return callApi('submitScore', { board: board, score: score }).then(function () {
@@ -114,7 +119,7 @@
     var key = board + ':' + period;
     var hit = cache[key];
     if (hit && Date.now() - hit.at < CACHE_MS) return Promise.resolve(hit);
-    if (mock || !hasApi) {
+    if (mock) {
       var m = mockList(board);
       var out = { at: Date.now(), list: m.list, mine: m.mine, mock: true };
       cache[key] = out;
@@ -170,7 +175,7 @@
     return board === 2 ? (n + ' 天') : (n + ' 金');
   }
 
-  var sheet, currentBoard = 1, section = 'book', retryT = 0;
+  var sheet, currentBoard = 1, section = 'book', retryT = 0, retryN = 0;
 
   function ensureSheet() {
     if (sheet) return sheet;
@@ -184,8 +189,10 @@
       var b = e.target.closest ? e.target.closest('[data-b]') : null;
       var x = e.target.closest ? e.target.closest('[data-x]') : null;
       if (x) { close(); return; }
-      if (sec) { section = sec.getAttribute('data-sec'); render(true); return; }
-      if (b) { currentBoard = +b.getAttribute('data-b'); render(true); }
+      var retry = e.target.closest ? e.target.closest('[data-retry]') : null;
+      if (sec) { section = sec.getAttribute('data-sec'); if (section === 'rank') submitBoth(); render(true); return; }
+      if (b) { currentBoard = +b.getAttribute('data-b'); render(true); return; }
+      if (retry) { cache = {}; retryN = 0; render(true); }
     });
     return sheet;
   }
@@ -210,7 +217,7 @@
       { id: 'book', name: '图鉴' },
       { id: 'ach', name: '成就' },
       { id: 'ms', name: '里程碑' }
-    ];
+    ].filter(function (t) { return t.id !== 'rank' || rankUsable(); });
     return '<div class="xhs-board-sections">' + tabs.map(function (t) {
       return '<button type="button" class="pbtn' + (section === t.id ? ' on' : '') + '" data-sec="' + t.id + '">' + t.name + '</button>';
     }).join('') + '</div>';
@@ -249,8 +256,7 @@
   function bindFollow(el) {
     var b = el && el.querySelector('#xhs-board-follow');
     if (!b) return;
-    var host = typeof window !== 'undefined' && window.xhs && window.xhs.miniTool;
-    if (host && !(P.creatorFollow && (typeof P.creatorFollow.available === 'function' ? P.creatorFollow.available() : P.creatorFollow.available))) {
+    if (!(P.creatorFollow && (typeof P.creatorFollow.available === 'function' ? P.creatorFollow.available() : P.creatorFollow.available))) {
       b.hidden = true;
       return;
     }
@@ -267,6 +273,7 @@
     var el = ensureSheet();
     el.hidden = false;
     if (P._markTabs) P._markTabs();
+    if (section === 'rank' && !rankUsable()) section = 'book';
     if (section !== 'rank') {
       parkCodex();
       paintChrome(el);
@@ -277,10 +284,7 @@
     var unit = currentBoard === 2 ? '农场天数' : '累计金币';
     paintChrome(el, unit);
     var body0 = el.querySelector('.xhs-board-body');
-    if (denied || (isHost && !hasApi && !mock)) {
-      if (body0) body0.innerHTML = '<div class="note">' + escapeHtml(handleErr({ errCode: denied ? 1005 : 0 }, '暂时看不到排行榜')) + '</div>';
-      return;
-    }
+
     if (body0) body0.innerHTML = '载入中…';
     loadBoard(currentBoard, 'all').then(function (data) {
       var body = el.querySelector('.xhs-board-body');
@@ -300,12 +304,21 @@
     }, function (e) {
       var body = el.querySelector('.xhs-board-body');
       var msg = handleErr(e, '榜单正在准备…');
-      if (denied) return;
-      if (body) body.innerHTML = '<div class="note">' + escapeHtml(msg) + '</div>';
-      if (errCode(e) === 2002) {
-        clearTimeout(retryT);
-        retryT = setTimeout(function () { if (sheet && !sheet.hidden) render(true); }, 1000);
+      if (denied) {
+        // 未开通：去掉排行榜页签，回到图鉴，并告诉玩家一声
+        if (P.notice) P.notice(msg);
+        section = 'book';
+        if (sheet && !sheet.hidden) render(true);
+        return;
       }
+      var again = errCode(e) === 2002 && retryN < 4;
+      if (body) body.innerHTML = '<div class="note">' + escapeHtml(msg) + '</div>' +
+        (again ? '' : '<button type="button" class="pbtn" data-retry="1">再试一次</button>');
+      if (again) {
+        clearTimeout(retryT);
+        var wait = 500 * Math.pow(2, retryN++);
+        retryT = setTimeout(function () { if (sheet && !sheet.hidden && section === 'rank') render(true); }, wait);
+      } else retryN = 0;
     });
   }
 
@@ -316,7 +329,7 @@
     });
     var dock = document.getElementById('xhs-inv-dock');
     if (dock) dock.hidden = true;
-    if (section === 'rank' && !denied) submitBoth();
+    if (section === 'rank' && rankUsable()) submitBoth();
     render(true);
   }
 
@@ -329,6 +342,7 @@
 
   P.leaderboard = {
     hasApi: hasApi,
+    usable: rankUsable,
     mock: mock,
     open: open,
     close: close,

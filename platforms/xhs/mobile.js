@@ -83,8 +83,15 @@
     clearTimeout(toastFadeT);
     toastT = setTimeout(function () { el.classList.remove('show'); }, 3000);
   };
+  // 点按反馈（「正在打开分享…」「金币还差 80」）优先于农场日志，2.4 秒内不被日志顶掉。
+  var noticeUntil = 0;
+  P.notice = function (msg) {
+    noticeUntil = Date.now() + 2400;
+    P.toast(msg);
+  };
   function toastLog(raw) {
     var msg = String(raw || '').replace(/^\d{1,2}:\d{2}\s+/, '').trim();
+    if (Date.now() < noticeUntil) return;
     if (!msg || msg === lastToastSrc) return;
     lastToastSrc = msg;
     P.toast(msg);
@@ -120,6 +127,42 @@
     i.setAttribute('aria-hidden', 'true');
     b.appendChild(i);
     if (typeof fn === 'function') b.addEventListener('click', fn);
+    return b;
+  }
+
+  function isOpen(el) { return !!(el && !el.hidden); }
+  // 1.1.1：底栏「仓库」第二次点按关不上。ui.js 在 window 的 pointerdown 里先把仓库收起，
+  // 随后的 click 又把它切回打开，看起来就是按钮没反应。这里在按钮自己的 pointerdown/touchstart
+  // （早于 window 冒泡）记下按下那一刻面板是否开着，click 时按这个状态决定开还是关。
+  function sheetIco(id, kind, title, sheetId, webBtnId) {
+    var b = ico(id, kind, title, function () {
+      var sheet = doc.getElementById(sheetId);
+      var wasOpen = b._wasOpen != null ? b._wasOpen : isOpen(sheet);
+      b._wasOpen = null;
+      if (!sheet && !webBtnId) return;
+      if (wasOpen) {
+        closeSheets(null);
+        if (sheet) sheet.hidden = true;
+        markIcons();
+        return;
+      }
+      closeSheets(sheet);
+      var web = webBtnId && doc.getElementById(webBtnId);
+      if (sheet && !sheet.hidden) { markIcons(); return; }
+      if (web) web.click();
+      if (sheet && sheet.hidden) sheet.hidden = false;
+      markIcons();
+    });
+    function remember() {
+      // pointerdown 先到，touchstart 后到（那时 ui.js 已经把面板收起）；只认同一次按下的第一个事件
+      if (b._wasOpen != null && Date.now() - (b._wasAt || 0) < 600) return;
+      b._wasAt = Date.now();
+      b._wasOpen = isOpen(doc.getElementById(sheetId));
+      clearTimeout(b._wasT);
+      b._wasT = setTimeout(function () { b._wasOpen = null; }, 1200);
+    }
+    b.addEventListener('pointerdown', remember);
+    b.addEventListener('touchstart', remember, { passive: true });
     return b;
   }
 
@@ -259,23 +302,9 @@
     toastEl = toast;
     reparentSheets();
 
-    bar.appendChild(ico('xhs-btn-bag', 'bag', '背包', function () {
-      toggleEl(doc.getElementById('xhs-inv-dock'));
-    }));
-    bar.appendChild(ico('xhs-btn-store', 'store', '仓库', function () {
-      var btn = doc.getElementById('storeBtn');
-      closeSheets(doc.getElementById('store'));
-      if (btn) btn.click();
-      else toggleEl(doc.getElementById('store'));
-      markIcons();
-    }));
-    bar.appendChild(ico('xhs-btn-shop', 'shop', '商店', function () {
-      var btn = doc.getElementById('shopBtn');
-      closeSheets(doc.getElementById('shop'));
-      if (btn) btn.click();
-      else toggleEl(doc.getElementById('shop'));
-      markIcons();
-    }));
+    bar.appendChild(sheetIco('xhs-btn-bag', 'bag', '背包', 'xhs-inv-dock', null));
+    bar.appendChild(sheetIco('xhs-btn-store', 'store', '仓库', 'store', 'storeBtn'));
+    bar.appendChild(sheetIco('xhs-btn-shop', 'shop', '商店', 'shop', 'shopBtn'));
     var follow = ico('xhs-follow', 'follow', '跟随农夫', function () {
       setFollow(!P.followFarmer);
     });
@@ -310,8 +339,9 @@
     side.appendChild(moreWrap);
     doc.body.appendChild(side);
     setupFollow();
-    setupPostNote();
-    setupExtraApis();
+    // 容器可能晚于脚本注入 window.xhs，或客户端版本要异步拿到：稍后再核对一次入口。
+    setTimeout(refreshEntries, 1500);
+    setTimeout(refreshEntries, 4000);
     paintAudioToggles();
     applyWindowInsets();
     if (root.__farm && __farm.fit) __farm.fit();
@@ -390,18 +420,33 @@
   }
   P.applyWindowInsets = applyWindowInsets;
 
+  // 1.1.1：平台入口只在当前客户端真能用时出现（方法已注入 + 客户端版本够 + 未被拒绝）。
+  // 1.1.0 只看方法在不在：SDK 方法在、客户端不支持时调用一直等待，按钮点了没反应。
+  // 没有容器（普通浏览器）时这些入口一律隐藏，不再「先露出来再说」。
   function setupPostNote() {
     var btn = doc.getElementById('xhs-btn-note');
-    var host = !!(root.xhs && root.xhs.miniTool);
-    var ok = P.postNoteAvailable ? P.postNoteAvailable() : !!(root.xhs && root.xhs.miniTool && typeof root.xhs.miniTool.postNote === 'function');
-    if (host && !ok && btn) btn.hidden = true;
+    var ok = !!(P.postNoteAvailable && P.postNoteAvailable());
+    if (btn) btn.hidden = !ok;
   }
-
-  function apiOnHost(name) {
-    var host = !!(root.xhs && root.xhs.miniTool);
-    if (!host) return true; // 模拟器里露出入口，真机按方法是否注入决定
-    return typeof root.xhs.miniTool[name] === 'function';
+  function followUsable() {
+    var api = P.creatorFollow;
+    return !!(api && (typeof api.available === 'function' ? api.available() : api.available));
   }
+  function refreshEntries() {
+    setupPostNote();
+    var fo = followUsable();
+    ['xhs-btn-author', 'xhs-board-follow'].forEach(function (id) {
+      var b = doc.getElementById(id);
+      if (b) b.hidden = !fo;
+    });
+    if (fo && !refreshEntries._followAsked) {
+      refreshEntries._followAsked = true;
+      P.creatorFollow.getStatus().then(paintFollow, function () {});
+    }
+    setupExtraApis();
+  }
+  P.refreshEntries = refreshEntries;
+  root.addEventListener('pf:caps', refreshEntries);
   function hideFollowEntries() {
     ['xhs-btn-author', 'xhs-board-follow'].forEach(function (id) {
       var b = doc.getElementById(id);
@@ -423,11 +468,12 @@
     var save = doc.getElementById('xhs-btn-save');
     var tip = doc.getElementById('xhs-btn-tip');
     var more = doc.getElementById('xhs-btn-more');
-    if (share && !apiOnHost('share')) share.hidden = true;
-    if (save && !apiOnHost('saveImageToPhotosAlbum')) save.hidden = true;
-    if (tip && !apiOnHost('rewardAuthor')) tip.hidden = true;
+    if (share) share.hidden = !(P.shareAvailable && P.shareAvailable());
+    if (save) save.hidden = !(P.saveImageAvailable && P.saveImageAvailable());
+    if (tip) tip.hidden = !(P.rewardAvailable && P.rewardAvailable());
     var any = [share, save, tip].some(function (b) { return b && !b.hidden; });
-    if (more && !any) more.hidden = true;
+    if (more) more.hidden = !any;
+    if (!any) closeMore();
   }
   root.addEventListener('pf:follow-unavailable', hideFollowEntries);
   root.addEventListener('pf:reward-unavailable', hideRewardEntry);
@@ -458,7 +504,14 @@
     var A = root.PFAudio;
     var btn = doc.getElementById(kind === 'music' ? 'xhs-btn-music' : 'xhs-btn-sfx');
     if (!A) {
-      if (btn) btn.classList.add('loading');
+      // audio.js 在首帧后才加载；先记下这次点按，加载好立刻生效，不让按钮白点一下。
+      pendingSound[kind] = !pendingSound[kind];
+      if (btn) {
+        btn.classList.toggle('loading', !!pendingSound[kind]);
+        btn.classList.toggle('off', !pendingSound[kind]);
+      }
+      say(pendingSound[kind] ? (kind === 'music' ? '音乐加载中…' : '音效加载中…') : (kind === 'music' ? '音乐已关' : '音效已关'));
+      waitAudio();
       return;
     }
     if (A.unlock) A.unlock();
@@ -480,34 +533,79 @@
     if (A.whenReady) A.whenReady(kind, done);
     else done();
   }
+  var pendingSound = {};
+  var audioWait = 0;
+  function waitAudio() {
+    if (audioWait) return;
+    audioWait = setInterval(function () {
+      var A = root.PFAudio;
+      if (!A || !A.settings) return;
+      clearInterval(audioWait); audioWait = 0;
+      var cur = A.settings();
+      ['music', 'sfx'].forEach(function (k) {
+        if (pendingSound[k] && !cur[k]) toggleSound(k);
+        pendingSound[k] = false;
+      });
+      paintAudioToggles();
+    }, 150);
+  }
   function toggleMusic() { toggleSound('music'); }
   function toggleSfx() { toggleSound('sfx'); }
+  function codeOf(e) { return e && (typeof e.errCode === 'number' ? e.errCode : (typeof e.code === 'number' ? e.code : 0)); }
+  function say(msg) { if (P.notice) P.notice(msg); else if (P.toast) P.toast(msg); }
+  // 忙碌标记最多保持 ms，端上没回调也不会把按钮永久锁死。
+  function busyFor(btn, ms) {
+    var until = Date.now() + (ms || 8000);
+    if (btn) btn.classList.add('busy');
+    return {
+      active: function () { return Date.now() < until; },
+      done: function () { until = 0; if (btn) btn.classList.remove('busy'); }
+    };
+  }
+  var shareBusy = null;
   function onShareCard() {
     closeMore();
-    if (!P.shareCard) { if (P.toast) P.toast('这里还不能分享'); return; }
-    P.shareCard().then(function () {}, function () {});
+    if (!(P.shareAvailable && P.shareAvailable())) { setupExtraApis(); say('当前小红书版本还不能分享，升级后再试'); return; }
+    if (shareBusy && shareBusy.active()) { say('分享面板正在打开…'); return; }
+    shareBusy = busyFor(doc.getElementById('xhs-btn-more'), 16000);
+    say('正在打开分享…');
+    P.shareCard().then(function () { shareBusy.done(); }, function (e) {
+      shareBusy.done();
+      var c = codeOf(e);
+      if (c === 15503) say('今天的分享次数用完了，明天再来');
+      else if (c === 15502) say('现在打不开分享面板，稍后再试');
+      else if (c === -2) say('分享没有响应，稍后再试');
+      else if (c === 0) { setupExtraApis(); say('当前小红书版本还不能分享'); }
+      else say('没能打开分享');
+    });
   }
-  var saveBusy = false;
+  var saveBusy = null;
   function onSaveFarm() {
     closeMore();
-    if (saveBusy) return;
-    if (P.saveImageAvailable && !P.saveImageAvailable() && root.xhs && root.xhs.miniTool) return;
+    if (!(P.saveImageAvailable && P.saveImageAvailable()) || !P.saveFarmImage) { setupExtraApis(); say('当前小红书版本还不能保存图片'); return; }
+    if (saveBusy && saveBusy.active()) { say('正在保存，稍等一下'); return; }
     var live = canvasToJpeg(doc.getElementById('game'), 0.9);
-    if (!live) { if (P.toast) P.toast('没截到画面'); return; }
-    if (!P.saveFarmImage) { if (P.toast) P.toast('这里还不能保存到相册'); return; }
-    saveBusy = true;
+    if (!live) { say('没截到画面，稍后再试'); return; }
+    saveBusy = busyFor(doc.getElementById('xhs-btn-more'), 16000);
+    say('正在保存农场图…');
     toNoteUrl(live).then(function (path) {
       return P.saveFarmImage(path || live);
     }).then(function () {
-      saveBusy = false;
-      if (P.toast) P.toast('已保存到相册');
-    }, function () { saveBusy = false; });
+      saveBusy.done();
+      say('已保存到相册');
+    }, function (e) {
+      saveBusy.done();
+      say(codeOf(e) === -2 ? '保存没有响应，稍后再试' : '没能保存到相册，请检查相册权限');
+    });
   }
   function onTipAuthor() {
     closeMore();
-    if (P.rewardAvailable && !P.rewardAvailable()) { hideRewardEntry(); return; }
-    if (!P.tipAuthor) { hideRewardEntry(); return; }
-    P.tipAuthor().then(function () {}, function () {});
+    if (!(P.rewardAvailable && P.rewardAvailable()) || !P.tipAuthor) { hideRewardEntry(); say('赞赏暂未开放'); return; }
+    say('正在打开赞赏…');
+    P.tipAuthor().then(function () {}, function (e) {
+      if (codeOf(e) === -2) say('赞赏没有响应，稍后再试');
+      else say('赞赏暂时打不开');
+    });
   }
 
   function canvasToJpeg(cv, quality) {
@@ -548,12 +646,14 @@
     return Promise.resolve(data);
   }
 
+  var noteBusyGuard = null;
   var noteBusy = false;
   function onPostNote() {
-    if (noteBusy) return;
-    if (P.postNoteAvailable && !P.postNoteAvailable()) return;
-    if (!P.shareNote) return;
+    if (!(P.postNoteAvailable && P.postNoteAvailable()) || !P.shareNote) { setupPostNote(); say('当前小红书版本还不能发笔记'); return; }
+    if (noteBusy && noteBusyGuard && noteBusyGuard.active()) { say('发笔记页正在打开…'); return; }
+    noteBusyGuard = busyFor(doc.getElementById('xhs-btn-note'), 20000);
     noteBusy = true;
+    say('正在打开发笔记…');
     var copy = root.PFNoteCopy || {};
     var bundled = copy.images || [];
     var live = canvasToJpeg(doc.getElementById('game'), 0.82);
@@ -562,13 +662,16 @@
       var raw = [];
       if (live) raw.push(live);
       for (var i = 0; i < shots.length; i++) if (shots[i]) raw.push(shots[i]);
-      if (!raw.length) { noteBusy = false; return; }
+      if (!raw.length) { noteBusy = false; noteBusyGuard.done(); say('没截到画面，稍后再试'); return; }
       var i2 = 0, urls = [];
       function next() {
         if (i2 >= raw.length) {
-          if (!urls.length) { noteBusy = false; return; }
+          if (!urls.length) { noteBusy = false; noteBusyGuard.done(); say('没截到画面，稍后再试'); return; }
           P.shareNote({ mediaInfo: { image_resources: urls.map(function (u) { return { url: u }; }) } })
-            .then(function () { noteBusy = false; }, function () { noteBusy = false; });
+            .then(function () { noteBusy = false; noteBusyGuard.done(); }, function (e) {
+              noteBusy = false; noteBusyGuard.done();
+              if (codeOf(e) === -2) say('发笔记页没有响应，稍后再试');
+            });
           return;
         }
         toNoteUrl(raw[i2++]).then(function (u) {
@@ -577,7 +680,7 @@
         }, function () { next(); });
       }
       next();
-    }, function () { noteBusy = false; });
+    }, function () { noteBusy = false; noteBusyGuard.done(); say('没截到画面，稍后再试'); });
   }
   P.onPostNote = onPostNote;
 
@@ -599,35 +702,36 @@
   }
   P.paintFollow = paintFollow;
 
+  var followGuard = null;
   function onFollowCreator() {
     var api = P.creatorFollow;
-    if (!api || !(typeof api.available === 'function' ? api.available() : api.available)) return;
-    if (followBusy) return;
+    if (!followUsable()) { hideFollowEntries(); say('当前小红书版本还不能关注作者'); return; }
+    if (P._followStatus === 1) { say('已经关注作者啦，谢谢'); return; }
+    if (P._followStatus === 2) { say('你就是作者本人'); return; }
+    if (followBusy && followGuard && followGuard.active()) { say('关注确认框正在打开…'); return; }
     followBusy = true;
+    followGuard = busyFor(doc.getElementById('xhs-btn-author'), 20000);
+    say('正在打开关注…');
     api.follow().then(function (s) {
-      followBusy = false;
+      followBusy = false; followGuard.done();
       paintFollow(s);
+      if (s === 1) say('已关注作者，谢谢');
+      else if (s === 2) say('你就是作者本人');
+      else if (s !== 0) say('关注没有成功，稍后再试');
     }, function (err) {
-      followBusy = false;
-      var c = err && (err.errCode || err.code);
-      if (c === 20002 || c === 10003) return;
-      if (c === 15404) P.toast('今天关注次数用完了');
+      followBusy = false; followGuard.done();
+      var c = codeOf(err);
+      if (c === 20002 || c === 10003) return; // 用户自己关掉了确认框 / 确认框已在显示
+      if (c === 15404) say('今天关注次数用完了');
+      else if (c === -2) say('关注没有响应，稍后再试');
+      else if (!followUsable()) { hideFollowEntries(); say('当前小红书版本还不能关注作者'); }
+      else say('关注没有成功，稍后再试');
     });
   }
   P.onFollowCreator = onFollowCreator;
 
   function setupFollow() {
-    var api = P.creatorFollow;
-    var host = !!(root.xhs && root.xhs.miniTool);
-    var btn = doc.getElementById('xhs-btn-author');
-    var ok = !!(api && (typeof api.available === 'function' ? api.available() : api.available));
-    if (host && !ok) {
-      hideFollowEntries();
-      return;
-    }
-    if (ok) {
-      api.getStatus().then(paintFollow, function () {});
-    }
+    refreshEntries();
   }
 
   function wrapAngle(a) {
@@ -778,6 +882,48 @@
     });
   }
 
+  // 1.1.1：新档 0 金币时商店里每个购买按钮都是 disabled，点了毫无反应（审核看到的就是一屏点不动的按钮）。
+  // 改成看起来仍是灰的，但能点：点了提示还差多少金币 / 先买什么，并轻轻抖一下。
+  function wireShopFeedback() {
+    var shop = doc.getElementById('shop');
+    if (!shop || shop._xhsShort) return;
+    shop._xhsShort = true;
+    function unlock() {
+      var list = shop.querySelectorAll('button[data-buy][disabled]');
+      for (var i = 0; i < list.length; i++) {
+        list[i].removeAttribute('disabled');
+        list[i].classList.add('xhs-short');
+        list[i].setAttribute('aria-disabled', 'true');
+      }
+    }
+    unlock();
+    if (root.MutationObserver) new MutationObserver(unlock).observe(shop, { childList: true, subtree: true });
+    else setInterval(unlock, 300);
+    shop.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('button.xhs-short[data-buy]') : null;
+      if (!b || !shop.contains(b)) return;
+      e.stopPropagation();
+      e.preventDefault();
+      var card = b.closest('.card') || b.parentNode;
+      var short = card && card.querySelector('.short');
+      var txt = short ? short.textContent.replace(/\s+/g, ' ').trim() : '';
+      var lock = short && short.classList.contains('lock');
+      var parts = [];
+      var chips = short ? short.querySelectorAll('.cost') : [];
+      for (var i = 0; i < chips.length; i++) {
+        var amt = chips[i].querySelector('.amt');
+        var wood = chips[i].querySelector('.ico.wood');
+        if (amt) parts.push(amt.textContent.trim() + (wood ? ' 木材' : ' 金币'));
+      }
+      if (lock) say(txt + '，再来解锁这一项');
+      else if (parts.length) say('还差 ' + parts.join(' + ') + '，农夫卖菜会慢慢攒');
+      else say('现在还买不了，农夫卖菜攒够钱再来');
+      b.classList.remove('xhs-shake');
+      void b.offsetWidth;
+      b.classList.add('xhs-shake');
+    }, true);
+  }
+
   function hookFollowPause() {
     var cv = doc.getElementById('game');
     if (!cv || cv._xhsFollow) return;
@@ -788,6 +934,8 @@
   }
 
   function hookSaves() {
+    if (hookSaves._done) return;
+    hookSaves._done = true;
     function hideSave() {
       if (root.__farm && __farm.saveNow) __farm.saveNow();
       if (P.flush) P.flush();
@@ -812,6 +960,16 @@
     buildChrome();
     wirePinch();
     hookFollowPause();
+    wireShopFeedback();
+    // 1.1.0 的轮询会把 bootUi 调几十次，下面的监听每次都多挂一份；只挂一次。
+    if (bootUi._wired) {
+      if (!P.fbLocked) chooseFramebuffer();
+      if (root.__farm && __farm.fit) __farm.fit();
+      compactHud();
+      syncSpeedBtn();
+      return;
+    }
+    bootUi._wired = true;
     hookSaves();
     if (!P.fbLocked) chooseFramebuffer();
     if (root.__farm && __farm.fit) __farm.fit();
@@ -848,7 +1006,8 @@
   var iv = setInterval(function () {
     n++;
     if (doc.getElementById('hud') && !doc.getElementById('xhs-stage')) bootUi();
-    if (doc.getElementById('game')) { wirePinch(); hookFollowPause(); hookSaves(); }
+    if (doc.getElementById('game')) { wirePinch(); hookFollowPause(); }
+    wireShopFeedback();
     reparentSheets();
     compactHud();
     syncSpeedBtn();

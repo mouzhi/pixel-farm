@@ -589,3 +589,42 @@ html.xhs-mobile #menu textarea {
   max-width: 100%;
   font-size: 13px;
 }
+
+/* 1.1.1：买不起的商品按钮仍显示为灰色，但可以点，点了提示还差多少并抖一下 */
+html.xhs-mobile #shop .pbtn.xhs-short { opacity: .55; cursor: default; }
+html.xhs-mobile #shop .pbtn.xhs-short:active { transform: none; }
+@keyframes xhs-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+html.xhs-mobile .xhs-shake { animation: xhs-shake .36s steps(6) 1; }
+
+/* 1.1.1：商店标题行（含关闭 ×）滚动时贴在面板顶上，从地块牌子跳进来也能直接关 */
+html.xhs-mobile #shop .shead {
+  position: -webkit-sticky;
+  position: sticky;
+  top: -10px;
+  z-index: 2;
+  margin: -10px -12px 8px;
+  padding: 10px 12px 6px;
+  background: rgba(40, 28, 22, .98);
+}
+
+/* 端能力请求进行中：按钮轻微变暗，表示已经收到点按 */
+html.xhs-mobile .xhs-ico.busy { opacity: .6; }
+
+/* 游戏没能启动时的重试层（静态资源取回失败等） */
+#xhs-boot-fail {
+  position: fixed; left: 24px; right: 24px; top: 40%; z-index: 60;
+  padding: 16px; text-align: center; color: #fff6dc;
+  background: rgba(40, 28, 22, .96); border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20;
+  font: 600 14px/1.5 "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
+#xhs-boot-fail button {
+  margin-top: 12px; min-width: 120px; min-height: 44px;
+  background: #e8c78a; color: #3a2a20; border: 2px solid #3a2a20; font: inherit;
+}
