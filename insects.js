@@ -378,7 +378,10 @@
         const n = nearest(k.x, k.y);
         if (n && n.dist < 14 && (st.rng ? st.rng() : Math.random()) < dt * 0.12) {
           const ev = catchBug(n.id, st.day | 0);
-          if (ev) { catchCool = 45 + (st.rng ? st.rng() : Math.random()) * 40; break; }
+          if (ev) {
+            ev.kidId = k.id; ev.kidX = k.x; ev.kidY = k.y;
+            catchCool = 45 + (st.rng ? st.rng() : Math.random()) * 40; break;
+          }
         }
       }
     }
@@ -406,11 +409,13 @@
     pending.push(ev);
     return ev;
   }
-  function forceCatch(kind, day, x, y) {
+  function forceCatch(kind, day, x, y, kid) {
     const s = BY[kind] || SPECIES[0];
     const b = { id: 'i' + (seq++), kind: s.id, group: s.group, name: s.name, x: x || 80, y: y || 70, tx: x || 80, ty: y || 70, ph: 0, wait: 0, z: 3, alive: 1 };
     live.push(b);
-    return catchBug(b.id, day);
+    const ev = catchBug(b.id, day);
+    if (ev && kid) { ev.kidId = kid.id; ev.kidX = kid.x; ev.kidY = kid.y; }
+    return ev;
   }
   function reset() { live.length = 0; pending.length = 0; seq = 1; catchCool = 0; dayCounts.day = -1; Object.keys(cache).forEach(k => { delete cache[k]; }); }
 
