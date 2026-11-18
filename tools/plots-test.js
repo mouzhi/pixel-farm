@@ -109,10 +109,12 @@ ok('save: v10 -> v11 adds no plots and no meadow; v11 keeps plots and plot field
   assert(fs.existsSync(path.join(FIX, 'save-v11-day4.json')), 'v11 fixture');
 });
 const USER = process.env.PF_USER_SAVE;
-if (USER && fs.existsSync(USER)) ok('a real player save (v10, ' + path.basename(USER) + ') migrates to v11 with nothing lost', () => {
+if (USER && fs.existsSync(USER)) ok('a real player save (v9/v10, ' + path.basename(USER) + ') migrates to v11 with nothing lost', () => {
   const raw = JSON.parse(fs.readFileSync(USER, 'utf8')), old = raw.save || raw, s = SAVE.migrate(JSON.parse(JSON.stringify(old))), base = SAVE.validate(old);
   assert.strictEqual(s.saveVersion, 11); assert.deepStrictEqual(s.plots, {}); assert.strictEqual(s.upgrades.graze, 0);
-  for (const k of Object.keys(base)) { if (['saveVersion', 'plots', 'upgrades'].includes(k)) continue; assert.deepStrictEqual(s[k], base[k], 'kept ' + k); }
+  for (const k of Object.keys(base)) { if (['saveVersion', 'plots', 'upgrades'].includes(k)) continue;
+    if (!(k in old)) continue; // a v9 save: v10 fields (codex, achievements…) are inferred by the v10 step, not copied
+    assert.deepStrictEqual(s[k], base[k], 'kept ' + k); }
   for (const k of Object.keys(base.upgrades)) assert.strictEqual(s.upgrades[k], base.upgrades[k], 'upgrade ' + k);
   assert.strictEqual(s.coins, old.coins); assert.strictEqual(s.tiles.length, old.tiles.length); assert.strictEqual(s.trees.length, old.trees.length);
   assert.deepStrictEqual([s.farmer.x, s.farmer.y], [old.farmer.x, old.farmer.y]);
