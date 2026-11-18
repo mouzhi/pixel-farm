@@ -414,26 +414,65 @@
   }
   function reset() { live.length = 0; pending.length = 0; seq = 1; catchCool = 0; dayCounts.day = -1; Object.keys(cache).forEach(k => { delete cache[k]; }); }
 
+  // In the yard insects are just a few crisp pixels with a 2-frame flap.
+  // The 24px book sprite only appears at the catch moment (see catchSprite).
+  const WING = { white: '#fff6dc', yellow: '#ffd76a', swallow: '#ffd76a', grey: '#c5e0f6', dragon: '#e8f6fa', reddragon: '#e8f6fa', damsel: '#c8eaf0', firefly: '#c8f080' };
+  const BODY = { white: '#2a1d16', yellow: '#5a3a28', swallow: '#2a1d16', grey: '#2a1d16', dragon: '#4fa3cf', reddragon: '#e06a2c', damsel: '#4fa3cf', firefly: '#2a1d16' };
+  const INK = '#2a1d16';
+  function px(ctx, x, y, c) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); }
+  function stamp(ctx, ox, oy, cells) {
+    const filled = new Set(cells.map(([dx, dy]) => dx + ',' + dy));
+    for (const [dx, dy] of cells) {
+      for (const [ax, ay] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
+        const k = (dx + ax) + ',' + (dy + ay);
+        if (!filled.has(k)) px(ctx, ox + dx + ax, oy + dy + ay, INK);
+      }
+    }
+    for (const [dx, dy, c] of cells) px(ctx, ox + dx, oy + dy, c);
+  }
+  function catchSprite(id, scale) {
+    scale = scale || 1;
+    const img = imageOf(id, true); if (!img) return null;
+    const src = canvasOf(img); if (!src) return null;
+    const c = document.createElement('canvas'); c.width = img.w * scale; c.height = img.h * scale;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(src, 0, 0, c.width, c.height);
+    return c;
+  }
   function draw(ctx, proj, RS) {
     if (!live.length) return 0;
     let n = 0;
     for (const b of live) {
       if (!b.alive) continue;
       const p = proj(b.x, b.y), sx = Math.round(p[0]), sy = Math.round(p[1] - (b.z || 0) * (RS ? RS * 0.15 : 0.3));
-      const img = imageOf(b.kind, true); if (!img) continue;
-      const c = canvasOf(img); if (!c) continue;
-      const flip = b.tx < b.x, sc = 1, dw = c.width * sc, dh = c.height * sc;
+      const flap = Math.sin(b.ph) >= 0, wing = WING[b.kind] || '#fff6dc', body = BODY[b.kind] || INK;
       ctx.save();
       ctx.imageSmoothingEnabled = false;
       if (b.group === 'firefly') {
         const g = b.glow == null ? 1 : b.glow;
-        ctx.globalAlpha = 0.22 + 0.35 * g;
+        ctx.globalAlpha = 0.3 + 0.4 * g;
         ctx.fillStyle = '#fff2a8';
-        ctx.fillRect(sx - 5, sy - 6, 10, 10);
-        ctx.globalAlpha = 0.6 + 0.4 * g;
+        ctx.fillRect(sx - 1, sy - 1, 3, 3);
+        ctx.globalAlpha = 1;
+        px(ctx, sx, sy, '#c8f080');
+        px(ctx, sx, sy - 1, INK);
+        ctx.restore(); n++; continue;
       }
-      if (flip) { ctx.translate(sx, sy); ctx.scale(-1, 1); ctx.drawImage(c, 0, 0, c.width, c.height, -(dw >> 1), -dh + 4, dw, dh); }
-      else ctx.drawImage(c, 0, 0, c.width, c.height, sx - (dw >> 1), sy - dh + 4, dw, dh);
+      if (b.group === 'dragonfly') {
+        const cells = [[0, 0, body], [0, 1, body], [0, 2, body], [0, 3, INK]];
+        if (flap) cells.push([-2, 0, wing], [2, 0, wing], [-2, 1, wing], [2, 1, wing]);
+        else cells.push([-1, 0, wing], [1, 0, wing], [-1, 1, wing], [1, 1, wing]);
+        stamp(ctx, sx, sy, cells);
+      } else {
+        const cells = [[0, 0, body], [0, 1, INK]];
+        if (flap) {
+          cells.push([-2, 0, wing], [-1, 0, wing], [1, 0, wing], [2, 0, wing], [-1, -1, wing], [1, -1, wing]);
+          if (b.kind === 'swallow') cells.push([0, 2, wing]);
+        } else {
+          cells.push([-1, 0, wing], [1, 0, wing], [0, -1, wing]);
+          if (b.kind === 'swallow') cells.push([0, 2, INK]);
+        }
+        stamp(ctx, sx, sy, cells);
+      }
       ctx.restore();
       n++;
     }
@@ -442,7 +481,7 @@
 
   const api = {
     NET_PRICE, SPECIES, BY, keyBug, catalog,
-    imageOf, canvasOf, urlOf, bugURL, silURL, silhouette, raster,
+    imageOf, canvasOf, urlOf, bugURL, silURL, silhouette, raster, catchSprite,
     tick, nearest, list, catch: catchBug, catchBug, forceCatch, reset, draw, live,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;

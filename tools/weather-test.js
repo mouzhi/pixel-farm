@@ -157,4 +157,15 @@ ok('a kid with a net standing next to an insect catches it (then it is released)
   assert.strictEqual(INS.list().filter(x => x.id === b.id).length, 0);
 });
 
+
+ok('book insect sprites stay 24×24; catchSprite is exported for the catch popup', () => {
+  for (const s of INS.SPECIES) {
+    const im = INS.imageOf(s.id, true);
+    assert(im && im.w === 24 && im.h === 24, s.id + ' ' + (im && im.w) + 'x' + (im && im.h));
+  }
+  assert.strictEqual(typeof INS.catchSprite, 'function');
+  assert.strictEqual(INS.catchSprite('white', 2), null); // no document in Node
+});
+
 console.log(n + ' tests ok');
+
