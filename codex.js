@@ -32,6 +32,7 @@
     { id: 'richday', name: '芜湖起飞', hint: '单日收入第一次超过 2,000 金' },
     { id: 'firstrain', name: '这场雨我允许了', hint: '第一次遇上小雨' },
     { id: 'firstbug', name: '先入图鉴为敬', hint: '孩子第一次用捕虫网捉到昆虫，看一眼再放走' },
+    { id: 'firstpark', name: '童年 DNA 动了', hint: '孩子第一次在乐园玩滑梯、沙坑或秋千' },
   ];
   const MILESTONES = [
     { id: 'open', name: '农场开张', hint: '新的一天开始了' },
@@ -276,6 +277,7 @@
     want('richday', (ctx.todayEarn | 0) >= 2000 || ((ctx.dayEarn || []).some && (ctx.dayEarn || []).some(v => v >= 2000)));
     want('firstrain', !!ctx.sawRain);
     want('firstbug', !!ctx.caughtBug);
+    want('firstpark', !!ctx.playedPark);
     return due;
   }
 

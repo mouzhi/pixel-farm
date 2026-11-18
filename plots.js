@@ -214,6 +214,16 @@
     return out;
   }
 
+  // ---------- phase 11 hook (stub): a married child's homestead ----------
+  // Not playable yet: marriage needs the new house (placeables, phase 8/9) and a partner from the party / town (phases 9-10).
+  // What phase 7 fixes now is WHERE such a household can go: a bought flat plot left as 花甸 or 农田 next to the farm, where the new
+  // house plus 6-8 field tiles fit. The rules below are the roadmap's draft numbers so phase 11 can build on them unchanged.
+  const HOMESTEAD = { tiles: 6, helpPerDay: 2, helpMinutes: 60, mods: ['meadow', 'field'], terrains: ['flat', 'across', 'slope'] };
+  function homesteadSites(plots) {
+    return Object.keys(plots || {}).filter(id => { const p = plot(id), q = plots[id];
+      return !!(p && q && !p.special && HOMESTEAD.mods.includes(q.mod) && HOMESTEAD.terrains.includes(p.terrain)); });
+  }
+
   // ---------- navigation: paints on a path.js grid (H: the grid helpers, so this file does not depend on path.js) ----------
   // opts.regions: open areas (old regions + bought plots), opts.graze: the fold's meadow is bought
   const NAVMASK = new Map(); // static river / cliff cells per grid shape
@@ -251,6 +261,6 @@
 
   const api = { MODULES, MODULE_IDS, TERRAIN, RIVER, RIVER_HW, BANK, BRIDGE, TRAIL, TRAIL_TOP, TRAIL_EAST, TOWN, GRAZE, PLOTS, PLOT_IDS, FIELD_PLOT_IDS, ROUTES, OLD, CLIFF,
     plot, isPlotId, plotAt, terrainAt, clearAt, outer, riverDist, riverHW, ridgeY, onTrail, polyDist, grazeHours,
-    gateOpen, workers, offer, rezoneOffer, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, navPaint, navCarve };
+    gateOpen, workers, offer, rezoneOffer, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFPlots = api;
 })(typeof window !== 'undefined' ? window : globalThis);

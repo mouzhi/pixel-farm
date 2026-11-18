@@ -148,4 +148,15 @@ ok('playground: kids who are not working can play on the slide, sandbox and swin
   assert(!KIDS.playTargets(Object.assign({}, ctx, { regions: [] })).some(t => t.kind === 'play-slide'), 'not bought: not played on');
   assert(!KIDS.playTargets(Object.assign({}, ctx, { playSpots: [] })).some(t => /slide|swing|sandbox/.test(t.kind)));
 });
+ok('homestead stub: only bought flat 花甸 / 农田 plots can later host a married child\'s house and small field', () => {
+  assert.deepStrictEqual(PL.homesteadSites({}), []);
+  const sites = PL.homesteadSites({ glade: { mod: 'meadow' }, eslope: { mod: 'field' }, play: { mod: 'playground' }, bridge: { mod: 'bridge' }, swbank: { mod: 'dam' } });
+  assert.deepStrictEqual(sites.sort(), ['eslope', 'glade']);
+  assert(PL.HOMESTEAD.tiles >= 6 && PL.HOMESTEAD.helpPerDay <= 2);
+});
+ok('achievement: the first play in the playground unlocks 童年 DNA 动了', () => {
+  const CX = require('../codex.js');
+  assert(!CX.dueAchievements({ day: 3 }).some(u => u.id === 'firstpark'));
+  assert(CX.dueAchievements({ day: 3, playedPark: true }).some(u => u.id === 'firstpark'));
+});
 console.log(`plots-test: ${n} ok`);

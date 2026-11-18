@@ -846,6 +846,8 @@ function finishKidTask(k) {
   }
   if (k.kind === 'play-pet' && k.pet && k.pet.pet) k.done = () => { const v = k.pet.view || petView(k.pet.pet); hearts(v.x, v.y, 8); if (v.pose === 3) v.pose = 2; v.idle = 0; log(`${F.name}摸了摸${k.pet.name}`); };
   else if (k.kind === 'play-pet' && k.pet) k.done = () => { hearts(k.pet.x, k.pet.y, 8); log(`${F.name}摸了摸${k.pet.name}`); };
+  if (k.kind === 'play-slide' || k.kind === 'play-sandbox' || k.kind === 'play-swing') { // v5.5.0: 第一次在乐园玩 → 成就
+    const prev = k.done; k.done = () => { if (prev) prev(); noteProgress({ playedPark: true }); }; }
   F._playKind = k.kind;
   return k;
 }
