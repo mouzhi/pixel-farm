@@ -395,6 +395,21 @@ ok('family: children need a bigger house and time; baby -> child -> teen; childr
   assert(FAM.canDo('child', 'feed') && FAM.canDo('child', 'pick') && !FAM.canDo('child', 'water') && !FAM.canDo('child', 'chop') && !FAM.canDo('child', 'buy'));
   assert(FAM.canDo('teen', 'chop') && !FAM.canDo('teen', 'buy') && !FAM.canDo('teen', 'fish')); assert(FAM.canDo('partner', 'buy') && !FAM.canDo('partner', 'fish'));
 });
+ok('v5.3 family: each person prefers their own areas, helps elsewhere at a cost; alone the farmer has no preference; the next child is counted down', () => {
+  const P = [{ id: 'partner', role: 'partner' }], M = [{ id: 'farmer' }];
+  assert.strictEqual(FAM.affinity('farmer', undefined, 'field', []), 0, 'alone: no preference');
+  assert.strictEqual(FAM.affinity('farmer', undefined, 'animal', []), 0);
+  assert(FAM.affinity('farmer', undefined, 'field', P) > 0 && FAM.affinity('farmer', undefined, 'animal', P) < 0);
+  assert(FAM.affinity('partner', 'partner', 'animal', M) > 0 && FAM.affinity('partner', 'partner', 'orchard', M) > 0 && FAM.affinity('partner', 'partner', 'field', M) < 0);
+  assert.strictEqual(FAM.affinity('partner', 'partner', 'market', M), 0, 'nobody owns the market');
+  assert(FAM.affinity('kid0', 'child', 'yard', M) > 0 && FAM.affinity('kid1', 'child', 'coop', M) > 0 && FAM.affinity('kid0', 'teen', 'field', M) > 0);
+  assert(FAM.OWN - FAM.HELP > -30, 'helping still beats fishing (8-12) for most jobs');
+  const f = Object.assign(FAM.empty(), { love: 100, moved: 41 });
+  assert.deepStrictEqual(FAM.nextKid(f, 42, 3), { name: '小豆', days: 6 }); assert.strictEqual(FAM.kidText(FAM.nextKid(f, 42, 3)), '小豆还有 6 天到来');
+  assert.strictEqual(FAM.kidText(FAM.nextKid(f, 47, 3)), '小豆明天就来了'); assert.deepStrictEqual(FAM.nextKid(f, 47, 2), { name: '小豆', room: true });
+  const g = Object.assign(FAM.empty(), { love: 100, moved: 41 }); for (let d = 42; d <= 60; d++) { const n = FAM.nextKid(g, d - 1, 4); if (FAM.morning(g, d, 4).includes('born')) assert.strictEqual(n.days, 1, 'countdown said tomorrow the day before ' + d); }
+  assert.strictEqual(g.kids.length, 2); assert.strictEqual(FAM.nextKid(g, 61, 4), null); assert.strictEqual(FAM.nextKid(FAM.empty(), 5, 4), null);
+});
 ok('v8 -> v9: house and fence at 0, nobody met yet, wild trees appended once, wood, regions and animals kept', () => {
   const v8 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v8-day4.json'), 'utf8')); v8.inventory.wood = 37; v8.upgrades.forest = 1; v8.upgrades.chicken = 2; v8.upgrades.coop = 1;
   v8.animals = [AN.animal('chicken0', 'chicken'), AN.animal('chicken1', 'chicken')]; v8.trees = WD.defaultTrees().filter(t => !/^h/.test(t.id)); v8.trees[0].stage = 'stump';
