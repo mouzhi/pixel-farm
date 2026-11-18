@@ -96,15 +96,15 @@
 
   // ---------- mount / sync ----------
   function mount(x) { X = x; S = x.S; MD = makeModels(x); ICON = makeIcons(x); mounted = true; sync(true); warm(); return api; }
-  const keyOf = () => JSON.stringify([S.works.sprinklers.map(s => [s.x, s.y]), S.works.works, S.works.hives.map(h => [h.at, h.s]), S.plots, S.eff && S.eff.wheel, (S.eff && S.eff.regions || []).includes('orchard')]);
+  const keyOf = () => JSON.stringify([S.works.sprinklers.map(s => [s.x, s.y, s._c]), S.works.works, S.works.hives.map(h => [h.at, h.s, h.x, h.y, h._c]), S.plots, S.eff && S.eff.wheel, (S.eff && S.eff.regions || []).includes('orchard')]);
   function clearList(list) { for (const q of list) removeFrom(X.props, q); list.length = 0; }
   function sync(force) {
     if (!mounted) return; const k = keyOf(); if (!force && k === lastKey) return; lastKey = k;
     clearList(own.spr); clearList(own.works); clearList(own.hives); clearList(own.lamps);
-    for (const s of S.works.sprinklers) own.spr.push(X.addProp(MD.sprinkler, s.x, s.y, 0, { xp: 1 }));
+    for (const s of S.works.sprinklers) if (!s._c) own.spr.push(X.addProp(MD.sprinkler, s.x, s.y, 0, { xp: 1 }));
     for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.workPos(w);
       own.works.push(X.addProp(MD[id], p.x, p.y, 0, { xp: 1, big: 1, work: id })); }
-    hiveSpots().forEach(h => h && own.hives.push(X.addProp(MD.hive, h.x, h.y, 0, { xp: 1 })));
+    hiveSpots().forEach((h, i) => h && !S.works.hives[i]._c && own.hives.push(X.addProp(MD.hive, h.x, h.y, 0, { xp: 1 })));
     if ((S.eff && S.eff.wheel) > 0) for (const l of lamps()) own.lamps.push(X.addProp(MD.lamp, l.x, l.y, 0, { xp: 1, lamp: l.id }));
     X.markNavDirty();
   }
@@ -134,18 +134,18 @@
   function draw(ctx, proj, onScreen, realT, T, night, rain, mode) {
     const day = T >= 7 * 60 && T < 18 * 60 + 30;
     // spray: an arc of droplets turning round each sprinkler while it waters
-    S.works.sprinklers.forEach((s, i) => { if (!(realT < (s.spray || 0) || (s.wday === S.day && T >= 6 * 60 && T < 6 * 60 + 50)) || !onScreen(s.x, s.y, 30)) return;
+    S.works.sprinklers.forEach((s, i) => { if (s._c || !(realT < (s.spray || 0) || (s.wday === S.day && T >= 6 * 60 && T < 6 * 60 + 50)) || !onScreen(s.x, s.y, 30)) return;
       for (let k = 0; k < 18; k++) { const a = realT * 2.2 + (k >> 1) * 0.7 + i, r = ((realT * 11 + k * 1.7) % 15) + 2, h = 5 + 7 * Math.sin(Math.PI * r / 17);
         const [sx, sy] = proj(s.x + Math.cos(a) * r, s.y + Math.sin(a) * r); ctx.fillStyle = k & 1 ? '#d8f0f8' : '#7ec0dc'; ctx.fillRect(Math.round(sx), Math.round(sy - h), 2, k & 1 ? 1 : 2); } });
     // bees: a few dots buzzing round each hive in the daytime
-    if (day && !rain) hiveSpots().forEach((h, i) => { if (!h || !onScreen(h.x, h.y, 40)) return;
+    if (day && !rain) hiveSpots().forEach((h, i) => { if (!h || S.works.hives[i]._c || !onScreen(h.x, h.y, 40)) return;
       for (let k = 0; k < 3; k++) { const ph = i * 2.3 + k * 2.1, R = 6 + 5 * Math.sin(realT * 0.7 + ph), a = realT * (1.4 + k * 0.3) + ph;
         const [sx, sy] = proj(h.x + Math.cos(a) * R, h.y + Math.sin(a * 1.3) * R * 0.8); ctx.drawImage(ICON.bee, Math.round(sx) - 1, Math.round(sy - 10 - 3 * Math.sin(realT * 4 + ph)) - 1); } });
     // finished goods waiting: the product's icon bobbing over the door
     const bob = Math.round(Math.sin(realT * 3));
     for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.ready > 0)) continue; const p = PW.workPos(w); if (!onScreen(p.x, p.y, 40)) continue;
       const [sx, sy] = proj(p.x, p.y), ic = ICON[PW.WORKS[id].out]; ctx.drawImage(ic, Math.round(sx) - (ic.width >> 1), Math.round(sy) - 40 + bob); }
-    const hs = hiveSpots(); S.works.hives.forEach((hv, i) => { const h = hs[i]; if (!h || !(hv.ready > 0) || !onScreen(h.x, h.y, 30)) return; const [sx, sy] = proj(h.x, h.y); ctx.drawImage(ICON.honey, Math.round(sx) - 3, Math.round(sy) - 22 + bob); });
+    const hs = hiveSpots(); S.works.hives.forEach((hv, i) => { const h = hs[i]; if (!h || hv._c || !(hv.ready > 0) || !onScreen(h.x, h.y, 30)) return; const [sx, sy] = proj(h.x, h.y); ctx.drawImage(ICON.honey, Math.round(sx) - 3, Math.round(sy) - 22 + bob); });
     // lamps: lit bulbs, and a small grey 'too far' bolt over the ones the wheel can't reach (only at dusk / night)
     if (night > 0.2 && (S.eff && S.eff.wheel) > 0) for (const l of lamps()) { if (!onScreen(l.x, l.y, 30)) continue; const [sx, sy] = proj(l.x, l.y);
       if (l.on) { ctx.fillStyle = '#fff4b8'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 12, 2, 2); }
