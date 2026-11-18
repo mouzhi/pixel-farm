@@ -77,6 +77,88 @@
     return `<i style="background:url(${atlas || (window.PF_CROPS && window.PF_CROPS.src)}) no-repeat;background-size:${32 * SIM.IDS.length}px 32px;background-position:${-32 * SIM.IDS.indexOf(k)}px 0"></i>`; };
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${ICONS[id]});background-size:32px;image-rendering:pixelated"></i>`);
   const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
+  const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
+  if (ICN) {
+    if (ICN.fishURL('goldfish')) ICONS.goldfish = ICN.fishURL('goldfish');
+    if (ICN.fishURL('koi')) ICONS.koi = ICN.fishURL('koi');
+  }
+  function icoTag(url, cls, w, h) {
+    if (!url) return '';
+    return `<i class="ico ${cls || ''}" style="width:${w}px;height:${h}px;background-image:url(${url});background-size:${w}px ${h}px"></i>`;
+  }
+  function canvasImg(c) {
+    const g = c.getContext('2d');
+    return { w: c.width, h: c.height, px: new Uint8ClampedArray(g.getImageData(0, 0, c.width, c.height).data) };
+  }
+  function decorateCrop(type, mode, seen, fit) {
+    const src = G.cropFrame && G.cropFrame(type);
+    if (!src) return cropIcon(type);
+    const glow = mode === 'glow' || mode === 'glow-giant', giant = mode === 'giant' || mode === 'glow-giant';
+    const pad = glow ? 3 : 2, scale = giant ? 2 : 1;
+    const c = document.createElement('canvas');
+    c.width = src.width * scale + pad * 2; c.height = src.height * scale + pad * 2;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
+    if (glow) {
+      const im = g.getImageData(0, 0, c.width, c.height), d = im.data, w = c.width, h = c.height;
+      const aat = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : d[(y * w + x) * 4 + 3];
+      const gold = [255, 215, 106, 255], cream = [255, 246, 220, 255], extra = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (aat(x, y)) continue;
+        if (aat(x - 1, y) || aat(x + 1, y) || aat(x, y - 1) || aat(x, y + 1)) extra.push(x, y);
+      }
+      for (let i = 0; i < extra.length; i += 2) {
+        const x = extra[i], y = extra[i + 1], j = (y * w + x) * 4, col = (x + y) % 2 ? gold : cream;
+        d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255;
+      }
+      g.putImageData(im, 0, 0);
+      g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
+    }
+    let img = canvasImg(c);
+    if (!seen && ICN) img = ICN.silhouette(img);
+    const url = ICN ? ICN.urlOf(img) : c.toDataURL();
+    let show = giant ? 1.5 : 2, dw = Math.round(c.width * show), dh = Math.round(c.height * show);
+    if (fit && Math.max(dw, dh) > fit) { const s = fit / Math.max(dw, dh); dw = Math.max(1, Math.round(dw * s)); dh = Math.max(1, Math.round(dh * s)); }
+    return icoTag(url, 'crop', dw, dh);
+  }
+  // Shared pixel art for fish, rares, glowing and giant crops (same sprites as the 图鉴).
+  function itemKind(spec) {
+    if (!spec) return null;
+    const id = spec.id || spec.type;
+    const FS = window.PFFish;
+    if (spec.group === 'fish' || (FS && FS.isFish(id))) return { kind: 'fish', id };
+    if (spec.group === 'rare' || (spec.rare && ICN && ICN.has('rare', spec.rare))) return { kind: 'rare', id: spec.rare };
+    if (id && ICN && ICN.has('rare', id) && (spec.kind === 'rare' || !spec.type || spec.type === id)) return { kind: 'rare', id };
+    if (spec.group === 'glow-giant' || (spec.glow && spec.giant)) return { kind: 'glow-giant', id };
+    if (spec.group === 'glow' || spec.glow) return { kind: 'glow', id };
+    if (spec.group === 'giant' || spec.giant) return { kind: 'giant', id };
+    return { kind: 'other', id };
+  }
+  function itemArt(spec, opt) {
+    opt = opt || {};
+    const seen = opt.seen !== false, fit = opt.fit || 0, k = itemKind(spec);
+    if (!k) return '<i></i>';
+    if (k.kind === 'fish' && ICN && ICN.has('fish', k.id)) {
+      const url = seen ? ICN.fishURL(k.id) : ICN.silURL('fish', k.id);
+      const w = opt.w || (fit ? Math.min(fit, 48) : 72), h = Math.round(w * 16 / 24);
+      return icoTag(url, 'fish', w, h);
+    }
+    if (k.kind === 'rare' && ICN && ICN.has('rare', k.id)) {
+      const url = seen ? ICN.rareURL(k.id) : ICN.silURL('rare', k.id);
+      const s = opt.w || opt.fit || 32;
+      return icoTag(url, 'rare', s, s);
+    }
+    if (k.kind === 'glow' || k.kind === 'giant' || k.kind === 'glow-giant') return decorateCrop(k.id, k.kind, seen, fit || opt.w);
+    if (k.id && (ICONS[k.id] || (SIM.CROPS && SIM.CROPS[k.id]))) return icon(k.id);
+    return '<i></i>';
+  }
+  function rarityClass(spec) {
+    if (!BOOK || !BOOK.rarityOf) return '';
+    const k = itemKind(spec); if (!k || k.kind === 'other') return '';
+    const it = (k.kind === 'glow' || k.kind === 'giant' || k.kind === 'glow-giant') ? { group: k.kind === 'glow-giant' ? 'giant' : k.kind, type: k.id } : { group: k.kind, id: k.id };
+    const tier = BOOK.rarityOf(it);
+    return tier ? 'r-' + tier : '';
+  }
   // v5.1.1: a fixed 48px bar (8 tick marks) that stays inside the 62px slot at every can size
   const METER_W = 48;
   function meterBar(cur, max) {
@@ -88,7 +170,8 @@
   function inv() {
     const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
     const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(typ(k))).length;
-    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
+    const specials = (F.crops || []).map(it => { const o = window.PFSurprise ? PFSurprise.itemOf(it) : { type: typ(it) }; return [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'); }).join('|');
+    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, specials, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
     if (key === invKey) return; invKey = key;
     let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i>${meterBar(F.water, S.waterMax)}<span class="k">水壶</span><span class="n">${F.water}/${S.waterMax}</span></div>`;
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0);
@@ -113,8 +196,23 @@
     h += `<div class="slot" title="${rodTip}"><i style="background:url(${E.searod ? ICONS.searod : ICONS.rod});background-size:32px;image-rendering:pixelated"></i><span class="k">${E.searod ? '海竿' : rod.name}</span></div>`;
     if (FS && fishN) {
       const counts = {}; for (const k of F.crops) { const id = typ(k); if (FS.isFish(id)) counts[id] = (counts[id] || 0) + 1; }
-      for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id);
-        h += `<div class="slot" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条"><i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i><span class="k">${f.name}</span><span class="n">${counts[id]}</span></div>`; }
+      for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id), rc = rarityClass({ group: 'fish', id });
+        h += `<div class="slot ${rc}" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条">${itemArt({ group: 'fish', id }, { fit: 32 })}<span class="k ${rc}">${esc(f.name)}</span><span class="n">${counts[id]}</span></div>`; }
+    }
+    // same sprites for basket rares / glowing / giant crops, grouped like the fish slots
+    if (window.PFSurprise) {
+      const groups = new Map();
+      for (const it of F.crops) {
+        const o = PFSurprise.itemOf(it);
+        if ((FS && FS.isFish(o.type)) || !(o.rare || o.glow || o.giant)) continue;
+        const key = [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':');
+        const e = groups.get(key) || { spec: o, n: 0 }; e.n++; groups.set(key, e);
+      }
+      for (const e of groups.values()) {
+        const name = PFSurprise.itemName(e.spec, Object.fromEntries((SIM.IDS || []).map(k => [k, SIM.CROPS[k].name])));
+        const rc = rarityClass(e.spec), unit = G.priceOfAny ? G.priceOfAny(e.spec) : '';
+        h += `<div class="slot ${rc}" title="${esc(name)}${unit ? '：篮子里待售，集市收购 ' + unit + ' 金' : ''}">${itemArt(e.spec, { fit: 32 })}<span class="k ${rc}">${esc(name)}</span><span class="n">${e.n}</span></div>`;
+      }
     }
     $('inv').innerHTML = h;
   }
@@ -167,7 +265,7 @@
       if (gf) {
         const held = ((S.ornament && S.ornament.goldfish) || 0) + (S.pondFish || []).filter(f => f.kind === 'goldfish').length;
         const maxed = held >= (FS.POND_CAP || 8), ok = !maxed && S.coins >= gf.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(gf.price - S.coins, 'coin')}</span></span>`;
-        h += `<div class="card${maxed ? ' max' : ''}" data-item="goldfish">${icon('goldfish')}<div class="ct"><div><b>金鱼</b> <span class="lv">已有 ${held}/${FS.POND_CAP}</span></div>` +
+        h += `<div class="card${maxed ? ' max' : ''}" data-item="goldfish">${itemArt({ group: 'fish', id: 'goldfish' }, { fit: 32 })}<div class="ct"><div><b>金鱼</b> <span class="lv">已有 ${held}/${FS.POND_CAP}</span></div>` +
           (maxed ? `<div class="d">池塘已经养满了</div></div><div class="cb"><span class="done">✓</span></div>` :
             `<div class="d">买来放到家门口池塘里养着，只是在水里游给人看，不再卖掉。海鱼不能放进淡水池塘</div></div><div class="cb"><button class="pbtn" data-buy="goldfish"${ok ? '' : ' disabled'}>${priceChips(gf.price, 0)}</button>${short}</div>`) + '</div>';
       }
@@ -189,16 +287,15 @@
   const store = $('store'); let storeKey = '';
   function rowIcon(row) {
     const id = row.id || row.type;
+    const art = itemArt(row, { fit: 32 });
+    if (art && art !== '<i></i>') return art;
     if (row.kind === 'seed' || (id && SIM.CROPS[id])) return cropIcon(id);
     if (id && FRUIT_ICON[id]) return `<i style="background:url(${FRUIT_ICON[id]});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'wood') return `<i style="background:url(${FRUIT_ICON.wood});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'hay') return icon('hay');
     if (id === 'fishfood' || id === 'fishFood') return icon('fishfood');
-    if (id === 'goldfish' || id === 'koi') return icon(id);
     if (id === 'flower') return icon('flower');
     if (ICONS[id]) return icon(id);
-    const FS = window.PFFish, f = FS && FS.isFish(id) && (FS.BY_ID[id] || (FS.fishOf && FS.fishOf(id)));
-    if (f) return `<i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i>`;
     return '<i></i>';
   }
   // v5.3.1: with an axe and 林场, the family keeps the storehouse topped up to what the next build needs
@@ -206,7 +303,8 @@
   function storeCard(row, extra) {
     const gold = row.gold ? costChip(row.gold, 'coin') : (row.unit != null && row.kind === 'seed' ? `收购 ${costChip(row.unit, 'coin')}` : '');
     const unit = row.n && row.unit && row.gold ? `×${row.unit}` : '';
-    return `<div class="card">${rowIcon(row)}<div class="ct"><div><b>${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${unit ? unit + ' · ' + gold : gold}</span>` : ''}</div></div>`;
+    const rc = rarityClass(row);
+    return `<div class="card ${rc}">${rowIcon(row)}<div class="ct"><div><b class="${rc}">${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${unit ? unit + ' · ' + gold : gold}</span>` : ''}</div></div>`;
   }
   function drawStore(force) {
     const S = G.S, data = G.storehouse(), key = JSON.stringify(data) + !!atlas;
@@ -246,62 +344,13 @@
     if (e.key === 'Escape') { toggleShop(false); toggleStore(false); toggleCodex(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
 
   // ---- v5.4.0 collection book: 图鉴 / 成就 / 里程碑, next to the storehouse button ----
-  const BOOK = window.PFCodex, codexEl = $('codex');
+  const codexEl = $('codex');
   let codexTab = 'book', codexKey = '', codexFocus = '';
-  const ICN = window.PFCodexIcons;
-  if (ICN) {
-    if (ICN.fishURL('goldfish')) ICONS.goldfish = ICN.fishURL('goldfish');
-    if (ICN.fishURL('koi')) ICONS.koi = ICN.fishURL('koi');
-  }
-  function icoTag(url, cls, w, h) {
-    if (!url) return '';
-    return `<i class="ico ${cls || ''}" style="width:${w}px;height:${h}px;background-image:url(${url});background-size:${w}px ${h}px"></i>`;
-  }
-  function canvasImg(c) {
-    const g = c.getContext('2d');
-    return { w: c.width, h: c.height, px: new Uint8ClampedArray(g.getImageData(0, 0, c.width, c.height).data) };
-  }
-  function decorateCrop(type, mode, seen) {
-    const src = G.cropFrame && G.cropFrame(type);
-    if (!src) return cropIcon(type);
-    const pad = mode === 'glow' ? 3 : 2, scale = mode === 'giant' ? 2 : 1;
-    const c = document.createElement('canvas');
-    c.width = src.width * scale + pad * 2; c.height = src.height * scale + pad * 2;
-    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
-    g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
-    if (mode === 'glow') {
-      const im = g.getImageData(0, 0, c.width, c.height), d = im.data, w = c.width, h = c.height;
-      const aat = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : d[(y * w + x) * 4 + 3];
-      const gold = [255, 215, 106, 255], cream = [255, 246, 220, 255], extra = [];
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        if (aat(x, y)) continue;
-        if (aat(x - 1, y) || aat(x + 1, y) || aat(x, y - 1) || aat(x, y + 1)) extra.push(x, y);
-      }
-      for (let i = 0; i < extra.length; i += 2) {
-        const x = extra[i], y = extra[i + 1], j = (y * w + x) * 4, col = (x + y) % 2 ? gold : cream;
-        d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255;
-      }
-      g.putImageData(im, 0, 0);
-      g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
-    }
-    let img = canvasImg(c);
-    if (!seen && ICN) img = ICN.silhouette(img);
-    const url = ICN ? ICN.urlOf(img) : c.toDataURL();
-    const show = mode === 'giant' ? 1.5 : 2, dw = Math.round(c.width * show), dh = Math.round(c.height * show);
-    return icoTag(url, 'crop', dw, dh);
-  }
   function cellArt(it, seen) {
-    if (ICN && it.group === 'fish' && ICN.has('fish', it.id)) {
-      const url = seen ? ICN.fishURL(it.id) : ICN.silURL('fish', it.id);
-      return icoTag(url, 'fish', 72, 48);
-    }
-    if (ICN && it.group === 'rare' && ICN.has('rare', it.id)) {
-      const url = seen ? ICN.rareURL(it.id) : ICN.silURL('rare', it.id);
-      return icoTag(url, 'rare', 48, 48);
-    }
+    if (it.group === 'fish') return itemArt(it, { seen, w: 72 });
+    if (it.group === 'rare') return itemArt(it, { seen, w: 48 });
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
-    if (ICONS[it.id] || ICONS[it.type]) return icon(it.id || it.type);
-    return '<i class="ico"></i>';
+    return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
   function drawCodex(force) {
     if (!codexEl || !BOOK) return;

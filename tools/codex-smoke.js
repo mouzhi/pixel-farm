@@ -1,4 +1,4 @@
-// Browser smoke for the v5.4.1 collection book, wandering dogs and ornamental pond fish: node tools/codex-smoke.js
+// Browser smoke for the v5.4.2 collection book, wandering dogs and ornamental pond fish: node tools/codex-smoke.js
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
@@ -135,6 +135,69 @@ async function test(name, fn) {
     assert.strictEqual(r.pond, 1); assert.strictEqual(r.kind, 'goldfish'); assert.strictEqual(r.foodN, 1); assert.strictEqual(r.sv, 10);
     assert(r.ach.includes('ornamental'), '锦鲤附体 ' + r.ach.join(','));
     assert.deepStrictEqual(p.errs, []);
+  });
+
+  await test('backpack, storehouse and catch list use pixel icons, not colour squares, and tint names by rarity', async ctx => {
+    const p = await ctx.newPage({ viewport: { width: 1280, height: 800 } }); p.errs = [];
+    p.on('pageerror', e => p.errs.push(String(e)));
+    await p.goto(`${base}/index.html?manual&seed=7`);
+    await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI);
+    const r = await p.evaluate(() => {
+      const f = __farm, S = f.S, F = f.FARMER || f.F;
+      f.SAVE.off = true;
+      F.crops = ['sardine', 'seabass', 'crucian', 'koi', { type: 'egg', rare: 'gold' }, { type: 'egg', rare: 'double' }, { type: 'truffle', rare: 'white' }, { type: 'pumpkin', glow: 1 }, { type: 'pumpkin', giant: 1 }];
+      S.catches = [{ id: 'sardine', name: '沙丁鱼', gold: 8, water: 'sea', day: S.day }, { id: 'koi', name: '锦鲤', gold: 36, water: 'pond', day: S.day }];
+      if (f.hud) f.hud();
+      f.refreshUI();
+      document.getElementById('storeBtn').click();
+      const info = (root, nameSel) => [...root.querySelectorAll(root.id === 'inv' ? '.slot' : (root.id === 'store' ? '.card' : 'div'))].map(el => {
+        const ico = el.querySelector('i');
+        const nm = el.querySelector(nameSel);
+        const cs = ico ? getComputedStyle(ico) : null;
+        return {
+          text: el.textContent.replace(/\s+/g, ' ').trim(),
+          cls: el.className,
+          nameCls: nm ? nm.className : '',
+          nameColor: nm ? getComputedStyle(nm).color : '',
+          bg: cs ? cs.backgroundImage : '',
+          box: cs ? cs.boxShadow : '',
+        };
+      });
+      const inv = info(document.getElementById('inv'), '.k');
+      const store = info(document.getElementById('store'), 'b');
+      const catches = [...document.querySelectorAll('#catches div')].map(el => {
+        const ico = el.querySelector('i.ico');
+        const nm = el.querySelector('span[class^="r-"]');
+        return { text: el.textContent, bg: ico ? getComputedStyle(ico).backgroundImage : '', cls: nm ? nm.className : '', color: nm ? getComputedStyle(nm).color : '' };
+      });
+      return { inv, store, catches, swatches: document.querySelectorAll('#inv i, #store i').length };
+    });
+    const isPx = s => /data:image/.test((s && s.bg) || '');
+    const isBlock = s => /inset/.test((s && s.box) || '') && !isPx(s);
+    const find = (list, re) => list.find(x => re.test(x.text));
+    const sardine = find(r.inv, /沙丁鱼/);
+    const seabass = find(r.inv, /海鲈/);
+    const koi = find(r.inv, /锦鲤/);
+    const gold = find(r.inv, /金蛋/) || find(r.store, /金蛋/);
+    const white = find(r.inv, /白松露/) || find(r.store, /白松露/);
+    const glow = find(r.inv, /发光的南瓜/) || find(r.store, /发光的南瓜/);
+    const giant = find(r.inv, /巨大的南瓜/) || find(r.store, /巨大的南瓜/);
+    const storeFish = find(r.store, /沙丁鱼/) || find(r.store, /海鲈/) || find(r.store, /锦鲤/);
+    assert(sardine && seabass && koi, 'fish slots in the backpack: ' + (r.inv || []).map(x => x.text).join(' | '));
+    for (const it of [sardine, seabass, koi, gold, white, glow, giant, storeFish]) {
+      assert(it, 'missing icon row');
+      assert(isPx(it), 'expected a pixel sprite, got box=' + it.box + ' bg=' + (it.bg || '').slice(0, 40) + ' text=' + it.text);
+      assert(!isBlock(it), 'colour square still used for ' + it.text);
+    }
+    assert(/r-common/.test(sardine.cls + sardine.nameCls), 'sardine should be common green, got ' + sardine.cls + ' ' + sardine.nameCls);
+    assert(/r-rare/.test(seabass.cls + seabass.nameCls), 'sea bass should be rare blue, got ' + seabass.cls);
+    assert(/r-epic/.test(koi.cls + koi.nameCls), 'koi should be very-rare orange, got ' + koi.cls);
+    assert(/r-epic/.test((gold.cls || '') + (gold.nameCls || '')), 'golden egg should be orange');
+    const catchKoi = r.catches.find(c => /锦鲤/.test(c.text));
+    assert(catchKoi && /data:image/.test(catchKoi.bg), 'catch list should show the koi sprite');
+    assert(catchKoi && /r-epic/.test(catchKoi.cls), 'catch list koi name should be orange');
+    assert.deepStrictEqual(p.errs, []);
+    await p.close();
   });
 
   await test('a v9 save migrates: existing catches appear in the book, unseen cells stay empty', async ctx => {
