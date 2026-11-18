@@ -1469,7 +1469,7 @@ function flipCanvas(c) { const f = mkc(c.width, c.height), g = f.getContext('2d'
 const ANIMAL_SPR = {};
 for (const k in ANIMAL_ROWS) { const fr = [...ANIMAL_ROWS[k], lowerHead(ANIMAL_ROWS[k][0], HEAD_COL[k], HEAD_DY[k])].map(r => pix(r)); ANIMAL_SPR[k] = { r: fr, l: fr.map(flipCanvas) }; }
 const EGG = pix(['.c.', 'ccc', 'cEc']);
-// v5.3.2 pets, chibi (big head, readable at game zoom), facing right. Legend: X coat, Z coat shade, W light (muzzle, chest, belly),
+// v5.3.1 pets, chibi (big head, readable at game zoom), facing right. Legend: X coat, Z coat shade, W light (muzzle, chest, belly),
 // x stripes (cat) / saddle (dog), Q and V calico patches or collie blaze, F dog face, M dog muzzle, U dog ears, Y eye, N nose, P pink (inner ear, cat nose, tongue).
 // Frames: walk A, walk B, sit, sleep (curled up), sit B (cat: tail flick + blink, dog: tail wag), happy (being patted).
 const PET_ROWS = {
@@ -2338,7 +2338,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.3.2';
+const GAME_VERSION = '5.3.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
