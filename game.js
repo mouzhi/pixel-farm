@@ -1031,7 +1031,7 @@ function storehouse() {
     const map = new Map();
     for (const it of list) {
       const o = SU.itemOf(it), key = [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'), unit = priceOfAny(it);
-      const e = map.get(key) || { type: o.type, kind: 'item', name: label(it), n: 0, unit, gold: 0, surprise: SU.isSurpriseItem(it) };
+      const e = map.get(key) || { type: o.type, kind: 'item', name: label(it), n: 0, unit, gold: 0, surprise: SU.isSurpriseItem(it), glow: o.glow || 0, giant: o.giant || 0, rare: o.rare || '' };
       e.n++; e.gold += unit; map.set(key, e);
     }
     return Array.from(map.values());
@@ -2425,7 +2425,14 @@ function hud() {
     const today = S.catches.filter(c => c.day === S.day), recent = S.catches.slice(0, 8);
     if (!recent.length) box.hidden = true;
     else { box.hidden = false; box.innerHTML = `<div class="h">今日钓到 ${today.length} 条` + (S.fishGold ? ` · 累计卖出 ${S.fishGold} 金` : '') + `</div>` +
-      recent.map(c => `<div>${c.day === S.day ? '今' : '第' + c.day + '天'} · ${c.name} ${c.gold} 金${c.water === 'sea' ? ' · 海' : ''}</div>`).join(''); }
+      recent.map(c => {
+        const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
+        const url = ICN && ICN.fishURL && ICN.fishURL(c.id);
+        const tier = BOOK && BOOK.rarityOf && BOOK.rarityOf({ group: 'fish', id: c.id });
+        const ico = url ? `<i class="ico fish" style="width:24px;height:16px;background-image:url(${url});background-size:24px 16px"></i>` : '';
+        const name = tier ? `<span class="r-${tier}">${c.name}</span>` : c.name;
+        return `<div>${c.day === S.day ? '今' : '第' + c.day + '天'} · ${ico}${name} ${c.gold} 金${c.water === 'sea' ? ' · 海' : ''}</div>`;
+      }).join(''); }
   }
 }
 
@@ -2593,7 +2600,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.1';
+const GAME_VERSION = '5.4.4';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
