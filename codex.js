@@ -7,6 +7,7 @@
   const SIM = (typeof require === 'function' && typeof document === 'undefined') ? require('./sim.js') : root.PFSim;
   const AN = (typeof require === 'function' && typeof document === 'undefined') ? require('./animals.js') : root.PFAnimals;
   const FS = (typeof require === 'function' && typeof document === 'undefined') ? require('./fish.js') : root.PFFish;
+  const INS = (typeof require === 'function' && typeof document === 'undefined') ? require('./insects.js') : root.PFInsects;
 
   const REGIONS7 = ['forest', 'east', 'orchard', 'south', 'pasture', 'coast']; // plus the home yard: seven buyable areas on the current map
   // later-phase achievements stay listed so the names are already in the panel; they cannot be earned until those features exist
@@ -29,6 +30,8 @@
     { id: 'newhouse', name: '新房入伙', hint: '孩子成家，搬进新盖的房子', later: 1 },
     { id: 'happypets', name: '精神状态良好', hint: '所有动物心情连续 5 天不低于 80' },
     { id: 'richday', name: '芜湖起飞', hint: '单日收入第一次超过 2,000 金' },
+    { id: 'firstrain', name: '这场雨我允许了', hint: '第一次遇上小雨' },
+    { id: 'firstbug', name: '先入图鉴为敬', hint: '孩子第一次用捕虫网捉到昆虫，看一眼再放走' },
   ];
   const MILESTONES = [
     { id: 'open', name: '农场开张', hint: '新的一天开始了' },
@@ -63,6 +66,7 @@
   const keyGlow = id => 'glow:' + id;
   const keyGiant = id => 'giant:' + id;
   const keyDecor = id => 'decor:' + id;
+  const keyBug = id => 'bug:' + id;
 
   function emptyCodex() { return { entries: {} }; }
   function emptyList() { return []; }
@@ -99,6 +103,7 @@
   const TIER_RARE = new Set(['bass', 'seabass', 'snapper', 'goldfish', 'double', 'big']);
   function rarityOf(it) {
     if (!it) return 'common';
+    if (it.group === 'bug' && it.rarity) return it.rarity;
     if (it.group === 'glow' || it.group === 'giant') return 'epic';
     if (TIER_EPIC.has(it.id)) return 'epic';
     if (TIER_RARE.has(it.id)) return 'rare';
@@ -116,7 +121,8 @@
     const rares = RARE_ITEMS.map(r => withRarity({ key: keyRare(r.id), id: r.id, name: r.name, group: 'rare', type: r.type, rare: r.rare }));
     const glow = GLOW_CROPS.map(id => withRarity({ key: keyGlow(id), id, name: '发光的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'glow', type: id }));
     const giant = GIANT_CROPS.map(id => withRarity({ key: keyGiant(id), id, name: '巨大的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'giant', type: id }));
-    return { fish, rare: rares, glow, giant, decor: [] };
+    const bugs = (INS && INS.catalog) ? INS.catalog() : [];
+    return { fish, rare: rares, glow, giant, bug: bugs, decor: [] };
   }
 
   function groups() {
@@ -125,6 +131,7 @@
       { id: 'rare', name: '珍品', items: catalog().rare },
       { id: 'glow', name: '发光作物', items: catalog().glow },
       { id: 'giant', name: '巨大作物', items: catalog().giant },
+      { id: 'bug', name: '昆虫', items: catalog().bug },
       { id: 'decor', name: '装饰', items: catalog().decor, later: 1 },
     ];
   }
@@ -139,7 +146,7 @@
     const src = (c && c.entries && typeof c.entries === 'object') ? c.entries : (c && typeof c === 'object' && !Array.isArray(c) ? c : {});
     const entries = {};
     for (const k of Object.keys(src)) {
-      if (!/^(fish|rare|glow|giant|decor):[a-z0-9_]+$/i.test(k) || k.length > 40) continue;
+      if (!/^(fish|rare|glow|giant|decor|bug):[a-z0-9_]+$/i.test(k) || k.length > 40) continue;
       const e = validEntry(src[k]); if (e) entries[k] = e;
     }
     return { entries };
@@ -212,6 +219,8 @@
     if (kid0 && day - (kid0.born | 0) >= 5) mark('kidwork', (kid0.born | 0) + 5);
     const peak = Math.max(coins, earned, ...(((s && s.stats && s.stats.dayEarn) || []).concat((s && s.stats && s.stats.todayEarn) || 0)));
     if (((s && s.stats && s.stats.todayEarn) | 0) >= 2000 || ((s && s.stats && s.stats.dayEarn) || []).some(v => v >= 2000)) mark('richday', 0);
+    if (s && s.weather && (s.weather.lastDay | 0) > 0) mark('firstrain', s.weather.lastDay | 0);
+    if (s && s.codex && s.codex.entries && Object.keys(s.codex.entries).some(k => k.indexOf('bug:') === 0)) mark('firstbug', 0);
     void peak;
     return out;
   }
@@ -265,6 +274,8 @@
     want('dogjob', !!(ctx.dogSurprise || ctx.dogJob));
     want('happypets', (ctx.streaks && ctx.streaks.happy | 0) >= 5);
     want('richday', (ctx.todayEarn | 0) >= 2000 || ((ctx.dayEarn || []).some && (ctx.dayEarn || []).some(v => v >= 2000)));
+    want('firstrain', !!ctx.sawRain);
+    want('firstbug', !!ctx.caughtBug);
     return due;
   }
 
@@ -304,7 +315,7 @@
 
   const api = {
     REGIONS7, ACHIEVEMENTS, MILESTONES, RARE_ITEMS, GLOW_CROPS, GIANT_CROPS, ACH_BY, MS_BY,
-    keyFish, keyRare, keyGlow, keyGiant, keyDecor, itemKey,
+    keyFish, keyRare, keyGlow, keyGiant, keyDecor, keyBug, itemKey,
     emptyCodex, emptyList, emptyStreaks, record, has, entryOf, catalog, groups, rarityOf,
     validEntry, validCodex, validUnlocks, validStreaks, validPondFish, validOrnament,
     seedFromSave, inferAchievements, inferMilestones, regionsBought, allRegions,

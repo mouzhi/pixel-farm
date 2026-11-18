@@ -11,6 +11,7 @@ const M = 40;                    // forest margin around the home farm (world un
 const AN = window.PFAnimals; // v4.5: animal care rules
 const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
 const BOOK = window.PFCodex; // v5.4.0: the collection book, achievements and milestones
+const WX = window.PFWeather, INS = window.PFInsects; // v5.4.3: light rain and insects
 const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
@@ -598,6 +599,7 @@ const S = {
   catches: [], fishGold: 0, // v4.6: recent catches (id, name, gold, water, day) and gold earned from fish this session
   family: FAM.empty(), members: [], // v5.0: 阿禾 and the children (family.js rules); members: the family out working (runtime actors)
   fishFood: 0, ornament: { koi: 0, goldfish: 0 }, pondFish: [], pondFed: 0, // v5.4.0: fish food and ornamental pond fish
+  weather: (WX && WX.emptyWeather) ? WX.emptyWeather() : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 }, bugNet: 0, // v5.4.3
   codex: BOOK.emptyCodex(), achievements: [], milestones: [], streaks: BOOK.emptyStreaks(),
   doorGift: null, loose: [], dogPlan: null,
 };
@@ -697,6 +699,14 @@ function buy(id) { // the player's one action: spend gold on the next level of a
     S.coins -= price; S.ornament.goldfish = (S.ornament.goldfish || 0) + 1; emit('purchase', { item: 'goldfish', n: 1, gold: price, who: 'player' });
     if (BOOK) BOOK.record(S.codex, BOOK.keyFish('goldfish'), S.day);
     log(`买了一条金鱼（${price} 金），可以放到家门口的池塘里养着`); popText(FARMER.x, FARMER.y, 22, '-' + price, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#e8a02a'], 8, 'coin');
+    noteProgress(); return { ok: true, consumable: true };
+  }
+  if (id === 'bugnet' || id === 'net') {
+    if (S.bugNet) return { ok: false, reason: 'maxed' };
+    const price = (INS && INS.NET_PRICE) || 150;
+    if (S.coins < price) return { ok: false, reason: 'short', short: price - S.coins };
+    S.coins -= price; S.bugNet = 1; emit('purchase', { item: 'bugnet', n: 1, gold: price, who: 'player' });
+    log(`买了捕虫网（${price} 金），孩子有时会自己去捉一只昆虫，看一眼就放走`); popText(FARMER.x, FARMER.y, 22, '-' + price, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#8fd35a'], 8, 'coin');
     noteProgress(); return { ok: true, consumable: true };
   }
   const o = SIM.offer(S.up, S.coins, id, FARMER.wood);
@@ -892,7 +902,7 @@ function waterTask(t) {
 }
 function plantTask(t) {
   const ty = SU.pickSeed(t, tiles, F.bag, () => SIM.pickFromBag(F.bag, S.prices));
-  return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || !ty || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; groundDirty = true; } };
+  return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || !ty || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; if (WX && WX.isRaining(S.weather, S.day, S.t)) t.watered = true; groundDirty = true; } };
 }
 function fetchTask(need) { // take the best seeds from the barn first
   return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => {
@@ -1286,6 +1296,7 @@ function overnight() {
   noteProgress();
   markNavDirty();
   groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
+  if (applyRainMorning()) { /* 今天下雨的田已经浇过，日志在 applyRainMorning 里 */ }
   onMorning();
 }
 function driftProducts(prices) { // own stream, so the crops' prices and the farm's random events stay where they were
@@ -1304,12 +1315,21 @@ function stepSim(dm) {
   for (const a of S.members) { F = a; stepActor(dm); } // v5.0: the family first, so the farmer's own step leaves F on him
   F = FARMER; stepActor(dm);
 }
+function followInsect(k) { // play-chase: keep walking toward the live butterfly (window.__insects.nearest)
+  if (!window.PFKids) return;
+  const bug = PFKids.nearbyInsect(F.x, F.y, 'butterfly') || PFKids.nearbyInsect(F.x, F.y);
+  if (!bug || bug.x == null) return;
+  const moved = Math.hypot((k.to && k.to.x || 0) - bug.x, (k.to && k.to.y || 0) - bug.y);
+  k.to = { x: bug.x, y: bug.y }; k.insect = bug;
+  if (moved > 5) k.via = routeVia(F, k.to);
+}
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
   if (!F.task) { F.task = chooseTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
+  if (k && k.kind === 'play-chase') followInsect(k);
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
   const dx = tgt.x - F.x, dy = tgt.y - F.y, dist = Math.hypot(dx, dy);
@@ -1686,15 +1706,15 @@ function animalView(a) { let v = AV.get(a.id); if (!v) { const R0 = PENS[penOfKi
 function stepAnimals(dm) {
   stepPets(dm); stepPondFish(dm);
   if (!S.animals.length) return;
-  const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE;
+  const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE, raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
     if (v.hold) { v.graze = 0; continue; }
     const P = PENS[penOfKind(a.kind)], roam = { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 };
-    if (night) { const home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; setWalkTarget(v, home.x, home.y); v.wait = 0; }
+    if (night || raining) { const home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; setWalkTarget(v, home.x, home.y); v.wait = 0; }
     const hop = nextHop(v, { x: v.tx, y: v.ty }, roam), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
-    if (d > 0.4) { const st = Math.min(d, ASPEED[a.kind] * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.graze = 0;
+    if (d > 0.4) { const st = Math.min(d, (raining ? 0.45 : 1) * ASPEED[a.kind] * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.graze = 0;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
-    if (night) { v.graze = 0; continue; }
+    if (night || raining) { v.graze = 0; continue; }
     v.wait -= dm; v.graze = v.wait > 0 && (Math.floor(v.wait / 6) % 2 === 0);
     if (v.wait <= 0) { const R0 = P.roam, far = anRng() < 0.3;
       let tx = Math.max(R0[0], Math.min(R0[2], far ? R0[0] + anRng() * (R0[2] - R0[0]) : v.x + (anRng() - 0.5) * 24));
@@ -1764,7 +1784,7 @@ function stepPets(dm) {
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
     if (v.hold) { v.pose = 5; continue; } // happy face while being patted
     let speed = dog ? 4.2 : 2.4;
-    if (night || FARMER.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; v.job = null; }
+    if (night || (WX && WX.isRaining(S.weather, S.day, S.t)) || FARMER.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; v.job = null; }
     else if (dog) {
       const arriving = Math.hypot((v.tx || 0) - v.x, (v.ty || 0) - v.y) < 0.6;
       if (v.job && arriving) { v.wait -= dm; if (v.wait <= 0) { if (v.job.surprise) finishDogSurprise(p, v); else noteProgress({ dogJob: true }); v.job = null; } }
@@ -2079,6 +2099,10 @@ function paintWater(t, box, key) {
     const xs = a < 0.15 ? [0] : a < 0.3 ? [-1, 0, 1] : a < 0.65 ? [-2, -1, 0, 1, 2] : a < 0.85 ? [-2, -1, 1, 2] : [-2, 2];
     for (const dx of xs) put(x + dx, y, Math.abs(dx) <= (xs.length >= 5 ? 1 : 0) ? 6 : 5, 1); }
   if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1); ripple(x, y, lt - s0); }
+  // v5.4.3: rain uses the pond's own ripples, just more of them and more often
+  if (key === 'pond' && WX && WX.isRaining(S.weather, S.day, S.t) && Gm.deep.length) {
+    for (let g = 0; g < 12; g++) { const [x, y] = at(Gm.deep), s0 = (g * 0.38 + rr() * 0.06) % WLOOP; ripple(x, y, (lt - s0 + WLOOP) % WLOOP); }
+  }
   // v4.4: asynkimo step 6 also has warm point glints (yellow/white pluses) and falling drips, not only dashes and leaves
   if (Gm.sky.length) for (let g = 0; g < 10; g++) { const [x, y] = at(Gm.sky), s0 = rr() * (WLOOP - 0.45), a = (lt - s0) / 0.45; if (a < 0 || a >= 1) continue;
     pondDecor.push([x + bx, y + by, g % 3 === 0 ? Ac[1] : Ac[0], a > 0.28 && a < 0.7 ? 1 : 0]); }
@@ -2261,6 +2285,7 @@ function render() {
     if (x1 > x0 && y1 > y0) ctx.drawImage(groundBase, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); ctx.setTransform(1, 0, 0, 1, 0, 0); }
   tick('ground');
   waterPass(realT); tick('water');
+  if (WX) WX.drawWet(ctx, proj, RS, { pathSegs, W, H, regionOpen });
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
   for (const t of tiles) if ((t.tilled || t.crop) && onScreen(t.x, t.y, 20)) drawStack(ctx, models.soil[t.watered ? 1 : 0], t.x, t.y, 0, 0);
   for (const d of decals) { const [sx, sy] = proj(d.x, d.y); if (sx < -8 || sx > W + 8 || sy < -4 || sy > H + 12) continue; const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
@@ -2322,7 +2347,10 @@ function render() {
   drawPondFish();
   drawFishing();
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  if (WX) WX.drawSky(ctx, W, H);
   if (night > 0) lighting(night, T);
+  if (INS) INS.draw(ctx, proj, RS);
+  if (WX) WX.drawRain(ctx, W, H);
   if (night > 0.5) for (const f of fireflies) { const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
   for (const p of particles) if (p.text) { const [sx, sy] = proj(p.x, p.y); pixText(p.text, sx, sy - p.z * RS, p.c); }
   tick('fx+light');
@@ -2592,6 +2620,7 @@ function advance(dt) {
   while (dm > 0) { const s = Math.min(dm, 1); stepSim(s); dm -= s; }
   glowTick(dt);
   updateFx(dt);
+  tickWeather(dt);
 }
 function glowTick(dt) {
   for (const a of actors()) if (a.crops.some(it => SU.itemOf(it).giant) && a.moving && !a.home && Math.random() < dt * 0.7) hearts(a.x, a.y, 16);
@@ -2638,7 +2667,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.3';
+const GAME_VERSION = '5.4.4';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2655,6 +2684,8 @@ function progressCtx(extra) {
     sawGiantPumpkin: BOOK.has(S.codex, BOOK.keyGiant('pumpkin')),
     caughtKoi: BOOK.has(S.codex, BOOK.keyFish('koi')),
     caughtSword: BOOK.has(S.codex, BOOK.keyFish('sword')),
+    sawRain: !!(S.weather && S.weather.lastDay),
+    caughtBug: !!(BOOK.has && BOOK.keyBug && Object.keys((S.codex && S.codex.entries) || {}).some(k => k.indexOf('bug:') === 0)),
   }, extra || {});
 }
 function noteProgress(extra) {
@@ -2694,6 +2725,7 @@ function snapshot() {
     achievements: (S.achievements || []).map(u => Object.assign({}, u)),
     milestones: (S.milestones || []).map(u => Object.assign({}, u)),
     streaks: Object.assign({}, S.streaks),
+    weather: Object.assign({}, S.weather || {}), bugNet: S.bugNet ? 1 : 0,
     family: (S.family.kidGrowth = 1, JSON.parse(JSON.stringify(S.family))), // v5.0; kidGrowth marks the v5.4.3 table
     members: S.members.map(m => ({ id: m.id, water: m.water, bag: Object.assign({}, m.bag), gathered: m.gathered, basket: m.crops.slice() })),
     log: S.log.slice(),
@@ -2721,6 +2753,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.pondFish = (s.pondFish || []).map(f => Object.assign({}, f)); S.pondFed = 0;
   S.codex = BOOK.validCodex(s.codex); S.achievements = (s.achievements || []).map(u => Object.assign({}, u)); S.milestones = (s.milestones || []).map(u => Object.assign({}, u));
   S.streaks = BOOK.validStreaks(s.streaks); S.doorGift = null; S.loose = []; S.dogPlan = null; planDogDay();
+  S.weather = WX && WX.validWeather ? WX.validWeather(s.weather) : (s.weather || { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0 }); S.weather = WX && WX.ensure ? WX.ensure(S.weather, S.day, s.createdAt | 0 || 1) : S.weather; S.bugNet = s.bugNet ? 1 : 0; if (INS && INS.reset) INS.reset();
   S.family = Object.assign(FAM.empty(), JSON.parse(JSON.stringify(s.family || {}))); if (window.PFKids) PFKids.migrateFamily(S.family, S.day, s.members || []); S.members.length = 0; syncFamily(); // v5.0: everyone wakes at the door
   for (const m of S.members) { const o = (s.members || []).find(q => q.id === m.id); m.sleeping = FARMER.sleeping;
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
@@ -2731,10 +2764,56 @@ function saveNow() {
   if (SAVE.off) return false;
   const r = PFSave.write(snapshot()); SAVE.error = r.ok ? null : r.error; if (r.ok) { SAVE.at = Date.now(); noteLog('flush'); noteLog('syncSoon', 'autosave'); } return r.ok;
 }
+
+function weatherSeed() { return (S.createdAt | 0) || 1; }
+function applyRainMorning(forced) {
+  if (!WX) return false;
+  if (!forced) S.weather = WX.beginDay(S.weather || WX.emptyWeather(), S.day, weatherSeed());
+  if (!WX.isRainDay(S.weather, S.day)) return false;
+  let n = 0;
+  for (const tile of tiles) if (tile.crop && tile.open) { tile.watered = true; n++; }
+  groundDirty = true;
+  if (!forced) log('今天下着小雨，已经种下的田都湿了，不用浇水');
+  noteProgress({ sawRain: true });
+  return true;
+}
+function tickWeather(dt) {
+  const raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
+  const wet = WX ? WX.wetness(S.weather, S.day, S.t) : 0;
+  const T = S.t % 1440, night = T >= 20 * 60 || T < WAKE;
+  if (WX) WX.tickVisual(dt, { raining, wetness: wet, pond: POND, W, H, pathSegs });
+  if (window.PFAudio && PFAudio.rain) PFAudio.rain(raining);
+  if (INS) {
+    const evs = INS.tick(dt, {
+      day: S.day, t: S.t, raining, night, summer: !!(WX && WX.isSummer(S.day)),
+      pond: POND, orchard: !!(S.eff.regions && S.eff.regions.includes('orchard')),
+      hasNet: !!S.bugNet,
+      // play / school / helper kids (not only role==='child'); skip anyone still off-map at school
+      kids: (S.members || []).filter(m => m.id && /^kid/.test(m.id) && m.away !== 'school').map(m => ({ x: m.x, y: m.y, id: m.id })),
+    });
+    for (const ev of evs || []) {
+      if (BOOK) BOOK.record(S.codex, ev.key, ev.day || S.day);
+      noteProgress({ caughtBug: true });
+      log(`孩子用捕虫网捉到一只${ev.name}，看了一眼就放走了`);
+    }
+  }
+}
+
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; gold, plus a little wood (v5.3.1)
   const r = SIM.offlineSettle(sec, S.dayEarn); if (!r) return null;
   S.coins += r.gold; S.earned += r.gold; if (r.gold > 0) log(`离线期间赚了 ${r.gold} 金`);
   offlineWood(r); // v5.3.1: the family also chopped a little in 林场
+  if (WX && r.days > 0) {
+    const off = WX.advanceDays(S.weather || WX.emptyWeather(), S.day, r.days, (S.createdAt | 0) || 1);
+    S.weather = off.weather;
+    if (off.rainDays.length) {
+      r.rain = true; r.rainDays = off.rainDays.slice();
+      for (const tile of tiles) if (tile.crop && tile.open) tile.watered = true;
+      groundDirty = true;
+      log('这天下过小雨，田都湿了');
+      noteProgress({ sawRain: true });
+    }
+  }
   noteLog('offline', r, logSnap());
   SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
 }
@@ -2743,6 +2822,7 @@ const boot = PFSave.read();
 SAVE.notes = boot.notes;
 if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); }
 else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); }
+if (WX && WX.ensure) S.weather = WX.ensure(S.weather || WX.emptyWeather(), S.day, (S.createdAt | 0) || 1);
 OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); groundReady = true;
 if (!boot.blocked) saveNow();
 noteLog('boot', logSnap(), { getSave: snapshot });
@@ -2755,8 +2835,9 @@ document.addEventListener('visibilitychange', () => {
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
-  BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR,
-  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
+  BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
+  forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
+  forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; },

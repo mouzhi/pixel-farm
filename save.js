@@ -9,6 +9,7 @@
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
   const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
+  const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 10;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -165,6 +166,8 @@
       achievements: CX.validUnlocks(s.achievements, CX.ACH_BY),
       milestones: CX.validUnlocks(s.milestones, CX.MS_BY),
       streaks: CX.validStreaks(s.streaks),
+      weather: WX && WX.validWeather ? WX.validWeather(s.weather) : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 },
+      bugNet: s.bugNet ? 1 : 0,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }

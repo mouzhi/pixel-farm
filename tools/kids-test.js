@@ -171,4 +171,15 @@ ok('a play kid with targets is never without a play task (idle cap)', () => {
   assert(maxIdle < K.IDLE_LIMIT, 'idle streak ' + maxIdle + ' >= ' + K.IDLE_LIMIT);
 });
 
+
+ok('nearbyInsect forwards kind to __insects.nearest so chase prefers butterflies', () => {
+  const calls = [];
+  globalThis.__insects = { nearest(x, y, kind) { calls.push([x, y, kind]); return kind === 'butterfly' ? { kind: 'white', group: 'butterfly', x: 88, y: 60 } : null; } };
+  const n = K.nearbyInsect(10, 20, 'butterfly');
+  assert.deepStrictEqual(calls[0], [10, 20, 'butterfly']);
+  assert.strictEqual(n.group, 'butterfly');
+  assert.strictEqual(n.x, 88);
+  delete globalThis.__insects;
+});
+
 console.log(n + ' tests ok');
