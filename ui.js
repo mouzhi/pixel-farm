@@ -379,8 +379,12 @@
     const S = G.S, key = [codexTab, S.day, JSON.stringify(S.codex), (S.achievements || []).length, (S.milestones || []).length, codexFocus].join('|');
     if (!force && key === codexKey) return; codexKey = key;
     const tabs = [{ id: 'book', name: '图鉴' }, { id: 'ach', name: '成就' }, { id: 'ms', name: '里程碑' }];
-    let h = `<div class="shead"><b>图鉴</b><button class="pbtn x" data-a="close" title="关闭（J / Esc）">✕</button></div>`;
-    h += `<div class="tabs">${tabs.map(t => `<button type="button" class="pbtn${t.id === codexTab ? ' on' : ''}" data-tab="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
+    const hosted = (codexEl.getAttribute && codexEl.getAttribute('data-hosted') === '1') || !!(codexEl.closest && codexEl.closest('#xhs-board'));
+    let h = '';
+    if (!hosted) {
+      h += `<div class="shead"><b>图鉴</b><button class="pbtn x" data-a="close" title="关闭（J / Esc）">✕</button></div>`;
+      h += `<div class="tabs">${tabs.map(t => `<button type="button" class="pbtn${t.id === codexTab ? ' on' : ''}" data-tab="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
+    }
     if (codexTab === 'book') {
       const groups = BOOK.groups();
       let detail = '';
@@ -424,6 +428,13 @@
     codexEl.innerHTML = h;
   }
   const toggleCodex = v => { if (!codexEl) return; codexEl.hidden = v === undefined ? !codexEl.hidden : !v; if (!codexEl.hidden) { menu.hidden = true; shop.hidden = true; store.hidden = true; drawCodex(true); } };
+  G.openCodexTab = (tab, opts) => {
+    if (tab === 'book' || tab === 'ach' || tab === 'ms') codexTab = tab;
+    if (!codexEl) return;
+    if (opts && opts.hosted) codexEl.setAttribute('data-hosted', '1');
+    codexEl.hidden = false;
+    drawCodex(true);
+  };
   if (codexEl) {
     codexEl.addEventListener('click', e => {
       const el = e.target.closest('[data-a],[data-tab],[data-key]'); if (!el || !codexEl.contains(el)) return;
@@ -436,7 +447,11 @@
     addEventListener('pointerdown', e => {
       if (!codexEl || codexEl.hidden) return;
       if (codexEl.contains(e.target) || ($('codexBtn') && $('codexBtn').contains(e.target))) return;
+      const board = $('xhs-board'), boardBtn = $('xhs-btn-board');
+      if (board && board.contains(e.target)) return;
+      if (boardBtn && boardBtn.contains(e.target)) return;
       toggleCodex(false);
+      if (window.PFPlatform && PFPlatform.leaderboard && PFPlatform.leaderboard.close) PFPlatform.leaderboard.close();
     });
   }
 

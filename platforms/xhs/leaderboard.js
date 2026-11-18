@@ -42,11 +42,8 @@
   }
 
   function markDenied() {
+    // 排行榜未授权时只关掉榜单数据，图鉴 / 成就仍从奖杯入口打开。
     denied = true;
-    var tab = document.getElementById('tabBoard');
-    if (tab) tab.hidden = true;
-    var sheet = document.getElementById('xhs-board');
-    if (sheet) sheet.hidden = true;
   }
 
   function handleErr(e, loading) {
@@ -173,7 +170,7 @@
     return board === 2 ? (n + ' 天') : (n + ' 金');
   }
 
-  var sheet, currentBoard = 1, retryT = 0;
+  var sheet, currentBoard = 1, section = 'book', retryT = 0;
 
   function ensureSheet() {
     if (sheet) return sheet;
@@ -183,17 +180,66 @@
     sheet.hidden = true;
     document.body.appendChild(sheet);
     sheet.addEventListener('click', function (e) {
+      var sec = e.target.closest ? e.target.closest('[data-sec]') : null;
       var b = e.target.closest ? e.target.closest('[data-b]') : null;
       var x = e.target.closest ? e.target.closest('[data-x]') : null;
       if (x) { close(); return; }
+      if (sec) { section = sec.getAttribute('data-sec'); render(true); return; }
       if (b) { currentBoard = +b.getAttribute('data-b'); render(true); }
     });
     return sheet;
   }
 
+  function parkCodex() {
+    var c = document.getElementById('codex');
+    if (!c) return;
+    if (c.parentNode !== document.body) document.body.appendChild(c);
+    c.removeAttribute('data-hosted');
+    c.hidden = true;
+  }
+
   function close() {
+    parkCodex();
     if (sheet) sheet.hidden = true;
     if (P._markTabs) P._markTabs();
+  }
+
+  function sectionTabsHtml() {
+    var tabs = [
+      { id: 'rank', name: '排行榜' },
+      { id: 'book', name: '图鉴' },
+      { id: 'ach', name: '成就' },
+      { id: 'ms', name: '里程碑' }
+    ];
+    return '<div class="xhs-board-sections">' + tabs.map(function (t) {
+      return '<button type="button" class="pbtn' + (section === t.id ? ' on' : '') + '" data-sec="' + t.id + '">' + t.name + '</button>';
+    }).join('') + '</div>';
+  }
+
+  function paintChrome(el, subtitle) {
+    var titles = { rank: '排行榜', book: '图鉴', ach: '成就', ms: '里程碑' };
+    var extra = (section === 'rank' && subtitle) ? '<span>' + subtitle + '</span>' : '';
+    el.innerHTML = '<div class="xhs-board-hd"><b>' + (titles[section] || '图鉴') + '</b>' + extra + followBtnHtml() + '<button type="button" class="pbtn" data-x="1">×</button></div>' +
+      sectionTabsHtml() +
+      (section === 'rank' ? ('<div class="xhs-board-tabs">' +
+        '<button type="button" class="pbtn' + (currentBoard === 1 ? ' on' : '') + '" data-b="1">累计金币</button>' +
+        '<button type="button" class="pbtn' + (currentBoard === 2 ? ' on' : '') + '" data-b="2">农场天数</button>' +
+        '</div>') : '') +
+      '<div class="xhs-board-body"></div>';
+    bindFollow(el);
+  }
+
+  function showCodex(tab) {
+    var el = ensureSheet();
+    var body = el.querySelector('.xhs-board-body');
+    var c = document.getElementById('codex');
+    if (!body) return;
+    if (!c) { body.innerHTML = '<div class="note">图鉴还没准备好。</div>'; return; }
+    body.innerHTML = '';
+    body.appendChild(c);
+    c.setAttribute('data-hosted', '1');
+    c.hidden = false;
+    if (root.__farm && typeof root.__farm.openCodexTab === 'function') root.__farm.openCodexTab(tab, { hosted: true });
   }
 
   function followBtnHtml() {
@@ -218,17 +264,24 @@
   }
 
   function render(force) {
-    if (denied) return;
     var el = ensureSheet();
     el.hidden = false;
     if (P._markTabs) P._markTabs();
+    if (section !== 'rank') {
+      parkCodex();
+      paintChrome(el);
+      showCodex(section);
+      return;
+    }
+    parkCodex();
     var unit = currentBoard === 2 ? '农场天数' : '累计金币';
-    el.innerHTML = '<div class="xhs-board-hd"><b>排行榜</b><span>' + unit + '</span>' + followBtnHtml() + '<button type="button" class="pbtn" data-x="1">×</button></div>' +
-      '<div class="xhs-board-tabs">' +
-      '<button type="button" class="pbtn' + (currentBoard === 1 ? ' on' : '') + '" data-b="1">累计金币</button>' +
-      '<button type="button" class="pbtn' + (currentBoard === 2 ? ' on' : '') + '" data-b="2">农场天数</button>' +
-      '</div><div class="xhs-board-body">载入中…</div>';
-    bindFollow(el);
+    paintChrome(el, unit);
+    var body0 = el.querySelector('.xhs-board-body');
+    if (denied || (isHost && !hasApi && !mock)) {
+      if (body0) body0.innerHTML = '<div class="note">' + escapeHtml(handleErr({ errCode: denied ? 1005 : 0 }, '暂时看不到排行榜')) + '</div>';
+      return;
+    }
+    if (body0) body0.innerHTML = '载入中…';
     loadBoard(currentBoard, 'all').then(function (data) {
       var body = el.querySelector('.xhs-board-body');
       if (!body) return;
@@ -257,22 +310,13 @@
   }
 
   function open() {
-    if (denied) return;
-    if (isHost && !hasApi) {
-      var el = ensureSheet();
-      el.hidden = false;
-      el.innerHTML = '<div class="xhs-board-hd"><b>排行榜</b>' + followBtnHtml() + '<button type="button" class="pbtn" data-x="1">×</button></div>' +
-        '<div class="xhs-board-body"><div class="note">当前客户端还不支持排行榜，请升级到 9.51 以上。</div></div>';
-      el.querySelector('[data-x]').addEventListener('click', close);
-      bindFollow(el);
-      if (P._markTabs) P._markTabs();
-      return;
-    }
-    // close other sheets
+    // close other sheets (图鉴嵌在本面板里，奖杯入口始终可开)
     ['shop', 'store', 'menu'].forEach(function (id) {
       var n = document.getElementById(id); if (n) n.hidden = true;
     });
-    submitBoth();
+    var dock = document.getElementById('xhs-inv-dock');
+    if (dock) dock.hidden = true;
+    if (section === 'rank' && !denied) submitBoth();
     render(true);
   }
 
