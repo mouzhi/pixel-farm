@@ -631,7 +631,9 @@ function nextHop(v, dest, bounds) {
   while (v.via.length && Math.hypot(v.via[0].x - v.x, v.via[0].y - v.y) <= 0.5) v.via.shift();
   return v.via.length ? v.via[0] : dest;
 }
-const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue; const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01; if (d < bd) { bd = d; best = t; } } return best; };
+const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue;
+  if (t.f !== undefined && CROWD.some(q => q.tile && Math.abs(q.x - t.x) <= TILE * 1.5 && Math.abs(q.y - t.y) <= TILE * 1.5)) continue; // v5.3: never the tile next to someone else's
+  const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01 + crowd(t); if (d < bd) { bd = d; best = t; } } return best; };
 const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 }))];
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
 // v5.0 family: everyone shares one task board. A job someone else is already doing (its tile, tree, animal, trough, or a
@@ -640,6 +642,17 @@ const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so 
 const BASK = () => F === FARMER ? S.eff.basket : Math.max(4, Math.round(S.eff.basket * (F.bmul || 1)));
 const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish'];
 let CLAIM = new Set();
+// v5.3 roles: while one person picks a job, CROWD holds where the others stand and where they are heading. A target near
+// them costs up to CROWD_K px of extra walk per px inside CROWD_R (rngNear) and a quarter of that in score (chooseTask), so
+// two people spread over the farm instead of working side by side; family.js affinity() adds the "my area" preference.
+let CROWD = [];
+const CROWD_R = 5 * TILE, CROWD_K = 3;
+const crowd = t => { let p = 0; for (const q of CROWD) { const d = Math.hypot(t.x - q.x, t.y - q.y); if (d < CROWD_R) p += (CROWD_R - d) * CROWD_K; } return p; };
+const workingOthers = me => actors().filter(a => a !== me && !a.home && !a.sleeping);
+function crowdFor(me) { const out = [];
+  for (const a of workingOthers(me)) { out.push({ x: a.x, y: a.y }); const k = a.task; if (k && k.kind !== 'idle' && k.kind !== 'home') { const t = k.tile || k.to; if (t) out.push({ x: t.x, y: t.y, tile: !!k.tile }); } }
+  return out; }
+const whoId = a => a === FARMER ? 'farmer' : a.id;
 const actors = () => S.members.length ? [FARMER, ...S.members] : [FARMER];
 function claimsFor(me) { const c = new Set(); for (const a of actors()) { const k = a.task; if (a === me || !k) continue;
   if (k.tile) c.add(k.tile); if (k.an) c.add(k.an); if (k.key) c.add(k.key); if (EXCLUSIVE.includes(k.kind)) c.add('kind:' + k.kind); } return c; }
@@ -692,7 +705,7 @@ function homeTask() { const me = F; return { kind: 'home', label: '回家睡觉'
 function board() {
   const T = S.t % 1440, E = S.eff, out = [];
   const shut = T < SHOP_OPEN || T >= SHOP_CLOSE - 20; // v5.0: no trips to a closed stall (crops wait in the basket until morning)
-  const post = (kind, base, at, make, key) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key }); }; // at = null: every target is claimed
+  const post = (kind, base, at, make, key, area) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key, area: area || FAM.AREA_OF[kind] }); }; // at = null: every target is claimed
   const open = tiles.filter(t => t.open && !CLAIM.has(t));
   const ripe = open.filter(t => t.crop && SU.canHarvest(t.crop, SIM.ripe));
   const dry = open.filter(t => t.crop && SU.canGrow(t.crop, SIM.ripe) && !t.watered);
@@ -702,7 +715,7 @@ function board() {
   const bagN = seedCount(F.bag), storeN = seedCount(S.store), full = F.crops.length >= BASK();
   if (ripe.length && !full) { const t = rngNear(ripe); post('harvest', 90, t, () => harvestTask(t)); }
   if (dry.length) { const late = T >= 15 * 60;
-    if (F.water <= 0) { const w = rngNear(waterSpots()); post('refill', late ? 95 : 60, w, () => refillTask(w)); }
+    if (F.water <= 0) { const w = rngNear(waterSpots()); post('refill', late ? 95 : 60, w, () => refillTask(w), undefined, 'field'); }
     else { let t = rngNear(dry); // v5.0 sprinkler can: aim at the tile with the most thirsty crops around it
       if (t && E.water3) t = dry.reduce((b, u) => { const v = dry.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - travel(F, u); return v > b.v ? { t: u, v } : b; }, { t, v: -1e9 }).t;
       post('water', late ? 96 : 61, t, () => waterTask(t)); } }
@@ -713,7 +726,8 @@ function board() {
   if (debris.length) { const t = rngNear(debris); post('clear', 40, t, () => clearTask(t)); }
   if (yard.length) { const c = rngNear(yard); post('tidy', 18, c, () => yardTask(c)); }
   // v4.6 fishing: lowest-priority idle work (below yard tidy 18). Sea fishing is a little more worthwhile once unlocked.
-  if (T < 19 * 60 && F.crops.length < BASK()) {
+  const fishedOut = S.members.length && F.fishDay === S.day && F.fishMin >= FISH_FAMILY_CAP; // v5.3: with family around he does not fish the whole afternoon away
+  if (T < 19 * 60 && F.crops.length < BASK() && !fishedOut) {
     if (E.searod && E.regions.includes('coast')) { const sp = fishSpot('sea'); post('fish', 12, sp.stand, () => fishTask('sea')); }
     else post('fish', 8, FS.POND_SPOT.stand, () => fishTask('pond')); }
   if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
@@ -734,10 +748,10 @@ function board() {
     for (const pen of AN.PEN_IDS) { const pn = AN.penNeed(S.animals, pen); if (!pn) continue; const tr = S.troughs[pen], at = troughSpot(pen); inTroughs += Math.min(tr.feed, pn);
       if (tr.feed < pn && S.hay > 0) post('feed', (T < 12 * 60 ? 82 : 66) + late, at, () => feedTask(pen), PENS[pen].trough);
       if (!tr.water) { if (F.water >= PENS[pen].water) post('trough', 70 + late, at, () => troughTask(pen), PENS[pen].trough);
-        else { const w = rngNear(waterSpots()); post('refill', 62 + late, w, () => refillTask(w)); } } }
+        else { const w = rngNear(waterSpots()); post('refill', 62 + late, w, () => refillTask(w), undefined, 'animal'); } } }
     const ready = S.animals.filter(a => a.ready > 0);
     const eggs = ready.filter(a => a.kind === 'chicken').reduce((n, a) => n + a.ready, 0);
-    if (eggs && space > 0) post('collect', 72, COOP_DOOR, () => eggTask(), PENS.coop.bld);
+    if (eggs && space > 0) post('collect', 72, COOP_DOOR, () => eggTask(), PENS.coop.bld, 'coop');
     const big = ready.filter(a => a.kind !== 'chicken');
     if (big.length && space > 0) { const a = rngNear(big.map(animalSpot)); if (a) post('collect', 72, a, () => milkTask(a.an)); }
     const lonely = S.animals.filter(a => !a.pet);
@@ -763,15 +777,25 @@ function chooseTask() {
     return homeTask();
   }
   let best = null, bs = -Infinity;
-  const taken = CLAIM = claimsFor(F); const jobs = board(); CLAIM = new Set();
+  const others = workingOthers(F).map(a => ({ id: whoId(a), role: a.role })), me = whoId(F);
+  const taken = CLAIM = claimsFor(F); CROWD = crowdFor(F); const jobs = board();
   for (const j of jobs) { if (F.role && !FAM.canDo(F.role, j.kind)) continue; if ((j.key && taken.has(j.key)) || taken.has('kind:' + j.kind)) continue;
-    const s = j.base - travel(F, j.at) / 8; if (s > bs) { bs = s; best = j; } }
+    const s = j.base - travel(F, j.at) / 8 + FAM.affinity(me, F.role, j.area, others) - crowd(j.at) / 4; if (s > bs) { bs = s; best = j; } }
+  CLAIM = new Set(); CROWD = [];
   if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
   // nothing on the board: rest or stroll
   F.idleCount++;
+  if (F.role === 'child') { const at = F.id === 'kid1' && S.eff.coop ? { x: COOP_DOOR.x + 8, y: COOP_DOOR.y + 6, label: '在鸡舍边看小鸡' } : { x: DOOR.x + 14, y: DOOR.y + 10, label: '在院子里玩' };
+    return { kind: 'idle', label: at.label, to: { x: at.x + R(-3, 3), y: at.y + R(-2, 2) }, dur: 12 }; } // v5.3: a child plays in their own corner
+  if (F.id === 'partner' && F.idleCount % 3 !== 0) { const spots = idleSpotsOf(F); if (spots.length) { const p = pick(spots); return { kind: 'idle', label: p.label, to: { x: p.x, y: p.y }, dur: 14, rest: true }; } }
   if (F.idleCount % 3 === 0) { const t = pick(tiles.filter(t => t.open)); return { kind: 'idle', label: '在田边巡视', to: { x: t.x + R(-6, 6), y: FIELD.r0 * TILE - 4 }, dur: 6 }; }
   return { kind: 'idle', label: '坐在池塘边休息', to: F === FARMER ? BENCH_SPOT : { x: BENCH_SPOT.x + 5 + 4 * S.members.indexOf(F), y: BENCH_SPOT.y + 1 }, dur: 25, rest: true };
 }
+// v5.3: 阿禾 takes her breaks in her own corner of the farm (by a pen she looks after, or under a fruit tree), not on his bench
+function idleSpotsOf(m) { const out = [];
+  for (const pen of AN.PEN_IDS) if (S.animals.some(a => AN.KINDS[a.kind].home === pen)) { const at = troughSpot(pen); out.push({ x: at.x - 2, y: at.y + 6, label: '在棚子边看着动物们' }); }
+  for (const t of S.trees) if (t.stage === 'tree' && WD.FRUIT[t.kind] && treeReachable(t)) out.push({ x: t.x - 6, y: t.y + 5, label: '在果树下歇一会儿' });
+  return out.filter(p => Math.hypot(p.x - FARMER.x, p.y - FARMER.y) > CROWD_R).sort((a, b) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(b.x - m.x, b.y - m.y)).slice(0, 3); } // a nearby one: a break, not a hike
 function harvestTask(t) {
   const origin = SU.originOf(t, tiles), giant = !!(origin.crop && origin.crop.giant);
   const name = origin.crop ? SIM.CROPS[origin.crop.type].name : '';
@@ -1001,7 +1025,8 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   let hint;
   if (fam.moved) {
     const kids = fam.kids.map(k => `${k.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[FAM.kidStage(k, S.day)]}）`);
-    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人。`;
+    const nk = FAM.kidText(FAM.nextKid(fam, S.day, tier.pop)); // v5.3: 「小豆还有 N 天到来」
+    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人。` + (nk ? nk + '。' : '');
   } else if (!fam.met) hint = '去集市逛逛，就能认识店主阿禾。';
   else if (fam.love >= max && S.eff.house >= 1) hint = '好感已满，她答应明天搬过来。';
   else if (fam.love >= max) hint = '已满，等待大木屋';
@@ -1012,7 +1037,7 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   if (today.sales) bits.push('卖菜 +' + today.sales);
   const total = today.chat + today.gift + today.sales;
   const todayText = bits.length ? ('今天：' + bits.join('，') + '，共 +' + total) : (fam.moved ? '' : '今天还没去集市');
-  return { met: fam.met, moved: fam.moved, love: fam.love, max, people, pop: tier.pop, today, todayText, hint,
+  return { met: fam.met, moved: fam.moved, love: fam.love, max, people, pop: tier.pop, today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
     label: fam.moved ? `一家 ${people}/${tier.pop}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
 }
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
@@ -1043,8 +1068,10 @@ function sellTask() {
   } };
 }
 function fishSpot(water) { if (water === 'sea') { const r = WD.region('coast'); return r.fish; } return FS.POND_SPOT; }
+const FISH_FAMILY_CAP = 75; // game minutes of fishing a day once the family works too
 function fishTask(water) {
   const spot = fishSpot(water), wait = FS.waitTime(S.eff.rod, rand);
+  if (F.fishDay !== S.day) { F.fishDay = S.day; F.fishMin = 0; } F.fishMin += FS.CAST + wait + FS.BITE + FS.REEL + FS.SHOW;
   return { kind: 'fish', label: water === 'sea' ? '正在码头海钓' : '正在池塘边钓鱼', to: spot.stand, tile: spot.hook, hook: spot.hook, water, phase: 'cast',
     dur: FS.CAST + wait + FS.BITE + FS.REEL + FS.SHOW, wait, rest: true, tick: fishTick, done: fishDone };
 }
@@ -1557,6 +1584,10 @@ function syncFenceProps() {
   }
 }
 // ---- v5.0 family sprites: palette swaps of the farmer sheet (style A colours only); children are a few rows shorter ----
+// v5.3: 阿禾 and the children come prebuilt from assets/family_sprites.js (tools/build_family.py): the old whole-sheet swap also
+// recoloured the farmer's mouth (same red as his shirt) and drew a cream bar across her chin in every side-facing frame.
+// She has her own head there (headscarf, long auburn hair). The maps below are only the fallback when that file is missing.
+const FAM_PRE = {}; if (window.PF_FAMILY_SPRITES) for (const k in window.PF_FAMILY_SPRITES) { const im = new Image(); im.src = window.PF_FAMILY_SPRITES[k]; FAM_PRE[k] = im; }
 const FAM_LOOK = {
   partner: { '#4fa3cf': '#52af3a', '#2f6ea0': '#358a3c', '#1f3d68': '#24603a', '#a8432e': '#f6ecd0', '#7a2c24': '#ecc27c', '#8a5530': '#cf6a3c', '#5e3524': '#a8432e' }, // like her shop sprite
   kid0: { '#a8432e': '#f2cf55', '#7a2c24': '#d3984c' },
@@ -1566,10 +1597,11 @@ const FAM_LOOK = {
 const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 6 (partner, father, two children x child / teen)
 function famSheet(look, cut = 0) {
   const key = look + ':' + cut; let sh = FAM_SPR.get(key); if (sh || !SPR.ok) return sh || null;
-  const W0 = SPR.img.width, H0 = SPR.img.height, src = mkc(W0, H0), g = src.getContext('2d', { willReadFrequently: true }); g.drawImage(SPR.img, 0, 0);
-  const id = g.getImageData(0, 0, W0, H0), d = id.data, map = FAM_LOOK[look], hex = (r, gg, b) => '#' + [r, gg, b].map(v => v.toString(16).padStart(2, '0')).join('');
-  for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const to = map[hex(d[i], d[i + 1], d[i + 2])]; if (to) { d[i] = parseInt(to.slice(1, 3), 16); d[i + 1] = parseInt(to.slice(3, 5), 16); d[i + 2] = parseInt(to.slice(5, 7), 16); } }
-  g.putImageData(id, 0, 0);
+  const pre = FAM_PRE[look]; if (pre && !(pre.complete && pre.naturalWidth)) return null; // still decoding: skip a frame
+  const W0 = SPR.img.width, H0 = SPR.img.height, src = mkc(W0, H0), g = src.getContext('2d', { willReadFrequently: true }); g.drawImage(pre || SPR.img, 0, 0);
+  if (!pre) { const id = g.getImageData(0, 0, W0, H0), d = id.data, map = FAM_LOOK[look], hex = (r, gg, b) => '#' + [r, gg, b].map(v => v.toString(16).padStart(2, '0')).join('');
+    for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const to = map[hex(d[i], d[i + 1], d[i + 2])]; if (to) { d[i] = parseInt(to.slice(1, 3), 16); d[i + 1] = parseInt(to.slice(3, 5), 16); d[i + 2] = parseInt(to.slice(5, 7), 16); } }
+    g.putImageData(id, 0, 0); }
   let img = src;
   if (cut) { img = mkc(W0, H0); const c = img.getContext('2d'), fh = SPR.fh, B = 18; // drop `cut` rows of the body, keep the feet on the anchor
     for (let y = 0; y < H0; y += fh) { c.drawImage(src, 0, y + B + cut, W0, fh - B - cut, 0, y + B + cut, W0, fh - B - cut); c.drawImage(src, 0, y, W0, B, 0, y + cut, W0, B); }
@@ -2294,7 +2326,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.2.4';
+const GAME_VERSION = '5.3.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

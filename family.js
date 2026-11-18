@@ -52,7 +52,34 @@
     for (const k of fam.kids) { const st = kidStage(k, day); if (st !== 'baby') out.push({ id: k.id, name: k.name, role: st }); }
     return out;
   }
+  // v5.3 division of labour. Each person owns a few areas of the farm: the farmer the fields and the wood, 阿禾 the animals,
+  // the coop and the orchard; a child has a corner of their own (小豆 the yard and the pets, 小米 the coop and the pets) and
+  // a teen takes over part of a parent's areas. Only while someone else is out working: a job in my own area scores +OWN,
+  // one in an area somebody else owns -HELP (still well above fishing or resting, so nobody idles while there is work),
+  // anything else 0. On his own the farmer is unaffected.
+  const AREA_OF = { harvest: 'field', water: 'field', plant: 'field', fetch: 'field', buy: 'field', weed: 'field', clear: 'field', till: 'field',
+    chop: 'wood', transplant: 'wood', feed: 'animal', trough: 'animal', collect: 'animal', pet: 'animal', hay: 'animal', petpet: 'pets', pick: 'orchard', tidy: 'yard' };
+  const AREAS = { farmer: ['field', 'wood'], partner: ['animal', 'coop', 'orchard'],
+    kid0: { child: ['yard', 'pets'], teen: ['field', 'yard', 'pets'] }, kid1: { child: ['coop', 'pets'], teen: ['animal', 'coop', 'orchard'] } };
+  const OWN = 15, HELP = 18;
+  const areasOf = (id, role) => { const a = AREAS[id]; return !a ? [] : Array.isArray(a) ? a : (a[role] || []); };
+  // others: [{ id, role }] of the other people out working right now
+  function affinity(id, role, area, others) {
+    if (!area || !others || !others.length) return 0;
+    if (areasOf(id, role).includes(area)) return OWN;
+    return others.some(o => areasOf(o.id, o.role).includes(area)) ? -HELP : 0;
+  }
+  // the next child: { name, days } (days until the morning they arrive; 1 = tomorrow), { name, room: true } when the house
+  // has no room yet, or null (not living together yet, or every child is here)
+  function nextKid(fam, day, pop) {
+    if (!fam.moved || fam.kids.length >= KID_NAMES.length) return null;
+    const name = KID_NAMES[fam.kids.length];
+    if (fam.kids.length >= kidCap(pop)) return { name, room: true };
+    const last = fam.kids.length ? fam.kids[fam.kids.length - 1].born : fam.moved + KID_AFTER - KID_GAP;
+    return { name, days: Math.max(1, Math.max(fam.moved + KID_AFTER, last + KID_GAP) - day) };
+  }
+  const kidText = n => !n ? '' : n.room ? `扩建房子后${n.name}才会来` : n.days === 1 ? `${n.name}明天就来了` : `${n.name}还有 ${n.days} 天到来`;
   const canDo = (role, kind) => role === 'child' ? CHILD_KINDS.includes(kind) : role === 'teen' ? kind !== 'buy' && kind !== 'fish' : kind !== 'fish';
-  const api = { PARTNER, KID_NAMES, LOVE_MAX, CHAT, SALE, SALES_DAY, GIFTS, GIFT_FISH, MEET_DAY, KID_AFTER, KID_GAP, BABY_DAYS, CHILD_DAYS, CHILD_KINDS, empty, giftValue, bestGift, visit, kidCap, morning, kidStage, workers, canDo };
+  const api = { PARTNER, KID_NAMES, LOVE_MAX, CHAT, SALE, SALES_DAY, GIFTS, GIFT_FISH, MEET_DAY, KID_AFTER, KID_GAP, BABY_DAYS, CHILD_DAYS, CHILD_KINDS, empty, giftValue, bestGift, visit, kidCap, morning, kidStage, workers, canDo, AREA_OF, AREAS, OWN, HELP, areasOf, affinity, nextKid, kidText };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFFamily = api;
 })(typeof window !== 'undefined' ? window : globalThis);
