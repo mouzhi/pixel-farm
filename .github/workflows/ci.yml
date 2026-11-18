@@ -47,6 +47,8 @@ jobs:
         run: node tools/kids-test.js
       - name: Phase 8 (works) unit tests
         run: node tools/works-test.js
+      - name: Phase 9 (decor) unit tests
+        run: node tools/decor-test.js
       - name: Surprise browser test
         env:
           CHROME: /usr/bin/google-chrome
@@ -72,3 +74,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/works-shots.js
+      - name: Phase 9 browser test (decor shop, auto placing, moving, night lamps, party, codex page, day-59 save)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/decor-shots.js
