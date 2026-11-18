@@ -19,8 +19,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const at = T => { S.t = Math.floor(S.t / 1440) * 1440 + T; };
     const until = (ok, n) => { for (let i = 0; i < (n || 600) && !ok(); i++) f.advance(1, 10); return ok(); };
     const tod = () => S.t % 1440, dry = () => { if (S.weather) S.weather.rained = false; };
-    const spotFor = (what, id, c, skip) => { for (let r = 0; r <= 90; r += 6) for (let a = 0; a < 16; a++) { const x = c.x + r * Math.cos(a * Math.PI / 8), y = c.y + r * Math.sin(a * Math.PI / 8);
-      const q = f.placeOk(x, y, what, id, skip); if (q.ok) return q; } return null; };`;
+    const spotFor = (what, id, c, skip, from) => { for (let r = 0; r <= 90; r += 3) for (let a = 0; a < 24; a++) { const x = c.x + r * Math.cos(a * Math.PI / 12), y = c.y + r * Math.sin(a * Math.PI / 12);
+      if (from && Math.hypot(x - from.x, y - from.y) < 14) continue; const q = f.placeOk(x, y, what, id, skip); if (q.ok) return q; } return null; };`;
   const shot = async (name, fn, check, vw, vh) => { if (only && !name.includes(only)) return;
     const p = await page('?manual', vw, vh); const r = await p.evaluate(fn); await p.waitForTimeout(500); await p.screenshot({ path: path.join(OUT, name) });
     const bad = check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
@@ -47,19 +47,26 @@ fs.mkdirSync(OUT, { recursive: true });
     f.setMode(null); const btn2 = [...document.querySelectorAll('#tools button')].map(b => b.textContent); f.setMode('decor', 'stringlights'); const s2 = f.autoSpot('stringlights'); f.input.hover = f.decorHover(s2); f.setAngle(0); f.panTo(sp.x, sp.y); f.advance(0.2, 10); f.input.hover = f.decorHover(s2); f.render();
     return { btn, btn2, doorNo: door && !door.ok && door.why, waterNo: water && !water.ok && water.why, good: good && good.ok, queued, placed, hoverOk: f.input.hover && f.input.hover.dec && f.input.hover.dec.ok }; })()`,
     r => !r.btn.some(t => /摆路灯/.test(t)) || !r.btn2.some(t => /挪东西/.test(t)) ? 'toolbar ' + r.btn + ' / ' + r.btn2 : !r.doorNo || !r.waterNo ? 'bad spot accepted' : !r.good || !r.placed ? 'not placed' : !r.hoverOk ? 'hover' : null);
-  // 4. 挪东西: a workshop moves out of its yard to a spot by the house; deliveries still find its door
-  await shot('v570_move_workshop.png', `(() => { ${setup} dry(); f.buyPlot('wbank', 'workshop'); f.buy('mill'); at(9 * 60); const w = S.works.works.mill, p0 = f.PW.workPos(w);
-    f.setMode('move'); f.decorClick(p0); const picked = f.input.mvPick && f.input.mvPick.ref; const to = spotFor('work', null, { x: f.DOOR.x + 60, y: f.DOOR.y + 40 }, { what: 'work', ref: 'mill' });
-    const r = f.decorClick(to); f.setMode(null); until(() => !S.decor.orders.length, 600); const p1 = f.PW.workPos(w), door = f.PWA.doorOf('mill');
-    f.setAngle(0); f.panTo(p1.x, p1.y); f.advance(0.3, 10);
-    return { picked, ok: r && r.ok, from: [p0.x, p0.y], to: [p1.x, p1.y], moved: Math.hypot(p1.x - to.x, p1.y - to.y) < 1, saved: typeof w.x === 'number', door: [door.x, door.y] }; })()`,
-    r => r.picked !== 'mill' ? 'pick' : !r.ok ? 'order' : !r.moved ? 'not moved' : null);
-  // 5. a hive and a sprinkler move too (the sprinkler only along a field's edge)
-  await shot('v570_move_hive.png', `(() => { ${setup} dry(); f.buy('hive'); f.buy('hive'); at(9 * 60); const h0 = f.PWA.hiveSpots()[0];
-    f.setMode('move'); f.decorClick(h0); const to = spotFor('hive', null, { x: f.DOOR.x + 40, y: f.DOOR.y + 36 }, { what: 'hive', ref: 0 }); const r = f.decorClick(to); f.setMode(null);
+  // 4. 挪东西: a workshop only moves inside its own 工坊院 (red outline elsewhere); deliveries still find its door
+  await shot('v570_move_workshop.png', `(() => { ${setup} dry(); f.buyPlot('wbank', 'workshop'); f.buy('mill'); at(9 * 60); const w = S.works.works.mill, p0 = f.PW.workPos(w), R = f.PL.plot('wbank').rect;
+    const sk = { what: 'work', ref: 'mill' }, inside = (x, y) => x >= R[0] && x <= R[2] && y >= R[1] && y <= R[3];
+    f.setMode('move'); f.decorClick(p0); const picked = f.input.mvPick && f.input.mvPick.ref;
+    const byHouse = spotFor('decor', 'party', { x: f.DOOR.x + 60, y: f.DOOR.y + 40 }), houseNo = f.decorClick(byHouse), houseHover = f.decorHover(byHouse).dec.ok;
+    const out = { x: R[2] + 14, y: (R[1] + R[3]) / 2 }, outNo = f.placeOk(out.x, out.y, 'work', null, sk);
+    const to = spotFor('work', null, { x: (R[0] + R[2]) / 2, y: (R[1] + R[3]) / 2 }, sk, p0); const r = f.decorClick(to); f.setMode(null);
+    until(() => !S.decor.orders.length, 600); const p1 = f.PW.workPos(w), door = f.PWA.doorOf('mill');
+    f.setMode('move'); f.decorClick(p1); f.setAngle(0); f.panTo((R[0] + R[2]) / 2 + 6, (R[1] + R[3]) / 2); f.advance(0.3, 10);
+    const edge = { x: R[2] + 6, y: p1.y }; f.input.hover = f.decorHover(edge); f.render();
+    return { picked, houseNo: houseNo && !houseNo.ok && houseNo.why, houseHover, outNo: !outNo.ok && outNo.why, edgeRed: f.input.hover.dec.ok === false, ok: r && r.ok, from: [p0.x, p0.y], to: [p1.x, p1.y], inYard: inside(p1.x, p1.y),
+      moved: Math.hypot(p1.x - to.x, p1.y - to.y) < 1 && Math.hypot(p1.x - p0.x, p1.y - p0.y) >= 14, door: [door.x, door.y] }; })()`,
+    r => r.picked !== 'mill' ? 'pick' : !/工坊院/.test(r.houseNo || '') || r.houseHover ? 'moved out of the yard: ' + r.houseNo : !r.outNo || !r.edgeRed ? 'outline not red outside' : !r.ok ? 'order' : !r.moved || !r.inYard ? 'not moved inside the yard' : null);
+  // 5. hives stay in their 花甸 / on 果园坡 (the orchard pair here)
+  await shot('v570_move_hive.png', `(() => { ${setup} dry(); f.buy('hive'); f.buy('hive'); at(9 * 60); const h0 = f.PWA.hiveSpots()[0], sk = { what: 'hive', ref: 0 };
+    f.setMode('move'); f.decorClick(h0); const near = spotFor('decor', 'flowerpot', { x: f.DOOR.x + 40, y: f.DOOR.y + 36 }), homeNo = f.decorClick(near);
+    const to = spotFor('hive', null, h0, sk, h0); const r = f.decorClick(to); f.setMode(null);
     until(() => !S.decor.orders.length, 600); const h1 = f.PWA.hiveSpots()[0]; f.setMode('move'); f.setAngle(0); f.panTo(h1.x, h1.y); f.advance(0.3, 10);
-    return { ok: r && r.ok, moved: Math.hypot(h1.x - to.x, h1.y - to.y) < 1, kept: S.works.hives.length }; })()`,
-    r => !r.ok ? 'order' : !r.moved ? 'hive not moved' : r.kept !== 2 ? 'hives' : null);
+    return { homeNo: homeNo && !homeNo.ok && homeNo.why, ok: r && r.ok, moved: Math.hypot(h1.x - to.x, h1.y - to.y) < 1, orchard: f.WD ? f.WD.areaAt(h1.x, h1.y) : 'n/a', kept: S.works.hives.length }; })()`,
+    r => !/果园坡/.test(r.homeNo || '') ? 'hive moved out of the orchard: ' + r.homeNo : !r.ok ? 'order' : !r.moved ? 'hive not moved' : r.kept !== 2 ? 'hives' : null);
   // 6. lamps: without a water wheel they stand dark; with one turning they light at dusk and 「今晚月色真美」 lights up
   const lampSetup = `${setup} dry(); for (const id of ['lamppost', 'lamppost', 'stonelamp', 'stonelamp', 'stringlights']) f.buy(id); at(8 * 60); until(() => !Object.keys(S.decor.inv).length && !S.decor.orders.length, 900);
     const ps = S.decor.placed, cx = ps.reduce((s, q) => s + q.x, 0) / ps.length, cy = ps.reduce((s, q) => s + q.y, 0) / ps.length;`;
@@ -85,8 +92,9 @@ fs.mkdirSync(OUT, { recursive: true });
   // 9. the book's 装饰 page: pieces seen are drawn, the rest are silhouettes
   await shot('v570_codex_decor.png', `(() => { ${setup} for (const id of ['bench', 'lamppost', 'carving', 'shell', 'giant_pumpkin']) f.decorGain(id); f.refreshUI(); document.getElementById('codexBtn').click();
     const box = document.getElementById('codex'), cells = [...box.querySelectorAll('[data-key^="decor:"], [data-lock^="decor:"]')]; cells[0] && cells[0].scrollIntoView({ block: 'center' });
-    return { cells: cells.length, seen: cells.filter(c => !c.classList.contains('locked')).length, icons: cells.filter(c => { const i = c.querySelector('.ico'); return i && /data:image\\/png/.test(i.style.backgroundImage); }).length }; })()`,
-    r => r.cells !== 16 ? 'cells ' + r.cells : r.seen !== 5 ? 'seen ' + r.seen : r.icons !== 16 ? 'icons ' + r.icons : null);
+    const fishIco = box.querySelector('[data-key^="fish:"] .ico, [data-lock^="fish:"] .ico'), sizes = cells.map(c => c.querySelector('.ico').offsetWidth);
+    return { size: [Math.min(...sizes), Math.max(...sizes)], fish: fishIco && fishIco.offsetWidth, cells: cells.length, seen: cells.filter(c => !c.classList.contains('locked')).length, icons: cells.filter(c => { const i = c.querySelector('.ico'); return i && /data:image\\/png/.test(i.style.backgroundImage); }).length }; })()`,
+    r => r.size[0] !== r.fish || r.size[1] !== r.fish ? 'icon size ' + r.size + ' vs fish ' + r.fish : r.cells !== 16 ? 'cells ' + r.cells : r.seen !== 5 ? 'seen ' + r.seen : r.icons !== 16 ? 'icons ' + r.icons : null);
   // 10. the day-59 manor save (v10) loads in v5.7.0: no decorations, plots and the old house where they were
   if (!only || 'v570_fixture_day59.png'.includes(only)) {
     const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8')), save = raw.save || raw;

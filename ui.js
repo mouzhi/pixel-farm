@@ -404,7 +404,7 @@
       return url ? icoTag(url, 'bug', 72, 72) : '<i class="ico"></i>';
     }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
-    if (it.group === 'decor' && DART()) { const url = DART().iconURL(it.id); return url ? `<i class="ico decor" style="width:48px;height:48px;background-image:url(${url});background-size:48px 48px;image-rendering:pixelated${seen ? '' : ';filter:brightness(0);opacity:.3'}"></i>` : '<i class="ico"></i>'; } // v5.7.0
+    if (it.group === 'decor' && DART()) { const url = DART().bookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.7.0: 36px art at 2x, like fish and bugs
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
   function drawCodex(force) {

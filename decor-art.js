@@ -118,6 +118,25 @@
         g.drawImage(k.c, 0, 0, sw, sh, Math.round((32 - w) / 2), Math.round((32 - h) / 2), w, h); ICON_URL[id] = c.toDataURL(); } catch (e) { /* drawn later */ } }
   }
   const iconURL = id => ICON_URL[id] || null;
+  // the codex cell: the model cropped to its pixels and scaled up by a whole number onto 36x36 (shown at 72, like the fish and bugs);
+  // unseen pieces use the book's own silhouette (dark fill, darker edge)
+  const BOOK_URL = {};
+  function bookURL(id, seen) {
+    const key = id + (seen ? '' : ':sil'); if (BOOK_URL[key] !== undefined) return BOOK_URL[key];
+    const m = MD && MD[id]; if (!m || typeof document === 'undefined') return null;
+    try {
+      const k = X.stackCanvas(m, -0.6), src = k.c, sg = src.getContext('2d'), d = sg.getImageData(0, 0, src.width, src.height).data;
+      let x0 = src.width, y0 = src.height, x1 = -1, y1 = -1;
+      for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) if (d[(y * src.width + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+      if (x1 < 0) return (BOOK_URL[key] = null);
+      const N = 36, w = x1 - x0 + 1, h = y1 - y0 + 1, big = Math.max(w, h), sc = big <= N - 2 ? Math.max(1, Math.floor((N - 2) / big)) : (N - 2) / big;
+      const dw = Math.max(1, Math.round(w * sc)), dh = Math.max(1, Math.round(h * sc)), c = document.createElement('canvas'); c.width = c.height = N;
+      const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(src, x0, y0, w, h, Math.floor((N - dw) / 2), N - 1 - dh, dw, dh);
+      const ICN = root.PFCodexIcons;
+      if (!seen && ICN && ICN.silhouette) { const im = g.getImageData(0, 0, N, N), sil = ICN.silhouette({ w: N, h: N, px: im.data }); g.putImageData(new ImageData(sil.px, N, N), 0, 0); }
+      return (BOOK_URL[key] = c.toDataURL());
+    } catch (e) { return null; }
+  }
 
   // ---------- mount / sync ----------
   function mount(x) { X = x; S = x.S; MD = makeModels(x); mounted = true; sync(true); makeIcons(); return api; }
@@ -175,6 +194,6 @@
   }
   const IMG = {};
   function iconImg(id) { if (IMG[id]) return IMG[id].complete ? IMG[id] : null; if (!ICON_URL[id]) return null; const im = new Image(); im.src = ICON_URL[id]; IMG[id] = im; return null; }
-  const api = { mount, sync, blocks, lamps, litLamps, lights, draw, iconURL, models: () => MD };
+  const api = { mount, sync, blocks, lamps, litLamps, lights, draw, iconURL, bookURL, models: () => MD };
   root.PFDecorArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

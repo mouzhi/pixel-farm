@@ -1905,10 +1905,14 @@ function placeOk(x, y, what, id, skip, self) { // self: the order being carried 
   x = Math.round(x * 2) / 2; y = Math.round(y * 2) / 2; const box = thingBox(what, id, x, y), res = (ok, why) => ({ ok, why, box, x, y });
   const pts = [{ x, y }, { x: box[0], y: box[1] }, { x: box[2], y: box[1] }, { x: box[0], y: box[3] }, { x: box[2], y: box[3] }];
   if (!pts.every(p => ownGround(p.x, p.y))) return res(false, '这里还没解锁');
-  if (!pts.every(p => groundAt(p.x, p.y)[1] === 'grass')) return res(false, '只能放在草地上，不能压在路、水边或桥上');
+  const zone = thingZone(what, skip); if (zone && !pts.every(p => zone.ok(p.x, p.y))) return res(false, zone.why);
+  if (!zone && !pts.every(p => groundAt(p.x, p.y)[1] === 'grass')) return res(false, '只能放在草地上，不能压在路、水边或桥上');
   const g = ensureNav(), cur = skip && skip.what !== 'spr' ? thingNow({ op: 'move', what: skip.what, ref: skip.ref }) : null;
   const own = cur ? thingBlock(skip.what, skip.what === 'decor' ? decorById(skip.ref) : id, cur.x, cur.y) : null;
-  if (!DC.onGrass(g, box, NAV.GRASS, own)) return res(false, '这里挡路了（路、门口、篱笆或别的东西）');
+  if (zone) { // inside its own plot the yard's packed dirt is fine; only fences, water, buildings and the plot's gate are out
+    const mine = new Set(own ? DC.cellsOf(g, own).map(([i, j]) => j * g.w + i) : []), pl = PL.plotAt(x, y);
+    if (DC.cellsOf(g, box).some(([i, j]) => i < 0 || j < 0 || i >= g.w || j >= g.h || (!g.cost[j * g.w + i] && !mine.has(j * g.w + i))) || (pl && pl.gate && ptIn(pl.gate, box, 4))) return res(false, '这里挡路了（篱笆、门口或别的东西）');
+  } else if (!DC.onGrass(g, box, NAV.GRASS, own)) return res(false, '这里挡路了（路、门口、篱笆或别的东西）');
   if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && ptIn(t, box, 5))) return res(false, '不能放在田里');
   if (yard.some(c => ptIn(c, box, 3))) return res(false, '这里有杂物，等家人收拾完再放');
   const hb = NAV.houseBox(S.eff.house || 0); if (boxHit(box, [hb.x0, hb.y0, hb.x1, hb.y1], 8)) return res(false, '离房子太近');
@@ -1925,6 +1929,15 @@ function placeOk(x, y, what, id, skip, self) { // self: the order being carried 
   const blk = thingBlock(what, id, x, y);
   if (blk && !DC.keepsPaths(g, blk, entrySpots(), NAV.LAYOUT.DOOR)) return res(false, '放在这里会把路堵上');
   return res(true, null);
+}
+// things tied to a plot's use stay inside it: a workshop in its 工坊院, a hive in its 花甸 (or on 果园坡 for the orchard pair)
+function thingZone(what, skip) {
+  const inPlot = (id, mod) => { const p = PL.plot(id), st = S.plots[id]; return p && st && st.mod === mod ? (x, y) => WD.inRect(x, y, p.rect) : () => false; };
+  if (what === 'work' && skip) { const w = S.works.works[skip.ref]; if (!w || !w.at) return null; return { ok: inPlot(w.at, 'workshop'), why: `${PW.WORKS[skip.ref].name}只能挪到它所在的工坊院里` }; }
+  if (what === 'hive' && skip) { const h = S.works.hives[skip.ref]; if (!h) return null;
+    if (h.at === 'orchard') return { ok: (x, y) => WD.areaAt(x, y) === 'orchard', why: '这箱蜂只能在果园坡里挪' };
+    return { ok: inPlot(h.at, 'meadow'), why: '蜂箱只能挪到它所在的花甸里' }; }
+  return null;
 }
 const decorById = u => { const p = S.decor.placed.find(q => q.u === u); return p ? p.id : null; };
 // the family's own choice: free grass near the house (the party area prefers a playground plot), spaced out a little
