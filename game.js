@@ -653,7 +653,7 @@ let CLAIM = new Set();
 let CROWD = [];
 const CROWD_R = 5 * TILE, CROWD_K = 3;
 const crowd = t => { let p = 0; for (const q of CROWD) { const d = Math.hypot(t.x - q.x, t.y - q.y); if (d < CROWD_R) p += (CROWD_R - d) * CROWD_K; } return p; };
-const workingOthers = me => actors().filter(a => a !== me && !a.home && !a.sleeping);
+const workingOthers = me => actors().filter(a => a !== me && !a.home && !a.sleeping && !a.away);
 function crowdFor(me) { const out = [];
   for (const a of workingOthers(me)) { out.push({ x: a.x, y: a.y }); const k = a.task; if (k && k.kind !== 'idle' && k.kind !== 'home') { const t = k.tile || k.to; if (t) out.push({ x: t.x, y: t.y, tile: !!k.tile }); } }
   return out; }
@@ -798,6 +798,41 @@ function board() {
   }
   return out;
 }
+
+// v5.4.3: kids.js picks play and school tasks; the game only supplies the live world (pets, pens, pond, path)
+function kidCtx() {
+  const kid = (S.family.kids || []).find(k => k.id === F.id);
+  const pets = PETS_LIVE.map(p => { const v = petView(p), name = ((AN.PETS[p.kind] || {}).coats || []).find(c => c.id === p.coat); return { id: p.id, kind: p.kind, coat: p.coat, name: name ? name.name : (p.kind === 'dog' ? '小狗' : '小猫'), x: v.x, y: v.y, view: v, pet: p }; });
+  const pens = [];
+  for (const id of AN.PEN_IDS) {
+    const kinds = [];
+    for (const a of S.animals) { const k = AN.KINDS[a.kind]; if (k && k.home === id && !kinds.includes(a.kind)) kinds.push(a.kind); }
+    if (!kinds.length) continue;
+    const P = PENS[id];
+    if (P.needs && !S.eff.regions.includes(P.needs) && P.needs !== null) continue;
+    pens.push({ id, name: P.name, door: P.door, kinds });
+  }
+  return { actor: F, day: S.day, t: S.t, kid, pets, pens, pond: POND, pondFish: (S.pondFish || []).length, regions: S.eff.regions || [],
+    areaAt: (x, y) => WD.areaAt(x, y), rng: rand, lastKind: F.task && F.task.play ? F.task.kind : (F._playKind || null),
+    door: DOOR, world: WD.WORLD, allowFeed: true };
+}
+function finishKidTask(k) {
+  if (!k) return k;
+  if (k.leave) k.done = () => { F.away = 'school'; F.x = k.to.x; F.y = k.to.y; log(`${F.name}去上学了`); };
+  if (k.comeBack) {
+    const ex = window.PFKids.schoolExit(kidCtx());
+    const x1 = (WD.WORLD && WD.WORLD.x1) || 352;
+    F.away = null; F.x = Math.min(ex.to.x, x1 - 2); F.y = ex.to.y; F.fx = -1; F.fy = 0;
+    k.done = () => { log(`${F.name}放学回来了`); };
+  }
+  if (k.kind === 'play-pet' && k.pet && k.pet.pet) k.done = () => { const v = k.pet.view || petView(k.pet.pet); hearts(v.x, v.y, 8); if (v.pose === 3) v.pose = 2; v.idle = 0; log(`${F.name}摸了摸${k.pet.name}`); };
+  else if (k.kind === 'play-pet' && k.pet) k.done = () => { hearts(k.pet.x, k.pet.y, 8); log(`${F.name}摸了摸${k.pet.name}`); };
+  F._playKind = k.kind;
+  return k;
+}
+function kidPickTask() { return finishKidTask(PFKids.pickTask(kidCtx())); }
+function kidPickPlay() { return finishKidTask(PFKids.pickPlay(kidCtx())); }
+
 function chooseTask() {
   const T = S.t % 1440;
   if (T >= BEDTIME || T < WAKE - 30) {
@@ -805,6 +840,7 @@ function chooseTask() {
     if (F.gathered > 0 && T < BEDTIME + 60) return storeTask();
     return homeTask();
   }
+  if (window.PFKids && F.id && /^kid/.test(F.id)) { const k = kidPickTask(); if (k) return k; }
   let best = null, bs = -Infinity;
   const others = workingOthers(F).map(a => ({ id: whoId(a), role: a.role })), me = whoId(F);
   const taken = CLAIM = claimsFor(F); CROWD = crowdFor(F); const jobs = board();
@@ -812,8 +848,9 @@ function chooseTask() {
     const s = j.base - travel(F, j.at) / 8 + FAM.affinity(me, F.role, j.area, others) - crowd(j.at) / 4; if (s > bs) { bs = s; best = j; } }
   CLAIM = new Set(); CROWD = [];
   if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
-  // nothing on the board: rest or stroll
+  // nothing on the board: rest or stroll. v5.4.3: a child who is not working goes off to play (pets, pens, pond, skip)
   F.idleCount++;
+  if (window.PFKids && F.id && /^kid/.test(F.id)) { const k = kidPickPlay(); if (k) return k; }
   if (F.role === 'child') { const at = F.id === 'kid1' && S.eff.coop ? { x: COOP_DOOR.x + 8, y: COOP_DOOR.y + 6, label: '在鸡舍边看小鸡' } : { x: DOOR.x + 14, y: DOOR.y + 10, label: '在院子里玩' };
     return { kind: 'idle', label: at.label, to: { x: at.x + R(-3, 3), y: at.y + R(-2, 2) }, dur: 12 }; } // v5.3: a child plays in their own corner
   if (F.id === 'partner' && F.idleCount % 3 !== 0) { const spots = idleSpotsOf(F); if (spots.length) { const p = pick(spots); return { kind: 'idle', label: p.label, to: { x: p.x, y: p.y }, dur: 14, rest: true }; } }
@@ -1078,7 +1115,7 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   const today = (fam.today && fam.today.day === S.day) ? fam.today : { chat: 0, gift: 0, giftName: '', sales: 0 };
   let hint;
   if (fam.moved) {
-    const kids = fam.kids.map(k => `${k.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[FAM.kidStage(k, S.day)]}）`);
+    const kids = fam.kids.map(k => FAM.kidLine(k, S.day));
     const nk = FAM.kidText(FAM.nextKid(fam, S.day, tier.pop)); // v5.3: 「小豆还有 N 天到来」
     hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人。` + (nk ? nk + '。' : '');
   } else if (!fam.met) hint = '去集市逛逛，就能认识店主阿禾。';
@@ -1270,8 +1307,8 @@ function stepSim(dm) {
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = chooseTask(); F.task.work = 0; F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
-  else if (F._nav !== navVer) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
+  if (!F.task) { F.task = chooseTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
@@ -1288,7 +1325,7 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
   if (me) noteLog('tick', dm, F.task && F.task.kind, F.task && F.task.label); else if (F.task && F.task.kind !== 'idle' && F.task.kind !== 'home') noteLog('work', F.id, dm);
 }
 // ---- v5.0 family: 阿禾 moves in, children arrive and grow up (family.js); members are the ones out working ----
-const ROLE = { partner: { spd: 1, bmul: 1 }, teen: { spd: 1.1, bmul: 0.75 }, child: { spd: 0.8, bmul: 0.5 } };
+const ROLE = { partner: { spd: 1, bmul: 1 }, teen: { spd: 1.1, bmul: 0.75 }, child: { spd: 0.8, bmul: 0.5 }, play: { spd: 0.85, bmul: 0.5 }, school: { spd: 0.85, bmul: 0.5 } };
 function makeMember(w) {
   return { id: w.id, name: w.name, role: w.role, spd: ROLE[w.role].spd, bmul: ROLE[w.role].bmul, x: DOOR.x + 3, y: DOOR.y, fx: 0, fy: 1, home: true, sleeping: false, task: null,
     bag: SIM.emptySeeds(), gathered: 0, crops: [], water: 0, walkPhase: 0, idleCount: 0, act: 0 };
@@ -1309,7 +1346,8 @@ function familyMorning() {
   }
   let kidStarted = false;
   for (const k of S.family.kids) { const st = FAM.kidStage(k, S.day), was = FAM.kidStage(k, S.day - 1);
-    if (st !== was) { log(st === 'child' ? `${k.name}会走路了，能帮忙喂鸡、摸摸动物、摘果子` : `${k.name}长成了少年，田里的活都能干了`); if (k.id === 'kid0' && st === 'child') kidStarted = true; } }
+    if (st !== was) { const msg = window.PFKids ? PFKids.stageChangeLog(k.name, st) : (st === 'child' || st === 'helper' ? `${k.name}会走路了，能帮忙喂鸡、摸摸动物、摘果子` : `${k.name}长成了少年，田里的活都能干了`);
+      if (msg) log(msg); if (k.id === 'kid0' && (st === 'child' || st === 'helper')) kidStarted = true; } }
   if (kidStarted) noteProgress({ kidStarted: true });
   syncFamily(); if (S.members.map(m => m.id + m.role).join() !== before && window.__farm && window.__farm.onFamily) window.__farm.onFamily();
 }
@@ -1816,7 +1854,7 @@ function famSheet(look, cut = 0) {
   const flip = mkc(W0, H0), fc = flip.getContext('2d'); fc.translate(W0, 0); fc.scale(-1, 1); fc.drawImage(img, 0, 0);
   sh = { img, flip }; FAM_SPR.set(key, sh); return sh;
 }
-const lookOf = m => m.id === 'partner' ? ['partner', 0] : [m.id, m.role === 'child' ? 6 : 3];
+const lookOf = m => m.id === 'partner' ? ['partner', 0] : [m.id, (m.role === 'child' || m.role === 'play' || m.role === 'school') ? 6 : 3];
 const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
 const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', '.bbbbbbbbb.', 'b.........b']);
 function carryFields(actor) { // hide the hip basket while a giant crop is held overhead
@@ -1826,7 +1864,7 @@ function carryFields(actor) { // hide the hip basket while a giant crop is held 
 }
 function familyDraw(list, T) { // pushes the family into the depth-sorted list; returns the ones that get a ghost
   const out = [], fam = S.family;
-  for (const m of S.members) { if (m.home) continue; const [look, cut] = lookOf(m), sh = famSheet(look, cut); if (!sh) continue;
+  for (const m of S.members) { if (m.home || m.away) continue; const [look, cut] = lookOf(m), sh = famSheet(look, cut); if (!sh) continue;
     const d = Object.assign({ bb: 1, x: m.x, y: m.y, sheet: sh, member: m.id }, carryFields(m), farmerPose(m)); list.push(d); out.push(d); }
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby');
   if (T >= WAKE && T < BEDTIME) babies.forEach((k, i) => list.push({ spr: CRADLE, x: DOOR.x + 11 + i * 7, y: DOOR.y - 3, w: 1 }));
@@ -2600,7 +2638,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.2';
+const GAME_VERSION = '5.4.3';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2656,7 +2694,7 @@ function snapshot() {
     achievements: (S.achievements || []).map(u => Object.assign({}, u)),
     milestones: (S.milestones || []).map(u => Object.assign({}, u)),
     streaks: Object.assign({}, S.streaks),
-    family: JSON.parse(JSON.stringify(S.family)), // v5.0
+    family: (S.family.kidGrowth = 1, JSON.parse(JSON.stringify(S.family))), // v5.0; kidGrowth marks the v5.4.3 table
     members: S.members.map(m => ({ id: m.id, water: m.water, bag: Object.assign({}, m.bag), gathered: m.gathered, basket: m.crops.slice() })),
     log: S.log.slice(),
   };
@@ -2683,7 +2721,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.pondFish = (s.pondFish || []).map(f => Object.assign({}, f)); S.pondFed = 0;
   S.codex = BOOK.validCodex(s.codex); S.achievements = (s.achievements || []).map(u => Object.assign({}, u)); S.milestones = (s.milestones || []).map(u => Object.assign({}, u));
   S.streaks = BOOK.validStreaks(s.streaks); S.doorGift = null; S.loose = []; S.dogPlan = null; planDogDay();
-  S.family = Object.assign(FAM.empty(), JSON.parse(JSON.stringify(s.family || {}))); S.members.length = 0; syncFamily(); // v5.0: everyone wakes at the door
+  S.family = Object.assign(FAM.empty(), JSON.parse(JSON.stringify(s.family || {}))); if (window.PFKids) PFKids.migrateFamily(S.family, S.day, s.members || []); S.members.length = 0; syncFamily(); // v5.0: everyone wakes at the door
   for (const m of S.members) { const o = (s.members || []).find(q => q.id === m.id); m.sleeping = FARMER.sleeping;
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
   S.log = s.log.slice(); S.label = FARMER.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
@@ -2717,7 +2755,7 @@ document.addEventListener('visibilitychange', () => {
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
-  BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish,
+  BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR,
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
