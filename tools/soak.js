@@ -8,15 +8,15 @@ const SECS = +process.argv[3] || 180;
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.addInitScript(() => {
     const st = window.__cv = { made: 0, alive: 0, px: 0, maxAlive: 0, maxPx: 0 };
-    const reg = new FinalizationRegistry(a => { st.alive--; st.px -= a; });
+    const reg = new FinalizationRegistry(b => { st.alive--; st.px -= b.a; });
     const ce = Document.prototype.createElement;
     Document.prototype.createElement = function (t, ...r) { const el = ce.call(this, t, ...r);
       if (String(t).toLowerCase() === 'canvas') { st.made++; st.alive++; let area = 0;
         const desc = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width'), desch = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height');
-        const upd = () => { const a = el.width * el.height; st.px += a - area; area = a; el.__a = a; st.maxPx = Math.max(st.maxPx, st.px); };
+        const upd = () => { const a = el.width * el.height; st.px += a - area; area = a; el.__a = a; if (el.__box) el.__box.a = a; st.maxPx = Math.max(st.maxPx, st.px); };
         Object.defineProperty(el, 'width', { get() { return desc.get.call(this); }, set(v) { desc.set.call(this, v); upd(); } });
         Object.defineProperty(el, 'height', { get() { return desch.get.call(this); }, set(v) { desch.set.call(this, v); upd(); } });
-        upd(); const box = { a: 0 }; reg.register(el, 0); el.__box = box; st.maxAlive = Math.max(st.maxAlive, st.alive); }
+        const box = { a: 0 }; el.__box = box; upd(); reg.register(el, box); st.maxAlive = Math.max(st.maxAlive, st.alive); }
       return el; };
     // frame-time probe
     window.__ft = []; let last = 0; const f = t => { if (last) window.__ft.push(t - last); last = t; requestAnimationFrame(f); }; requestAnimationFrame(f);

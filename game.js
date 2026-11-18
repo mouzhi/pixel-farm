@@ -639,9 +639,13 @@ function nextHop(v, dest, bounds) {
   while (v.via.length && Math.hypot(v.via[0].x - v.x, v.via[0].y - v.y) <= 0.5) v.via.shift();
   return v.via.length ? v.via[0] : dest;
 }
-const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue;
+// v5.5.0: nearest first by straight line, and stop once the straight line alone is longer than the best walk found
+// (a walk is never shorter than the straight line, less the few units a snap to the nav grid can cut), so the big outer
+// ring's far tiles never each cost a full A* every time someone picks a job; at most 8 walks are measured per pick
+const rngNear = (list) => { let best = null, bd = 1e9, n = 0; const c = list.map(t => ({ t, e: Math.hypot(t.x - F.x, t.y - F.y) })).sort((a, b) => a.e - b.e);
+  for (const { t, e } of c) { if (e - 8 >= bd || n >= 8) break; if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue;
   if (t.f !== undefined && CROWD.some(q => q.tile && Math.abs(q.x - t.x) <= TILE * 1.5 && Math.abs(q.y - t.y) <= TILE * 1.5)) continue; // v5.3: never the tile next to someone else's
-  const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01 + crowd(t); if (d < bd) { bd = d; best = t; } } return best; };
+  n++; const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01 + crowd(t); if (d < bd) { bd = d; best = t; } } return best; };
 const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 })),
   ...PL.PLOTS.filter(p => p.barrel && S.plots[p.id] && S.plots[p.id].mod === 'field').map(p => ({ x: p.barrel.x, y: p.barrel.y + 8 }))];
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
@@ -1351,12 +1355,12 @@ function proj(x, y) { const rx = x * CA - y * SA, ry = x * SA + y * CA; return [
 // Rotated stacks are rendered at 3x and reduced with a majority (mode) filter: each screen pixel takes the colour that covers
 // most of it, so stripes keep their shape at every angle. Each result gets its own selective outline and is cached per angle.
 const SS = 3, ssC = mk(8, 8), ssG = ssC.getContext('2d', { willReadFrequently: true });
-const STK = new Map(), STK_BUDGET = 16e6; let stkPx = 0; // ~64 MB (CPU) of cached stacks at most, least recently used goes first
+const STK = new Map(), STK_BUDGET = 16e6, STK_MAX = 10000; let stkPx = 0; // ~64 MB (CPU) of cached stacks at most, least recently used goes first
 function stackCanvas(m, a) {
   const map = m._ck || (m._ck = new Map()); let k = map.get(a);
   if (k) { STK.delete(k); STK.set(k, m); return k; }
   k = { a }; map.set(a, k); k.done = () => { k.px = k.c.width * k.c.height; stkPx += k.px; STK.set(k, m);
-    while ((stkPx > STK_BUDGET || STK.size > 6000) && STK.size > 1) { const [ok, om] = STK.entries().next().value; STK.delete(ok); om._ck.delete(ok.a); stkPx -= ok.px; ok.c.width = ok.c.height = 0; } };
+    while ((stkPx > STK_BUDGET || STK.size > STK_MAX) && STK.size > 1) { const [ok, om] = STK.entries().next().value; STK.delete(ok); om._ck.delete(ok.a); stkPx -= ok.px; ok.c.width = ok.c.height = 0; } };
   return buildStack(m, a, k);
 }
 function buildStack(m, a, k) {
@@ -2748,7 +2752,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
-  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y),
+  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
