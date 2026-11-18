@@ -25,13 +25,13 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.7.0 and a fresh save is v13 with an empty book', async ctx => {
+  await test('version 5.8.0 and a fresh save is v14 with an empty book', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const s = __farm.snapshot();
       return { v: __farm.version, sv: s.saveVersion, entries: Object.keys(s.codex.entries).length, food: s.inventory.fishFood, pond: (s.pondFish || []).length, btn: !!document.getElementById('codexBtn') };
     });
-    assert.strictEqual(r.v, '5.7.0'); assert.strictEqual(r.sv, 13); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
+    assert.strictEqual(r.v, '5.8.0'); assert.strictEqual(r.sv, 14); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
     assert.deepStrictEqual(p.errs, []);
   });
 
@@ -132,7 +132,7 @@ async function test(name, fn) {
       return { food: food.ok, gf: gf.ok, rel: rel.ok, pond: S.pondFish.length, kind: placed && placed.kind, ach: (snap.achievements || []).map(u => u.id), foodN: snap.inventory.fishFood, sv: snap.saveVersion };
     });
     assert(r.food && r.gf && r.rel);
-    assert.strictEqual(r.pond, 1); assert.strictEqual(r.kind, 'goldfish'); assert.strictEqual(r.foodN, 1); assert.strictEqual(r.sv, 13);
+    assert.strictEqual(r.pond, 1); assert.strictEqual(r.kind, 'goldfish'); assert.strictEqual(r.foodN, 1); assert.strictEqual(r.sv, 14);
     assert(r.ach.includes('ornamental'), '锦鲤附体 ' + r.ach.join(','));
     assert.deepStrictEqual(p.errs, []);
   });
@@ -213,7 +213,7 @@ async function test(name, fn) {
       const s = __farm.snapshot();
       return { sv: s.saveVersion, v: __farm.version, bass: !!(s.codex.entries && s.codex.entries['fish:bass']), sword: !!(s.codex.entries && s.codex.entries['fish:sword']), food: s.inventory.fishFood, coins: s.coins };
     });
-    assert.strictEqual(r.sv, 13); assert.strictEqual(r.v, '5.7.0'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
+    assert.strictEqual(r.sv, 14); assert.strictEqual(r.v, '5.8.0'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
     assert.deepStrictEqual(p.errs, []);
     await p.close();
   });

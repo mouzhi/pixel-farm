@@ -26,6 +26,8 @@
   const gr = P ? P.green : ['#1f3a22', '#2e5a2c', '#3f7a32', '#5a9a3a', '#8fd35a', '#c8f08a'], rf = P ? P.roof : ['#4a1c1c', '#7a2a24', '#b8432f', '#d9826a'];
   const ICONS = {
     can: CAN, basket: BASKET,
+    town: pixIcon(['', '      kk', '     krrk', '    krrrrk   kk', '   krrrrrrk krrk', '  kkkkkkkkkkrrrrk', '   kwwwwwwkkkkkkk', '   kwbwwbwk kwwk', '   kwwwwwwk kwdk', '   kwwddwwk kwdk', '   kkkddkkkkkkkk', '  gggg  gggg'],
+      { k: ink, r: rf[2], w: wd[5] || wd[4], b: '#4fa3cf', d: wd[1], g: gr[3] }), // v5.8.0 the town
     shoe: pixIcon(['', '', '', '    kkkk', '   kbbbbk', '   kbttbk', '   kbbbbk', '   kbbbbkk', '   kbbbbbbkkk', '  kbbbbbbbbbbk', '  kbtttbbbbbbbk', '  kkkkkkkkkkkkk', '  kdddddddddddk', '   kkkkkkkkkkk'].map(r => r.padEnd(16)),
       { k: ink, b: wd[2], t: wd[4], d: wd[1] }),
     hoe: pixIcon(['', '            kk', '           kbk', '          kbk', '         kbk', '        kbk', '       kbk', '      kbk', '     kbk', '  kkkbk', ' kssskk', ' kseeek', ' kseek', '  kkk'].map(r => r.padEnd(16)),
