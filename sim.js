@@ -39,7 +39,11 @@
     { id: 'speed', name: '游戏倍速', icon: 'speed', levels: [{ cost: 600, label: '2× 速度', desc: '解锁 2× 按钮' }, { cost: 3000, label: '4× 速度', desc: '解锁 4× 按钮' }] },
     { id: 'strawberry', name: '草莓种子', icon: 'strawberry', levels: [{ cost: 800, label: '草莓', desc: '4 天结果，之后每天摘一次，共 10 次' }] },
     { id: 'watermelon', name: '西瓜种子', icon: 'watermelon', levels: [{ cost: 2500, label: '西瓜', desc: '6 天成熟，卖 220' }] },
-    { id: 'axe', name: '斧头', icon: 'axe', levels: [{ cost: 500, label: '斧头', desc: '能砍家门口和已买区域里的野树（果树不砍）：木材 5 份进仓库 + 果树苗 1 棵，偶尔掉点小东西；只有林场的树会长回来' }] },
+    { id: 'axe', name: '斧头', icon: 'axe', levels: [
+      { cost: 500, label: '斧头', desc: '能砍家门口和已买区域里的野树（果树不砍）：每棵木材 8 份 + 果树苗 1 棵，偶尔掉点小东西；买了林场以后，木材不够时农夫会自己去林场砍树（林场的树会长回来）' },
+      { cost: 1500, label: '钢斧', desc: '每棵树多 2 份木材，砍得快一些' },
+      { cost: 4000, label: '伐木大斧', desc: '每棵树再多 2 份木材（共 12 份），砍一棵只要一半时间' },
+    ] },
     // regions (Phase 3): one level each; buying opens the fence
     { id: 'forest', name: '林场', icon: 'forest', region: 1, levels: [{ cost: 800, label: '林场', desc: '北边的树林，能砍树（要斧头），树会长回来' }] },
     { id: 'east', name: '东田', icon: 'east', region: 1, levels: [{ cost: 1200, label: '东田', desc: '东边 24 格大田，满地杂物，带水桶' }] },
@@ -69,6 +73,8 @@
     { id: 'rod', name: '钓竿', icon: 'rod', fish: 1, levels: [{ cost: 400, label: '钢竿', desc: '咬钩更快，更容易钓到少见的鱼' }, { cost: 1600, label: '碳素竿', desc: '再快一些，锦鲤更常见' }] },
     { id: 'coast', name: '海边', icon: 'coast', region: 1, fish: 1, levels: [{ cost: 3500, label: '海边', desc: '东南边的沙滩和码头，看得见海' }] },
     { id: 'searod', name: '海竿', icon: 'searod', fish: 1, needs: 'coast', levels: [{ cost: 2000, label: '大海竿', desc: '能在码头上钓海鱼' }] },
+    // v5.3.1 wood automation (rules in wood.js): the hut in the forest adds wood per tree and replants stumps from stored saplings
+    { id: 'lumber', name: '伐木小屋', icon: 'lumber', lumber: 1, needs: 'forest', levels: [{ cost: 2400, wood: 30, label: '伐木小屋', desc: '盖在林场里：林场的树每棵多 2 份木材；树桩当晚就用仓库里的树苗补种，3 天长回来（原来 5 天）' }] },
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
@@ -76,7 +82,7 @@
     { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'speed', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
     { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast'] },
-    { id: 'build', name: '建筑', ids: ['house', 'fence', 'coop', 'sty', 'fold', 'shed'] },
+    { id: 'build', name: '建筑', ids: ['house', 'fence', 'lumber', 'coop', 'sty', 'fold', 'shed'] },
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
   ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
@@ -92,7 +98,7 @@
       basket: [BASKET, 20, 40][lv('basket')],
       speedMax: [1, 2, 4][lv('speed')],
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
-      axe: lv('axe') > 0,
+      axe: lv('axe') > 0, axeLv: lv('axe'), lumber: lv('lumber') > 0, // v5.3.1: axe levels and the lumber hut (wood.js)
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
       coop: lv('coop') > 0, sty: lv('sty') > 0, fold: lv('fold') > 0, shed: lv('shed') > 0,
       animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow'), pig: lv('pig') },

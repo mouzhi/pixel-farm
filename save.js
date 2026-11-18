@@ -57,7 +57,7 @@
     },
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber']; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];

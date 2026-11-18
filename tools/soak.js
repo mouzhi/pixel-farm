@@ -1,4 +1,4 @@
-// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
+// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working; PF_WOOD=1 adds the axes, 林场 and the lumber hut with an empty storehouse): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
 const { chromium } = require('playwright-core');
 const URL = process.argv[2] || (process.env.PF_URL || 'http://127.0.0.1:8765') + '/index.html?speed=12';
 const SECS = +process.argv[3] || 180;
@@ -28,6 +28,8 @@ const SECS = +process.argv[3] || 180;
   if (process.env.PF_FAMILY) await p.evaluate(() => { const f = __farm, S = f.S; S.coins = Math.max(S.coins, 1e6); f.FARMER.wood = 2000;
     for (const id of ['axe', 'field', 'field', 'field', 'coop', 'chicken', 'chicken', 'house', 'house', 'house', 'fence']) f.buy(id);
     S.day = Math.max(S.day, 40); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 30, kids: [{ id: 'kid0', name: '小豆', born: S.day - 20 }, { id: 'kid1', name: '小米', born: S.day - 8 }] }); f.syncFamily(); f.panTo(70, 60); });
+  // PF_WOOD=1 (v5.3.1): the axe upgrades, 林场 and the lumber hut, wood at 0, so the farmer keeps walking to the forest to chop
+  if (process.env.PF_WOOD) await p.evaluate(() => { const f = __farm; f.S.coins = Math.max(f.S.coins, 1e6); f.FARMER.wood = Math.max(f.FARMER.wood, 100); for (const id of ['axe', 'axe', 'axe', 'forest', 'lumber', 'house', 'house', 'house']) f.buy(id); f.FARMER.wood = 0; }); // after PF_FAMILY, which fills the storehouse
   const cdp = await p.context().newCDPSession(p); await cdp.send('Performance.enable');
   const t0 = Date.now(); let i = 0;
   while ((Date.now() - t0) / 1000 < SECS) {

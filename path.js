@@ -176,6 +176,7 @@
     paintDisc(g, L.WELL.x, L.WELL.y, 5.5, BLOCKED);
     paintBox(g, L.STALL.x - 11, L.STALL.y - 6.5, L.STALL.x + 11, L.STALL.y + 6.5, BLOCKED);
     paintBox(g, L.BENCH.x - 4, L.BENCH.y - 2, L.BENCH.x + 4, L.BENCH.y + 2, BLOCKED);
+    for (const b of (opts && opts.blocks) || []) paintBox(g, b[0], b[1], b[2], b[3], BLOCKED); // v5.3.1: e.g. the lumber hut
     const pens = (opts && opts.pens) || {};
     if (WD) for (const k of WD.PEN_IDS) if (pens[k]) {
       const P = WD.PENS[k], [hx, hy] = PEN_FOOT[k] || [6, 5];
