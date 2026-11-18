@@ -25,10 +25,10 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.3.0, saveVersion stays 9', async ctx => {
+  await test('version 5.3.2, saveVersion stays 9', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => ({ v: __farm.version, sv: __farm.snapshot().saveVersion }));
-    assert.strictEqual(r.v, '5.3.0');
+    assert.strictEqual(r.v, '5.3.2');
     assert.strictEqual(r.sv, 9);
     assert.deepStrictEqual(p.errs, []);
   });
