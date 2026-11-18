@@ -1,4 +1,4 @@
-// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working; PF_WOOD=1 adds the axes, 林场 and the lumber hut with an empty storehouse; PF_CODEX=1 opens the 图鉴 panel with a few ornamental fish): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
+// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working; PF_WOOD=1 adds the axes, 林场 and the lumber hut with an empty storehouse; PF_PLOTS=1 buys the whole outer ring; PF_CODEX=1 opens the 图鉴 panel with a few ornamental fish): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
 const { chromium } = require('playwright-core');
 const URL = process.argv[2] || (process.env.PF_URL || 'http://127.0.0.1:8765') + '/index.html?speed=12';
 const SECS = +process.argv[3] || 180;
@@ -30,6 +30,10 @@ const SECS = +process.argv[3] || 180;
     S.day = Math.max(S.day, 40); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 30, kids: [{ id: 'kid0', name: '小豆', born: S.day - 20 }, { id: 'kid1', name: '小米', born: S.day - 8 }] }); f.syncFamily(); f.panTo(70, 60); });
   // PF_WOOD=1 (v5.3.1): the axe upgrades, 林场 and the lumber hut, wood at 0, so the farmer keeps walking to the forest to chop
   if (process.env.PF_WOOD) await p.evaluate(() => { const f = __farm; f.S.coins = Math.max(f.S.coins, 1e6); f.FARMER.wood = Math.max(f.FARMER.wood, 100); for (const id of ['axe', 'axe', 'axe', 'forest', 'lumber', 'house', 'house', 'house']) f.buy(id); f.FARMER.wood = 0; }); // after PF_FAMILY, which fills the storehouse
+  // PF_PLOTS=1 (v5.5.0): 阿禾 moved in and every plot of the outer ring bought, each as a different module, plus the grazing meadow
+  if (process.env.PF_PLOTS) await p.evaluate(() => { const f = __farm, S = f.S; S.coins = Math.max(S.coins, 1e6); f.FARMER.wood = Math.max(f.FARMER.wood, 900); S.family.met = 1; S.family.moved = S.family.moved || S.day;
+    for (const [id, m] of [['play', 'playground'], ['glade', 'field'], ['swbank', 'dam'], ['wbank', 'workshop'], ['sbank', 'field'], ['bridge'], ['swacross', 'orchard'], ['seacross', 'pasture'], ['eslope', 'meadow'], ['eroad'], ['eshore', 'field'], ['nwslope', 'woodland'], ['neslope', 'orchard'], ['trail'], ['summit', 'woodland'], ['alp', 'pasture']]) f.buyPlot(id, m);
+    for (const id of ['orchard', 'fold', 'sheep', 'sheep', 'graze']) f.buy(id); });
   // PF_CODEX=1 (v5.4.0): a few ornamental fish, a full-ish book, the 图鉴 panel open
   if (process.env.PF_CODEX) await p.evaluate(() => { const f = __farm, S = f.S, CX = f.BOOK || window.PFCodex;
     S.coins = Math.max(S.coins, 1e6); f.buy('fishfood'); f.buy('goldfish');

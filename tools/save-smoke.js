@@ -154,7 +154,7 @@ async function test(name, fn) {
     const p = await open(ctx);
     let r = await p.evaluate(() => { const S = __farm.S, T = __farm.tiles; S.coins = 2000; const before = T.filter(t => t.f === 'east' && t.open).length;
       const poor = __farm.buy('south'); const ok = __farm.buy('east').ok; return { before, ok, poor: poor.ok, open: T.filter(t => t.f === 'east' && t.open).length, coins: S.coins, regions: S.eff.regions.slice(), lab: document.querySelectorAll('.rlab').length }; });
-    assert.strictEqual(r.before, 0); assert(r.ok); assert(!r.poor); assert(r.open >= 12, 'east field opens tiles: ' + r.open); assert.strictEqual(r.coins, 2000 - 1200); assert.deepStrictEqual(r.regions, ['east']); assert.strictEqual(r.lab, require('../world.js').REGIONS.length);
+    assert.strictEqual(r.before, 0); assert(r.ok); assert(!r.poor); assert(r.open >= 12, 'east field opens tiles: ' + r.open); assert.strictEqual(r.coins, 2000 - 1200); assert.deepStrictEqual(r.regions, ['east']); assert.strictEqual(r.lab, require('../world.js').REGIONS.length + require('../plots.js').PLOTS.length); // v5.5.0: plus the ring's plots
     const junk = () => __farm.tiles.filter(t => t.f === 'east' && (t.debris || t.weed)).length, j0 = await p.evaluate(junk);
     await p.evaluate(() => { for (let i = 0; i < 66; i++) __farm.advance(10, 5); __farm.saveNow(); });
     const worked = j0 - await p.evaluate(junk) + await p.evaluate(() => __farm.tiles.filter(t => t.f === 'east' && (t.tilled || t.crop)).length);
@@ -380,7 +380,7 @@ async function test(name, fn) {
     await p.evaluate(() => __farm.saveNow()); const before = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood }));
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     const after = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood, members: __farm.S.members.map(m => m.role), m: __farm.houseProp.m.h, v: __farm.snapshot().saveVersion }));
-    assert.deepStrictEqual(after.fam, before.fam); assert.strictEqual(after.up, 3); assert.strictEqual(after.wood, before.wood); assert.deepStrictEqual(after.members, ['partner', 'teen', 'child']); assert(after.m > 76, 'manor model after reload'); assert.strictEqual(after.v, 10);
+    assert.deepStrictEqual(after.fam, before.fam); assert.strictEqual(after.up, 3); assert.strictEqual(after.wood, before.wood); assert.deepStrictEqual(after.members, ['partner', 'teen', 'child']); assert(after.m > 76, 'manor model after reload'); assert.strictEqual(after.v, SAVE.CURRENT);
     assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);
