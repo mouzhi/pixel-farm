@@ -1389,15 +1389,17 @@ function burst(x, y, z, cols, n, kind) { // short pixel VFX; ?nofx turns this of
 }
 function popText(x, y, z, s, c) { particles.push({ x, y, z, vx: 0, vy: 0, vz: 10, c, life: 1.6, text: s }); }
 let lastCatch = null;
-function noteBugCatch(ev) { // float the book sprite + name for a moment; the yard itself only has tiny dots
+function noteBugCatch(ev) { // brief, small sprite above the catching kid — never a 24px icon sitting in the yard
   if (!ev) return;
   lastCatch = { line: null, url: (INS && INS.bugURL) ? INS.bugURL(ev.kind, true) : '', at: Date.now() };
+  for (let i = particles.length - 1; i >= 0; i--) if (particles[i].catchBug) particles.splice(i, 1);
+  const x = ev.kidX != null ? ev.kidX : ev.x, y = ev.kidY != null ? ev.kidY : ev.y;
   if (INS && INS.catchSprite) {
-    const spr = INS.catchSprite(ev.kind, 1);
-    if (spr) particles.push({ x: ev.x, y: ev.y, z: 14, vx: 0, vy: 0, vz: 3, life: 2.2, spr, kind: 'icon' });
+    const spr = INS.catchSprite(ev.kind, 0.5); // 12px, clearly smaller than a person
+    if (spr) particles.push({ x, y, z: 16, vx: 0, vy: 0, vz: 1.2, life: 1.2, spr, kind: 'icon', catchBug: true, fade: true });
   }
-  popText(ev.x, ev.y, 28, ev.name, '#fff6dc');
-  burst(ev.x, ev.y, 16, ['#fff6dc', '#8fd35a', '#ffd76a'], 8, 'spark');
+  particles.push({ x, y, z: 26, vx: 0, vy: 0, vz: 8, c: '#fff6dc', life: 1.2, text: ev.name, catchBug: true, fade: true });
+  burst(x, y, 16, ['#fff6dc', '#8fd35a', '#ffd76a'], 6, 'spark');
   log(`孩子用捕虫网捉到一只${ev.name}，看了一眼就放走了`);
   lastCatch.line = S.log[0];
 }
@@ -2353,7 +2355,7 @@ function render() {
   for (const d of familyD) drawBillboard(ctx, d, 0.35);
   drawMarks(); tick('marks');
   if (window.PF_FX) PF_FX.draw(ctx, proj, RS);
-  for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); if (p.spr) { ctx.drawImage(p.spr, Math.round(sx) - (p.spr.width >> 1), Math.round(sy - p.z * RS) - p.spr.height); continue; } ctx.fillStyle = p.c;
+  for (const p of particles) { if (p.text) continue; const [sx, sy] = proj(p.x, p.y); if (p.spr) { const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; ctx.drawImage(p.spr, Math.round(sx) - (p.spr.width >> 1), Math.round(sy - p.z * RS) - p.spr.height); if (a < 1) ctx.globalAlpha = 1; continue; } ctx.fillStyle = p.c;
     if (p.kind === 'heart') { const hx = Math.round(sx), hy = Math.round(sy - p.z * RS); ctx.fillRect(hx - 2, hy, 2, 1); ctx.fillRect(hx + 1, hy, 2, 1); ctx.fillRect(hx - 2, hy + 1, 5, 1); ctx.fillRect(hx - 1, hy + 2, 3, 1); ctx.fillRect(hx, hy + 3, 1, 1); continue; } const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), s, s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
   drawPondLeaves();
@@ -2365,7 +2367,7 @@ function render() {
   if (INS) INS.draw(ctx, proj, RS);
   if (WX) WX.drawRain(ctx, W, H);
   if (night > 0.5) for (const f of fireflies) { const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
-  for (const p of particles) if (p.text) { const [sx, sy] = proj(p.x, p.y); pixText(p.text, sx, sy - p.z * RS, p.c); }
+  for (const p of particles) if (p.text) { const [sx, sy] = proj(p.x, p.y); const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; pixText(p.text, sx, sy - p.z * RS, p.c); if (a < 1) ctx.globalAlpha = 1; }
   tick('fx+light');
   if (F.sleeping || (F.home && night > 0.7)) {
     const [sx, sy] = proj(HOUSE.x + 8, HOUSE.y - 5);
@@ -2683,7 +2685,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.6';
+const GAME_VERSION = '5.4.7';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
