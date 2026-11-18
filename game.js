@@ -2050,19 +2050,25 @@ function guestStep(g, dm) {
   if (!g.pts.length) return;
   const t = g.pts[0], dx = t.x - g.x, dy = t.y - g.y, d = Math.hypot(dx, dy);
   if (d < 0.5) { g.pts.shift(); g.moving = !!g.pts.length; return; }
-  const st = Math.min(d, WALK * 0.85 * dm); g.x += dx / d * st; g.y += dy / d * st; g.fx = dx / d; g.fy = dy / d; g.moving = true; g.walkPhase = (g.walkPhase || 0) + st;
+  const st = Math.min(d, WALK * (g.fast ? 1.1 : 0.85) * dm); g.x += dx / d * st; g.y += dy / d * st; g.fx = dx / d; g.fy = dy / d; g.moving = true; g.walkPhase = (g.walkPhase || 0) + st;
 }
+let guestsOut = 0; // v5.8.0: the day the town guests set out (they walk over from their houses, so they leave before the party starts)
+const GUEST_WALK = 90;
 function decorTick(dm) {
-  const T = S.t % 1440;
+  const T = S.t % 1440, early = townOpen() ? GUEST_WALK : 0;
+  if (early && partyTonight() && T >= DC.PARTY.from - early && T < DC.PARTY.from && guestsOut !== S.day && !(WX && WX.isRaining(S.weather, S.day, S.t))) { guestsOut = S.day;
+    for (let i = 0; i < S.decor.party.guests; i++) { const seat = partySeat(actors().length + i), h = TN.BY_ID[i ? 'h4' : 'h3'].door;
+      GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: h.x, y: h.y, fx: 0, fy: 1, pts: routeVia(h, seat).concat([seat]), moving: true, leaving: false, home: h, fast: 1 }); }
+    if (S.decor.party.guests) log(`${GUEST_NAME.slice(0, S.decor.party.guests).map(n => n.replace('镇上的', '')).join('和')}从镇上动身，来参加今晚的派对`); }
   if (partyTonight() && T >= DC.PARTY.from && T < DC.PARTY.to && partyBegun !== S.day) { partyBegun = S.day;
     if (WX && WX.isRaining(S.weather, S.day, S.t)) { S.decor.party.tonight = 0; log('下雨了，派对改到下回'); }
     else { const n = S.decor.party.guests, a = partyArea(); S.decor.party.last = S.day;
       log(n ? `傍晚一家人在派对区聚在一起，${GUEST_NAME.slice(0, n).join('和')}也来做客` : '傍晚一家人在派对区聚在一起，挂起了串灯');
       burst(a.x, a.y, 24, [Ac[3], Ac[1], '#fff2a8', Wt[4]], 18, 'spark'); noteProgress({ partyHeld: true });
       for (let i = 0; i < n; i++) { const seat = partySeat(actors().length + i), e = EAST_IN[0];
-        if (townOpen()) { const h = TN.BY_ID[i ? 'h4' : 'h3'].door; GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: h.x, y: h.y, fx: 0, fy: 1, pts: routeVia(h, seat).concat([seat]), moving: true, leaving: false, home: h }); continue; } // v5.8.0: from their houses in town
+        if (guestsOut === S.day) break; // v5.8.0: the town guests are already on their way
         GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: e.x + i * 3, y: e.y + i, fx: -1, fy: 0, pts: EAST_IN.slice(1).concat(routeVia(EAST_IN[EAST_IN.length - 1], seat), [seat]), moving: true, leaving: false }); } } }
-  if (GUESTS.length && (!partyTonight() || T >= DC.PARTY.to || T < DC.PARTY.from)) for (const g of GUESTS) if (!g.leaving) { g.leaving = true; if (g.home) { g.pts = routeVia(g, g.home).concat([g.home]); continue; } const back = EAST_IN.slice().reverse(); g.pts = routeVia(g, back[0]).concat(back); }
+  if (GUESTS.length && (!partyTonight() || T >= DC.PARTY.to || T < DC.PARTY.from - early)) for (const g of GUESTS) if (!g.leaving) { g.leaving = true; if (g.home) { g.pts = routeVia(g, g.home).concat([g.home]); continue; } const back = EAST_IN.slice().reverse(); g.pts = routeVia(g, back[0]).concat(back); }
   for (let i = GUESTS.length - 1; i >= 0; i--) { const g = GUESTS[i]; guestStep(g, dm); if (g.leaving && !g.pts.length) GUESTS.splice(i, 1); }
 }
 // ---------- v5.8.0 phase 10: school days, days off, classmates, the town (rules in town.js, art in town-art.js) ----------
@@ -2114,7 +2120,8 @@ function neighbourTick(dm) {
   if (!townOpen()) { NEIGH.length = 0; return; }
   if (!NEIGH.length) for (const n of TN.NEIGHBOURS) { const h = TN.BY_ID[n.home].door; NEIGH.push({ id: n.id, name: n.name, def: n, look: n.look, x: h.x, y: h.y, fx: 0, fy: 1, pts: [], spot: 'home', out: false, moving: false }); }
   const T = S.t % 1440;
-  for (const g of NEIGH) { const w = TN.neighbourAt(g.def, T);
+  for (const g of NEIGH) { if (GUESTS.some(q => q.look === g.look)) { if (g.out) { g.out = false; g.spot = 'party'; g.pts.length = 0; const h = TN.BY_ID[g.def.home].door; g.x = h.x; g.y = h.y; } continue; } // tonight they are the party guests
+    const w = TN.neighbourAt(g.def, T);
     if (w.spot !== g.spot) { g.spot = w.spot; g.out = true; g.pts = routeVia(g, w.at).concat([{ x: w.at.x, y: w.at.y }]); }
     if (g.pts.length) guestStep(g, dm); else { g.moving = false; if (g.spot === 'home') g.out = false; } }
 }
@@ -2126,7 +2133,7 @@ function tradeKeep(a, keep) { // while the town shop is still open today, the tr
   const k = keep.slice(); for (const o of tradeList(a)) k[o.i] = true; return k; }
 function townBoard(post, T) {
   if (!tradeOk(F) || T < TN.TRADE.from || T >= TN.TRADE.to) return;
-  if (tradeList(F).length >= TN.TRADE.min) post('towntrade', 74, TN.SHOP_DOOR, () => tradeTask(), 'town:trade:' + (F === FARMER ? 'farmer' : F.id));
+  if (tradeList(F).length >= TN.TRADE.min) post('towntrade', 66 + travel(F, TN.SHOP_DOOR) / 8, TN.SHOP_DOOR, () => tradeTask(), 'town:trade:' + (F === FARMER ? 'farmer' : F.id)); // an errand: the long walk is not held against it
 }
 function tradeTask() {
   const at = { x: TN.SHOP_DOOR.x - 3, y: TN.SHOP_DOOR.y + 3 };
@@ -3330,7 +3337,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.family = Object.assign(FAM.empty(), JSON.parse(JSON.stringify(s.family || {}))); if (window.PFKids) PFKids.migrateFamily(S.family, S.day, s.members || []); S.members.length = 0; syncFamily(); // v5.0: everyone wakes at the door
   for (const m of S.members) { const o = (s.members || []).find(q => q.id === m.id); m.sleeping = FARMER.sleeping;
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
-  S.town = TN.valid(s.town); VISITORS.length = 0; NEIGH.length = 0; // v5.8.0
+  S.town = TN.valid(s.town); VISITORS.length = 0; NEIGH.length = 0; guestsOut = 0; // v5.8.0
   S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; if (DECOR_ON) DA.sync(true); markNavDirty(); // v5.7.0
   S.log = s.log.slice(); S.label = FARMER.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
 }
@@ -3426,7 +3433,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
-  TN, TA, townOpen, VISITORS, NEIGH, schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
+  TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
 Object.assign(window.__farm, { plotBusy: id => worksBusy(id), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
