@@ -8,8 +8,9 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
+  const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 9;
+  const CURRENT = 10;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -54,6 +55,19 @@
         [48, 196, 2], [178, 158, 6], [226, -92, 1], [338, -92, 4], [-144, -92, 7], [-60, -92, 0]].map(([x, y, v], i) => ({ id: 'h' + i, x, y, kind: 'wild', v, stage: 'tree', age: 0, ripe: 0, cd: 0 }));
       const trees = Array.isArray(s.trees) ? s.trees.concat(extra.filter(t => !s.trees.some(o => o && o.id === t.id))) : s.trees;
       return Object.assign({}, s, { upgrades: Object.assign({ house: 0, fence: 0 }, s.upgrades), trees, family: { love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [] }, members: [] });
+    },
+    // v5.4.0 phase 6: the collection book, achievements and milestones, fish food, ornamental pond fish.
+    // Existing catch logs and basket rares seed the book; streaks start at 0 so a week of idling is not awarded on load.
+    10: s => {
+      const seeded = CX.seedFromSave(s);
+      return Object.assign({}, s, {
+        inventory: Object.assign({ fishFood: 0, ornament: {} }, s.inventory),
+        pondFish: Array.isArray(s.pondFish) ? s.pondFish : [],
+        codex: s.codex || seeded.codex,
+        achievements: Array.isArray(s.achievements) ? s.achievements : seeded.achievements,
+        milestones: Array.isArray(s.milestones) ? s.milestones : seeded.milestones,
+        streaks: s.streaks || CX.emptyStreaks(),
+      });
     },
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
@@ -103,6 +117,7 @@
     o = obj(o);
     if (o.type === 'chop' && typeof o.id === 'string' && o.id.length <= 40) return { type: 'chop', id: o.id };
     if (o.type === 'plant' && FRUIT_IDS.includes(o.kind) && typeof o.x === 'number' && typeof o.y === 'number') return { type: 'plant', kind: o.kind, x: num(o.x, 0, -400, 600), y: num(o.y, 0, -400, 600) };
+    if (o.type === 'release' && (o.kind === 'koi' || o.kind === 'goldfish')) return { type: 'release', kind: o.kind };
     return null;
   }
   function validCatch(c) {
@@ -131,6 +146,7 @@
         water: int(inv.water, 0, 0, 999), waterMax: int(inv.waterMax, 4, 1, 999), store: seeds(inv.store), bag: seeds(inv.bag),
         gathered: int(inv.gathered, 0, 0, 1e6), basket: validBasket(inv.basket),
         wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
+        fishFood: int(inv.fishFood, 0, 0, 30), ornament: CX.validOrnament(inv.ornament),
       },
       farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
@@ -142,8 +158,13 @@
       animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
       troughs: Object.fromEntries(PEN_IDS.map(k => { const t = obj(obj(s.troughs)[k]); return [k, { feed: int(t.feed, 0, 0, 99), water: t.water ? 1 : 0 }]; })),
       catches: (Array.isArray(s.catches) ? s.catches : []).map(validCatch).filter(Boolean).slice(0, 12),
+      pondFish: CX.validPondFish(s.pondFish),
       family: validFamily(obj(s.family)),
       members: (Array.isArray(s.members) ? s.members : []).map(validMember).filter(Boolean).slice(0, 3),
+      codex: CX.validCodex(s.codex),
+      achievements: CX.validUnlocks(s.achievements, CX.ACH_BY),
+      milestones: CX.validUnlocks(s.milestones, CX.MS_BY),
+      streaks: CX.validStreaks(s.streaks),
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }

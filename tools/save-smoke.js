@@ -380,7 +380,7 @@ async function test(name, fn) {
     await p.evaluate(() => __farm.saveNow()); const before = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood }));
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     const after = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood, members: __farm.S.members.map(m => m.role), m: __farm.houseProp.m.h, v: __farm.snapshot().saveVersion }));
-    assert.deepStrictEqual(after.fam, before.fam); assert.strictEqual(after.up, 3); assert.strictEqual(after.wood, before.wood); assert.deepStrictEqual(after.members, ['partner', 'teen', 'child']); assert(after.m > 76, 'manor model after reload'); assert.strictEqual(after.v, 9);
+    assert.deepStrictEqual(after.fam, before.fam); assert.strictEqual(after.up, 3); assert.strictEqual(after.wood, before.wood); assert.deepStrictEqual(after.members, ['partner', 'teen', 'child']); assert(after.m > 76, 'manor model after reload'); assert.strictEqual(after.v, 10);
     assert.deepStrictEqual(p.errs, []);
   });
   await browser.close(); server.close(); console.log(failed ? `${failed} failed` : 'all passed'); process.exit(failed ? 1 : 0);

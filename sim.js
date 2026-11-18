@@ -62,7 +62,11 @@
     { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1400, 1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
     // companions (v4.6): no hay, no product, a small bonus each
     { id: 'cat', name: '猫', icon: 'cat', pet: 1, levels: [{ cost: 120, label: '橘猫' }, { cost: 180, label: '黑猫' }, { cost: 260, label: '三花猫' }].map(l => Object.assign(l, { desc: '在农场里晒太阳、跟着散步；每天早上叼来 1 颗胡萝卜种子' })) },
-    { id: 'dog', name: '狗', icon: 'dog', pet: 1, levels: [{ cost: 160, label: '柴犬' }, { cost: 240, label: '黑白狗' }, { cost: 320, label: '棕色小狗' }].map(l => Object.assign(l, { desc: '跟着农夫到处走，农夫走路快 3%' })) },
+    { id: 'dog', name: '狗', icon: 'dog', pet: 1, levels: [
+      { cost: 160, label: '柴犬', desc: '大部分时间自己在院子里转，偶尔过来看一眼；农夫走路快 3%' },
+      { cost: 240, label: '边境牧羊犬', desc: '黑白边牧：自己溜达，爱在羊圈附近转；以后羊圈升级出草地时会赶羊。农夫走路快 3%' },
+      { cost: 320, label: '棕色小狗', desc: '大部分时间自己在院子里转，偶尔过来看一眼；农夫走路快 3%' },
+    ] },
     // v5.0 phase 5: the house grows with wood + gold; each tier is one more room (people who can live and work here)
     { id: 'house', name: '房子', icon: 'house', home: 1, levels: [
       { cost: 800, wood: 40, label: '大木屋', desc: '加一间屋，人口上限 2：阿禾可以搬来一起住；仓库能放 200 份木材' },

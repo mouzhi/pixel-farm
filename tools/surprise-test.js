@@ -138,7 +138,7 @@ test('validate keeps glow / giant fields and basket objects, drops junk, keeps o
     ],
     inventory: { basket: ['carrot', { type: 'pumpkin', giant: 1, glow: 1 }, { type: 'egg', rare: 'gold' }, { type: 'egg', rare: 'nope' }, '???'] }
   });
-  assert.strictEqual(base.saveVersion, 9);
+  assert.strictEqual(base.saveVersion, SAVE.CURRENT);
   assert.strictEqual(base.tiles[0].crop.glow, 1);
   assert.strictEqual(base.tiles[0].crop.giant, 1);
   assert.deepStrictEqual(base.tiles[1].crop.giantOf, { f: 'home', c: 0, r: 0 });
