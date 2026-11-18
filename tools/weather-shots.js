@@ -75,6 +75,7 @@ async function cropAround(p, wx, wy, W, H, K) {
     if (WX) { WX.resetVisual(); for (let i = 0; i < 40; i++) WX.tickVisual(0.05, { raining: true, wetness: 1, pond: f.POND, W: 1280, H: 800, pathSegs: null }); }
     f.panTo(80, 70);
     for (let i = 0; i < 30; i++) f.advance(0.05, 20);
+    if (f.setRealT) f.setRealT(2.2);
     f.render();
     const v = WX && WX._visual;
     return { raining: WX.isRaining(S.weather, S.day, S.t), wet: WX.wetness(S.weather, S.day, S.t), watered: f.tiles.filter(t => t.crop && t.watered).length, streaks: v && v.streaks.length, ripples: v && v.ripples.length, puddles: v && v.puddles.length };
@@ -98,15 +99,20 @@ async function cropAround(p, wx, wy, W, H, K) {
   });
   await p.waitForTimeout(200);
   await p.screenshot({ path: path.join(OUT, 'v543_codex_bugs.png') });
-  const panel = await p.evaluate(async () => {
+  const panel = await p.evaluate(() => {
     const el = document.getElementById('codex'); if (!el || el.hidden) return null;
-    const r = el.getBoundingClientRect(), c = document.createElement('canvas');
-    const scale = 2; c.width = Math.round(r.width) * scale; c.height = Math.round(r.height) * scale;
-    // draw from the page screenshot via the element's appearance: use html2canvas-less path — capture the whole page later
-    return { w: r.width, h: r.height, x: r.x, y: r.y };
+    const r = el.getBoundingClientRect();
+    const sec = [...el.querySelectorAll('.sec')].find(s => s.textContent.indexOf('昆虫') >= 0);
+    const sr = sec ? sec.getBoundingClientRect() : r;
+    const all = [...el.querySelectorAll('.sec')];
+    const i = all.indexOf(sec);
+    const next = all[i + 1];
+    const top = Math.max(r.y, sr.y - 8);
+    const bottom = next ? next.getBoundingClientRect().top : r.bottom;
+    return { x: r.x, y: top, width: r.width, height: Math.max(40, Math.min(r.bottom, bottom + 4) - top) };
   });
   if (panel) {
-    const buf = await p.screenshot({ clip: { x: panel.x, y: panel.y, width: panel.w, height: panel.h } });
+    const buf = await p.screenshot({ clip: panel });
     save('v543_codex_bugs_panel.png', buf);
   }
   fs.copyFileSync(path.join(OUT, 'v543_codex_bugs.png'), path.join(DOCS, 'v543_codex_bugs.png'));

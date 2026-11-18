@@ -17,16 +17,222 @@
   const keyBug = id => 'bug:' + id;
 
   const PIX = {
-    white: ['                ', '                ', '   ww      ww   ', '  wkw      wkw  ', '  www kkkk www  ', '   wwkkkkkkww   ', '    k kyyk k    ', '      kyyk      ', '       kk       '],
-    yellow: ['                ', '                ', '   yy      yy   ', '  yky      yky  ', '  yyy kkkk yyy  ', '   yykkkkkkyy   ', '    k kyyk k    ', '      kyyk      ', '       kk       '],
-    swallow: ['                ', '  yy        yy  ', ' ykyy      yyky ', ' yyyy kkkk yyyy ', '  yy kkkkkk yy  ', '   k  kyyk  k   ', '  k    kk    k  ', ' k      k     k ', '                '],
-    grey: ['                ', '                ', '   ss      ss   ', '  sks      sks  ', '  sss kkkk sss  ', '   sskkkkksss   ', '    k kssk k    ', '      kssk      ', '       kk       '],
-    dragon: ['                ', '  ww        ww  ', '   ww kkkk ww   ', '    wktuuukw    ', '   ww ktuuk ww  ', '  ww   kuu   ww ', '        ku      ', '        ku      ', '         k      '],
-    reddragon: ['                ', '  ww        ww  ', '   ww kkkk ww   ', '    wkrrrrkw    ', '   ww krrrkw w  ', '  ww   krr   ww ', '        kr      ', '        kr      ', '         k      '],
-    damsel: ['                ', '                ', '  ww        ww  ', '   ww kkkk ww   ', '    wktuutkw    ', '     k tuuk     ', '        tu      ', '        tu      ', '         k      '],
-    firefly: ['                ', '                ', '      kk        ', '     kyyk       ', '    kyAAyk      ', '     kyyk       ', '      kk        ', '      k         ', '                '],
+    white: [
+      '                        ',
+      '   k                k   ',
+      '    k              k    ',
+      '   wwwwwww    wwwwwww   ',
+      '  wwwwwwwww  wwwwwwwww  ',
+      ' wwwwewwwww  wwwwwewww  ',
+      ' wwwwwwwwwwwwwwwwwwwww  ',
+      ' www k wwwwwwwww k www  ',
+      '  wwwwwwwwwwwwwwwwwww   ',
+      '  wwwwww  BhB  wwwwww   ',
+      '   wwwww  BnB  wwwww    ',
+      '   wwwww  BnB  wwwww    ',
+      '    www   BnB   www     ',
+      '    www   nBn   www     ',
+      '     ww    n    ww      ',
+      '           n            ',
+      '           k            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    yellow: [
+      '                        ',
+      '   k                k   ',
+      '    k              k    ',
+      '   yyyyyyy    yyyyyyy   ',
+      '  yyYyyyyyy  yyyyyYyyy  ',
+      ' yyyyyyyyyy  yyyyyyyyy  ',
+      ' yyyyyyyyyyyyyyyyyyyyy  ',
+      ' yyY Y yyyyyyyyy Y Yyy  ',
+      '  yyyyyyyyyyyyyyyyyyy   ',
+      '  yyyyyy  BhB  yyyyyy   ',
+      '   yyyyy  BnB  yyyyy    ',
+      '   yyYyy  BnB  yyYyy    ',
+      '    yyy   BnB   yyy     ',
+      '    yYy   nBn   yYy     ',
+      '     yy    n    yy      ',
+      '           n            ',
+      '           k            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    grey: [
+      '                        ',
+      '                        ',
+      '     k            k     ',
+      '      k          k      ',
+      '     bbbbbb  bbbbbb     ',
+      '    bbccbbbbbbbbccbb    ',
+      '    bbbbbbbbbbbbbbbb    ',
+      '    bb k bbbbbb k bb    ',
+      '     bbbbbBhBbbbbbb     ',
+      '      bbb Bnb bbbb      ',
+      '      bbb BnB bbbb      ',
+      '       bb  nB  bb       ',
+      '       bb  n   bb       ',
+      '            n           ',
+      '            k           ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    swallow: [
+      '                        ',
+      '  k                  k  ',
+      '   k                k   ',
+      '  yYyyyyyyy  yyyyyyyY   ',
+      ' yyyyyyyyyy  yyyyyyyyy  ',
+      ' yyyyyyyyyyyyyyyyyyyyy  ',
+      ' yy k yyyyyyyyyyy k yy  ',
+      ' yyyyyYyyyyyyyyYyyyyyy  ',
+      '  yyyyyy  BhB  yyyyyy   ',
+      '  yyyyyy  BnB  yyyyyy   ',
+      '   yyyyy  BnB  yyyyy    ',
+      '   yYyy   BnB   yyYy    ',
+      '   yy k   nBn   k yy    ',
+      '  yy k     n     k yy   ',
+      '  y k      n      k y   ',
+      '  y        n        y   ',
+      '           k            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    dragon: [
+      '                        ',
+      '                        ',
+      '          uU            ',
+      '         kUuUk          ',
+      '  tttttt  knk  tttttt   ',
+      ' tttttttt knk tttttttt  ',
+      '  tTtttt  BhB  ttttTt   ',
+      '          BnB           ',
+      '  tttttt  BnB  tttttt   ',
+      ' tttttttt BnB tttttttt  ',
+      '  tTtttt  nBn  ttttTt   ',
+      '          nBn           ',
+      '          n B           ',
+      '          n B           ',
+      '           n            ',
+      '           n            ',
+      '           k            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    reddragon: [
+      '                        ',
+      '                        ',
+      '          rR            ',
+      '         kRrRk          ',
+      '  tttttt  knk  tttttt   ',
+      ' tttttttt knk tttttttt  ',
+      '  tTtttt  RhR  ttttTt   ',
+      '          RnR           ',
+      '  tttttt  RnR  tttttt   ',
+      ' tttttttt RnR tttttttt  ',
+      '  tTtttt  nRn  ttttTt   ',
+      '          nRn           ',
+      '          n R           ',
+      '          n R           ',
+      '           n            ',
+      '           n            ',
+      '           k            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    damsel: [
+      '                        ',
+      '                        ',
+      '                        ',
+      '         uU             ',
+      '        kUuUk           ',
+      '     ttt knk ttt        ',
+      '    ttttt BhB ttttt     ',
+      '     tttt BnB tttt      ',
+      '      tt  BnB  tt       ',
+      '      t   nBn   t       ',
+      '          n B           ',
+      '          n B           ',
+      '           n            ',
+      '           n            ',
+      '           n            ',
+      '           k            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
+    firefly: [
+      '                        ',
+      '                        ',
+      '         k  k           ',
+      '          kk            ',
+      '         knnk           ',
+      '        kBwwBk          ',
+      '        kwwwwk          ',
+      '        kweewk          ',
+      '         knnk           ',
+      '       A kGGgk A        ',
+      '      A kGGGGGk A       ',
+      '       A kGGGk A        ',
+      '         kAAk           ',
+      '          kk            ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+      '                        ',
+    ],
   };
-  const COL = { k: '#2a1d16', w: '#fff6dc', y: '#ffd76a', A: '#fff2a8', s: '#9aa4b0', t: '#8cc6dc', u: '#4fa3cf', r: '#e06a2c' };
+  const COL = {
+    k: '#2a1d16', w: '#fff6dc', e: '#f6ecd0', y: '#ffd76a', Y: '#e8a02a',
+    o: '#e8a070', A: '#fff2a8', G: '#c8f080', g: '#8fd35a', s: '#9aa4b0',
+    b: '#a8c8e8', c: '#78a8d8', u: '#4fa3cf', U: '#2f6ea0', t: '#d2ecf0',
+    T: '#8cc6dc', r: '#e06a2c', R: '#c04a1c', P: '#b8432f', B: '#7a4e30',
+    n: '#5a3a28', h: '#b48c5a'
+  };
 
   function raster(rows, cols) {
     const h = rows.length, w = Math.max.apply(null, rows.map(r => r.length));
@@ -55,7 +261,7 @@
     const key = id + (seen ? ':on' : ':off');
     if (cache[key]) return cache[key];
     const rows = PIX[id]; if (!rows) return null;
-    const img = raster(rows.map(r => r.padEnd(16)), COL);
+    const img = raster(rows.map(r => r.padEnd(24)), COL);
     return cache[key] = seen ? img : silhouette(img);
   }
   function canvasOf(img) {
@@ -215,20 +421,18 @@
       const p = proj(b.x, b.y), sx = Math.round(p[0]), sy = Math.round(p[1] - (b.z || 0) * (RS ? RS * 0.15 : 0.3));
       const img = imageOf(b.kind, true); if (!img) continue;
       const c = canvasOf(img); if (!c) continue;
-      const flip = b.tx < b.x;
+      const flip = b.tx < b.x, sc = 1, dw = c.width * sc, dh = c.height * sc;
       ctx.save();
+      ctx.imageSmoothingEnabled = false;
       if (b.group === 'firefly') {
         const g = b.glow == null ? 1 : b.glow;
-        ctx.globalAlpha = 0.35 + 0.65 * g;
+        ctx.globalAlpha = 0.22 + 0.35 * g;
         ctx.fillStyle = '#fff2a8';
-        ctx.fillRect(sx - 1, sy - 1, 3, 3);
-        ctx.fillStyle = '#ffd76a';
-        ctx.fillRect(sx, sy, 1, 1);
-      } else {
-        ctx.imageSmoothingEnabled = false;
-        if (flip) { ctx.translate(sx, sy); ctx.scale(-1, 1); ctx.drawImage(c, -(c.width >> 1), -c.height + 2); }
-        else ctx.drawImage(c, sx - (c.width >> 1), sy - c.height + 2);
+        ctx.fillRect(sx - 5, sy - 6, 10, 10);
+        ctx.globalAlpha = 0.6 + 0.4 * g;
       }
+      if (flip) { ctx.translate(sx, sy); ctx.scale(-1, 1); ctx.drawImage(c, 0, 0, c.width, c.height, -(dw >> 1), -dh + 4, dw, dh); }
+      else ctx.drawImage(c, 0, 0, c.width, c.height, sx - (dw >> 1), sy - dh + 4, dw, dh);
       ctx.restore();
       n++;
     }

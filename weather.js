@@ -1,5 +1,5 @@
 // 像素农场 · 小雨天气（v5.4.3 第 7 阶段）：只做小雨，大约每 7–10 天下一场、持续 2–4 个游戏时；下雨那天已种的田算浇过。
-// 纯函数可以在 Node 里直接 require 做单元测试；雨丝、涟漪、湿路是便宜的画面钩子，由 game.js 挂上。
+// 纯函数可以在 Node 里直接 require 做单元测试；雨丝和湿路是便宜的画面钩子，由 game.js 挂上。下雨时池塘用原有的涟漪，只是更密一些，不再另画一套。
 'use strict';
 (function (root) {
   const GAP_MIN = 7, GAP_MAX = 10;
@@ -106,14 +106,20 @@
     rng = rng || mulberry(0xA11CE);
     for (const s of segs) {
       const x0 = s[0], y0 = s[1], x1 = s[2], y1 = s[3], len = Math.hypot(x1 - x0, y1 - y0) || 1;
-      const n = Math.max(1, Math.round(len / 28));
+      const n = Math.max(0, Math.round(len / 40));
       for (let i = 0; i < n; i++) {
-        if (rng() > 0.55) continue;
-        const u = (i + 0.3 + rng() * 0.4) / n;
-        out.push({ x: x0 + (x1 - x0) * u + (rng() - 0.5) * 3, y: y0 + (y1 - y0) * u + (rng() - 0.5) * 2, rx: 2.2 + rng() * 2.4, ry: 1.1 + rng() * 1.2 });
+        if (rng() > 0.5) continue;
+        const u = (i + 0.25 + rng() * 0.5) / Math.max(1, n);
+        out.push({
+          x: x0 + (x1 - x0) * u + (rng() - 0.5) * 2,
+          y: y0 + (y1 - y0) * u + (rng() - 0.5) * 1.2,
+          rx: 1.6 + rng() * 1.7,
+          ry: 0.8 + rng() * 0.65,
+          wob: (rng() - 0.5) * 0.6,
+        });
       }
     }
-    return out.slice(0, 22);
+    return out.slice(0, 12);
   }
   function ensureVisual(pathSegs) { if (!V.puddles.length) V.puddles = makePuddles(pathSegs); }
 
@@ -125,22 +131,13 @@
     const target = st.wetness != null ? st.wetness : (raining ? 1 : 0);
     V.wet += (target - V.wet) * Math.min(1, dt * 1.6);
     const W = st.W || 640, H = st.H || 360;
-    const want = (raining || V.rain > 0.05) ? 36 : 0;
-    while (V.streaks.length < want) V.streaks.push({ x: Math.random() * W, y: Math.random() * H - 20, len: 5 + Math.random() * 7, spd: 280 + Math.random() * 160, a: 0.22 + Math.random() * 0.18 });
+    const want = (raining || V.rain > 0.05) ? 44 : 0;
+    while (V.streaks.length < want) V.streaks.push({ x: Math.random() * W, y: Math.random() * H - 20, len: 7 + Math.random() * 9, spd: 280 + Math.random() * 160, a: 0.32 + Math.random() * 0.22 });
     if (V.streaks.length > want) V.streaks.length = want;
     for (const s of V.streaks) {
       s.y += s.spd * dt; s.x += s.spd * 0.28 * dt;
-      if (s.y > H + 8 || s.x > W + 8) { s.y = -12; s.x = Math.random() * W; s.len = 5 + Math.random() * 7; }
+      if (s.y > H + 8 || s.x > W + 8) { s.y = -12; s.x = Math.random() * W; s.len = 7 + Math.random() * 9; }
     }
-    if ((raining || V.rain > 0.15) && st.pond) {
-      V.pondT += dt;
-      if (V.pondT > 0.35 && V.ripples.length < 6) {
-        V.pondT = 0;
-        const p = st.pond, a = Math.random() * Math.PI * 2, r = Math.sqrt(Math.random());
-        V.ripples.push({ x: p.x + Math.cos(a) * p.rx * 0.7 * r, y: p.y + Math.sin(a) * p.ry * 0.7 * r, life: 0, max: 0.9 + Math.random() * 0.4 });
-      }
-    }
-    for (let i = V.ripples.length - 1; i >= 0; i--) { V.ripples[i].life += dt; if (V.ripples[i].life >= V.ripples[i].max) V.ripples.splice(i, 1); }
   }
 
   function drawSky(ctx, W, H) {
@@ -153,63 +150,57 @@
     ctx.restore();
     return 1;
   }
+  function oval(ctx, x, y, rx, ry, rot) {
+    ctx.beginPath();
+    if (ctx.ellipse) ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2);
+    else { ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0); ctx.scale(rx, ry); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.restore(); }
+  }
   function drawWet(ctx, proj, RS, st) {
     if (V.wet < 0.04) return 0;
     st = st || {};
     ensureVisual(st.pathSegs);
-    const W = st.W || 1e4, H = st.H || 1e4;
+    const W = st.W || 1e4, H = st.H || 1e4, scale = RS || 2;
     ctx.save();
-    ctx.fillStyle = '#3a322c';
-    ctx.globalAlpha = 0.22 * V.wet;
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.strokeStyle = `rgba(120, 116, 122, ${0.4 * V.wet})`;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = Math.max(4, 3.2 * scale);
     for (const s of (st.pathSegs || [])) {
       if (s[4] && st.regionOpen && !st.regionOpen(s[4])) continue;
-      const steps = 6;
-      for (let i = 0; i <= steps; i++) {
-        const u = i / steps, x = s[0] + (s[2] - s[0]) * u, y = s[1] + (s[3] - s[1]) * u;
-        const p = proj(x, y), sx = p[0], sy = p[1];
-        if (sx < -12 || sx > W + 12 || sy < -12 || sy > H + 12) continue;
-        const rw = Math.max(3, 3.2 * (RS || 2)), rh = Math.max(2, 1.8 * (RS || 2));
-        ctx.fillRect(Math.round(sx - rw), Math.round(sy - rh * 0.4), rw * 2, rh);
-      }
+      const a = proj(s[0], s[1]), b = proj(s[2], s[3]);
+      if ((a[0] < -20 && b[0] < -20) || (a[0] > W + 20 && b[0] > W + 20) || (a[1] < -20 && b[1] < -20) || (a[1] > H + 20 && b[1] > H + 20)) continue;
+      ctx.beginPath();
+      ctx.moveTo(a[0], a[1]);
+      ctx.lineTo(b[0], b[1]);
+      ctx.stroke();
     }
+    ctx.globalCompositeOperation = 'source-over';
     for (const p of V.puddles) {
       const q = proj(p.x, p.y), sx = q[0], sy = q[1];
-      if (sx < -10 || sy < -10 || sx > W + 10 || sy > H + 10) continue;
-      const rx = p.rx * (RS || 2), ry = p.ry * (RS || 2);
-      ctx.globalAlpha = 0.42 * V.wet;
-      ctx.fillStyle = '#243444';
-      ctx.fillRect(Math.round(sx - rx), Math.round(sy - ry * 0.4), Math.round(rx * 2), Math.round(ry * 1.2));
-      ctx.fillRect(Math.round(sx - rx * 0.7), Math.round(sy - ry * 0.7), Math.round(rx * 1.4), Math.round(ry * 0.5));
-      ctx.globalAlpha = 0.28 * V.wet;
-      ctx.fillStyle = '#c8e8f0';
-      ctx.fillRect(Math.round(sx - rx * 0.3), Math.round(sy - ry * 0.45), Math.max(1, Math.round(rx * 0.5)), 1);
+      if (sx < -12 || sy < -12 || sx > W + 12 || sy > H + 12) continue;
+      const rx = Math.max(3.2, p.rx * scale * 1.15), ry = Math.max(1.7, p.ry * scale * 1.15);
+      ctx.globalAlpha = 0.52 * V.wet;
+      ctx.fillStyle = '#2a3340';
+      oval(ctx, sx, sy, rx, ry, p.wob || 0);
+      ctx.fill();
+      ctx.globalAlpha = 0.2 * V.wet;
+      oval(ctx, sx + rx * 0.18, sy + ry * 0.12, rx * 0.62, ry * 0.7, 0.35);
+      ctx.fill();
+      ctx.globalAlpha = 0.48 * V.wet;
+      ctx.fillStyle = '#d8eef4';
+      oval(ctx, sx - rx * 0.28, sy - ry * 0.4, Math.max(1.1, rx * 0.36), Math.max(0.6, ry * 0.2), -0.4);
+      ctx.fill();
     }
     ctx.restore();
     return V.puddles.length;
   }
-  function drawRipples(ctx, proj, RS) {
-    if (!V.ripples.length) return 0;
-    ctx.save();
-    ctx.strokeStyle = '#c8e8f0';
-    ctx.lineWidth = 1;
-    for (const r of V.ripples) {
-      const u = r.life / r.max, p = proj(r.x, r.y), sx = Math.round(p[0]), sy = Math.round(p[1]);
-      const radx = (2 + u * 7) * (RS || 2) * 0.45, rady = radx * 0.55, a = (1 - u) * 0.5;
-      ctx.globalAlpha = a;
-      // cheap ring made of 8 dots, no ellipse dependency in old paths
-      for (let i = 0; i < 8; i++) {
-        const ang = i * Math.PI / 4;
-        ctx.fillStyle = '#c8e8f0';
-        ctx.fillRect(Math.round(sx + Math.cos(ang) * radx), Math.round(sy + Math.sin(ang) * rady), 1, 1);
-      }
-    }
-    ctx.restore();
-    return V.ripples.length;
-  }
+  // Pond already paints its own ripples; rain just densifies those in game.js. Keep a stub so older hooks stay safe.
+  function drawRipples(ctx, proj, RS) { return 0; }
   function drawRain(ctx, W, H) {
     if (!V.streaks.length || V.rain < 0.04) return 0;
     ctx.save();
-    ctx.fillStyle = '#d8e8f0';
+    ctx.fillStyle = '#e8f4fa';
     for (const s of V.streaks) {
       ctx.globalAlpha = s.a * V.rain;
       const dy = Math.round(s.len);

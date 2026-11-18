@@ -368,7 +368,7 @@
     const INS = window.PFInsects;
     if (it.group === 'bug' && INS && INS.bugURL) {
       const url = seen ? INS.bugURL(it.id, true) : INS.silURL(it.id);
-      return url ? icoTag(url, 'bug', 48, 48) : '<i class="ico"></i>';
+      return url ? icoTag(url, 'bug', 72, 72) : '<i class="ico"></i>';
     }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
