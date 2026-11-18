@@ -2,16 +2,15 @@
 
 ## 声音（audio.js）
 
-- 背景音乐曲目网页版源文件为 `assets/audio/morning.mp3`、`afternoon.mp3`、`evening.mp3`、`night.mp3`（128 kbps）；
-  小工具另有 `audio/morning.mp3` 以及同目录下重编码的午/晚/夜曲（64 kbps 立体声）。因平台 zip 不允许音频后缀，打包时写入 `assets/audio-data.js`（清晨）和 `assets/audio-afternoon.js` 等懒加载文件。
+- 背景音乐曲目 `assets/audio/morning.mp3`、`afternoon.mp3`、`evening.mp3`、`night.mp3`：
   由 **ElevenLabs Eleven Music**（模型 eleven_music_v2_5）于 2026-11-17 生成，生成时账号为 ElevenLabs **Starter** 付费档。
   依据 ElevenLabs Music Terms（2026-10-09 版）附录 A：Starter 档允许线上线下商业使用（不含影视、电视、广播和 "Studio Games"；
   本作按条款定义属于 Indie Game），Starter 档无需署名，不得作为独立音乐库分发或上架流媒体。
-  处理：去头尾静音、个别曲目去掉结尾淡出、响度标准化（白天 -16 LUFS，夜晚 -18 LUFS）。
+  处理：去头尾静音、个别曲目去掉结尾淡出、响度标准化（白天 -16 LUFS，夜晚 -18 LUFS）、128 kbps MP3。
 - 音效 `sfx/*.mp3`（首屏用：点击、锄地、浇水、收获、金币）和 `assets/audio/sfx/*.mp3`（其余：播种、打水、摘果、砍树、喂草、
   抛竿、出水、购买、解锁、闪光、清理、鸡、羊、牛、猪、猫、狗、鸟叫）：由 **ElevenLabs Sound Effects**（eleven_text_to_sound_v2）
   于 2026-11-17 生成，账号为 ElevenLabs **Starter** 付费档（付费档可商用、无需署名；免费档才要求署名）。
-  处理：截取单次动作、单声道、去低频、按响度统一、短淡出、64 kbps MP3。 其中打水音效 `assets/audio/sfx/refill.mp3` 于 2026-11-18 重生成（木头辘轳、绳子和轻倒水，去掉冲水感）。文件缺失或未加载时用下方 ZzFX 合成音效代替。
+  处理：截取单次动作、单声道、去低频、按响度统一、短淡出、64 kbps MP3。 其中打水音效 `assets/audio/sfx/refill.mp3` 于 2026-11-18 重生成（木头辘轳、绳子和轻倒水，去掉冲水感）。文件缺失或未加载时用下方 ZzFX 合成音效代替。 小雨环境声 `assets/audio/sfx/rain.mp3` 于 2026-11-18 用同一模型生成（12 秒可循环，轻柔雨打叶子和草地，远处有一点池塘涟漪；处理后做了淡入淡出衔接和响度统一）。首次下雨才懒加载，不进首屏。
 - 程序生成的背景音乐（音频文件加载前或加载失败时使用）、环境声（鸟叫、虫鸣）、提示音：运行时用 WebAudio 生成，本仓库原创。
 - 音效合成器：音效的采样生成函数改写自 **ZzFX**（Zuper Zmall Zound Zynth），MIT 许可。
   - Copyright (c) 2019 Frank Force — https://github.com/KilledByAPixel/ZzFX

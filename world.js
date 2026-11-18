@@ -71,9 +71,9 @@
     orange: { name: '橘子', n: 4, every: 2, price: 15 },
   };
   const FRUIT_IDS = Object.keys(FRUIT);
-  const WOOD = { perChop: 5, price: 4 };
+  const WOOD = { perChop: 8, price: 4 };   // v5.3.1: 5 → 8 per tree (axe levels and the lumber hut add more, wood.js)
   const SAPLING_DAYS = 5;                   // a transplanted sapling bears fruit 5 days later
-  const STUMP_TO_SAPLING = 3, STUMP_TO_TREE = 7; // a chopped forest tree grows back
+  const STUMP_TO_SAPLING = 2, STUMP_TO_TREE = 5; // a chopped forest tree grows back (v5.3.1: 7 → 5 nights; the lumber hut makes it 3)
   const MAX_ORDERS = 24;
   // one sim tree: { id, x, y, kind: 'wild' | 'apple' | 'orange', v: art variant, stage: 'tree' | 'stump' | 'sapling', age, ripe, cd }
   function fruitTree(id, x, y, kind, v) { return { id, x, y, kind, v, stage: 'tree', age: 0, ripe: 1, cd: FRUIT[kind].every }; }

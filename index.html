@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.2.4</title>
+<title>像素堆叠 · 放置农场 v5.4.4</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -33,7 +33,7 @@
   body.grab #fakecursor{background:rgba(255,215,106,.8);transform:scale(.8)}
   #log div:nth-child(2){opacity:.75}#log div:nth-child(3){opacity:.55}#log div:nth-child(4){opacity:.4}
   #catches{color:#fff6dc;font:500 12px/1.45 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:5px 10px;border:2px solid #b89a66;min-width:0;max-width:100%;box-sizing:border-box}
-  #catches[hidden]{display:none}#catches b{color:#ffd76a;font-weight:600}#catches .h{opacity:.75;margin-bottom:2px}
+  #catches[hidden]{display:none}#catches b{color:#ffd76a;font-weight:600}#catches .h{opacity:.75;margin-bottom:2px}#catches .ico{display:inline-block;vertical-align:-2px;margin-right:4px;image-rendering:pixelated;background-repeat:no-repeat;background-position:center}
   .ico{display:inline-block;width:24px;height:24px;vertical-align:-6px;margin-right:4px;background:url(assets/hud_icons.png) no-repeat;background-size:120px 24px;image-rendering:pixelated}
   .ico.coin{background-position:0 0}.ico.seed{background-position:-24px 0}.ico.carrot{background-position:-48px 0}.ico.cabbage{background-position:-72px 0}.ico.wood{background-position:-96px 0}
   .cost{display:inline-grid;grid-template-columns:16px max-content;column-gap:4px;align-items:center;white-space:nowrap;line-height:16px;vertical-align:middle}
@@ -47,14 +47,17 @@
   .slot{width:62px;height:58px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
   .slot .n{position:absolute;right:3px;top:1px;font-size:13px;color:#ffd76a;text-shadow:1px 1px 0 #000}
   .slot .k{font-size:11px;font-weight:500;opacity:.8;line-height:1;margin-top:1px}
+  .slot .k.r-common,.slot .k.r-rare,.slot .k.r-epic{opacity:1;font-weight:600}
   .slot.dim{opacity:.45}
   .slot canvas,.slot i{width:32px;height:32px;image-rendering:pixelated;display:block}
+  .slot i.ico{flex:none;background-repeat:no-repeat;background-position:center}
+  .r-common{color:#bff0a0}.r-rare{color:#8cc6dc}.r-epic{color:#ffb86a}
   .meter{width:48px;height:5px;margin-top:2px;background:#3d5f73;box-shadow:0 0 0 1px #10202a;position:relative;flex:none;overflow:hidden;image-rendering:pixelated}
   .meter .fill{display:block;height:5px;background:#7ec3e6;width:0}
   .meter .ticks{position:absolute;left:6px;top:0;width:1px;height:5px;background:#10202a;box-shadow:6px 0 #10202a,12px 0 #10202a,18px 0 #10202a,24px 0 #10202a,30px 0 #10202a,36px 0 #10202a;pointer-events:none}
   .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
   .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
-  #menuBtn,#shopBtn,#storeBtn{position:relative}
+  #menuBtn,#shopBtn,#storeBtn,#codexBtn{position:relative}
   #speed{position:relative;display:flex;gap:4px}#speed[hidden]{display:none}
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
   #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
@@ -90,14 +93,14 @@
   #minimap{position:relative;right:auto;top:auto;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
   #mapBtn{position:relative}
   #tools{position:relative;display:flex;gap:4px}#tools[hidden]{display:none}
-  #shop,#menu,#store{z-index:3}
+  #shop,#menu,#store,#codex{z-index:3}
   #store{position:relative;right:auto;top:auto;bottom:auto;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
   #store .shead .wallet{display:inline-flex;align-items:center;gap:4px;color:#ffd76a}
   #store .sec{font-size:12px;opacity:.7;margin:6px 0 4px}
   #store .cards{display:flex;flex-direction:column;gap:5px}
   #store .card{display:flex;align-items:center;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 6px}
-  #store .card>i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
+  #store .card>i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none;background-repeat:no-repeat;background-position:center}
   #store .ct{flex:1;min-width:0}#store .d{font-weight:500;font-size:12px;opacity:.85}
   #store .cb{display:flex;flex-direction:column;align-items:flex-end;gap:0;flex:none;color:#ffd76a}#store .cb .u{font-size:11px;opacity:.8;font-weight:500;color:#fff6dc;display:inline-flex;align-items:center;gap:4px;line-height:16px}
   #store .empty{opacity:.7;font-weight:500;padding:4px 2px}
@@ -113,12 +116,42 @@
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip b, #loveVal{color:#ffd76a}
-  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
   /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
   @media (max-width:720px){
-    #shop,#store,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
+    #shop,#store,#codex,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
     #hud .row.res{gap:6px 10px}
   }
+
+  #codex{position:relative;right:auto;top:auto;bottom:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px;color:#fff6dc}
+  #codex .shead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}#codex .shead b:first-child{font-size:16px;color:#ffd76a}#codex .shead .x{margin-left:auto;padding:0 7px}
+  #codex .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
+  #codex .tabs .pbtn{padding:2px 8px;font-size:12px}
+  #codex .sec{font-size:12px;margin:8px 0 4px;color:#e8c78a;opacity:1}
+  #codex .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:5px}
+  #codex .cell{background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:5px 2px 4px;text-align:center;cursor:pointer;min-height:88px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:#fff6dc}
+  #codex .cell .nm{font-size:12px;font-weight:600;line-height:1.2;color:#fff6dc}
+  #codex .cell.r-common .nm{color:#bff0a0}
+  #codex .cell.r-rare .nm{color:#8cc6dc}
+  #codex .cell.r-epic .nm{color:#ffb86a}
+  #codex .cell.locked{opacity:1;cursor:default}
+  #codex .cell.locked .nm{color:#e8c78a;font-weight:600}
+  #codex .cell.on{border-color:#e8c78a}
+  #codex .ico{display:block;image-rendering:pixelated;image-rendering:crisp-edges;background-repeat:no-repeat;background-position:center;flex:none}
+  #codex .cell.locked .ico{opacity:.95}
+  #codex .q{font-size:18px;color:#e8c78a;line-height:1}
+  #codex .detail{font-weight:500;font-size:12px;margin:6px 0 2px;min-height:1.4em;color:#f3e2b8;opacity:1}
+  #codex .cards{display:flex;flex-direction:column;gap:5px}
+  #codex .card{display:flex;align-items:flex-start;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:5px 6px;color:#fff6dc}
+  #codex .card.locked{opacity:1}
+  #codex .card.locked .nm{color:#e8c78a}
+  #codex .card.locked .hint{color:#f3e2b8}
+  #codex .card .nm{font-weight:600;color:#fff6dc}
+  #codex .card .hint{font-weight:500;font-size:12px;color:#f3e2b8;opacity:1}
+  #codex .card .when{font-size:11px;color:#ffd76a;margin-left:auto;flex:none;white-space:nowrap}
+  #codex .badge{color:#ffd76a;font-size:14px;flex:none}
+  #codex .later{font-size:11px;color:#e8c78a;opacity:1}
+  #codex .empty{color:#f3e2b8;font-weight:500;padding:4px 2px}
 </style>
 </head>
 <body>
@@ -144,18 +177,20 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.2.4 · 打水音效更轻柔（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.4.4 · 小雨和昆虫，孩子会自己去玩（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
       <div id="speed" hidden></div>
       <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
+      <button id="codexBtn" class="pbtn" title="图鉴（J）">图鉴 J</button>
       <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
       <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
     </div>
     <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
     <div id="shop" class="panel" hidden></div>
     <div id="store" class="panel" hidden></div>
+    <div id="codex" class="panel" hidden></div>
     <div id="menu" class="panel" hidden></div>
   </div>
   <div id="inv" class="panel"></div>
@@ -168,13 +203,20 @@
 <div id="say" class="panel" hidden></div>
 <script src="assets/palette.js"></script>
 <script src="assets/sprites.js"></script>
+<script src="assets/family_sprites.js"></script>
 <script src="sim.js"></script>
 <script src="world.js"></script>
+<script src="wood.js"></script>
 <script src="path.js"></script>
 <script src="animals.js"></script>
 <script src="fish.js"></script>
+<script src="kids.js"></script>
 <script src="family.js"></script>
 <script src="surprise.js"></script>
+<script src="weather.js"></script>
+<script src="insects.js"></script>
+<script src="codex.js"></script>
+  <script src="codex_icons.js"></script>
 <script src="save.js"></script>
 <script src="playlog.js"></script>
 <script src="fx.js"></script>

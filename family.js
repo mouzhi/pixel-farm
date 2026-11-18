@@ -1,7 +1,7 @@
 // 像素农场 · 家人规则（v5.0，第 5 阶段第一部分）：纯函数，浏览器里是 window.PFFamily，Node 里可以直接 require 做单元测试。
 // No hired hands: 阿禾 keeps the market stall. The farmer chats with her, sells to her and brings small gifts; once they are
 // close and the house has a spare room she moves in and farms with him, and her father takes over the stall. Bigger houses make room for children, who grow from a baby (stays at home)
-// to a child (light chores) to a teen (almost everything). Nobody is paid; everyone shares the one task board.
+// to a play / school / helper / teen arc (kids.js, v5.4.3). Nobody is paid; everyone shares the one task board.
 'use strict';
 (function (root) {
   const PARTNER = { id: 'partner', name: '阿禾' };
@@ -13,9 +13,10 @@
   const MEET_DAY = 1;                              // she is the shopkeeper: they meet on his first trip to the stall
   const SALE = 1, SALES_DAY = 2;                   // selling to her: +1 for each of the day's first two sale trips
   const KID_AFTER = 7, KID_GAP = 10;               // days she has lived here before the first child; days between children
-  const BABY_DAYS = 5, CHILD_DAYS = 14;            // age (days) when a baby becomes a child, and a child a teen
+  const KIDS = (typeof require !== 'undefined' ? require('./kids') : root.PFKids) || null;
+  const BABY_DAYS = 5, CHILD_DAYS = 14;            // v5.0 ages, kept for old callers; growth itself lives in kids.js
   // light chores a child can do; a teen does everything an adult does except buying at the market
-  const CHILD_KINDS = ['collect', 'pet', 'petpet', 'pick', 'feed', 'tidy', 'weed', 'store'];
+  const CHILD_KINDS = ['collect', 'pet', 'petpet', 'pick', 'feed', 'tidy', 'weed', 'store', 'feedpond', 'release'];
   const emptyToday = () => ({ day: 0, chat: 0, gift: 0, giftName: '', sales: 0 });
   const empty = () => ({ love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [], today: emptyToday() });
   const itemType = it => (it && typeof it === 'object') ? it.type : it; // v5.1: a basket slot may be a surprise object
@@ -45,14 +46,57 @@
     }
     return ev;
   }
-  const kidStage = (kid, day) => { const age = day - kid.born; return age < BABY_DAYS ? 'baby' : age < CHILD_DAYS ? 'child' : 'teen'; };
-  // the people who work: the farmer is always there; she once she lives here; children once they are past babyhood
+  const kidStage = (kid, day) => KIDS ? KIDS.stageOf(kid, day) : ((day - kid.born) < BABY_DAYS ? 'baby' : (day - kid.born) < CHILD_DAYS ? 'child' : 'teen');
+  // people on the map: she once she lives here; children once they are past babyhood (play and school kids walk around too).
+  // helper maps to today's 'child' role so the chore list and sprites stay put; play / school are their own roles.
   function workers(fam, day) {
     const out = []; if (fam.moved) out.push({ id: PARTNER.id, name: PARTNER.name, role: 'partner' });
-    for (const k of fam.kids) { const st = kidStage(k, day); if (st !== 'baby') out.push({ id: k.id, name: k.name, role: st }); }
+    for (const k of fam.kids) {
+      const st = kidStage(k, day);
+      const role = KIDS ? KIDS.workRole(st) : (st === 'baby' ? null : st);
+      if (role) out.push({ id: k.id, name: k.name, role });
+    }
     return out;
   }
-  const canDo = (role, kind) => role === 'child' ? CHILD_KINDS.includes(kind) : role === 'teen' ? kind !== 'buy' && kind !== 'fish' : kind !== 'fish';
-  const api = { PARTNER, KID_NAMES, LOVE_MAX, CHAT, SALE, SALES_DAY, GIFTS, GIFT_FISH, MEET_DAY, KID_AFTER, KID_GAP, BABY_DAYS, CHILD_DAYS, CHILD_KINDS, empty, giftValue, bestGift, visit, kidCap, morning, kidStage, workers, canDo };
+  // v5.3 division of labour. Each person owns a few areas of the farm: the farmer the fields and the wood, 阿禾 the animals,
+  // the coop and the orchard; a child has a corner of their own (小豆 the yard and the pets, 小米 the coop and the pets) and
+  // a teen takes over part of a parent's areas. Only while someone else is out working: a job in my own area scores +OWN,
+  // one in an area somebody else owns -HELP (still well above fishing or resting, so nobody idles while there is work),
+  // anything else 0. On his own the farmer is unaffected.
+  const AREA_OF = { harvest: 'field', water: 'field', plant: 'field', fetch: 'field', buy: 'field', weed: 'field', clear: 'field', till: 'field',
+    chop: 'wood', transplant: 'wood', feed: 'animal', trough: 'animal', collect: 'animal', pet: 'animal', hay: 'animal', petpet: 'pets', pick: 'orchard', tidy: 'yard', feedpond: 'yard', release: 'yard' };
+  const AREAS = { farmer: ['field', 'wood'], partner: ['animal', 'coop', 'orchard'],
+    kid0: { child: ['yard', 'pets'], teen: ['field', 'yard', 'pets'] }, kid1: { child: ['coop', 'pets'], teen: ['animal', 'coop', 'orchard'] } };
+  const OWN = 15, HELP = 18;
+  const areasOf = (id, role) => { const a = AREAS[id]; return !a ? [] : Array.isArray(a) ? a : (a[role] || a.child || []); };
+  // others: [{ id, role }] of the other people out working right now
+  function affinity(id, role, area, others) {
+    if (!area || !others || !others.length) return 0;
+    if (areasOf(id, role).includes(area)) return OWN;
+    return others.some(o => areasOf(o.id, o.role).includes(area)) ? -HELP : 0;
+  }
+  // the next child: { name, days } (days until the morning they arrive; 1 = tomorrow), { name, room: true } when the house
+  // has no room yet, or null (not living together yet, or every child is here)
+  function nextKid(fam, day, pop) {
+    if (!fam.moved || fam.kids.length >= KID_NAMES.length) return null;
+    const name = KID_NAMES[fam.kids.length];
+    if (fam.kids.length >= kidCap(pop)) return { name, room: true };
+    const last = fam.kids.length ? fam.kids[fam.kids.length - 1].born : fam.moved + KID_AFTER - KID_GAP;
+    return { name, days: Math.max(1, Math.max(fam.moved + KID_AFTER, last + KID_GAP) - day) };
+  }
+  const kidText = n => !n ? '' : n.room ? `扩建房子后${n.name}才会来` : n.days === 1 ? `${n.name}明天就来了` : `${n.name}还有 ${n.days} 天到来`;
+  const canDo = (role, kind) => {
+    if (role === 'play') return false;
+    if (role === 'school') return (KIDS ? KIDS.SCHOOL_FEED : ['feed', 'trough']).includes(kind);
+    if (role === 'child') return CHILD_KINDS.includes(kind);
+    if (role === 'teen') return kind !== 'buy' && kind !== 'fish';
+    return kind !== 'fish';
+  };
+  const kidLine = (kid, day) => {
+    if (KIDS) return `${kid.name}（${KIDS.panelText(kid, day)}）`;
+    const st = kidStage(kid, day);
+    return `${kid.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[st] || st}）`;
+  };
+  const api = { PARTNER, KID_NAMES, LOVE_MAX, CHAT, SALE, SALES_DAY, GIFTS, GIFT_FISH, MEET_DAY, KID_AFTER, KID_GAP, BABY_DAYS, CHILD_DAYS, CHILD_KINDS, empty, giftValue, bestGift, visit, kidCap, morning, kidStage, workers, canDo, AREA_OF, AREAS, OWN, HELP, areasOf, affinity, nextKid, kidText, kidLine, KIDS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFFamily = api;
 })(typeof window !== 'undefined' ? window : globalThis);

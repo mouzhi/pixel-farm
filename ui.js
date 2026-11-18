@@ -48,6 +48,11 @@
     truffle: pixIcon(['', '', '', '', '', '     kkkk', '    kbbtbk', '   kbtbbbbk', '   kbbbbtbk', '   kbtbbbbk', '    kbbbbk', '     kkkk'].map(r => r.padEnd(16)), { k: ink, b: wd[1], t: wd[3] }),
     pasture: pixIcon(['', '', '', '', '  k   k   k   k', ' kwk kwk kwk kwk', ' kwkkkwkkkwkkkwk', ' kwwwwwwwwwwwwwk', ' kwkkkwkkkwkkkwk', ' kwwwwwwwwwwwwwk', ' kwkgkwkgkwkgkwk', 'gkwkgkwkgkwkgkwkg', 'ggggggggggggggggg'].map(r => r.padEnd(16)), { k: ink, w: wd[4], g: gr[3] }),
     hay: pixIcon(['', '', '', '', '   kkkkkkkkkk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '   kkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#f2cf55', b: wd[3] }),
+    fishfood: pixIcon(['', '', '', '    kkkkkk', '   kyyyyyyk', '  kyykkkkkk', '  kykwwwwwk', '  kykwwwwwk', '  kyyyyyyyyk', '   kyyyyyyk', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#e8c78a', w: wt[4] }),
+    goldfish: pixIcon(['', '', '', '', '     kkkk', '    kooooook', '   kooooyoook', '  koooooooookk', '   kooooook wk', '    kkkkkk  k', '         kkk'].map(r => r.padEnd(16)), { k: ink, o: '#e8a02a', y: '#fff6dc', w: wt[4] }),
+    koi: pixIcon(['', '', '', '', '     kkkk', '    kororork', '   kororyrork', '  kororororokk', '   kororork wk', '    kkkkkk  k', '         kkk'].map(r => r.padEnd(16)), { k: ink, o: '#e06a2c', r: '#fff6dc', y: '#2a1d16', w: wt[4] }),
+    book: pixIcon(['', '', '   kkkkkkkk', '  kyyyyyyyyk', '  kykkkkkkyk', '  kyyyyyyyyk', '  kykkkkkkyk', '  kyyyyyyyyk', '  kykkkkkkyk', '  kyyyyyyyyk', '   kkkkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#e8c78a' }),
+    egg: pixIcon(['', '', '', '', '     kkkk', '    kwwwwk', '   kwwwwwwk', '   kwwwwwwk', '    kwwwwk', '     kkkk'].map(r => r.padEnd(16)), { k: ink, w: '#fff6dc' }),
     egg: pixIcon(['', '', '', '', '      kkk', '     kcccк', '    kcccccк', '    kccccck', '    kcccccck', '    kcecccck', '     keccck', '      kkkk'].map(r => r.replace(/к/g, 'k').padEnd(16)), { k: ink, c: '#f6ecd0', e: st[3] }),
     wool: pixIcon(['', '', '', '    kk kk', '   kcckcck', '  kcceccccck', '  kcccccecck', ' kceccccccck', ' kccccceccck', '  kccecccck', '   kkcckkk', '     kk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', e: st[3] }),
     milk: pixIcon(['', '', '      kkk', '      kak', '     kkkkk', '    kcccck', '    kcccck', '    kaaaak', '    kcccck', '    kcccck', '    kcccck', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', a: wt[3] }),
@@ -55,8 +60,10 @@
     searod: pixIcon(['', '              k', '             ks', '            ks', '           ks', '          ks', '         ks', '        ks', '       ks', '      ks', '   kkks', '  kwwwk', '  kwrwk', '   kkk'].map(r => r.padEnd(16)), { k: ink, s: st[3], w: '#fff6dc', r: (P && P.roof) ? P.roof[2] : '#b8432f' }),
     coast: pixIcon(['', '', '', '                ', '     www  ww', '   wwkwkwwkwk', '  wkkkkkkkkkk', '  kssysysyssk', '  ksssssssssk', ' kssysysysssk', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbbbb', 'bbbbbbbbbbbbbbbb'].map(r => r.padEnd(16)), { k: ink, w: wt[4], b: wt[2], s: wd[4], y: '#fff6dc' }) });
   ICONS.fence = ICONS.pasture; // v5.0
+  ICONS.lumber = house(gr[2]); // v5.3.1 the lumber hut: a cabin with a moss-green roof
   ICONS.heart = pixIcon(['', '', '', '   kkk   kkk', '  kpppk kpppk', ' kpphppkpppppk', ' kphhpppppppk', ' kpppppppppppk', '  kpppppppppk', '   kpppppppk', '    kpppppk', '     kpppk', '      kpk', '       k'].map(r => r.padEnd(16)), { k: ink, p: '#e57fa0', h: '#f6ecd0' });
   ICONS.flower = pixIcon(['', '', '', '      y', '     kyk', '    ykyky', '     kyk', '      b', '      b', '     kbk', '      k'].map(r => r.padEnd(16)), { k: ink, y: '#ffd76a', b: gr[3] });
+  ICONS.bugnet = pixIcon(['', '', '     kk', '    kwwk', '    kwwk', '     kk', '     kb', '    kb', '   kb', '  kb', ' kb', 'kb', 'k'].map(r => r.padEnd(16)), { k: ink, w: '#fff6dc', b: wd[3] });
   const artIcon = k => { const a = G.animalArt(k), n = Math.max(16, a.width, a.height), c = document.createElement('canvas'); c.width = c.height = n;
     c.getContext('2d').drawImage(a, (n - a.width) >> 1, n - a.height - ((n - a.height) >> 2)); return c.toDataURL(); };
   for (const k of PFAnimals.KIND_IDS) ICONS[k] = artIcon(k);
@@ -71,6 +78,88 @@
     return `<i style="background:url(${atlas || (window.PF_CROPS && window.PF_CROPS.src)}) no-repeat;background-size:${32 * SIM.IDS.length}px 32px;background-position:${-32 * SIM.IDS.indexOf(k)}px 0"></i>`; };
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${ICONS[id]});background-size:32px;image-rendering:pixelated"></i>`);
   const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
+  const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
+  if (ICN) {
+    if (ICN.fishURL('goldfish')) ICONS.goldfish = ICN.fishURL('goldfish');
+    if (ICN.fishURL('koi')) ICONS.koi = ICN.fishURL('koi');
+  }
+  function icoTag(url, cls, w, h) {
+    if (!url) return '';
+    return `<i class="ico ${cls || ''}" style="width:${w}px;height:${h}px;background-image:url(${url});background-size:${w}px ${h}px"></i>`;
+  }
+  function canvasImg(c) {
+    const g = c.getContext('2d');
+    return { w: c.width, h: c.height, px: new Uint8ClampedArray(g.getImageData(0, 0, c.width, c.height).data) };
+  }
+  function decorateCrop(type, mode, seen, fit) {
+    const src = G.cropFrame && G.cropFrame(type);
+    if (!src) return cropIcon(type);
+    const glow = mode === 'glow' || mode === 'glow-giant', giant = mode === 'giant' || mode === 'glow-giant';
+    const pad = glow ? 3 : 2, scale = giant ? 2 : 1;
+    const c = document.createElement('canvas');
+    c.width = src.width * scale + pad * 2; c.height = src.height * scale + pad * 2;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
+    if (glow) {
+      const im = g.getImageData(0, 0, c.width, c.height), d = im.data, w = c.width, h = c.height;
+      const aat = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : d[(y * w + x) * 4 + 3];
+      const gold = [255, 215, 106, 255], cream = [255, 246, 220, 255], extra = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+        if (aat(x, y)) continue;
+        if (aat(x - 1, y) || aat(x + 1, y) || aat(x, y - 1) || aat(x, y + 1)) extra.push(x, y);
+      }
+      for (let i = 0; i < extra.length; i += 2) {
+        const x = extra[i], y = extra[i + 1], j = (y * w + x) * 4, col = (x + y) % 2 ? gold : cream;
+        d[j] = col[0]; d[j + 1] = col[1]; d[j + 2] = col[2]; d[j + 3] = 255;
+      }
+      g.putImageData(im, 0, 0);
+      g.drawImage(src, pad, pad, src.width * scale, src.height * scale);
+    }
+    let img = canvasImg(c);
+    if (!seen && ICN) img = ICN.silhouette(img);
+    const url = ICN ? ICN.urlOf(img) : c.toDataURL();
+    let show = giant ? 1.5 : 2, dw = Math.round(c.width * show), dh = Math.round(c.height * show);
+    if (fit && Math.max(dw, dh) > fit) { const s = fit / Math.max(dw, dh); dw = Math.max(1, Math.round(dw * s)); dh = Math.max(1, Math.round(dh * s)); }
+    return icoTag(url, 'crop', dw, dh);
+  }
+  // Shared pixel art for fish, rares, glowing and giant crops (same sprites as the 图鉴).
+  function itemKind(spec) {
+    if (!spec) return null;
+    const id = spec.id || spec.type;
+    const FS = window.PFFish;
+    if (spec.group === 'fish' || (FS && FS.isFish(id))) return { kind: 'fish', id };
+    if (spec.group === 'rare' || (spec.rare && ICN && ICN.has('rare', spec.rare))) return { kind: 'rare', id: spec.rare };
+    if (id && ICN && ICN.has('rare', id) && (spec.kind === 'rare' || !spec.type || spec.type === id)) return { kind: 'rare', id };
+    if (spec.group === 'glow-giant' || (spec.glow && spec.giant)) return { kind: 'glow-giant', id };
+    if (spec.group === 'glow' || spec.glow) return { kind: 'glow', id };
+    if (spec.group === 'giant' || spec.giant) return { kind: 'giant', id };
+    return { kind: 'other', id };
+  }
+  function itemArt(spec, opt) {
+    opt = opt || {};
+    const seen = opt.seen !== false, fit = opt.fit || 0, k = itemKind(spec);
+    if (!k) return '<i></i>';
+    if (k.kind === 'fish' && ICN && ICN.has('fish', k.id)) {
+      const url = seen ? ICN.fishURL(k.id) : ICN.silURL('fish', k.id);
+      const w = opt.w || (fit ? Math.min(fit, 48) : 72), h = Math.round(w * 16 / 24);
+      return icoTag(url, 'fish', w, h);
+    }
+    if (k.kind === 'rare' && ICN && ICN.has('rare', k.id)) {
+      const url = seen ? ICN.rareURL(k.id) : ICN.silURL('rare', k.id);
+      const s = opt.w || opt.fit || 32;
+      return icoTag(url, 'rare', s, s);
+    }
+    if (k.kind === 'glow' || k.kind === 'giant' || k.kind === 'glow-giant') return decorateCrop(k.id, k.kind, seen, fit || opt.w);
+    if (k.id && (ICONS[k.id] || (SIM.CROPS && SIM.CROPS[k.id]))) return icon(k.id);
+    return '<i></i>';
+  }
+  function rarityClass(spec) {
+    if (!BOOK || !BOOK.rarityOf) return '';
+    const k = itemKind(spec); if (!k || k.kind === 'other') return '';
+    const it = (k.kind === 'glow' || k.kind === 'giant' || k.kind === 'glow-giant') ? { group: k.kind === 'glow-giant' ? 'giant' : k.kind, type: k.id } : { group: k.kind, id: k.id };
+    const tier = BOOK.rarityOf(it);
+    return tier ? 'r-' + tier : '';
+  }
   // v5.1.1: a fixed 48px bar (8 tick marks) that stays inside the 62px slot at every can size
   const METER_W = 48;
   function meterBar(cur, max) {
@@ -82,7 +171,8 @@
   function inv() {
     const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
     const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(typ(k))).length;
-    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
+    const specials = (F.crops || []).map(it => { const o = window.PFSurprise ? PFSurprise.itemOf(it) : { type: typ(it) }; return [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'); }).join('|');
+    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, specials, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
     if (key === invKey) return; invKey = key;
     let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i>${meterBar(F.water, S.waterMax)}<span class="k">水壶</span><span class="n">${F.water}/${S.waterMax}</span></div>`;
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0);
@@ -92,9 +182,18 @@
       h += `<div class="slot${F.wood ? '' : ' dim'}" title="仓库里的木材：扩建房子、给动物棚子围篱笆要用。仓库最多放 ${cap} 份（房子越大越多），放不下的才拿去集市卖（${PFWorld.WOOD.price} 金一份）"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}/${cap}</span></div>`; }
     { const fam = S.family, FA = window.PFFamily, tier = PFWorld.HOUSE_TIERS[E.house || 0]; // v5.0: 阿禾 and the children
       if (!fam.moved && fam.met) h += `<div class="slot" title="阿禾是集市的店主（7:00–19:00 开门）。农夫每天第一次去集市会和她聊几句（+${FA.CHAT}），篮子里有野花、鱼、果子或鸡蛋就送她一样；每天头两趟卖东西各 +${FA.SALE}。好感满 ${FA.LOVE_MAX}、房子扩建成大木屋后，她就搬来一起经营农场，摊子交给她爸爸。"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">阿禾</span><span class="n">${fam.love}/${FA.LOVE_MAX}</span></div>`;
-      if (fam.moved) { const kids = fam.kids.map(k => `${k.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[FA.kidStage(k, S.day)]}）`);
+      if (fam.moved) { const kids = fam.kids.map(k => FA.kidLine(k, S.day));
         const jobs = S.members.map(m => `${m.name}：${m.home ? '在家' : m.task ? m.task.label : '歇着'}`);
-        h += `<div class="slot" title="${tier.name}：最多住 ${tier.pop} 人。家人：阿禾${kids.length ? '、' + kids.join('、') : ''}。${jobs.join('；')}"><i style="background:url(${ICONS.house});background-size:32px;image-rendering:pixelated"></i><span class="k">家人</span><span class="n">${1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length}/${tier.pop}</span></div>`; } }
+        h += `<div class="slot" title="${tier.name}：最多住 ${tier.pop} 人。家人：阿禾${kids.length ? '、' + kids.join('、') : ''}。${jobs.join('；')}"><i style="background:url(${ICONS.house});background-size:32px;image-rendering:pixelated"></i><span class="k">家人</span><span class="n">${1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length}/${tier.pop}</span></div>`;
+        const NK = window.PFKids;
+        for (const k of fam.kids) {
+          const short = NK ? NK.panelShort(k, S.day) : FA.kidStage(k, S.day);
+          const m = S.members.find(q => q.id === k.id);
+          const job = !m || m.home ? '在家' : m.away ? '在学校上课' : (m.task ? m.task.label : '歇着');
+          h += `<div class="slot" title="${FA.kidLine(k, S.day)}。${job}"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${k.name}</span><span class="n">${short}</span></div>`;
+        }
+        const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
+        if (nk) h += `<div class="slot${nk.room ? ' dim' : ''}" title="${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${nk.name}</span><span class="n">${nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天'}</span></div>`; } }
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<div class="slot" title="${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置"><i style="background:url(${FRUIT_ICON[k]});background-size:32px"></i><span class="k">${PFWorld.FRUIT[k].name}苗</span><span class="n">${F.saplings[k]}</span></div>`;
     if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) h += `<div class="slot${S.hay ? '' : ' dim'}" title="仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）"><i style="background:url(${ICONS.hay});background-size:32px"></i><span class="k">干草</span><span class="n">${S.hay}</span></div>`;
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
@@ -105,8 +204,23 @@
     h += `<div class="slot" title="${rodTip}"><i style="background:url(${E.searod ? ICONS.searod : ICONS.rod});background-size:32px;image-rendering:pixelated"></i><span class="k">${E.searod ? '海竿' : rod.name}</span></div>`;
     if (FS && fishN) {
       const counts = {}; for (const k of F.crops) { const id = typ(k); if (FS.isFish(id)) counts[id] = (counts[id] || 0) + 1; }
-      for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id);
-        h += `<div class="slot" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条"><i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i><span class="k">${f.name}</span><span class="n">${counts[id]}</span></div>`; }
+      for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id), rc = rarityClass({ group: 'fish', id });
+        h += `<div class="slot ${rc}" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条">${itemArt({ group: 'fish', id }, { fit: 32 })}<span class="k ${rc}">${esc(f.name)}</span><span class="n">${counts[id]}</span></div>`; }
+    }
+    // same sprites for basket rares / glowing / giant crops, grouped like the fish slots
+    if (window.PFSurprise) {
+      const groups = new Map();
+      for (const it of F.crops) {
+        const o = PFSurprise.itemOf(it);
+        if ((FS && FS.isFish(o.type)) || !(o.rare || o.glow || o.giant)) continue;
+        const key = [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':');
+        const e = groups.get(key) || { spec: o, n: 0 }; e.n++; groups.set(key, e);
+      }
+      for (const e of groups.values()) {
+        const name = PFSurprise.itemName(e.spec, Object.fromEntries((SIM.IDS || []).map(k => [k, SIM.CROPS[k].name])));
+        const rc = rarityClass(e.spec), unit = G.priceOfAny ? G.priceOfAny(e.spec) : '';
+        h += `<div class="slot ${rc}" title="${esc(name)}${unit ? '：篮子里待售，集市收购 ' + unit + ' 金' : ''}">${itemArt(e.spec, { fit: 32 })}<span class="k ${rc}">${esc(name)}</span><span class="n">${e.n}</span></div>`;
+      }
     }
     $('inv').innerHTML = h;
   }
@@ -123,6 +237,7 @@
   function sectionFor(it, tabId) {
     if (tabId === 'tools' && it.fish) return '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）';
     if (tabId === 'build' && it.home) return '房子（木材 + 金币；房子越大，能住的家人越多）';
+    if (tabId === 'build' && it.lumber) return '伐木（木材不够时，农夫会自己去林场砍树）';
     if (tabId === 'build' && it.farm) return '棚子';
     if (tabId === 'animals' && it.pet) return '小伙伴（猫猫狗狗，不吃干草）';
     if (tabId === 'animals' && it.farm) return '养殖（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）';
@@ -131,7 +246,7 @@
   function drawShop(force) {
     const S = G.S, tabs = shopTabs();
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
-    const key = [shopTab, S.coins, G.F.wood, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
+    const key = [shopTab, S.coins, G.F.wood, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -147,10 +262,33 @@
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
+    if (tab.id === 'tools') {
+      const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
+      const netPrice = (window.PFInsects && PFInsects.NET_PRICE) || 150;
+      const netOwned = !!S.bugNet, netOk = !netOwned && S.coins >= netPrice, netShort = netOk || netOwned ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(netPrice - S.coins, 'coin')}</span></span>`;
+      h += `<div class="sec">院子</div>`;
+      h += `<div class="card${netOwned ? ' max' : ''}" data-item="bugnet">${icon('bugnet')}<div class="ct"><div><b>捕虫网</b> <span class="lv">${netOwned ? '已有' : '未购买'}</span></div>` +
+        (netOwned ? `<div class="d">买一次就留在家里。玩耍的孩子会自己带网去捉昆虫，看一眼再放走，记进图鉴</div></div><div class="cb"><span class="done">✓</span></div>` :
+          `<div class="d">${netPrice} 金，买一次就留在家里。有网之后，孩子偶尔会自己去捉一只昆虫，记进图鉴的「昆虫」页，看完就放走，不能卖</div></div><div class="cb"><button class="pbtn" data-buy="bugnet"${netOk ? '' : ' disabled'}>${priceChips(netPrice, 0)}</button>${netShort}</div>`) + '</div>';
+      h += `<div class="sec">池塘（鱼食买了以后家人会自己去撒；观赏鱼放进池塘只是看着玩）</div>`;
+      if (food) {
+        const maxed = S.fishFood >= food.stock, ok = !maxed && S.coins >= food.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(food.price - S.coins, 'coin')}</span></span>`;
+        h += `<div class="card${maxed ? ' max' : ''}" data-item="fishfood">${icon('fishfood')}<div class="ct"><div><b>鱼食</b> <span class="lv">仓库 ${S.fishFood}/${food.stock}</span></div>` +
+          (maxed ? `<div class="d">已经满了</div></div><div class="cb"><span class="done">✓</span></div>` :
+            `<div class="d">${food.price} 金一包。家里有鱼食时，空闲的家人会自己去池塘撒一把，那天鲈鱼和锦鲤更容易上钩，常见鱼还在</div></div><div class="cb"><button class="pbtn" data-buy="fishfood"${ok ? '' : ' disabled'}>${priceChips(food.price, 0)}</button>${short}</div>`) + '</div>';
+      }
+      if (gf) {
+        const held = ((S.ornament && S.ornament.goldfish) || 0) + (S.pondFish || []).filter(f => f.kind === 'goldfish').length;
+        const maxed = held >= (FS.POND_CAP || 8), ok = !maxed && S.coins >= gf.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(gf.price - S.coins, 'coin')}</span></span>`;
+        h += `<div class="card${maxed ? ' max' : ''}" data-item="goldfish">${itemArt({ group: 'fish', id: 'goldfish' }, { fit: 32 })}<div class="ct"><div><b>金鱼</b> <span class="lv">已有 ${held}/${FS.POND_CAP}</span></div>` +
+          (maxed ? `<div class="d">池塘已经养满了</div></div><div class="cb"><span class="done">✓</span></div>` :
+            `<div class="d">买来放到家门口池塘里养着，只是在水里游给人看，不再卖掉。海鱼不能放进淡水池塘</div></div><div class="cb"><button class="pbtn" data-buy="goldfish"${ok ? '' : ' disabled'}>${priceChips(gf.price, 0)}</button>${short}</div>`) + '</div>';
+      }
+    }
     shop.innerHTML = h + '</div>';
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
-  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; drawShop(true); } };
+  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
     const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
@@ -164,20 +302,26 @@
   const store = $('store'); let storeKey = '';
   function rowIcon(row) {
     const id = row.id || row.type;
+    const art = itemArt(row, { fit: 32 });
+    if (art && art !== '<i></i>') return art;
     if (row.kind === 'seed' || (id && SIM.CROPS[id])) return cropIcon(id);
     if (id && FRUIT_ICON[id]) return `<i style="background:url(${FRUIT_ICON[id]});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'wood') return `<i style="background:url(${FRUIT_ICON.wood});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'hay') return icon('hay');
+    if (id === 'fishfood' || id === 'fishFood') return icon('fishfood');
+    if (id === 'bugnet' || id === 'net') return icon('bugnet');
+    if (id === 'goldfish' || id === 'koi') return icon(id);
     if (id === 'flower') return icon('flower');
     if (ICONS[id]) return icon(id);
-    const FS = window.PFFish, f = FS && FS.isFish(id) && (FS.BY_ID[id] || (FS.fishOf && FS.fishOf(id)));
-    if (f) return `<i style="background:#2a1d16;box-shadow:inset 0 0 0 6px ${f.col};image-rendering:pixelated"></i>`;
     return '<i></i>';
   }
+  // v5.3.1: with an axe and 林场, the family keeps the storehouse topped up to what the next build needs
+  const autoWood = () => { const a = G.woodAuto && G.woodAuto(); return a && a.on ? `；木材少于 ${a.target} 份时，农夫会自己去林场砍树` : ''; };
   function storeCard(row, extra) {
     const gold = row.gold ? costChip(row.gold, 'coin') : (row.unit != null && row.kind === 'seed' ? `收购 ${costChip(row.unit, 'coin')}` : '');
     const unit = row.n && row.unit && row.gold ? `×${row.unit}` : '';
-    return `<div class="card">${rowIcon(row)}<div class="ct"><div><b>${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${unit ? unit + ' · ' + gold : gold}</span>` : ''}</div></div>`;
+    const rc = rarityClass(row);
+    return `<div class="card ${rc}">${rowIcon(row)}<div class="ct"><div><b class="${rc}">${esc(row.name)}</b>${row.surprise ? ' <span class="lv">惊喜</span>' : ''}</div>${extra || ''}</div><div class="cb"><span>${row.n != null ? row.n : ''}</span>${gold ? `<span class="u">${unit ? unit + ' · ' + gold : gold}</span>` : ''}</div></div>`;
   }
   function drawStore(force) {
     const S = G.S, data = G.storehouse(), key = JSON.stringify(data) + !!atlas;
@@ -191,13 +335,16 @@
     if (!data.baskets.length) h += '<div class="empty">篮子是空的</div>';
     else for (const b of data.baskets) { h += (data.baskets.length > 1 || b.who !== '农夫' ? `<div class="who">${esc(b.who)}</div>` : '') + `<div class="cards">${b.rows.map(r => storeCard(r)).join('')}</div>`; }
     h += `<div class="sec">材料</div><div class="cards">`;
-    h += storeCard({ id: 'wood', kind: 'item', name: `木材（${data.wood.n}/${data.wood.cap}）`, n: data.wood.n, unit: data.wood.unit, gold: data.wood.gold }, data.wood.spare ? `<div class="d">仓库放得下 ${data.wood.cap} 份，多出 ${data.wood.spare} 份可卖</div>` : `<div class="d">扩建房子和围篱笆要用，满了才拿去卖（${data.wood.unit} 金一份）</div>`);
+    h += storeCard({ id: 'wood', kind: 'item', name: `木材（${data.wood.n}/${data.wood.cap}）`, n: data.wood.n, unit: data.wood.unit, gold: data.wood.gold }, data.wood.spare ? `<div class="d">仓库放得下 ${data.wood.cap} 份，多出 ${data.wood.spare} 份可卖</div>` : `<div class="d">扩建房子和围篱笆要用，满了才拿去卖（${data.wood.unit} 金一份）${autoWood()}</div>`);
     h += storeCard({ id: 'hay', kind: 'item', name: '干草', n: data.hay.n }, `<div class="d">喂动物用，集市 ${data.hay.unit} 金一捆</div>`);
+    h += storeCard({ id: 'fishfood', kind: 'item', name: '鱼食', n: data.fishFood.n }, `<div class="d">家里有鱼食时，空闲的家人会自己去池塘撒一把，那天稀有鱼更容易上钩（${data.fishFood.unit} 金一包）</div>`);
+    for (const r of (data.ornament || [])) h += storeCard(r, '<div class="d">用右下角的放养按钮，放到家门口池塘里看着玩，不再卖掉</div>');
+    if (data.pondFish) h += storeCard({ id: 'koi', kind: 'item', name: '池塘里的观赏鱼', n: data.pondFish }, '<div class="d">在家门口的池塘里游，只是给人看</div>');
     for (const r of data.saplings) h += storeCard(r, '<div class="d">用右下角的种树按钮指定位置</div>');
     h += '</div>';
     store.innerHTML = h;
   }
-  const toggleStore = v => { store.hidden = v === undefined ? !store.hidden : !v; if (!store.hidden) { menu.hidden = true; shop.hidden = true; drawStore(true); } };
+  const toggleStore = v => { store.hidden = v === undefined ? !store.hidden : !v; if (!store.hidden) { menu.hidden = true; shop.hidden = true; if ($('codex')) $('codex').hidden = true; drawStore(true); } };
   store.addEventListener('click', e => { const d = e.target && e.target.dataset; if (d && d.a === 'close') toggleStore(false); });
   $('storeBtn').addEventListener('click', () => toggleStore());
   $('storeHud').addEventListener('click', () => toggleStore(true));
@@ -210,7 +357,89 @@
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
     if (e.key === 'b' || e.key === 'B') toggleShop();
     if (e.key === 'i' || e.key === 'I') toggleStore();
-    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
+    if (e.key === 'j' || e.key === 'J') toggleCodex();
+    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); toggleCodex(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
+
+  // ---- v5.4.0 collection book: 图鉴 / 成就 / 里程碑, next to the storehouse button ----
+  const codexEl = $('codex');
+  let codexTab = 'book', codexKey = '', codexFocus = '';
+  function cellArt(it, seen) {
+    if (it.group === 'fish') return itemArt(it, { seen, w: 72 });
+    if (it.group === 'rare') return itemArt(it, { seen, w: 48 });
+    const INS = window.PFInsects;
+    if (it.group === 'bug' && INS && INS.bugURL) {
+      const url = seen ? INS.bugURL(it.id, true) : INS.silURL(it.id);
+      return url ? icoTag(url, 'bug', 72, 72) : '<i class="ico"></i>';
+    }
+    if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
+    return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
+  }
+  function drawCodex(force) {
+    if (!codexEl || !BOOK) return;
+    const S = G.S, key = [codexTab, S.day, JSON.stringify(S.codex), (S.achievements || []).length, (S.milestones || []).length, codexFocus].join('|');
+    if (!force && key === codexKey) return; codexKey = key;
+    const tabs = [{ id: 'book', name: '图鉴' }, { id: 'ach', name: '成就' }, { id: 'ms', name: '里程碑' }];
+    let h = `<div class="shead"><b>图鉴</b><button class="pbtn x" data-a="close" title="关闭（J / Esc）">✕</button></div>`;
+    h += `<div class="tabs">${tabs.map(t => `<button type="button" class="pbtn${t.id === codexTab ? ' on' : ''}" data-tab="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
+    if (codexTab === 'book') {
+      const groups = BOOK.groups();
+      let detail = '';
+      if (codexFocus && BOOK.entryOf(S.codex, codexFocus)) {
+        const e = BOOK.entryOf(S.codex, codexFocus);
+        const item = groups.flatMap(g => g.items).find(it => it.key === codexFocus);
+        detail = `<div class="detail">${esc((item && item.name) || '图鉴')}：${BOOK.dayLabel(e.firstDay)}第一次遇到，一共遇到 ${e.count} 次</div>`;
+      } else detail = '<div class="detail">点开见到过的格子，能看到第一次是第几天、一共遇到几次。没见过的只显示剪影。</div>';
+      h += detail;
+      for (const g of groups) {
+        h += `<div class="sec">${esc(g.name)}${g.later ? '（以后）' : ''}</div>`;
+        if (!g.items.length) { h += '<div class="empty">以后会在这里记下捡到的装饰。</div>'; continue; }
+        h += '<div class="grid">';
+        for (const it of g.items) {
+          const e = BOOK.entryOf(S.codex, it.key);
+          const tier = BOOK.rarityOf ? BOOK.rarityOf(it) : (it.rarity || 'common');
+          if (e) h += `<button type="button" class="cell r-${esc(tier)}${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellArt(it, true)}<span class="nm">${esc(it.name)}</span></button>`;
+          else h += `<div class="cell locked">${cellArt(it, false)}<span class="nm">？</span></div>`;
+        }
+        h += '</div>';
+      }
+    } else if (codexTab === 'ach') {
+      const have = Object.fromEntries((S.achievements || []).map(u => [u.id, u]));
+      h += '<div class="cards">';
+      for (const a of BOOK.ACHIEVEMENTS) {
+        const u = have[a.id];
+        if (u) h += `<div class="card"><span class="badge">★</span><div class="ct"><div class="nm">${esc(a.name)}</div><div class="hint">${esc(a.hint)}</div></div><span class="when">${esc(BOOK.dayLabel(u.day))}</span></div>`;
+        else h += `<div class="card locked"><span class="badge">☆</span><div class="ct"><div class="nm">${esc(a.name)}</div><div class="hint">${esc(a.hint)}${a.later ? ' · 以后才能达成' : ''}</div></div></div>`;
+      }
+      h += '</div>';
+    } else {
+      const have = Object.fromEntries((S.milestones || []).map(u => [u.id, u]));
+      h += '<div class="cards">';
+      for (const m of BOOK.MILESTONES) {
+        const u = have[m.id];
+        if (u) h += `<div class="card"><span class="badge">●</span><div class="ct"><div class="nm">${esc(m.name)}</div></div><span class="when">${esc(BOOK.dayLabel(u.day))}</span></div>`;
+        else h += `<div class="card locked"><span class="badge">○</span><div class="ct"><div class="nm">？</div><div class="hint">${esc(m.hint)}</div></div></div>`;
+      }
+      h += '</div>';
+    }
+    codexEl.innerHTML = h;
+  }
+  const toggleCodex = v => { if (!codexEl) return; codexEl.hidden = v === undefined ? !codexEl.hidden : !v; if (!codexEl.hidden) { menu.hidden = true; shop.hidden = true; store.hidden = true; drawCodex(true); } };
+  if (codexEl) {
+    codexEl.addEventListener('click', e => {
+      const el = e.target.closest('[data-a],[data-tab],[data-key]'); if (!el || !codexEl.contains(el)) return;
+      const d = el.dataset;
+      if (d.a === 'close') toggleCodex(false);
+      if (d.tab) { codexTab = d.tab; drawCodex(true); }
+      if (d.key) { codexFocus = d.key; drawCodex(true); }
+    });
+    if ($('codexBtn')) $('codexBtn').addEventListener('click', () => toggleCodex());
+    addEventListener('pointerdown', e => {
+      if (!codexEl || codexEl.hidden) return;
+      if (codexEl.contains(e.target) || ($('codexBtn') && $('codexBtn').contains(e.target))) return;
+      toggleCodex(false);
+    });
+  }
+
   // ---- speed buttons (bought in the shop) ----
   let spKey = '';
   function speedBar() {
@@ -226,17 +455,20 @@
   let toolKey = '';
   function tools() {
     const S = G.S, F = G.F, m = G.input, chop = S.eff.axe; // v5.0: any wild tree at home or in a bought region
-    const key = [chop, F.saplings.apple, F.saplings.orange, m.mode, m.kind, S.orders.length].join(',');
+    const koiN = G.ornamentHeld ? G.ornamentHeld('koi') : 0, gfN = G.ornamentHeld ? G.ornamentHeld('goldfish') : 0;
+    const key = [chop, F.saplings.apple, F.saplings.orange, koiN, gfN, m.mode, m.kind, S.orders.length].join(',');
     if (key === toolKey) return; toolKey = key;
     let h = '';
     if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}" data-m="plant" data-k="${k}" title="点一块空草地，农夫会去种（Esc 退出）">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}</button>`;
-    const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树和种树指令">指令 ${n} ✕</button>`;
+    if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="点家门口的池塘，把篮子里的锦鲤放进去养着（Esc 退出）。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
+    if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="点家门口的池塘，把买来的金鱼放进去养着（Esc 退出）">放养金鱼 ${gfN}</button>`;
+    const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树、种树和放养指令">指令 ${n} ✕</button>`;
     $('tools').innerHTML = h; $('tools').hidden = !h;
   }
   $('tools').addEventListener('click', e => { const d = e.target.dataset; if (!d || !d.m) return;
     if (d.m === 'clear') { G.S.orders.length = 0; G.setMode(null); G.saveNow(); }
-    else if (G.input.mode === d.m && (d.m !== 'plant' || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
+    else if (G.input.mode === d.m && (!d.k || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
   let sayT = 0; addEventListener('pf:say', e => { const b = $('say'); b.textContent = e.detail; b.hidden = false; clearTimeout(sayT); sayT = setTimeout(() => { b.hidden = true; }, 2200); });
   addEventListener('pf:mode', () => tools());
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return; if (e.key === 'm' || e.key === 'M') toggleMap(); });
@@ -311,7 +543,7 @@
     else if (a === 'syncstop' && L) { L.forgetDir().then(() => { drawMenu(); hintSync(); }); }
     else if (a === 'exportlog' && L) { L.downloadLog(G.version); }
   });
-  $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) { shop.hidden = true; store.hidden = true; } mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
+  $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) { shop.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; } mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
   if ($('syncHint') && L) $('syncHint').addEventListener('click', () => { L.resumeDir().then(() => { hintSync(); if (!menu.hidden) drawMenu(); }); });
   hintSync();
   // ---- offline summary ----
@@ -320,6 +552,8 @@
     if (!r) return; const box = $('offline');
     box.innerHTML = `<h3>欢迎回来</h3><div>离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}</div>` +
       (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
+      (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
+      (r.rain ? `<div>这天下过小雨，田都湿了</div>` : '') +
       `<div class="row" style="justify-content:center;display:flex;margin-top:8px"><button class="pbtn" id="offOk">好的</button></div>`;
     box.hidden = false; $('offOk').onclick = () => { box.hidden = true; };
   }
@@ -337,6 +571,6 @@
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };
   if (loveHud) loveHud.addEventListener('click', e => { e.stopPropagation(); toggleLoveTip(); });
   addEventListener('pointerdown', e => { if (!loveTip || loveTip.hidden) return; if (loveTip.contains(e.target) || (loveHud && loveHud.contains(e.target))) return; toggleLoveTip(false); });
-  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv(); speedBar();
-  G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (G.hud) G.hud(); };
+  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (codexEl && !codexEl.hidden) drawCodex(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv(); speedBar();
+  G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; codexKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (codexEl && !codexEl.hidden) drawCodex(true); if (G.hud) G.hud(); };
 })();

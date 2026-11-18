@@ -8,8 +8,10 @@
 (function (root) {
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
+  const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
+  const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 9;
+  const CURRENT = 10;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -55,9 +57,22 @@
       const trees = Array.isArray(s.trees) ? s.trees.concat(extra.filter(t => !s.trees.some(o => o && o.id === t.id))) : s.trees;
       return Object.assign({}, s, { upgrades: Object.assign({ house: 0, fence: 0 }, s.upgrades), trees, family: { love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [] }, members: [] });
     },
+    // v5.4.0 phase 6: the collection book, achievements and milestones, fish food, ornamental pond fish.
+    // Existing catch logs and basket rares seed the book; streaks start at 0 so a week of idling is not awarded on load.
+    10: s => {
+      const seeded = CX.seedFromSave(s);
+      return Object.assign({}, s, {
+        inventory: Object.assign({ fishFood: 0, ornament: {} }, s.inventory),
+        pondFish: Array.isArray(s.pondFish) ? s.pondFish : [],
+        codex: s.codex || seeded.codex,
+        achievements: Array.isArray(s.achievements) ? s.achievements : seeded.achievements,
+        milestones: Array.isArray(s.milestones) ? s.milestones : seeded.milestones,
+        streaks: s.streaks || CX.emptyStreaks(),
+      });
+    },
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber']; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
@@ -103,6 +118,7 @@
     o = obj(o);
     if (o.type === 'chop' && typeof o.id === 'string' && o.id.length <= 40) return { type: 'chop', id: o.id };
     if (o.type === 'plant' && FRUIT_IDS.includes(o.kind) && typeof o.x === 'number' && typeof o.y === 'number') return { type: 'plant', kind: o.kind, x: num(o.x, 0, -400, 600), y: num(o.y, 0, -400, 600) };
+    if (o.type === 'release' && (o.kind === 'koi' || o.kind === 'goldfish')) return { type: 'release', kind: o.kind };
     return null;
   }
   function validCatch(c) {
@@ -131,6 +147,7 @@
         water: int(inv.water, 0, 0, 999), waterMax: int(inv.waterMax, 4, 1, 999), store: seeds(inv.store), bag: seeds(inv.bag),
         gathered: int(inv.gathered, 0, 0, 1e6), basket: validBasket(inv.basket),
         wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
+        fishFood: int(inv.fishFood, 0, 0, 30), ornament: CX.validOrnament(inv.ornament),
       },
       farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
@@ -142,18 +159,31 @@
       animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
       troughs: Object.fromEntries(PEN_IDS.map(k => { const t = obj(obj(s.troughs)[k]); return [k, { feed: int(t.feed, 0, 0, 99), water: t.water ? 1 : 0 }]; })),
       catches: (Array.isArray(s.catches) ? s.catches : []).map(validCatch).filter(Boolean).slice(0, 12),
+      pondFish: CX.validPondFish(s.pondFish),
       family: validFamily(obj(s.family)),
       members: (Array.isArray(s.members) ? s.members : []).map(validMember).filter(Boolean).slice(0, 3),
+      codex: CX.validCodex(s.codex),
+      achievements: CX.validUnlocks(s.achievements, CX.ACH_BY),
+      milestones: CX.validUnlocks(s.milestones, CX.MS_BY),
+      streaks: CX.validStreaks(s.streaks),
+      weather: WX && WX.validWeather ? WX.validWeather(s.weather) : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 },
+      bugNet: s.bugNet ? 1 : 0,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
   function validFamily(f) {
     const kids = (Array.isArray(f.kids) ? f.kids : []).filter(k => k && /^kid[01]$/.test(k.id)).slice(0, 2)
-      .map(k => ({ id: k.id, name: typeof k.name === 'string' ? k.name.slice(0, 8) : '孩子', born: int(k.born, 1, 1) }));
+      .map(k => {
+        const out = { id: k.id, name: typeof k.name === 'string' ? k.name.slice(0, 8) : '孩子', born: int(k.born, 1, 1) };
+        if (k.floor === 'helper' || k.floor === 'teen') out.floor = k.floor; // v5.4.3 append-only: old working kids do not regress
+        return out;
+      });
     const t = obj(f.today);
     const today = { day: int(t.day, 0, 0), chat: int(t.chat, 0, 0, 20), gift: int(t.gift, 0, 0, 50), giftName: typeof t.giftName === 'string' ? t.giftName.slice(0, 16) : '', sales: int(t.sales, 0, 0, 20) };
-    return { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), sales: int(f.sales, 0, 0, 9), moved: int(f.moved, 0, 0), kids, today };
+    const out = { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), sales: int(f.sales, 0, 0, 9), moved: int(f.moved, 0, 0), kids, today };
+    if (f.kidGrowth) out.kidGrowth = 1; // v5.4.3: set after the one-time growth floor, so mornings do not re-apply the old table
+    return out;
   }
   // what a family member had on them when the game was saved (they keep working from the house door after loading)
   function validMember(m) {

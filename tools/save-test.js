@@ -1,7 +1,7 @@
 // Unit tests for the pure save / sim rules (no browser):  node tools/save-test.js
 // Every saveVersion keeps a fixture in tools/fixtures/save-v<N>*.json; all of them must migrate to the current version.
 const assert = require('assert'), fs = require('fs'), path = require('path');
-const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js'), FAM = require('../family.js');
+const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js'), FAM = require('../family.js'), CX = require('../codex.js');
 const FIX = path.join(__dirname, 'fixtures');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 class Mem { constructor(o = {}) { this.m = new Map(Object.entries(o)); } get length() { return this.m.size; } key(i) { return [...this.m.keys()][i]; }
@@ -274,9 +274,9 @@ ok('a planted sapling fruits 5 days later; a stump grows back', () => {
   const w = { id: 'w', x: 0, y: 0, kind: 'wild', v: 0, stage: 'stump', age: 0, ripe: 0, cd: 0 }; let d = 0; while (w.stage !== 'tree' && d < 30) { WD.treeOvernight(w); d++; }
   assert.strictEqual(d, WD.STUMP_TO_TREE); // counted from the chop
 });
-ok('chopping (v5.0): 5 wood and a sapling; any wild tree at home or in a bought region; fruit trees and the rim forest never', () => {
+ok('chopping (v5.0; v5.3.1: 8 wood): wood and a sapling; any wild tree at home or in a bought region; fruit trees and the rim forest never', () => {
   const seq = a => { let i = 0; return () => a[i++ % a.length]; };
-  assert.deepStrictEqual(WD.chopYield(seq([0.1, 0.9])), { wood: 5, sapling: 'apple', drop: null }); assert.strictEqual(WD.chopYield(seq([0.9, 0.99])).sapling, 'orange');
+  assert.deepStrictEqual(WD.chopYield(seq([0.1, 0.9])), { wood: WD.WOOD.perChop, sapling: 'apple', drop: null }); assert.strictEqual(WD.chopYield(seq([0.9, 0.99])).sapling, 'orange');
   const trees = WD.defaultTrees(), wild = trees.filter(t => t.kind === 'wild'), a = trees.find(t => t.kind === 'apple');
   assert(wild.length >= 29); assert.strictEqual(trees.filter(t => t.kind === 'apple').length, 3); assert.deepStrictEqual(WD.defaultTrees(), trees);
   const w = wild.find(t => WD.areaAt(t.x, t.y) === 'forest'), home = wild.filter(t => WD.areaAt(t.x, t.y) === 'home');
@@ -384,21 +384,44 @@ ok('family: 阿禾 keeps the stall; one chat and one gift a day, +1 for the firs
   assert.strictEqual(FAM.visit(f, d + 2, 'flower'), 0); // no more courting once she lives here
   assert.deepStrictEqual(FAM.workers(f, d + 1).map(w => w.role), ['partner']);
 });
-ok('family: children need a bigger house and time; baby -> child -> teen; children only take light jobs', () => {
+ok('family: children need a bigger house and time; v5.4.3 baby -> play -> school -> helper -> teen; children only take light jobs', () => {
   const f = Object.assign(FAM.empty(), { love: 100, moved: 10 });
   for (let d = 10; d < 40; d++) FAM.morning(f, d, 2); assert.strictEqual(f.kids.length, 0, 'no room for a child in the 大木屋');
   const g = Object.assign(FAM.empty(), { love: 100, moved: 10 }); const born = [];
   for (let d = 11; d < 60; d++) { const pop = d < 30 ? 3 : 4; if (FAM.morning(g, d, pop).includes('born')) born.push(d); }
   assert.deepStrictEqual(born, [17, 30]); assert.deepStrictEqual(g.kids.map(k => k.name), ['小豆', '小米']);
-  const k = g.kids[0]; assert.strictEqual(FAM.kidStage(k, 17), 'baby'); assert.strictEqual(FAM.kidStage(k, 22), 'child'); assert.strictEqual(FAM.kidStage(k, 31), 'teen');
-  assert.deepStrictEqual(FAM.workers(g, 20).map(w => w.role), ['partner']); assert.deepStrictEqual(FAM.workers(g, 32).map(w => w.role), ['partner', 'teen']);
+  const k = g.kids[0]; // born day 17
+  assert.strictEqual(FAM.kidStage(k, 17), 'baby'); assert.strictEqual(FAM.kidStage(k, 21), 'baby');
+  assert.strictEqual(FAM.kidStage(k, 22), 'play'); assert.strictEqual(FAM.kidStage(k, 33), 'play');
+  assert.strictEqual(FAM.kidStage(k, 34), 'school'); assert.strictEqual(FAM.kidStage(k, 45), 'school');
+  assert.strictEqual(FAM.kidStage(k, 46), 'helper'); assert.strictEqual(FAM.kidStage(k, 59), 'helper');
+  assert.strictEqual(FAM.kidStage(k, 60), 'teen');
+  assert.deepStrictEqual(FAM.workers(g, 20).map(w => w.role), ['partner']);
+  assert.deepStrictEqual(FAM.workers(g, 22).map(w => w.role), ['partner', 'play']);
+  assert.deepStrictEqual(FAM.workers(g, 46).map(w => w.role), ['partner', 'child', 'play']); // 小豆 helper, 小米 (born 30, age 16) still play
   assert(FAM.canDo('child', 'feed') && FAM.canDo('child', 'pick') && !FAM.canDo('child', 'water') && !FAM.canDo('child', 'chop') && !FAM.canDo('child', 'buy'));
+  assert(FAM.canDo('play', 'feed') === false && FAM.canDo('school', 'feed') && !FAM.canDo('school', 'harvest'));
   assert(FAM.canDo('teen', 'chop') && !FAM.canDo('teen', 'buy') && !FAM.canDo('teen', 'fish')); assert(FAM.canDo('partner', 'buy') && !FAM.canDo('partner', 'fish'));
+});
+ok('v5.3 family: each person prefers their own areas, helps elsewhere at a cost; alone the farmer has no preference; the next child is counted down', () => {
+  const P = [{ id: 'partner', role: 'partner' }], M = [{ id: 'farmer' }];
+  assert.strictEqual(FAM.affinity('farmer', undefined, 'field', []), 0, 'alone: no preference');
+  assert.strictEqual(FAM.affinity('farmer', undefined, 'animal', []), 0);
+  assert(FAM.affinity('farmer', undefined, 'field', P) > 0 && FAM.affinity('farmer', undefined, 'animal', P) < 0);
+  assert(FAM.affinity('partner', 'partner', 'animal', M) > 0 && FAM.affinity('partner', 'partner', 'orchard', M) > 0 && FAM.affinity('partner', 'partner', 'field', M) < 0);
+  assert.strictEqual(FAM.affinity('partner', 'partner', 'market', M), 0, 'nobody owns the market');
+  assert(FAM.affinity('kid0', 'child', 'yard', M) > 0 && FAM.affinity('kid1', 'child', 'coop', M) > 0 && FAM.affinity('kid0', 'teen', 'field', M) > 0);
+  assert(FAM.OWN - FAM.HELP > -30, 'helping still beats fishing (8-12) for most jobs');
+  const f = Object.assign(FAM.empty(), { love: 100, moved: 41 });
+  assert.deepStrictEqual(FAM.nextKid(f, 42, 3), { name: '小豆', days: 6 }); assert.strictEqual(FAM.kidText(FAM.nextKid(f, 42, 3)), '小豆还有 6 天到来');
+  assert.strictEqual(FAM.kidText(FAM.nextKid(f, 47, 3)), '小豆明天就来了'); assert.deepStrictEqual(FAM.nextKid(f, 47, 2), { name: '小豆', room: true });
+  const g = Object.assign(FAM.empty(), { love: 100, moved: 41 }); for (let d = 42; d <= 60; d++) { const n = FAM.nextKid(g, d - 1, 4); if (FAM.morning(g, d, 4).includes('born')) assert.strictEqual(n.days, 1, 'countdown said tomorrow the day before ' + d); }
+  assert.strictEqual(g.kids.length, 2); assert.strictEqual(FAM.nextKid(g, 61, 4), null); assert.strictEqual(FAM.nextKid(FAM.empty(), 5, 4), null);
 });
 ok('v8 -> v9: house and fence at 0, nobody met yet, wild trees appended once, wood, regions and animals kept', () => {
   const v8 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v8-day4.json'), 'utf8')); v8.inventory.wood = 37; v8.upgrades.forest = 1; v8.upgrades.chicken = 2; v8.upgrades.coop = 1;
   v8.animals = [AN.animal('chicken0', 'chicken'), AN.animal('chicken1', 'chicken')]; v8.trees = WD.defaultTrees().filter(t => !/^h/.test(t.id)); v8.trees[0].stage = 'stump';
-  const s = SAVE.migrate(v8); assert.strictEqual(s.saveVersion, 9);
+  const s = SAVE.migrate(v8); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert.strictEqual(s.upgrades.house, 0); assert.strictEqual(s.upgrades.fence, 0); assert.strictEqual(s.inventory.wood, 37); assert.strictEqual(s.upgrades.forest, 1); assert.strictEqual(s.animals.length, 2);
   assert.deepStrictEqual(s.family, FAM.empty()); assert.deepStrictEqual(s.members, []);
   assert.strictEqual(s.trees.length, v8.trees.length + WD.EXTRA_TREES.length); assert.strictEqual(s.trees[0].stage, 'stump');
@@ -413,4 +436,79 @@ ok('v9 validation: family and members are clamped, junk dropped', () => {
     members: [{ id: 'partner', water: 3, bag: { carrot: 2 }, gathered: 1, basket: ['egg', 'flower', 'rock'] }, { id: 'stranger' }, null] }));
   assert.strictEqual(s.family.love, 100); assert.deepStrictEqual(s.family.kids, [{ id: 'kid0', name: '小豆', born: 20 }]);
   assert.strictEqual(s.members.length, 1); assert.deepStrictEqual(s.members[0].basket, ['egg', 'flower']); assert.strictEqual(s.members[0].bag.carrot, 2);
+});
+
+ok('v9 -> v10: empty book is filled from catches and basket rares, streaks start at 0, fish food is 0', () => {
+  const v9 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v9-day4.json'), 'utf8'));
+  v9.catches = [{ id: 'crucian', name: '鲫鱼', gold: 5, water: 'pond', day: 3 }, { id: 'koi', name: '锦鲤', gold: 36, water: 'pond', day: 4 }];
+  v9.inventory = Object.assign({}, v9.inventory, { basket: ['carp', { type: 'egg', rare: 'gold' }] });
+  v9.coins = 50; v9.stats = Object.assign({}, v9.stats, { earned: 80 });
+  const s = SAVE.migrate(v9);
+  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.inventory.fishFood, 0); assert.deepStrictEqual(s.inventory.ornament, { koi: 0, goldfish: 0 });
+  assert.deepStrictEqual(s.pondFish, []);
+  assert(s.codex.entries['fish:crucian'] && s.codex.entries['fish:koi'] && s.codex.entries['fish:carp']);
+  assert.strictEqual(s.codex.entries['fish:koi'].firstDay, 4);
+  assert(s.codex.entries['rare:gold']); assert(!s.codex.entries['fish:sword']); assert(!s.codex.entries['giant:pumpkin']);
+  assert(s.achievements.some(u => u.id === 'truecatch'), 'koi in the catch log seeds 这波是真的');
+  assert(!s.achievements.some(u => u.id === 'idleweek'), 'lying-flat is not awarded on load');
+  assert.strictEqual(s.streaks.noShop, 0); assert.strictEqual(s.streaks.happy, 0);
+  assert(s.milestones.some(u => u.id === 'open'));
+});
+ok('v10 validation: junk book entries dropped, pond cap 8, sea fish stay out, unlocks de-duplicated', () => {
+  const v9 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v9-day4.json'), 'utf8'));
+  const raw = Object.assign({}, v9, {
+    saveVersion: 10,
+    inventory: Object.assign({}, v9.inventory, { fishFood: 99, ornament: { goldfish: 4, sword: 9, koi: -2 } }),
+    pondFish: [{ id: 'pf1', kind: 'koi', day: 4 }, { id: 'pf1', kind: 'koi', day: 5 }, { id: 'x', kind: 'sword', day: 1 }, { id: 'pf2', kind: 'goldfish', day: 6 }],
+    codex: { entries: { 'fish:koi': { firstDay: 4, count: 2 }, 'nope:x': { firstDay: 1, count: 1 }, 'fish:': { firstDay: 1, count: 1 } } },
+    achievements: [{ id: 'truecatch', day: 4 }, { id: 'truecatch', day: 5 }, { id: 'bogus', day: 1 }],
+    milestones: [{ id: 'open', day: 1 }, { id: 'nope', day: 2 }],
+    streaks: { noShop: -3, shopDay: 2, happy: 99, dogDay: 1 },
+  });
+  const s = SAVE.migrate(raw);
+  assert.strictEqual(s.inventory.fishFood, 30); assert.strictEqual(s.inventory.ornament.goldfish, 4); assert.strictEqual(s.inventory.ornament.koi, 0);
+  assert.deepStrictEqual(s.pondFish.map(f => f.kind), ['koi', 'goldfish']);
+  assert.deepStrictEqual(Object.keys(s.codex.entries), ['fish:koi']);
+  assert.deepStrictEqual(s.achievements, [{ id: 'truecatch', day: 4 }]);
+  assert.deepStrictEqual(s.milestones.filter(u => u.id === 'open'), [{ id: 'open', day: 1 }]);
+  assert.strictEqual(s.streaks.noShop, 0); assert.strictEqual(s.streaks.happy, 99);
+});
+
+ok('v10 append-only: missing weather and bug net get defaults; insect book keys are kept', () => {
+  const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
+  delete raw.weather; delete raw.bugNet;
+  raw.codex = { entries: { 'bug:white': { firstDay: 4, count: 2 }, 'fish:koi': { firstDay: 2, count: 1 } } };
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.bugNet, 0);
+  assert.ok(s.weather);
+  assert.strictEqual(s.weather.rained, 0);
+  assert.strictEqual(s.weather.nextDay, 0);
+  assert.ok(s.codex.entries['bug:white']);
+  assert.ok(s.codex.entries['fish:koi']);
+});
+ok('v10 validate keeps a scheduled shower and a bought net', () => {
+  const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
+  raw.weather = { nextDay: 12, start: 600, dur: 180, lastDay: 4, rained: 1, nextStart: 700, nextDur: 120 };
+  raw.bugNet = 1;
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.weather.lastDay, 4);
+  assert.strictEqual(s.weather.nextDay, 12);
+  assert.strictEqual(s.weather.dur, 180);
+  assert.strictEqual(s.weather.nextStart, 700);
+  assert.strictEqual(s.bugNet, 1);
+});
+
+ok('v10 keeps weather, bugNet and kids growth fields together (no version bump)', () => {
+  const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
+  raw.weather = { nextDay: 12, start: 600, dur: 180, lastDay: 4, rained: 1, nextStart: 700, nextDur: 120 };
+  raw.bugNet = 1;
+  raw.family = { moved: 1, kidGrowth: 1, kids: [{ id: 'kid0', name: '小豆', born: 0, floor: 'helper' }] };
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.bugNet, 1);
+  assert.strictEqual(s.weather.nextDay, 12);
+  assert.strictEqual(s.family.kidGrowth, 1);
+  assert.strictEqual(s.family.kids[0].floor, 'helper');
 });

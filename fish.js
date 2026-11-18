@@ -23,6 +23,20 @@
   const ALL = POND.concat(SEA);
   const BY_ID = Object.fromEntries(ALL.map(f => [f.id, f]));
   const FISH_IDS = ALL.map(f => f.id);
+  // v5.4.0: a pack of fish food from the shop. On a day the pond was fed, bass and koi are a bit more likely;
+  // common fish never disappear, and a koi still stays rare even with the best rod.
+  const FOOD = { id: 'fishfood', name: '鱼食', price: 8, stock: 30 };
+  const FED_BOOST = { bass: 1.8, koi: 1.8 };
+  const POND_CAP = 8;
+  // ornamental fish that can live in the home pond (sea fish stay out of the freshwater). koi comes from a catch;
+  // goldfish is sold at the stall. Both swim for looking at, and are not sold once they are in the pond.
+  const ORNAMENTAL = [
+    { id: 'koi', name: '锦鲤', source: 'catch', water: 'pond', col: '#e06a2c' },
+    { id: 'goldfish', name: '金鱼', source: 'shop', water: 'pond', col: '#e8a02a', price: 80 },
+  ];
+  const ORN_BY = Object.fromEntries(ORNAMENTAL.map(o => [o.id, o]));
+  const isOrnamental = id => !!ORN_BY[id];
+  const pondOk = id => !!(ORN_BY[id] && ORN_BY[id].water === 'pond');
   // shop levels of `rod` (0 = the free bamboo rod). wait is [min, max] game minutes on the hook.
   const RODS = [
     { id: 'bamboo', name: '竹竿', wait: [38, 54], miss: 0.16, rare: 1, bite: 1 },
@@ -36,19 +50,24 @@
   const priceOf = id => (BY_ID[id] && BY_ID[id].price) || 0;
   const isRare = id => !!(BY_ID[id] && BY_ID[id].rare);
   // raise the tail of the table: a better rod makes rare fish more likely without deleting the commons
-  function pickFrom(list, rare, rnd) {
-    const w = list.map((f, i) => f.w * Math.pow(rare, list.length < 2 ? 0 : i / (list.length - 1)));
+  function pickFrom(list, rare, rnd, boost) {
+    const w = list.map((f, i) => f.w * Math.pow(rare, list.length < 2 ? 0 : i / (list.length - 1)) * ((boost && boost[f.id]) || 1));
     let t = rnd() * w.reduce((a, b) => a + b, 0);
     for (let i = 0; i < list.length; i++) { t -= w[i]; if (t <= 0) return list[i]; }
     return list[list.length - 1];
   }
   function waitTime(lv, rnd) { const r = rodOf(lv), a = r.wait[0], b = r.wait[1]; return a + Math.floor(rnd() * (b - a + 1)); }
-  // one hook: { miss } or { fish, gold }. `water` is 'pond' or 'sea'.
-  function roll(water, lv, rnd) {
+  // one hook: { miss } or { fish, gold }. `water` is 'pond' or 'sea'. `fed` raises bass and koi when the home pond was fed today.
+  function roll(water, lv, rnd, fed) {
     const r = rodOf(lv), list = water === 'sea' ? SEA : POND;
     if (rnd() < r.miss) return { miss: true, water };
-    const f = pickFrom(list, r.rare, rnd);
+    const f = pickFrom(list, r.rare, rnd, water === 'pond' && fed ? FED_BOOST : null);
     return { miss: false, water, fish: f.id, name: f.name, gold: f.price, col: f.col, rare: !!f.rare };
+  }
+  function chanceOf(list, rare, id, boost) {
+    const w = list.map((f, i) => f.w * Math.pow(rare, list.length < 2 ? 0 : i / (list.length - 1)) * ((boost && boost[f.id]) || 1));
+    const i = list.findIndex(f => f.id === id); if (i < 0) return 0;
+    return w[i] / w.reduce((a, b) => a + b, 0);
   }
   // where the farmer stands and where the bobber sits (world units). The seaside pier tip is on PFWorld.
   const POND_SPOT = { water: 'pond', stand: { x: 54, y: 94 }, hook: { x: 40, y: 103 } };
@@ -127,7 +146,8 @@
     return { toward, faceLeft, grip, tip, bob: { x: bobx, y: boby, show: showBob, slack }, lineEnd, fish, emote, ang, len };
   }
 
-  const api = { POND, SEA, ALL, BY_ID, FISH_IDS, RODS, ROD_LOOK, CAST, BITE, REEL, SHOW, POND_SPOT,
-    rodOf, isFish, fishOf, priceOf, isRare, pickFrom, waitTime, roll, rodLook, pose };
+  const api = { POND, SEA, ALL, BY_ID, FISH_IDS, FOOD, FED_BOOST, POND_CAP, ORNAMENTAL, ORN_BY,
+    RODS, ROD_LOOK, CAST, BITE, REEL, SHOW, POND_SPOT,
+    rodOf, isFish, fishOf, priceOf, isRare, isOrnamental, pondOk, pickFrom, waitTime, roll, chanceOf, rodLook, pose };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFFish = api;
 })(typeof window !== 'undefined' ? window : globalThis);
