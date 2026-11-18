@@ -384,15 +384,23 @@ ok('family: 阿禾 keeps the stall; one chat and one gift a day, +1 for the firs
   assert.strictEqual(FAM.visit(f, d + 2, 'flower'), 0); // no more courting once she lives here
   assert.deepStrictEqual(FAM.workers(f, d + 1).map(w => w.role), ['partner']);
 });
-ok('family: children need a bigger house and time; baby -> child -> teen; children only take light jobs', () => {
+ok('family: children need a bigger house and time; v5.4.3 baby -> play -> school -> helper -> teen; children only take light jobs', () => {
   const f = Object.assign(FAM.empty(), { love: 100, moved: 10 });
   for (let d = 10; d < 40; d++) FAM.morning(f, d, 2); assert.strictEqual(f.kids.length, 0, 'no room for a child in the 大木屋');
   const g = Object.assign(FAM.empty(), { love: 100, moved: 10 }); const born = [];
   for (let d = 11; d < 60; d++) { const pop = d < 30 ? 3 : 4; if (FAM.morning(g, d, pop).includes('born')) born.push(d); }
   assert.deepStrictEqual(born, [17, 30]); assert.deepStrictEqual(g.kids.map(k => k.name), ['小豆', '小米']);
-  const k = g.kids[0]; assert.strictEqual(FAM.kidStage(k, 17), 'baby'); assert.strictEqual(FAM.kidStage(k, 22), 'child'); assert.strictEqual(FAM.kidStage(k, 31), 'teen');
-  assert.deepStrictEqual(FAM.workers(g, 20).map(w => w.role), ['partner']); assert.deepStrictEqual(FAM.workers(g, 32).map(w => w.role), ['partner', 'teen']);
+  const k = g.kids[0]; // born day 17
+  assert.strictEqual(FAM.kidStage(k, 17), 'baby'); assert.strictEqual(FAM.kidStage(k, 21), 'baby');
+  assert.strictEqual(FAM.kidStage(k, 22), 'play'); assert.strictEqual(FAM.kidStage(k, 33), 'play');
+  assert.strictEqual(FAM.kidStage(k, 34), 'school'); assert.strictEqual(FAM.kidStage(k, 45), 'school');
+  assert.strictEqual(FAM.kidStage(k, 46), 'helper'); assert.strictEqual(FAM.kidStage(k, 59), 'helper');
+  assert.strictEqual(FAM.kidStage(k, 60), 'teen');
+  assert.deepStrictEqual(FAM.workers(g, 20).map(w => w.role), ['partner']);
+  assert.deepStrictEqual(FAM.workers(g, 22).map(w => w.role), ['partner', 'play']);
+  assert.deepStrictEqual(FAM.workers(g, 46).map(w => w.role), ['partner', 'child', 'play']); // 小豆 helper, 小米 (born 30, age 16) still play
   assert(FAM.canDo('child', 'feed') && FAM.canDo('child', 'pick') && !FAM.canDo('child', 'water') && !FAM.canDo('child', 'chop') && !FAM.canDo('child', 'buy'));
+  assert(FAM.canDo('play', 'feed') === false && FAM.canDo('school', 'feed') && !FAM.canDo('school', 'harvest'));
   assert(FAM.canDo('teen', 'chop') && !FAM.canDo('teen', 'buy') && !FAM.canDo('teen', 'fish')); assert(FAM.canDo('partner', 'buy') && !FAM.canDo('partner', 'fish'));
 });
 ok('v5.3 family: each person prefers their own areas, helps elsewhere at a cost; alone the farmer has no preference; the next child is counted down', () => {
