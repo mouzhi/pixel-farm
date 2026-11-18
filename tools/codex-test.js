@@ -43,9 +43,9 @@ ok('seeding an old save keeps unseen cells empty and does not drop catch or rare
 });
 
 ok('achievements are listed; later-phase ones stay locked until those features exist', () => {
-  assert.strictEqual(CX.ACHIEVEMENTS.length, 20);
+  assert.strictEqual(CX.ACHIEVEMENTS.length, 21);
   const later = CX.ACHIEVEMENTS.filter(a => a.later).map(a => a.id);
-  assert.deepStrictEqual(later.sort(), ['herding', 'newhouse', 'nightlight', 'party', 'school', 'sprinkler'].sort());
+  assert.deepStrictEqual(later.sort(), ['herding', 'newhouse', 'nightlight', 'party', 'sprinkler'].sort());
   const due = CX.dueAchievements({ day: 40, coins: 10000, upgrades: {}, family: {}, achievements: [], streaks: CX.emptyStreaks() });
   assert(!due.some(u => later.includes(u.id)));
   assert(due.some(u => u.id === 'gold1000'));
@@ -166,5 +166,10 @@ ok('book names use green / blue / orange rarity tiers', () => {
   assert.strictEqual(CX.rarityOf({ group: 'giant', type: 'cabbage' }), 'epic');
 });
 
+ok('小镇做题家: lights when a kid goes to school (or an old save already has a kid at / past the school stage)', () => {
+  assert(!CX.dueAchievements({ day: 30 }).some(u => u.id === 'school'));
+  assert(CX.dueAchievements({ day: 30, wentSchool: true }).some(u => u.id === 'school'));
+  assert(!CX.dueAchievements({ day: 30, wentSchool: true, achievements: [{ id: 'school', day: 20 }] }).some(u => u.id === 'school'));
+});
 console.log('codex-test: ' + n + ' ok');
 

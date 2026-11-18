@@ -5,7 +5,7 @@
 'use strict';
 (function (root) {
   const TILE = 8;
-  const WORLD = { x0: -160, y0: -112, x1: 352, y1: 288 };           // 64 x 50 tiles (v4.6: +10 tiles of coast and sea to the south)
+  const WORLD = { x0: -256, y0: -208, x1: 448, y1: 384 };           // v5.5.0: 88 x 74 tiles (was 64 x 50, -160..352 x -112..288); old coordinates did not move, the ring is plots.js
   const HOME = { x0: 0, y0: 0, x1: 192, y1: 128 };                  // the original farm
   // rect: the fenced clearing; field: a tile block (c0/r0 in world tiles); gate: where the path enters; barrel: local water
   const REGIONS = [

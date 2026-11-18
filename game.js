@@ -3,7 +3,8 @@
 'use strict';
 (() => {
 // ---------- config ----------
-const W = 426, H = 266;          // low-res framebuffer, integer upscaled (3x on 1280x800)
+const VIEW = (new URLSearchParams(location.search).get('view') || '').match(/^(\d+)x(\d+)$/); // v5.5.0: ?view=WxH, wide screenshots only
+const W = VIEW ? Math.min(1600, +VIEW[1]) : 426, H = VIEW ? Math.min(1000, +VIEW[2]) : 266; // low-res framebuffer, integer upscaled (3x on 1280x800)
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
@@ -13,6 +14,7 @@ const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
 const BOOK = window.PFCodex; // v5.4.0: the collection book, achievements and milestones
 const WX = window.PFWeather, INS = window.PFInsects; // v5.4.3: light rain and insects
 const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
+const PL = window.PFPlots, XP = window.PFExpand; // v5.5.0: the outer ring (plots.js rules, expansion.js art)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
@@ -528,11 +530,11 @@ addProp(mossRock, POND.x + 11, POND.y + 5, 0.6);
 const SIM = window.PFSim, CROP_IDS = SIM.IDS;
 const tiles = [];
 // fields: the home field plus one per farming region (v4.3); c / r are local to their field, f names the field
-const FIELDS = [Object.assign({ id: 'home' }, FIELD), ...WD.REGIONS.filter(r => r.field).map(r => Object.assign({ id: r.id }, r.field))];
+const FIELDS = [Object.assign({ id: 'home' }, FIELD), ...WD.REGIONS.filter(r => r.field).map(r => Object.assign({ id: r.id }, r.field)), ...PL.PLOTS.filter(p => p.field).map(p => Object.assign({ id: p.id }, p.field))]; // v5.5.0: plots that can be 农田
 for (const fd of FIELDS) for (let r = 0; r < fd.rows; r++) for (let c = 0; c < fd.cols; c++) {
   tiles.push({ f: fd.id, c, r, x: (fd.c0 + c) * TILE + TILE / 2, y: (fd.r0 + r) * TILE + TILE / 2, open: fd.id === 'home' && SIM.isOpen(c, r, 0), debris: null, weed: null, tilled: false, crop: null, watered: false });
 }
-const tileOpen = (t, eff) => t.f === 'home' ? SIM.isOpen(t.c, t.r, eff.field) : eff.regions.includes(t.f);
+const tileOpen = (t, eff) => t.f === 'home' ? SIM.isOpen(t.c, t.r, eff.field) : PL.isPlotId(t.f) ? !!(S.plots[t.f] && S.plots[t.f].mod === 'field') : eff.regions.includes(t.f);
 // clutter is stored as plain data (kind + variant index), so it can be saved; the model is looked up when drawing
 const debrisModel = d => { const a = d.type === 'rock' ? models.rocks : models.branches; return a[d.v % a.length]; };
 const weedSprite = w => models.weeds[w.v % models.weeds.length];
@@ -543,7 +545,7 @@ function spawnClutter(t, pDebris, pWeed) {
   if (v < pDebris + pWeed) { t.weed = { v: RI(0, models.weeds.length - 1), rot: R(0, 6.28) }; return true; } // weeds no longer undo tilling
   return false;
 }
-tiles.forEach(t => spawnClutter(t, t.f === 'home' ? 0.34 : 0.5, t.f === 'home' ? 0.42 : 0.4)); // the new fields start overgrown
+tiles.forEach(t => { if (!PL.isPlotId(t.f)) spawnClutter(t, t.f === 'home' ? 0.34 : 0.5, t.f === 'home' ? 0.42 : 0.4); }); // the new fields start overgrown (plot fields start clean: the sim stream stays the same)
 // yard clutter lives off the field (grass and dirt around the farm). It is saved as { type, v, rot, x, y }.
 const YARD_CAP = 18, YARD_START = 26, YARD_TYPES = ['weed', 'weed', 'weed', 'rock', 'rock', 'branch', 'branch', 'pebble'];
 const yard = [];
@@ -602,6 +604,7 @@ const S = {
   weather: (WX && WX.emptyWeather) ? WX.emptyWeather() : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 }, bugNet: 0, // v5.4.3
   codex: BOOK.emptyCodex(), achievements: [], milestones: [], streaks: BOOK.emptyStreaks(),
   doorGift: null, loose: [], dogPlan: null,
+  plots: {}, // v5.5.0: bought plots of the outer ring: id -> { mod, day }
 };
 Object.assign(S.prices, { egg: 1, wool: 1, milk: 1, truffle: 1 }); // animal products drift like crops
 const PASTURE = WD.region('pasture'), PENS = WD.PENS, COOP_DOOR = PENS.coop.door; // v4.7: each kind lives by its own building (world.js PENS)
@@ -624,7 +627,7 @@ function navState() {
     houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
     trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff), // v5.3.1: the lumber hut
-    rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y }))
+    rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze)
   };
 }
 function markNavDirty() { navDirty = true; }
@@ -638,10 +641,15 @@ function nextHop(v, dest, bounds) {
   while (v.via.length && Math.hypot(v.via[0].x - v.x, v.via[0].y - v.y) <= 0.5) v.via.shift();
   return v.via.length ? v.via[0] : dest;
 }
-const rngNear = (list) => { let best = null, bd = 1e9; for (const t of list) { if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue;
+// v5.5.0: nearest first by straight line, and stop once the straight line alone is longer than the best walk found
+// (a walk is never shorter than the straight line, less the few units a snap to the nav grid can cut), so the big outer
+// ring's far tiles never each cost a full A* every time someone picks a job; at most 8 walks are measured per pick
+const rngNear = (list) => { let best = null, bd = 1e9, n = 0; const c = list.map(t => ({ t, e: Math.hypot(t.x - F.x, t.y - F.y) })).sort((a, b) => a.e - b.e);
+  for (const { t, e } of c) { if (e - 8 >= bd || n >= 8) break; if (CLAIM.has(t) || (t.an && CLAIM.has(t.an))) continue;
   if (t.f !== undefined && CROWD.some(q => q.tile && Math.abs(q.x - t.x) <= TILE * 1.5 && Math.abs(q.y - t.y) <= TILE * 1.5)) continue; // v5.3: never the tile next to someone else's
-  const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01 + crowd(t); if (d < bd) { bd = d; best = t; } } return best; };
-const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 }))];
+  n++; const d = travel(F, t) + Math.abs(t.y - F.y) * 0.01 + crowd(t); if (d < bd) { bd = d; best = t; } } return best; };
+const waterSpots = () => [WELL_SPOT, ...WD.REGIONS.filter(r => r.barrel && S.eff.regions.includes(r.id)).map(r => ({ x: r.barrel.x, y: r.barrel.y + 8 })),
+  ...PL.PLOTS.filter(p => p.barrel && S.plots[p.id] && S.plots[p.id].mod === 'field').map(p => ({ x: p.barrel.x, y: p.barrel.y + 8 }))];
 const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so work poses show in profile
 // v5.0 family: everyone shares one task board. A job someone else is already doing (its tile, tree, animal, trough, or a
 // one-at-a-time errand like buying hay) is claimed, so two people never walk to the same tile. Each person has their own
@@ -674,14 +682,15 @@ function syncAnimals() { // the shop says how many of each kind; new ones arrive
   if (typeof syncPastureProps === 'function') syncPastureProps();
 }
 function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
-  S.eff = SIM.effects(S.up); S.waterMax = S.eff.waterMax;
+  S.eff = SIM.effects(S.up); XP.applyEff(S); S.waterMax = S.eff.waterMax;
   for (const t of tiles) if (!t.open && tileOpen(t, S.eff)) t.open = true;
   if (S.speed > S.eff.speedMax) S.speed = S.eff.speedMax;
   syncAnimals();
   groundDirty = true;
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
-  if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(); }
+  if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { const dirty = XP.dirtyRect(OPEN_REGIONS, S.eff.regions); OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(dirty); } // v5.5.0: a plot only repaints its own patch
   if (typeof syncLumberProps === 'function') syncLumberProps();
+  XP.sync();
   markNavDirty();
 }
 function buy(id) { // the player's one action: spend gold on the next level of a shop item, or a stall consumable (v5.4.0 fish food / goldfish)
@@ -824,11 +833,11 @@ function kidCtx() {
   }
   return { actor: F, day: S.day, t: S.t, kid, pets, pens, pond: POND, pondFish: (S.pondFish || []).length, regions: S.eff.regions || [],
     areaAt: (x, y) => WD.areaAt(x, y), rng: rand, lastKind: F.task && F.task.play ? F.task.kind : (F._playKind || null),
-    door: DOOR, world: WD.WORLD, allowFeed: true };
+    door: DOOR, world: WD.WORLD, allowFeed: true, playSpots: XP.playSpots() }; // v5.5.0: playground plots
 }
 function finishKidTask(k) {
   if (!k) return k;
-  if (k.leave) k.done = () => { F.away = 'school'; F.x = k.to.x; F.y = k.to.y; log(`${F.name}去上学了`); };
+  if (k.leave) k.done = () => { F.away = 'school'; F.x = k.to.x; F.y = k.to.y; log(`${F.name}去上学了`); noteProgress({ wentSchool: true }); };
   if (k.comeBack) {
     const ex = window.PFKids.schoolExit(kidCtx());
     const x1 = (WD.WORLD && WD.WORLD.x1) || 352;
@@ -837,6 +846,8 @@ function finishKidTask(k) {
   }
   if (k.kind === 'play-pet' && k.pet && k.pet.pet) k.done = () => { const v = k.pet.view || petView(k.pet.pet); hearts(v.x, v.y, 8); if (v.pose === 3) v.pose = 2; v.idle = 0; log(`${F.name}摸了摸${k.pet.name}`); };
   else if (k.kind === 'play-pet' && k.pet) k.done = () => { hearts(k.pet.x, k.pet.y, 8); log(`${F.name}摸了摸${k.pet.name}`); };
+  if (k.kind === 'play-slide' || k.kind === 'play-sandbox' || k.kind === 'play-swing') { // v5.5.0: 第一次在乐园玩 → 成就
+    const prev = k.done; k.done = () => { if (prev) prev(); noteProgress({ playedPark: true }); }; }
   F._playKind = k.kind;
   return k;
 }
@@ -1419,12 +1430,12 @@ function proj(x, y) { const rx = x * CA - y * SA, ry = x * SA + y * CA; return [
 // Rotated stacks are rendered at 3x and reduced with a majority (mode) filter: each screen pixel takes the colour that covers
 // most of it, so stripes keep their shape at every angle. Each result gets its own selective outline and is cached per angle.
 const SS = 3, ssC = mk(8, 8), ssG = ssC.getContext('2d', { willReadFrequently: true });
-const STK = new Map(), STK_BUDGET = 16e6; let stkPx = 0; // ~64 MB (CPU) of cached stacks at most, least recently used goes first
+const STK = new Map(), STK_BUDGET = 16e6, STK_MAX = 10000; let stkPx = 0; // ~64 MB (CPU) of cached stacks at most, least recently used goes first
 function stackCanvas(m, a) {
   const map = m._ck || (m._ck = new Map()); let k = map.get(a);
   if (k) { STK.delete(k); STK.set(k, m); return k; }
   k = { a }; map.set(a, k); k.done = () => { k.px = k.c.width * k.c.height; stkPx += k.px; STK.set(k, m);
-    while ((stkPx > STK_BUDGET || STK.size > 6000) && STK.size > 1) { const [ok, om] = STK.entries().next().value; STK.delete(ok); om._ck.delete(ok.a); stkPx -= ok.px; ok.c.width = ok.c.height = 0; } };
+    while ((stkPx > STK_BUDGET || STK.size > STK_MAX) && STK.size > 1) { const [ok, om] = STK.entries().next().value; STK.delete(ok); om._ck.delete(ok.a); stkPx -= ok.px; ok.c.width = ok.c.height = 0; } };
   return buildStack(m, a, k);
 }
 function buildStack(m, a, k) {
@@ -1473,7 +1484,12 @@ const LANES = { forest: [[100, -38, 100, -60], [100, -12, 80, -12]], east: [[216
 for (const k in LANES) for (const l of LANES[k]) pathSegs.push(l.concat(k)); // tagged: only painted once the region is open
 const routeSegs = []; for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) routeSegs.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
 const nearRoute = (x, y, d) => routeSegs.some(s => segDist(x, y, s) < d) || Object.values(LANES).some(ls => ls.some(l => segDist(x, y, l) < d));
-const pathD = (x, y) => { let pd = 99; for (const s of pathSegs) { if (s[4] && !regionOpen(s[4])) continue; if (Math.abs(x - (s[0] + s[2]) / 2) > Math.abs(s[2] - s[0]) / 2 + 12 || Math.abs(y - (s[1] + s[3]) / 2) > Math.abs(s[3] - s[1]) / 2 + 12) continue; pd = Math.min(pd, segDist(x, y, s)); } return pd; };
+// v5.5.0: the bigger map has ~2M ground pixels, so pathD only looks at the segments listed for its 16-unit cell (same result)
+const PB = 16, PBX = Math.floor((WORLD.x0 - GM) / PB) - 1, PBY = Math.floor((WORLD.y0 - GM) / PB) - 1, PBW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) / PB) + 3, PBH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) / PB) + 3;
+const PBK = Array.from({ length: PBW * PBH }, (_, k) => { const cx = (PBX + k % PBW) * PB, cy = (PBY + Math.floor(k / PBW)) * PB;
+  return pathSegs.filter(s => Math.min(s[0], s[2]) - 12 <= cx + PB && Math.max(s[0], s[2]) + 12 >= cx && Math.min(s[1], s[3]) - 12 <= cy + PB && Math.max(s[1], s[3]) + 12 >= cy); });
+const pathCell = (x, y) => { const i = Math.floor(x / PB) - PBX, j = Math.floor(y / PB) - PBY; return i < 0 || j < 0 || i >= PBW || j >= PBH ? pathSegs : PBK[j * PBW + i]; };
+const pathD = (x, y) => { let pd = 99; for (const s of pathCell(x, y)) { if (s[4] && !regionOpen(s[4])) continue; if (Math.abs(x - (s[0] + s[2]) / 2) > Math.abs(s[2] - s[0]) / 2 + 12 || Math.abs(y - (s[1] + s[3]) / 2) > Math.abs(s[3] - s[1]) / 2 + 12) continue; pd = Math.min(pd, segDist(x, y, s)); } return pd; };
 const rectOut = (x, y, [x0, y0, x1, y1]) => Math.max(x0 - x, x - x1, y0 - y, y - y1, 0);
 let OPEN_REGIONS = []; const regionOpen = id => OPEN_REGIONS.includes(id); // copied from the shop state (S.eff.regions) before the ground is rebuilt
 const fieldYard = r => r.field && [r.field.c0 * TILE - 6, r.field.r0 * TILE - 6, (r.field.c0 + r.field.cols) * TILE + 6, (r.field.r0 + r.field.rows) * TILE + 6];
@@ -1491,6 +1507,7 @@ function groundAt(x, y) { // -> [palette colour, kind]
   const pd = pathD(x, y), pw = 4.2 + wob;
   const yd = Math.max(YARD.x0 - x, x - YARD.x1, YARD.y0 - y, y - YARD.y1) + wob * 0.6;
   if (pd < pw || yd < 0) return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt'];
+  { const o = XP.ground(x, y, S.plots); if (o) return o; } // v5.5.0: river, cliff, mountain, the ring's plots
   // regions: an open region is farm grass (with a packed-dirt yard round its field); a locked one stays a wild meadow
   for (const r of WD.REGIONS) if (WD.inRect(x, y, r.rect)) {
     if (r.id === 'coast') { const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; } // the beach is sand even before it is bought
@@ -1506,10 +1523,12 @@ function groundAt(x, y) { // -> [palette colour, kind]
   if (out > 6 + vnoise(x / 6, y / 6, 3) * 8) return [G[2], 'grass'];
   return [G[3], 'grass'];
 }
-function buildGroundBase() { // one ground pixel per screen pixel (world unit = RS px)
-  const g = groundBase.getContext('2d'), img = g.createImageData(GW, GH), d = new Uint32Array(img.data.buffer);
-  for (let py = 0; py < GH; py++) for (let px = 0; px < GW; px++) d[py * GW + px] = u32(groundAt(px / RS + GX0, py / RS + GY0)[0]);
-  g.putImageData(img, 0, 0);
+function buildGroundBase(r) { // one ground pixel per screen pixel (world unit = RS px); r: only this world rect [x0, y0, x1, y1] (v5.5.0)
+  const X0 = r ? Math.max(0, Math.floor((r[0] - GX0) * RS)) : 0, Y0 = r ? Math.max(0, Math.floor((r[1] - GY0) * RS)) : 0;
+  const X1 = r ? Math.min(GW, Math.ceil((r[2] - GX0) * RS)) : GW, Y1 = r ? Math.min(GH, Math.ceil((r[3] - GY0) * RS)) : GH, w = X1 - X0, h = Y1 - Y0; if (w <= 0 || h <= 0) return;
+  const g = groundBase.getContext('2d'), img = g.createImageData(w, h), d = new Uint32Array(img.data.buffer);
+  for (let py = 0; py < h; py++) for (let px = 0; px < w; px++) d[py * w + px] = u32(groundAt((px + X0) / RS + GX0, (py + Y0) / RS + GY0)[0]);
+  g.putImageData(img, X0, Y0);
   if (window.__farm && window.__farm.onGround) window.__farm.onGround(); // the minimap copies it
 }
 function buildGround() { groundDirty = false; }
@@ -1534,13 +1553,13 @@ const decals = [];
 }
 // ---------- the big map (v4.3): roads cut through the forest rim, wild forest between the clearings, fenced regions ----------
 for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) continue;
-  if (nearRoute(p.x, p.y, 14) || WD.seaAt(p.x, p.y) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10) || (r.water && WD.inRect(p.x, p.y, r.water, 8))) || AN.PEN_IDS.some(k => WD.inRect(p.x, p.y, penBox(PENS[k]), 8))) props.splice(i, 1); }
+  if (nearRoute(p.x, p.y, 14) || WD.seaAt(p.x, p.y) || PL.clearAt(p.x, p.y, 10) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10) || (r.water && WD.inRect(p.x, p.y, r.water, 8))) || AN.PEN_IDS.some(k => WD.inRect(p.x, p.y, penBox(PENS[k]), 8))) props.splice(i, 1); }
 { const fr = mulberry32(5150), P = a => a[Math.floor(fr() * a.length)];
   const kinds = () => P([...treeDefs.dark, ...treeDefs.pine, ...treeDefs.oak, ...treeDefs.olive, ...treeDefs.dark, ...treeDefs.birch]);
   for (let y = WORLD.y0 - 8; y <= WORLD.y1 + 14; y += 17) for (let x = WORLD.x0 - 8; x <= WORLD.x1 + 10; x += 18) {
     const tx = x + (fr() - 0.5) * 9 + ((Math.round(y / 17) & 1) ? 9 : 0), ty = y + (fr() - 0.5) * 7;
     if (tx > -46 && tx < WW + 46 && ty > -46 && ty < WH + 46) continue;                    // the farm's own rim is already there
-    if (WD.seaAt(tx, ty) || WD.REGIONS.some(r => WD.inRect(tx, ty, r.rect, 12) || (r.water && WD.inRect(tx, ty, r.water, 8))) || AN.PEN_IDS.some(k => WD.inRect(tx, ty, penBox(PENS[k]), 10)) || nearRoute(tx, ty, 13)) continue;
+    if (PL.clearAt(tx, ty, 12) || ty < PL.ridgeY(tx) - PL.CLIFF - 2 || WD.seaAt(tx, ty) || WD.REGIONS.some(r => WD.inRect(tx, ty, r.rect, 12) || (r.water && WD.inRect(tx, ty, r.water, 8))) || AN.PEN_IDS.some(k => WD.inRect(tx, ty, penBox(PENS[k]), 10)) || nearRoute(tx, ty, 13)) continue;
     let d = 1e9; for (const r of WD.REGIONS) d = Math.min(d, rectOut(tx, ty, r.rect)); d = Math.min(d, Math.max(-tx, tx - WW, -ty, ty - WH, 0));
     if (fr() < (d < 50 ? 0.9 : 0.55)) addTree(kinds(), tx, ty);
   }
@@ -1571,6 +1590,10 @@ const pierDeck = buildModel(14, 16, 4, Object.assign((x, y, z) => {
 { const r = WD.region('coast'); if (r && r.pier) { const list = regionProps[r.id] || (regionProps[r.id] = []);
   for (let y = r.pier.y; y <= r.fish.stand.y + 4; y += 8) { const p = addProp(pierDeck, r.pier.x, y, 0, { pier: 1 }); list.push(p);
     if (y > r.pier.y) { SEA_SOLIDS.push({ x: r.pier.x - 6, y, r: 2 }); SEA_SOLIDS.push({ x: r.pier.x + 6, y, r: 2 }); } } } }
+// v5.5.0: the outer ring's props (expansion.js): cliffs, the bridge, wheels, the town, plot fences and signs, the modules
+const XPM = XP.mount({ S, buildModel, gableY, addProp, addTree, props, billboards, decals, regionProps, models, treeDefs, mulberry32, SIGN, LOCK, SPRITES, pierDeck, barrelModel, crateModel, logsModel,
+  stackCanvas, ASTEP, cam, manual: MANUAL, tiles, FARMER, log: m => log(m), popText: (...a) => popText(...a), burst: (...a) => burst(...a), emit: (...a) => emit(...a), applyUpgrades: () => applyUpgrades(), saveNow: () => saveNow(), woodCap: () => woodCap(),
+  treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
 // ---------- the pasture (v4.5): coop, shed, trough, hay; animals are billboards that wander slowly ----------
 function coopModel() { // a small red-roofed hen house with a ramp to its door
   const X0 = 3, X1 = 22, Y0 = 4, Y1 = 17, ZW = 12;
@@ -1724,14 +1747,14 @@ function stepAnimals(dm) {
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE, raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
     if (v.hold) { v.graze = 0; continue; }
-    const P = PENS[penOfKind(a.kind)], roam = { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 };
+    const P = PENS[penOfKind(a.kind)], GZ = XP.roamOf(a, T), RA = GZ || P.roam, roam = GZ ? { x0: Math.min(GZ[0], P.roam[0]), y0: Math.min(GZ[1], P.roam[1]), x1: Math.max(GZ[2], P.roam[2]), y1: Math.max(GZ[3], P.roam[3]), pad: 8 } : { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 }; // v5.5.0: sheep out on the meadow by day
     if (night || raining) { const home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; setWalkTarget(v, home.x, home.y); v.wait = 0; }
     const hop = nextHop(v, { x: v.tx, y: v.ty }, roam), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, (raining ? 0.45 : 1) * ASPEED[a.kind] * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.graze = 0;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
     if (night || raining) { v.graze = 0; continue; }
     v.wait -= dm; v.graze = v.wait > 0 && (Math.floor(v.wait / 6) % 2 === 0);
-    if (v.wait <= 0) { const R0 = P.roam, far = anRng() < 0.3;
+    if (v.wait <= 0) { const R0 = RA, far = GZ ? (v.x > GZ[2] + 4 || anRng() < 0.3) : anRng() < 0.3;
       let tx = Math.max(R0[0], Math.min(R0[2], far ? R0[0] + anRng() * (R0[2] - R0[0]) : v.x + (anRng() - 0.5) * 24));
       let ty = Math.max(R0[1], Math.min(R0[3], far ? R0[1] + anRng() * (R0[3] - R0[1]) : v.y + (anRng() - 0.5) * 14));
       const snap = NAV.nearestWalkable(ensureNav(), tx, ty, 12, null);
@@ -2410,6 +2433,7 @@ function drawMarks() {
       if (!h.ok) { ctx.fillStyle = Rf[2]; ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 4, 7, 1); } } }
   for (const r of WD.REGIONS) if (!regionOpen(r.id) && onScreen(r.sign.x, r.sign.y, 30)) { const [sx, sy] = proj(r.sign.x, r.sign.y), x = Math.round(sx), y = Math.round(sy);
     ctx.drawImage(LOCK, x - 3, y - 22 + bob); }
+  XP.drawLocks(ctx, proj, onScreen, bob); // v5.5.0
 }
 function spritePixels(c) { return c.d32 || (c.d32 = new Uint32Array(c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer)); }
 function stackPixels(m, a) { const k = stackCanvas(m, a); if (!k.d32) k.d32 = new Uint32Array(k.c.getContext('2d').getImageData(0, 0, k.c.width, k.c.height).data.buffer); return k; }
@@ -2544,7 +2568,7 @@ function plantSpot(x, y) { // where a sapling may go: open ground in the farm or
   const a = WD.areaAt(x, y);
   if (!(a === 'home' || S.eff.regions.includes(a))) return { ok: false, why: '这里还没解锁' };
   if (groundAt(x, y)[1] !== 'grass') return { ok: false, why: '只能种在草地上' };
-  if (tiles.some(t => Math.abs(t.x - x) < 9 && Math.abs(t.y - y) < 9)) return { ok: false, why: '不能种在田里' };
+  if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && Math.abs(t.x - x) < 9 && Math.abs(t.y - y) < 9)) return { ok: false, why: '不能种在田里' };
   if (yard.some(c => Math.hypot(c.x - x, c.y - y) < 7)) return { ok: false, why: '这里有杂物，等农夫收拾完再种' };
   if ([[HOUSE, 28], [BARN, 28], [STALL, 22], [WELL, 12]].some(([b, d]) => Math.hypot(b.x - x, b.y - y) < d)) return { ok: false, why: '离房子太近' };
   if (AN.PEN_IDS.some(k => Math.hypot(PENS[k].bld.x - x, PENS[k].bld.y - y) < 20 || Math.hypot(PENS[k].trough.x - x, PENS[k].trough.y - y) < 10)) return { ok: false, why: '这里留给动物的棚子' }; // kept free even before it is built
@@ -2685,7 +2709,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.7';
+const GAME_VERSION = '5.5.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2703,6 +2727,8 @@ function progressCtx(extra) {
     caughtKoi: BOOK.has(S.codex, BOOK.keyFish('koi')),
     caughtSword: BOOK.has(S.codex, BOOK.keyFish('sword')),
     sawRain: !!(S.weather && S.weather.lastDay),
+    // a kid who is in (or already past) the school stage has been to school: old saves light it too
+    wentSchool: !!(S.family && (S.family.kids || []).some(k => ['school', 'helper', 'teen'].includes(FAM.kidStage(k, S.day)))),
     caughtBug: !!(BOOK.has && BOOK.keyBug && Object.keys((S.codex && S.codex.entries) || {}).some(k => k.indexOf('bug:') === 0)),
   }, extra || {});
 }
@@ -2747,6 +2773,7 @@ function snapshot() {
     family: (S.family.kidGrowth = 1, JSON.parse(JSON.stringify(S.family))), // v5.0; kidGrowth marks the v5.4.3 table
     members: S.members.map(m => ({ id: m.id, water: m.water, bag: Object.assign({}, m.bag), gathered: m.gathered, basket: m.crops.slice() })),
     log: S.log.slice(),
+    plots: JSON.parse(JSON.stringify(S.plots || {})), // v5.5.0
   };
 }
 function restore(s) { // s has been migrated and validated by PFSave
@@ -2763,6 +2790,7 @@ function restore(s) { // s has been migrated and validated by PFSave
     if (t.crop) t.crop.stage = SIM.stageOf(t.crop); }
   FARMER.wood = s.inventory.wood || 0; FARMER.saplings = Object.assign({ apple: 0, orange: 0 }, s.inventory.saplings);
   resetTreeViews(); S.trees = s.trees ? s.trees.map(t => Object.assign({}, t)) : WD.defaultTrees(); S.orders = (s.orders || []).map(o => Object.assign({}, o)); // a v2 save gets the default forest
+  S.plots = PL.validPlots(s.plots); // v5.5.0 (before applyUpgrades: it opens plot fields and puts their modules down)
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
   if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
@@ -2865,7 +2893,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
-  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes,
+  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
@@ -2904,6 +2932,7 @@ function minimapBase() {
     g.fillStyle = 'rgba(20,14,10,0.45)'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = '#e8c78a'; g.setLineDash([3, 2]); g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); g.setLineDash([]);
     g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
     fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
+  XP.minimap(g, P, fillCoinPrice); // v5.5.0: the ring's plots
 }
 function minimapDraw() {
   if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');

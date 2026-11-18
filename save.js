@@ -10,8 +10,9 @@
   const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
   const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
   const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
+  const PL = (typeof require === 'function' && typeof document === 'undefined') ? require('./plots.js') : root.PFPlots; // v5.5.0
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 10;
+  const CURRENT = 11;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -70,12 +71,15 @@
         streaks: s.streaks || CX.emptyStreaks(),
       });
     },
+    // v5.5.0 phase 7: the map grows outward in a ring (old coordinates do not move); no plot of the ring is bought yet,
+    // and the fold has no grazing meadow yet
+    11: s => Object.assign({}, s, { plots: s.plots && typeof s.plots === 'object' ? s.plots : {}, upgrades: Object.assign({ graze: 0 }, s.upgrades) }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber']; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
-  const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
+  const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -149,7 +153,7 @@
         wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
         fishFood: int(inv.fishFood, 0, 0, 30), ornament: CX.validOrnament(inv.ornament),
       },
-      farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
+      farmer: { x: num(f.x, 36, -260, 452), y: num(f.y, 40, -212, 388), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
       upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
       settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
@@ -169,6 +173,7 @@
       weather: WX && WX.validWeather ? WX.validWeather(s.weather) : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 },
       bugNet: s.bugNet ? 1 : 0,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
+      plots: PL.validPlots(s.plots), // v5.5.0
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children

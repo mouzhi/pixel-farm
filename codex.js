@@ -21,7 +21,7 @@
     { id: 'allland', name: '遥遥领先', hint: '把现有 7 块区域全部买下' },
     { id: 'movedin', name: '安排上了', hint: '阿禾搬来的那天早上' },
     { id: 'kidwork', name: '村里来了个神童', hint: '小豆第一次出门干轻活' },
-    { id: 'school', name: '小镇做题家', hint: '孩子第一次去上学', later: 1 },
+    { id: 'school', name: '小镇做题家', hint: '孩子第一次去上学' },
     { id: 'sprinkler', name: '懒人福音', hint: '家人第一次自动在田边摆好浇水器', later: 1 },
     { id: 'nightlight', name: '今晚月色真美', hint: '电网接通后，夜里第一次点亮一座夜灯', later: 1 },
     { id: 'dogjob', name: '旺旺队出动', hint: '狗第一次没有跟着农夫，自己去办成一件小事' },
@@ -32,6 +32,7 @@
     { id: 'richday', name: '芜湖起飞', hint: '单日收入第一次超过 2,000 金' },
     { id: 'firstrain', name: '这场雨我允许了', hint: '第一次遇上小雨' },
     { id: 'firstbug', name: '先入图鉴为敬', hint: '孩子第一次用捕虫网捉到昆虫，看一眼再放走' },
+    { id: 'firstpark', name: '童年 DNA 动了', hint: '孩子第一次在乐园玩滑梯、沙坑或秋千' },
   ];
   const MILESTONES = [
     { id: 'open', name: '农场开张', hint: '新的一天开始了' },
@@ -276,6 +277,8 @@
     want('richday', (ctx.todayEarn | 0) >= 2000 || ((ctx.dayEarn || []).some && (ctx.dayEarn || []).some(v => v >= 2000)));
     want('firstrain', !!ctx.sawRain);
     want('firstbug', !!ctx.caughtBug);
+    want('firstpark', !!ctx.playedPark);
+    want('school', !!ctx.wentSchool); // v5.5.0: the school stage exists since v5.4.3
     return due;
   }
 

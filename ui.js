@@ -60,6 +60,7 @@
     searod: pixIcon(['', '              k', '             ks', '            ks', '           ks', '          ks', '         ks', '        ks', '       ks', '      ks', '   kkks', '  kwwwk', '  kwrwk', '   kkk'].map(r => r.padEnd(16)), { k: ink, s: st[3], w: '#fff6dc', r: (P && P.roof) ? P.roof[2] : '#b8432f' }),
     coast: pixIcon(['', '', '', '                ', '     www  ww', '   wwkwkwwkwk', '  wkkkkkkkkkk', '  kssysysyssk', '  ksssssssssk', ' kssysysysssk', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbbbb', 'bbbbbbbbbbbbbbbb'].map(r => r.padEnd(16)), { k: ink, w: wt[4], b: wt[2], s: wd[4], y: '#fff6dc' }) });
   ICONS.fence = ICONS.pasture; // v5.0
+  ICONS.graze = ICONS.pasture; // v5.5.0 the fold's grazing meadow
   ICONS.lumber = house(gr[2]); // v5.3.1 the lumber hut: a cabin with a moss-green roof
   ICONS.heart = pixIcon(['', '', '', '   kkk   kkk', '  kpppk kpppk', ' kpphppkpppppk', ' kphhpppppppk', ' kpppppppppppk', '  kpppppppppk', '   kpppppppk', '    kpppppk', '     kpppk', '      kpk', '       k'].map(r => r.padEnd(16)), { k: ink, p: '#e57fa0', h: '#f6ecd0' });
   ICONS.flower = pixIcon(['', '', '', '      y', '     kyk', '    ykyky', '     kyk', '      b', '      b', '     kbk', '      k'].map(r => r.padEnd(16)), { k: ink, y: '#ffd76a', b: gr[3] });
@@ -225,7 +226,7 @@
     $('inv').innerHTML = h;
   }
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
-  const shop = $('shop'); let shopKey = '', shopFocus = '';
+  const shop = $('shop'); let shopKey = '', shopFocus = '', plotView = ''; // plotView: v5.5.0 one plot's page (plots-ui.js)
   const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
   const shopTabs = () => SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }];
   const readShopTab = () => { try { const v = localStorage.getItem(SHOP_TAB_KEY); if (shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
@@ -245,12 +246,14 @@
   function drawShop(force) {
     const S = G.S, tabs = shopTabs();
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
-    const key = [shopTab, S.coins, G.F.wood, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
+    const PU = window.PFPlotsUI, PH = { costChip, priceChips };
+    const key = [shopTab, S.coins, G.F.wood, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved].join(',');
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
     const tab = tabs.find(t => t.id === shopTab) || tabs[0];
     let sec = '';
+    if (plotView && PU) { shop.innerHTML = h + PU.detailHtml(plotView, PH) + '</div>'; return; } // v5.5.0
     for (const id of tab.ids) {
       const o = SIM.offer(S.up, S.coins, id, G.F.wood), it = o.item, n = it.levels.length, lv = o.have;
       const s2 = sectionFor(it, tab.id); if (s2 && s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
@@ -261,6 +264,7 @@
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
+    if (tab.id === 'land' && PU) h += PU.listHtml(PH); // v5.5.0: the outer ring
     if (tab.id === 'tools') {
       const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
       const netPrice = (window.PFInsects && PFInsects.NET_PRICE) || 150;
@@ -287,16 +291,21 @@
     shop.innerHTML = h + '</div>';
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
-  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
+  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; plotView = (opt && opt.plot) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
-    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look]'); if (!el || !shop.contains(el)) return;
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
-    if (d.tab) { setShopTab(d.tab); drawShop(true); }
+    if (d.tab) { setShopTab(d.tab); plotView = ''; drawShop(true); }
+    if (d.a === 'back') { const was = plotView; plotView = ''; shopFocus = 'plot:' + was; drawShop(true); }
+    if (d.plot) { plotView = d.plot; drawShop(true); shop.scrollTop = 0; }
+    if (d.plotlook) { const p = PFPlots.plot(d.plotlook); G.panTo((p.rect[0] + p.rect[2]) / 2, (p.rect[1] + p.rect[3]) / 2); toggleShop(false); }
+    if (d.pbuy || d.pzone) { const [pid, mod] = (d.pbuy || d.pzone).split(':'), r = d.pbuy ? G.buyPlot(pid, mod) : G.rezonePlot(pid, mod); drawShop(true); if (!r.ok) el.classList.add('shake'); }
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); speedBar(); if (!r.ok) el.classList.add('shake'); }
   });
   $('shopBtn').addEventListener('click', () => toggleShop());
+  G.openPlot = id => toggleShop(true, { tab: 'land', plot: id }); // v5.5.0: the plot labels on the map
 
   const store = $('store'); let storeKey = '';
   function rowIcon(row) {

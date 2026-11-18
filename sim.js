@@ -57,6 +57,8 @@
     { id: 'sty', name: '猪圈', icon: 'sty', farm: 1, needs: 'forest', levels: [{ cost: 500, label: '猪圈', desc: '林场路边的猪圈，能养 3 头猪' }] },
     { id: 'pig', name: '猪', icon: 'pig', farm: 1, needs: 'sty', levels: [400, 480, 560].map((cost, i) => ({ cost, label: `第 ${i + 1} 头猪`, desc: '每天吃 2 份干草，每 2 天在树下拱出 1 颗松露（开心时 2 颗）' })) },
     { id: 'fold', name: '羊圈', icon: 'fold', farm: 1, needs: 'orchard', levels: [{ cost: 900, label: '羊圈', desc: '果园坡上的羊圈，能养 3 只羊' }] },
+    // v5.5.0: the fold's meadow behind the orchard (no plot needed); sheep go out to graze by day
+    { id: 'graze', name: '放牧草地', icon: 'graze', farm: 1, needs: 'fold', levels: [{ cost: 600, wood: 30, label: '放牧草地', desc: '在羊圈后面（果园西边）围出一块草地，白天 8–17 点羊会出去吃草' }] },
     { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'fold', levels: [700, 800, 900].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' })) },
     { id: 'shed', name: '牛棚', icon: 'shed', farm: 1, needs: 'pasture', levels: [{ cost: 1500, label: '牛棚', desc: '北牧场的牛棚，能养 3 头牛，旁边堆干草' }] },
     { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1400, 1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
@@ -86,7 +88,7 @@
     { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'speed', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
     { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast'] },
-    { id: 'build', name: '建筑', ids: ['house', 'fence', 'lumber', 'coop', 'sty', 'fold', 'shed'] },
+    { id: 'build', name: '建筑', ids: ['house', 'fence', 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed'] },
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
   ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
@@ -104,7 +106,7 @@
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
       axe: lv('axe') > 0, axeLv: lv('axe'), lumber: lv('lumber') > 0, // v5.3.1: axe levels and the lumber hut (wood.js)
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
-      coop: lv('coop') > 0, sty: lv('sty') > 0, fold: lv('fold') > 0, shed: lv('shed') > 0,
+      coop: lv('coop') > 0, sty: lv('sty') > 0, fold: lv('fold') > 0, shed: lv('shed') > 0, graze: lv('graze') > 0, // v5.5.0
       animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow'), pig: lv('pig') },
       pets: { cat: lv('cat'), dog: lv('dog') },
       rod: lv('rod'), searod: lv('searod') > 0,

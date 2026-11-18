@@ -16,7 +16,7 @@ jobs:
           node-version: 20
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fx.js sim.js save.js world.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
       - name: Headless smoke test
@@ -35,6 +35,8 @@ jobs:
         run: node tools/surprise-test.js
       - name: Pathfinding unit tests
         run: node tools/path-test.js
+      - name: Outer ring plots unit tests
+        run: node tools/plots-test.js
       - name: Wood automation unit tests
         run: node tools/wood-test.js
       - name: Codex / achievement unit tests
@@ -55,6 +57,10 @@ jobs:
         env:
           CHROME: /usr/bin/google-chrome
         run: node tools/codex-smoke.js
+      - name: Outer ring browser test
+        env:
+          CHROME: /usr/bin/google-chrome
+        run: node tools/plots-smoke.js
       - name: Playlog folder-sync browser test
         env:
           CHROME: /usr/bin/google-chrome

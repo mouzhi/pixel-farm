@@ -1,4 +1,4 @@
-// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working; PF_WOOD=1 adds the axes, 林场 and the lumber hut with an empty storehouse; PF_CODEX=1 opens the 图鉴 panel with a few ornamental fish): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
+// Soak (PF_ANIMALS=1 to soak a full pasture; PF_FAMILY=1 adds the manor, 阿禾 and two children, 4 people working; PF_WOOD=1 adds the axes, 林场 and the lumber hut with an empty storehouse; PF_PLOTS=1 buys the whole outer ring; PF_CODEX=1 opens the 图鉴 panel with a few ornamental fish): real-time rAF mode, fast time, periodic rotation sweeps; samples canvas count/pixels, heap, arrays, frame time.
 const { chromium } = require('playwright-core');
 const URL = process.argv[2] || (process.env.PF_URL || 'http://127.0.0.1:8765') + '/index.html?speed=12';
 const SECS = +process.argv[3] || 180;
@@ -8,15 +8,15 @@ const SECS = +process.argv[3] || 180;
   const errs = []; p.on('pageerror', e => errs.push(String(e)));
   await p.addInitScript(() => {
     const st = window.__cv = { made: 0, alive: 0, px: 0, maxAlive: 0, maxPx: 0 };
-    const reg = new FinalizationRegistry(a => { st.alive--; st.px -= a; });
+    const reg = new FinalizationRegistry(b => { st.alive--; st.px -= b.a; });
     const ce = Document.prototype.createElement;
     Document.prototype.createElement = function (t, ...r) { const el = ce.call(this, t, ...r);
       if (String(t).toLowerCase() === 'canvas') { st.made++; st.alive++; let area = 0;
         const desc = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'width'), desch = Object.getOwnPropertyDescriptor(HTMLCanvasElement.prototype, 'height');
-        const upd = () => { const a = el.width * el.height; st.px += a - area; area = a; el.__a = a; st.maxPx = Math.max(st.maxPx, st.px); };
+        const upd = () => { const a = el.width * el.height; st.px += a - area; area = a; el.__a = a; if (el.__box) el.__box.a = a; st.maxPx = Math.max(st.maxPx, st.px); };
         Object.defineProperty(el, 'width', { get() { return desc.get.call(this); }, set(v) { desc.set.call(this, v); upd(); } });
         Object.defineProperty(el, 'height', { get() { return desch.get.call(this); }, set(v) { desch.set.call(this, v); upd(); } });
-        upd(); const box = { a: 0 }; reg.register(el, 0); el.__box = box; st.maxAlive = Math.max(st.maxAlive, st.alive); }
+        const box = { a: 0 }; el.__box = box; upd(); reg.register(el, box); st.maxAlive = Math.max(st.maxAlive, st.alive); }
       return el; };
     // frame-time probe
     window.__ft = []; let last = 0; const f = t => { if (last) window.__ft.push(t - last); last = t; requestAnimationFrame(f); }; requestAnimationFrame(f);
@@ -30,6 +30,10 @@ const SECS = +process.argv[3] || 180;
     S.day = Math.max(S.day, 50); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 48, kids: [{ id: 'kid0', name: '小豆', born: S.day - 45 }, { id: 'kid1', name: '小米', born: S.day - 32 }] }); f.syncFamily(); f.panTo(70, 60); });
   // PF_WOOD=1 (v5.3.1): the axe upgrades, 林场 and the lumber hut, wood at 0, so the farmer keeps walking to the forest to chop
   if (process.env.PF_WOOD) await p.evaluate(() => { const f = __farm; f.S.coins = Math.max(f.S.coins, 1e6); f.FARMER.wood = Math.max(f.FARMER.wood, 100); for (const id of ['axe', 'axe', 'axe', 'forest', 'lumber', 'house', 'house', 'house']) f.buy(id); f.FARMER.wood = 0; }); // after PF_FAMILY, which fills the storehouse
+  // PF_PLOTS=1 (v5.5.0): 阿禾 moved in and every plot of the outer ring bought, each as a different module, plus the grazing meadow
+  if (process.env.PF_PLOTS) await p.evaluate(() => { const f = __farm, S = f.S; S.coins = Math.max(S.coins, 1e6); f.FARMER.wood = Math.max(f.FARMER.wood, 900); S.family.met = 1; S.family.moved = S.family.moved || S.day;
+    for (const [id, m] of [['play', 'playground'], ['glade', 'field'], ['swbank', 'dam'], ['wbank', 'workshop'], ['sbank', 'field'], ['bridge'], ['swacross', 'orchard'], ['seacross', 'pasture'], ['eslope', 'meadow'], ['eroad'], ['eshore', 'field'], ['nwslope', 'woodland'], ['neslope', 'orchard'], ['trail'], ['summit', 'woodland'], ['alp', 'pasture']]) f.buyPlot(id, m);
+    for (const id of ['orchard', 'fold', 'sheep', 'sheep', 'graze']) f.buy(id); });
   // PF_CODEX=1 (v5.4.0): a few ornamental fish, a full-ish book, the 图鉴 panel open
   // PF_RAIN=1 (v5.4.3): force a long shower so rain streaks, ripples and wet paths stay on for the soak
   if (process.env.PF_RAIN) await p.evaluate(() => { const f = __farm, S = f.S;

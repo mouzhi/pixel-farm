@@ -185,6 +185,11 @@
       const skip = { x: door.x + 18 + (ctx.rng ? (ctx.rng() * 24 - 8) : 10), y: door.y + 16 + (ctx.rng ? (ctx.rng() * 16 - 4) : 8) };
       out.push({ kind: 'play-skip', label: '在院子里跑来跑去', at: skip, dur: 7 });
     }
+    // v5.5.0: a playground plot (滑梯 / 沙坑 / 秋千) — ctx.playSpots: [{ kind, x, y, stand: { x, y } }]
+    const PLAY_AT = { slide: ['play-slide', '在乐园滑滑梯', 10, null], sandbox: ['play-sandbox', '在沙坑里堆沙堡', 16, 'pull'], swing: ['play-swing', '在乐园荡秋千', 12, null] };
+    if (ctx.playSpots) for (const sp of ctx.playSpots) { const d = PLAY_AT[sp.kind]; if (!d || !sp.stand) continue;
+      if (!inPlayBounds(sp.stand.x, sp.stand.y, ctx)) continue;
+      out.push({ kind: d[0], label: d[1], at: { x: sp.stand.x, y: sp.stand.y }, dur: d[2], pose: d[3] || undefined, spot: sp }); }
     out.push({ kind: 'play-yard', label: '在房子旁边玩', at: { x: door.x + 14, y: door.y + 10 }, dur: 12 });
     return out.filter(t => t.at && (t.kind === 'play-yard' || t.kind === 'play-skip' || t.kind === 'play-pond' || inPlayBounds(t.at.x, t.at.y, ctx)));
   }
