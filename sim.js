@@ -6,6 +6,7 @@
 // Phase 5 (v5.0): house tiers and pen fences cost wood as well as gold; family rules live in family.js.
 'use strict';
 (function (root) {
+  const DC = root.PFDecor || (typeof require === 'function' ? require('./decor.js') : null); // v5.7.0 phase 9: the decoration shop
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
   const SLEEP_MULT = 6;           // the night runs 6x faster while the farmer sleeps
   const WAKE = 6 * 60, BEDTIME = 20 * 60;
@@ -94,6 +95,9 @@
     { id: 'sty2', p8: 1, name: '第二猪圈', icon: 'sty', farm: 1, needs: 'sty', levels: [{ cost: 900, wood: 50, label: '第二猪圈', desc: '盖在选成「牧场」的新地上，再养 3 头猪' }] },
     { id: 'fold2', p8: 1, name: '第二羊圈', icon: 'fold', farm: 1, needs: 'fold', levels: [{ cost: 1500, wood: 60, label: '第二羊圈', desc: '盖在选成「牧场」的新地上，再养 3 只羊' }] },
     { id: 'shed2', p8: 1, name: '第二牛棚', icon: 'shed', farm: 1, needs: 'shed', levels: [{ cost: 2500, wood: 80, label: '第二牛棚', desc: '盖在选成「牧场」的新地上，再养 3 头牛' }] },
+    // v5.7.0 phase 9 (rules in decor.js): decorations at a flat price; each one bought goes to the storehouse and the family sets it down
+    ...(DC ? DC.SHOP_IDS.map(id => { const c = DC.CATALOG[id]; return { id, name: c.name, icon: id, deco: 1, p9: 1, flat: 1,
+      levels: Array.from({ length: c.shop.max }, (_, i) => ({ cost: c.shop.cost, wood: c.shop.wood, label: c.shop.max > 1 ? `第 ${i + 1} 个` : c.name, desc: c.desc })) }; }) : []),
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
@@ -104,6 +108,7 @@
     { id: 'build', name: '建筑', ids: ['house', 'fence', 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
     { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive'] }, // v5.6.0
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
+    ...(DC ? [{ id: 'decor', name: '装饰', title: '装饰、夜灯和派对区', ids: DC.SHOP_IDS.slice() }] : []), // v5.7.0
   ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
   const shopItem = id => SHOP.find(s => s.id === id);

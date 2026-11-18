@@ -75,6 +75,8 @@
     const r = PL.plot(id).rect, w = r[2] - r[0], h = r[3] - r[1];
     return w >= h ? P(Math.round(r[0] + w * (i + 0.5) / YARD_SLOTS), Math.round(r[1] + h * 0.5 + 2)) : P(Math.round((r[0] + r[2]) / 2 + 2), Math.round(r[1] + 10 + (h - 14) * (i + 0.5) / YARD_SLOTS));
   }
+  // v5.7.0: a workshop the player moved keeps its yard and slot (they still count as taken) and stands at its own x, y
+  const workPos = w => (typeof w.x === 'number' && typeof w.y === 'number' ? P(w.x, w.y) : slotPos(w.at, w.slot));
   // works: { id: { at, slot, ... } } -> the first free slot, or null
   function freeSlot(plots, works) {
     for (const id of ownedSorted(plots, 'workshop')) for (let i = 0; i < YARD_SLOTS; i++)
@@ -105,7 +107,7 @@
     for (const id of Object.keys(plots || {})) { const p = PL.plot(id); if (!p || p.special) continue;
       const r = p.rect, g = p.gate, inX = g.x <= r[0] + 1 ? 6 : g.x >= r[2] - 1 ? -6 : 0, inY = g.y <= r[1] + 1 ? 6 : g.y >= r[3] - 1 ? -6 : 0;
       out.push({ id: 'p' + id, x: g.x + inX + (inY ? 9 : 0), y: g.y + inY + (inX ? 9 : 0) }); }
-    for (const wid of WORK_IDS) { const w = works && works[wid]; if (!w || !w.at) continue; const s = slotPos(w.at, w.slot); out.push({ id: 'w' + wid, x: s.x + 12, y: s.y + 10 }); }
+    for (const wid of WORK_IDS) { const w = works && works[wid]; if (!w || !w.at) continue; const s = workPos(w); out.push({ id: 'w' + wid, x: s.x + 12, y: s.y + 10 }); }
     return out;
   }
   const LAMP_R = 36, LAMP_FRUIT = 0.35; // fruit trees this close to a lit lamp ripen a little sooner (35% chance a night of one extra day)
@@ -123,7 +125,9 @@
     return out;
   }
   // where hive h stands now (null: its plot was re-zoned, so it waits in the shed until a slot is free again)
-  const hivePos = (h, plots, regions) => hiveSlots(plots, regions).find(q => q.at === h.at && q.s === h.s) || null;
+  // v5.7.0: a hive the player moved keeps its slot (so the count stays right) and stands at its own x, y
+  const hivePos = (h, plots, regions) => { const q = hiveSlots(plots, regions).find(q => q.at === h.at && q.s === h.s); if (!q) return null;
+    return typeof h.x === 'number' && typeof h.y === 'number' ? Object.assign({}, q, { x: h.x, y: h.y }) : q; };
   // the next free slot for a new (or homeless) hive: the meadow first, then the orchard
   const hiveFree = (plots, regions, hives) => hiveSlots(plots, regions).find(q => !(hives || []).some(h => h.at === q.at && h.s === q.s)) || null;
   // total: six with a 花甸, two in the orchard without one ("每块花甸 4–6 箱，或老果园 2 箱")
@@ -200,8 +204,9 @@
     const w = o.works && typeof o.works === 'object' ? o.works : {};
     for (const id of WORK_IDS) { const q = w[id]; if (!q || typeof q !== 'object') continue; const def = WORKS[id];
       const at = typeof q.at === 'string' && plots && plots[q.at] && plots[q.at].mod === 'workshop' ? q.at : null;
-      out.works[id] = { at, slot: Math.round(num(q.slot, 0, 0, YARD_SLOTS - 1)), inp: Math.round(num(q.inp, 0, 0, def.inCap)), left: num(q.left, 0, 0, def.mins), ready: Math.round(num(q.ready, 0, 0, def.outCap)) }; }
-    out.hives = (Array.isArray(o.hives) ? o.hives : []).slice(0, HIVE.max).filter(h => h && typeof h === 'object').map(h => ({ at: h.at === 'orchard' || PL.isPlotId(h.at) ? h.at : null, s: Math.round(num(h.s, 0, 0, 5)), cd: Math.round(num(h.cd, HIVE.every, 0, 9)), ready: Math.round(num(h.ready, 0, 0, HIVE.readyCap)) }));
+      out.works[id] = { at, slot: Math.round(num(q.slot, 0, 0, YARD_SLOTS - 1)), inp: Math.round(num(q.inp, 0, 0, def.inCap)), left: num(q.left, 0, 0, def.mins), ready: Math.round(num(q.ready, 0, 0, def.outCap)) };
+      if (typeof q.x === 'number' && typeof q.y === 'number') { out.works[id].x = num(q.x, 0, -260, 452); out.works[id].y = num(q.y, 0, -212, 388); } } // v5.7.0 moved
+    out.hives = (Array.isArray(o.hives) ? o.hives : []).slice(0, HIVE.max).filter(h => h && typeof h === 'object').map(h => ({ at: h.at === 'orchard' || PL.isPlotId(h.at) ? h.at : null, s: Math.round(num(h.s, 0, 0, 5)), cd: Math.round(num(h.cd, HIVE.every, 0, 9)), ready: Math.round(num(h.ready, 0, 0, HIVE.readyCap)), ...(typeof h.x === 'number' && typeof h.y === 'number' ? { x: num(h.x, 0, -260, 452), y: num(h.y, 0, -212, 388) } : {}) })); // v5.7.0: x, y once moved
     out.penHost = typeof o.penHost === 'string' && PL.isPlotId(o.penHost) ? o.penHost : null;
     return out;
   }
@@ -211,7 +216,7 @@
   if (AN && AN.PEN_IDS) for (const k of PEN2_IDS) if (!AN.PEN_IDS.includes(k)) AN.PEN_IDS.push(k);
 
   const api = { TILE, SPRINKLER, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
-    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, freeSlot, workGate, hasOrchard,
+    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, workGate, hasOrchard,
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,

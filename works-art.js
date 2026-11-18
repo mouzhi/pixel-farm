@@ -102,7 +102,7 @@
     if (!mounted) return; const k = keyOf(); if (!force && k === lastKey) return; lastKey = k;
     clearList(own.spr); clearList(own.works); clearList(own.hives); clearList(own.lamps);
     for (const s of S.works.sprinklers) own.spr.push(X.addProp(MD.sprinkler, s.x, s.y, 0, { xp: 1 }));
-    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.slotPos(w.at, w.slot);
+    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.workPos(w);
       own.works.push(X.addProp(MD[id], p.x, p.y, 0, { xp: 1, big: 1, work: id })); }
     hiveSpots().forEach(h => h && own.hives.push(X.addProp(MD.hive, h.x, h.y, 0, { xp: 1 })));
     if ((S.eff && S.eff.wheel) > 0) for (const l of lamps()) own.lamps.push(X.addProp(MD.lamp, l.x, l.y, 0, { xp: 1, lamp: l.id }));
@@ -114,9 +114,9 @@
   function lamps() { const k = JSON.stringify([S.plots, S.works.works, S.eff && S.eff.wheel]); if (k === lampKey && lampCache) return lampCache; lampKey = k;
     const wheels = PW.wheelsOf(S.plots, (S.eff && S.eff.wheel) | 0); lampCache = PW.lampSpots(S.plots, S.works.works).map(l => Object.assign(l, { on: PW.powered(l.x, l.y, wheels) })); return lampCache; }
   // things that block walking: the workshop buildings (lamps, hives and sprinklers are small enough to walk round in place)
-  function blocks() { const out = []; for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.slotPos(w.at, w.slot); out.push([p.x - 7, p.y - 5, p.x + 7, p.y + 4]); } return out; }
+  function blocks() { const out = []; for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.workPos(w); out.push([p.x - 7, p.y - 5, p.x + 7, p.y + 4]); } return out; }
   // where someone stands to hand goods in / take them out: in front of the door
-  function doorOf(id) { const w = S.works.works[id]; const p = PW.slotPos(w.at, w.slot); return { x: p.x + 1, y: p.y + 8 }; }
+  function doorOf(id) { const w = S.works.works[id]; const p = PW.workPos(w); return { x: p.x + 1, y: p.y + 8 }; }
   function warm() {
     const list = [MD.sprinkler, MD.mill, MD.jam, MD.cheese, MD.hive, MD.lamp, ...((X.wheelFrames && X.wheelFrames()) || [])]; let n = 0, base = null, idx = 0;
     const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }
@@ -143,7 +143,7 @@
         const [sx, sy] = proj(h.x + Math.cos(a) * R, h.y + Math.sin(a * 1.3) * R * 0.8); ctx.drawImage(ICON.bee, Math.round(sx) - 1, Math.round(sy - 10 - 3 * Math.sin(realT * 4 + ph)) - 1); } });
     // finished goods waiting: the product's icon bobbing over the door
     const bob = Math.round(Math.sin(realT * 3));
-    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.ready > 0)) continue; const p = PW.slotPos(w.at, w.slot); if (!onScreen(p.x, p.y, 40)) continue;
+    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.ready > 0)) continue; const p = PW.workPos(w); if (!onScreen(p.x, p.y, 40)) continue;
       const [sx, sy] = proj(p.x, p.y), ic = ICON[PW.WORKS[id].out]; ctx.drawImage(ic, Math.round(sx) - (ic.width >> 1), Math.round(sy) - 40 + bob); }
     const hs = hiveSpots(); S.works.hives.forEach((hv, i) => { const h = hs[i]; if (!h || !(hv.ready > 0) || !onScreen(h.x, h.y, 30)) return; const [sx, sy] = proj(h.x, h.y); ctx.drawImage(ICON.honey, Math.round(sx) - 3, Math.round(sy) - 22 + bob); });
     // lamps: lit bulbs, and a small grey 'too far' bolt over the ones the wheel can't reach (only at dusk / night)
@@ -163,7 +163,7 @@
   // light sources at night: powered lamps glow, the workshops' windows are warm while they work
   function lights(hz) {
     if ((S.eff && S.eff.wheel) > 0) for (const l of lamps()) if (l.on) hz(l.x, l.y, 22, 38, 0.9);
-    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.left > 0)) continue; const p = PW.slotPos(w.at, w.slot); hz(p.x, p.y + 6, 10, 18, 0.5); }
+    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.left > 0)) continue; const p = PW.workPos(w); hz(p.x, p.y + 6, 10, 18, 0.5); }
   }
   // the lamp ids that are lit now (works.js decides the fruit bonus from these)
   const litLamps = () => (S.eff && S.eff.wheel) > 0 ? lamps().filter(l => l.on) : [];

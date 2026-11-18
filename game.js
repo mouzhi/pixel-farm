@@ -1796,7 +1796,7 @@ function worksTick(dm) {
   for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], made = PW.workStep(w, def, dm);
     if (!made) continue;
     if (def.feed) S.hay = Math.min(AN.HAY.stock, S.hay + def.feed * made);
-    const p = PW.slotPos(w.at, w.slot); burst(p.x, p.y, 16, ['#fff6dc', Ac[1]], 6, 'spark');
+    const p = PW.workPos(w); burst(p.x, p.y, 16, ['#fff6dc', Ac[1]], 6, 'spark');
     if (w._day !== S.day) { w._day = S.day; log(`${def.name}做好了${PW.PRODUCTS[def.out].name}` + (def.feed ? `，麸皮做成 ${def.feed} 份饲料进了仓库` : '')); } }
 }
 function worksNight() {
@@ -2872,7 +2872,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.6.0';
+const GAME_VERSION = '5.7.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

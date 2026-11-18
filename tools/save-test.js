@@ -306,7 +306,7 @@ ok('shop tabs cover every item once', () => {
 ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
   assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);
-  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive'); for (let i = 1; i < L.length; i++) assert(flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
+  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = (SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive')) || SIM.shopItem(id).flat; for (let i = 1; i < L.length; i++) assert(flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
 });
 ok('shop effects: base and fully upgraded', () => {
   const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.speedMax, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, 1, false]);
