@@ -191,12 +191,30 @@ async function test(name, fn) {
     const p = await open(ctx);
     const r = await p.evaluate(() => { const f = __farm, S = f.S, F = f.FARMER; S.coins = 1e6; F.wood = 200;
       for (const id of ['axe', 'forest', 'house', 'house']) f.buy(id);
-      S.day = Math.max(S.day, 40); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 30, kids: [{ id: 'kid0', name: '小豆', born: S.day - 20 }] }); f.syncFamily();
+      S.day = Math.max(S.day, 50); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 48, kids: [{ id: 'kid0', name: '小豆', born: S.day - 32 }] }); f.syncFamily();
       F.wood = 0; const by = {}; for (let i = 0; i < 2 * 33 * 4; i++) { f.advance(2.5, 5);
         for (const a of f.actors()) if (a.task && a.task.label === '自己去林场砍树') by[a === F ? 'farmer' : a.id] = (by[a === F ? 'farmer' : a.id] || 0) + 1; }
       return { by, members: S.members.map(m => m.id), wood: F.wood }; });
     assert(r.members.includes('partner'), JSON.stringify(r)); assert(r.by.farmer > 0, 'the farmer chops: ' + JSON.stringify(r));
     assert.deepStrictEqual(Object.keys(r.by), ['farmer'], 'only the farmer: ' + JSON.stringify(r)); assert(r.wood > 0);
+    assert.deepStrictEqual(p.errs, []);
+  });
+  await test('v5.4.5 a player\'s day-59 manor farm (nothing left to build, 40 wood): the farmer still goes to 林场 and fills the storehouse', async ctx => {
+    // fixture: the player's own v5.4.1 save from the morning they reported "auto chopping never runs" (their chop marks removed).
+    // Everything needing wood was bought, so the old 40-wood reserve was already met and he never left the fields again.
+    const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day59-manor.json'), 'utf8')); s.savedAt = Date.now();
+    const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
+    const r = await p.evaluate(() => { const f = __farm, S = f.S, F = f.FARMER; f.SAVE.off = true;
+      const wood0 = F.wood, tgt = f.woodAuto().target, cap = f.woodCap(), day0 = S.day, by = {}, kinds = {};
+      while (S.day < day0 + 2) { f.advance(2.5, 5);
+        for (const a of f.actors()) if (a.task && a.task.label === '自己去林场砍树') by[a === F ? 'farmer' : a.id] = (by[a === F ? 'farmer' : a.id] || 0) + 1;
+        if (F.task && F.task.kind) kinds[F.task.kind] = 1; }
+      return { wood0, tgt, cap, wood: F.wood, by, kinds, orders: S.orders.length, house: S.up.house, members: S.members.map(m => m.id) }; });
+    assert.strictEqual(r.house, 3); assert.strictEqual(r.wood0, 40); assert.strictEqual(r.orders, 0); assert(r.members.includes('partner'));
+    assert.strictEqual(r.tgt, r.cap, 'with nothing left to build he fills the storehouse: ' + JSON.stringify(r));
+    assert(r.by.farmer > 0, 'the farmer walks to 林场 by himself: ' + JSON.stringify(r)); assert.deepStrictEqual(Object.keys(r.by), ['farmer']);
+    assert(r.wood >= 40 + 8 * 14, 'at least 8 trees of wood in two days: ' + JSON.stringify(r)); assert(r.wood <= r.cap);
+    for (const k of ['harvest', 'water', 'plant']) assert(r.kinds[k], 'field work still gets done: ' + k + ' ' + JSON.stringify(r.kinds));
     assert.deepStrictEqual(p.errs, []);
   });
   await test('chop and transplant orders: wood, a sapling, then fruit he picks and sells', async ctx => {
@@ -369,12 +387,14 @@ async function test(name, fn) {
     const fam = await p.evaluate(() => { const f = __farm, S = f.S; S.family.love = 100; f.advance(1440, 10);
       const moved = S.family.moved > 0 && S.members.length === 1 && S.members[0].role === 'partner'; const movedLog = S.events.some(e => /阿禾搬进了大木屋/.test(e.msg));
       S.coins = 1e5; f.FARMER.wood = 1000; f.buy('house'); f.buy('house'); f.buy('forest'); f.buy('sty'); f.buy('fence');
-      S.day = Math.max(S.day, 40); Object.assign(S.family, { moved: S.day - 30, kids: [{ id: 'kid0', name: '小豆', born: S.day - 20 }, { id: 'kid1', name: '小米', born: S.day - 8 }] }); f.syncFamily();
+      S.day = Math.max(S.day, 50); S.t = S.day * 1440 + 9 * 60; S.speed = 1;
+      Object.assign(S.family, { moved: S.day - 48, kids: [{ id: 'kid0', name: '小豆', born: S.day - 45 }, { id: 'kid1', name: '小米', born: S.day - 32 }] }); f.syncFamily();
+      const roles = S.members.map(m => m.role);
       let clash = 0; const key = a => a.task ? [a.task.tile, a.task.an, a.task.key].filter(Boolean) : [];
       for (let i = 0; i < 400; i++) { f.advance(3, 10); const as = f.actors(); for (let x = 0; x < as.length; x++) for (let y = x + 1; y < as.length; y++) if (key(as[x]).some(q => key(as[y]).includes(q))) clash++; }
       const T = () => S.t % 1440; for (let i = 0; i < 3000 && T() >= 5 * 60 && T() < 23.5 * 60; i++) f.advance(5, 5);
       const night = f.actors().every(a => a.home), who = f.actors().map(a => (a.id || 'farmer') + ':' + a.home + ':' + (a.task && a.task.label) + ':' + Math.round(a.x) + ',' + Math.round(a.y) + ':' + Math.floor(S.t % 1440));
-      return { moved, roles: S.members.map(m => m.role), clash, night, fences: f.penFence.length, log: movedLog, who }; });
+      return { moved, roles, clash, night, fences: f.penFence.length, log: movedLog, who }; });
     if (process.env.PF_DEBUG) console.log(JSON.stringify(fam));
     assert(fam.moved && fam.log, JSON.stringify(fam)); assert.deepStrictEqual(fam.roles, ['partner', 'teen', 'child']); assert.strictEqual(fam.clash, 0); assert(fam.night, 'everyone home at night'); assert(fam.fences > 10, 'fence round the sty');
     await p.evaluate(() => __farm.saveNow()); const before = await p.evaluate(() => ({ fam: __farm.S.family, up: __farm.S.up.house, wood: __farm.FARMER.wood }));

@@ -368,11 +368,70 @@
   // UI taps: any button or clickable icon outside the canvas
   addEventListener('click', e => { const b = e.target && e.target.closest && e.target.closest('button,.pbtn,[data-buy],.slot'); if (b) sfx(b.disabled ? 'deny' : 'tap', 0.8); }, true);
 
+  // ---------- light-rain ambience (lazy, not in the first-screen bundle; follows the SFX toggle, quieter than the music) ----------
+  const RAIN_URL = MORE + 'rain.mp3', RAIN_GAIN = 0.16, RAIN_XF = 1.6;
+  const RAIN = { want: false, src: null, g: null, el: null, loading: 0, buf: null };
+  function rainLevel() { return (set.sfx && RAIN.want) ? RAIN_GAIN : 0; }
+  function fadeRainGain(v) {
+    if (!A.ctx) return;
+    if (!RAIN.g) { RAIN.g = A.ctx.createGain(); RAIN.g.gain.value = 0; RAIN.g.connect(A.sfx); }
+    RAIN.g.gain.setTargetAtTime(v, t0(), RAIN_XF / 3);
+  }
+  function stopRainSrc() { if (RAIN.src) { try { RAIN.src.stop(); } catch (e) {} RAIN.src = null; } if (RAIN.el) { try { RAIN.el.pause(); } catch (e) {} } }
+  function startRainBuf() {
+    if (!A.ctx || !RAIN.buf || !A.unlocked) return;
+    if (RAIN.src) return;
+    fadeRainGain(0);
+    const s = A.ctx.createBufferSource();
+    s.buffer = RAIN.buf; s.loop = true;
+    // skip a little encoder padding if the decoded buffer is slightly longer than 11.5s
+    if (RAIN.buf.duration > 11.4) { s.loopStart = 0.01; s.loopEnd = Math.min(RAIN.buf.duration - 0.02, RAIN.buf.duration); }
+    s.connect(RAIN.g); s.start(); RAIN.src = s;
+    fadeRainGain(rainLevel());
+  }
+  function startRainEl() {
+    if (RAIN.el && RAIN.el.readyState >= 2 && A.unlocked) {
+      if (RAIN.g && !RAIN.el._wired) {
+        try { A.ctx.createMediaElementSource(RAIN.el).connect(RAIN.g); RAIN.el._wired = 1; } catch (e) {}
+      }
+      const pr = RAIN.el.play(); if (pr && pr.catch) pr.catch(() => {});
+      if (RAIN.g) fadeRainGain(rainLevel()); else RAIN.el.volume = Math.max(0, Math.min(1, rainLevel() * set.sv));
+    }
+  }
+  function loadRain() {
+    if (RAIN.buf || RAIN.loading || !A.ctx) return;
+    RAIN.loading = 1;
+    const done = () => { RAIN.loading = 0; if (RAIN.want) startRainBuf(); };
+    const viaEl = () => {
+      const el = new Audio(); el.preload = 'auto'; el.src = RAIN_URL; el.loop = true;
+      RAIN.el = el;
+      el.addEventListener('canplaythrough', () => { RAIN.loading = 0; if (RAIN.want) startRainEl(); }, { once: true });
+      el.addEventListener('error', () => { RAIN.loading = 0; });
+    };
+    if (typeof fetch !== 'function') { viaEl(); return; }
+    fetch(RAIN_URL).then(r => { if (!r.ok) throw new Error('rain'); return r.arrayBuffer(); }).then(ab => new Promise((res, rej) => {
+      try { A.ctx.decodeAudioData(ab, res, rej); } catch (e) { rej(e); }
+    })).then(buf => { RAIN.buf = buf; done(); }).catch(() => { RAIN.loading = 0; viaEl(); });
+  }
+  function setRain(on) {
+    RAIN.want = !!on;
+    if (!A.ctx || !A.unlocked) return;
+    if (on) {
+      if (RAIN.buf) startRainBuf();
+      else if (RAIN.el) startRainEl();
+      else loadRain();
+    } else {
+      fadeRainGain(0);
+      setTimeout(() => { if (!RAIN.want) stopRainSrc(); }, RAIN_XF * 1000 + 400);
+    }
+  }
+
   // ---------- volumes, unlock, visibility ----------
   function applyVolumes() {
     if (!A.ctx) return; const t = t0();
     A.music.gain.setTargetAtTime(set.music ? set.mv * 1.4 : 0, t, 0.4);
     A.sfx.gain.setTargetAtTime(set.sfx ? set.sv : 0, t, 0.05);
+    if (RAIN.want) { if (RAIN.g) fadeRainGain(rainLevel()); else if (RAIN.el) RAIN.el.volume = Math.max(0, Math.min(1, rainLevel() * set.sv)); if (!set.sfx) setTimeout(() => { if (!set.sfx) stopRainSrc(); }, 800); }
     if (set.music) musicOn(); else setTimeout(() => { if (!set.music) musicOff(); }, 1500);
   }
   function unlock() {
@@ -416,6 +475,7 @@
     setSfx: on => { set.sfx = !!on; persist(); const b = document.getElementById('sfxBtn'); if (b) b.style.backgroundImage = `url(${IC.sfx[set.sfx ? 0 : 1]})`, b.classList.toggle('off', !set.sfx); applyVolumes(); },
     setVolume: (mv, sv) => { if (mv != null) set.mv = Math.max(0, Math.min(1, mv)); if (sv != null) set.sv = Math.max(0, Math.min(1, sv)); persist(); applyVolumes(); },
     setTracks: t => { A.tracks = t || []; D.failed = {}; if (A.ctx && set.music) { stopFiles(); musicOn(); } },
+    rain: setRain, rainState: () => ({ want: RAIN.want, hasBuf: !!RAIN.buf, playing: !!(RAIN.src || (RAIN.el && !RAIN.el.paused)) }),
     _seekEnd: () => { const d = D.decks[D.cur]; if (d && d.el.duration) d.el.currentTime = d.el.duration - XF - 1; }, // tests
     play: sfx, unlock, _out: () => A.ctx && { ctx: A.ctx, node: A.master }, // tests / recording a preview
  names: () => Object.keys(Z).concat(Object.keys(JINGLE)), fileNames: () => Object.keys(FILES), preload: () => preload(Object.keys(FILES)), _gapReset: () => { for (const k of Object.keys(last)) last[k] = 0; recent.length = 0; },

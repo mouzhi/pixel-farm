@@ -9,6 +9,7 @@
   const PREFIX = 'mouzhi/pixel-farm:';            // GitHub Pages shares one origin (mouzhi.github.io) across projects
   const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
   const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
+  const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
   const PL = (typeof require === 'function' && typeof document === 'undefined') ? require('./plots.js') : root.PFPlots; // v5.5.0
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 11;
@@ -169,6 +170,8 @@
       achievements: CX.validUnlocks(s.achievements, CX.ACH_BY),
       milestones: CX.validUnlocks(s.milestones, CX.MS_BY),
       streaks: CX.validStreaks(s.streaks),
+      weather: WX && WX.validWeather ? WX.validWeather(s.weather) : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 },
+      bugNet: s.bugNet ? 1 : 0,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
       plots: PL.validPlots(s.plots), // v5.5.0
     };
@@ -176,10 +179,16 @@
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
   function validFamily(f) {
     const kids = (Array.isArray(f.kids) ? f.kids : []).filter(k => k && /^kid[01]$/.test(k.id)).slice(0, 2)
-      .map(k => ({ id: k.id, name: typeof k.name === 'string' ? k.name.slice(0, 8) : '孩子', born: int(k.born, 1, 1) }));
+      .map(k => {
+        const out = { id: k.id, name: typeof k.name === 'string' ? k.name.slice(0, 8) : '孩子', born: int(k.born, 1, 1) };
+        if (k.floor === 'helper' || k.floor === 'teen') out.floor = k.floor; // v5.4.3 append-only: old working kids do not regress
+        return out;
+      });
     const t = obj(f.today);
     const today = { day: int(t.day, 0, 0), chat: int(t.chat, 0, 0, 20), gift: int(t.gift, 0, 0, 50), giftName: typeof t.giftName === 'string' ? t.giftName.slice(0, 16) : '', sales: int(t.sales, 0, 0, 20) };
-    return { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), sales: int(f.sales, 0, 0, 9), moved: int(f.moved, 0, 0), kids, today };
+    const out = { love: int(f.love, 0, 0, 100), met: int(f.met, 0, 0), chatDay: int(f.chatDay, 0, 0), gifts: int(f.gifts, 0, 0), sales: int(f.sales, 0, 0, 9), moved: int(f.moved, 0, 0), kids, today };
+    if (f.kidGrowth) out.kidGrowth = 1; // v5.4.3: set after the one-time growth floor, so mornings do not re-apply the old table
+    return out;
   }
   // what a family member had on them when the game was saved (they keep working from the house door after loading)
   function validMember(m) {

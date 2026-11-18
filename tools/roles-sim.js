@@ -26,7 +26,7 @@ const server = http.createServer((req, res) => {
     const f = __farm, S = f.S; f.SAVE.off = true;
     if (!SAVE) { S.coins = 1e7; f.FARMER.wood = 5000;
       for (const id of ['axe', 'field', 'field', 'field', 'field', 'field', 'can', 'can', 'shoe', 'shoe', 'basket', 'basket', 'coop', 'forest', 'orchard', 'east', 'south', 'pasture', 'sty', 'fold', 'shed', ...Array(6).fill('chicken'), ...Array(3).fill('pig'), ...Array(3).fill('sheep'), ...Array(3).fill('cow'), 'cat', 'dog', 'house', 'house', 'house', 'fence']) f.buy(id);
-      S.day = Math.max(S.day, 40); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 30, kids: KIDS ? [{ id: 'kid0', name: '小豆', born: S.day - 20 }, { id: 'kid1', name: '小米', born: S.day - 8 }] : [] }); f.syncFamily(); }
+      S.day = Math.max(S.day, 50); Object.assign(S.family, { love: 100, met: 3, moved: S.day - 48, kids: KIDS ? [{ id: 'kid0', name: '小豆', born: S.day - 45 }, { id: 'kid1', name: '小米', born: S.day - 32 }] : [] }); f.syncFamily(); }
     const end = S.day + DAYS, TILE = 8, near = 3 * TILE;
     const who = a => a === f.FARMER ? 'farmer' : a.id;
     const mix = {}, pairs = {}; let samples = 0, lastT = S.t;

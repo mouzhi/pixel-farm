@@ -64,6 +64,7 @@
   ICONS.lumber = house(gr[2]); // v5.3.1 the lumber hut: a cabin with a moss-green roof
   ICONS.heart = pixIcon(['', '', '', '   kkk   kkk', '  kpppk kpppk', ' kpphppkpppppk', ' kphhpppppppk', ' kpppppppppppk', '  kpppppppppk', '   kpppppppk', '    kpppppk', '     kpppk', '      kpk', '       k'].map(r => r.padEnd(16)), { k: ink, p: '#e57fa0', h: '#f6ecd0' });
   ICONS.flower = pixIcon(['', '', '', '      y', '     kyk', '    ykyky', '     kyk', '      b', '      b', '     kbk', '      k'].map(r => r.padEnd(16)), { k: ink, y: '#ffd76a', b: gr[3] });
+  ICONS.bugnet = pixIcon(['', '', '     kk', '    kwwk', '    kwwk', '     kk', '     kb', '    kb', '   kb', '  kb', ' kb', 'kb', 'k'].map(r => r.padEnd(16)), { k: ink, w: '#fff6dc', b: wd[3] });
   const artIcon = k => { const a = G.animalArt(k), n = Math.max(16, a.width, a.height), c = document.createElement('canvas'); c.width = c.height = n;
     c.getContext('2d').drawImage(a, (n - a.width) >> 1, n - a.height - ((n - a.height) >> 2)); return c.toDataURL(); };
   for (const k of PFAnimals.KIND_IDS) ICONS[k] = artIcon(k);
@@ -182,9 +183,16 @@
       h += `<div class="slot${F.wood ? '' : ' dim'}" title="仓库里的木材：扩建房子、给动物棚子围篱笆要用。仓库最多放 ${cap} 份（房子越大越多），放不下的才拿去集市卖（${PFWorld.WOOD.price} 金一份）"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}/${cap}</span></div>`; }
     { const fam = S.family, FA = window.PFFamily, tier = PFWorld.HOUSE_TIERS[E.house || 0]; // v5.0: 阿禾 and the children
       if (!fam.moved && fam.met) h += `<div class="slot" title="阿禾是集市的店主（7:00–19:00 开门）。农夫每天第一次去集市会和她聊几句（+${FA.CHAT}），篮子里有野花、鱼、果子或鸡蛋就送她一样；每天头两趟卖东西各 +${FA.SALE}。好感满 ${FA.LOVE_MAX}、房子扩建成大木屋后，她就搬来一起经营农场，摊子交给她爸爸。"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">阿禾</span><span class="n">${fam.love}/${FA.LOVE_MAX}</span></div>`;
-      if (fam.moved) { const kids = fam.kids.map(k => `${k.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[FA.kidStage(k, S.day)]}）`);
+      if (fam.moved) { const kids = fam.kids.map(k => FA.kidLine(k, S.day));
         const jobs = S.members.map(m => `${m.name}：${m.home ? '在家' : m.task ? m.task.label : '歇着'}`);
         h += `<div class="slot" title="${tier.name}：最多住 ${tier.pop} 人。家人：阿禾${kids.length ? '、' + kids.join('、') : ''}。${jobs.join('；')}"><i style="background:url(${ICONS.house});background-size:32px;image-rendering:pixelated"></i><span class="k">家人</span><span class="n">${1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length}/${tier.pop}</span></div>`;
+        const NK = window.PFKids;
+        for (const k of fam.kids) {
+          const short = NK ? NK.panelShort(k, S.day) : FA.kidStage(k, S.day);
+          const m = S.members.find(q => q.id === k.id);
+          const job = !m || m.home ? '在家' : m.away ? '在学校上课' : (m.task ? m.task.label : '歇着');
+          h += `<div class="slot" title="${FA.kidLine(k, S.day)}。${job}"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${k.name}</span><span class="n">${short}</span></div>`;
+        }
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) h += `<div class="slot${nk.room ? ' dim' : ''}" title="${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${nk.name}</span><span class="n">${nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天'}</span></div>`; } }
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<div class="slot" title="${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置"><i style="background:url(${FRUIT_ICON[k]});background-size:32px"></i><span class="k">${PFWorld.FRUIT[k].name}苗</span><span class="n">${F.saplings[k]}</span></div>`;
@@ -239,7 +247,7 @@
     const S = G.S, tabs = shopTabs();
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, S.coins, G.F.wood, S.fishFood, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved].join(',');
+    const key = [shopTab, S.coins, G.F.wood, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved].join(',');
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -259,6 +267,12 @@
     if (tab.id === 'land' && PU) h += PU.listHtml(PH); // v5.5.0: the outer ring
     if (tab.id === 'tools') {
       const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
+      const netPrice = (window.PFInsects && PFInsects.NET_PRICE) || 150;
+      const netOwned = !!S.bugNet, netOk = !netOwned && S.coins >= netPrice, netShort = netOk || netOwned ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(netPrice - S.coins, 'coin')}</span></span>`;
+      h += `<div class="sec">院子</div>`;
+      h += `<div class="card${netOwned ? ' max' : ''}" data-item="bugnet">${icon('bugnet')}<div class="ct"><div><b>捕虫网</b> <span class="lv">${netOwned ? '已有' : '未购买'}</span></div>` +
+        (netOwned ? `<div class="d">买一次就留在家里。玩耍的孩子会自己带网去捉昆虫，看一眼再放走，记进图鉴</div></div><div class="cb"><span class="done">✓</span></div>` :
+          `<div class="d">${netPrice} 金，买一次就留在家里。有网之后，孩子偶尔会自己去捉一只昆虫，记进图鉴的「昆虫」页，看完就放走，不能卖</div></div><div class="cb"><button class="pbtn" data-buy="bugnet"${netOk ? '' : ' disabled'}>${priceChips(netPrice, 0)}</button>${netShort}</div>`) + '</div>';
       h += `<div class="sec">池塘（鱼食买了以后家人会自己去撒；观赏鱼放进池塘只是看着玩）</div>`;
       if (food) {
         const maxed = S.fishFood >= food.stock, ok = !maxed && S.coins >= food.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(food.price - S.coins, 'coin')}</span></span>`;
@@ -303,6 +317,8 @@
     if (id === 'wood') return `<i style="background:url(${FRUIT_ICON.wood});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'hay') return icon('hay');
     if (id === 'fishfood' || id === 'fishFood') return icon('fishfood');
+    if (id === 'bugnet' || id === 'net') return icon('bugnet');
+    if (id === 'goldfish' || id === 'koi') return icon(id);
     if (id === 'flower') return icon('flower');
     if (ICONS[id]) return icon(id);
     return '<i></i>';
@@ -358,6 +374,11 @@
   function cellArt(it, seen) {
     if (it.group === 'fish') return itemArt(it, { seen, w: 72 });
     if (it.group === 'rare') return itemArt(it, { seen, w: 48 });
+    const INS = window.PFInsects;
+    if (it.group === 'bug' && INS && INS.bugURL) {
+      const url = seen ? INS.bugURL(it.id, true) : INS.silURL(it.id);
+      return url ? icoTag(url, 'bug', 72, 72) : '<i class="ico"></i>';
+    }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
@@ -539,6 +560,7 @@
     box.innerHTML = `<h3>欢迎回来</h3><div>离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}</div>` +
       (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
       (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
+      (r.rain ? `<div>这天下过小雨，田都湿了</div>` : '') +
       `<div class="row" style="justify-content:center;display:flex;margin-top:8px"><button class="pbtn" id="offOk">好的</button></div>`;
     box.hidden = false; $('offOk').onclick = () => { box.hidden = true; };
   }

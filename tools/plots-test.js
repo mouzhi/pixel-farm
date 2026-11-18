@@ -139,4 +139,13 @@ ok('path: locked plots are fenced, bought ones open at the gate', () => {
   const c = PL.plot('eshore'), mid = { x: (c.rect[0] + c.rect[2]) / 2, y: (c.rect[1] + c.rect[3]) / 2 }, from = { x: 340, y: 150 };
   assert(!NAV.route(nav({}), from, mid).reached); assert(NAV.route(nav({ eshore: 1 }), from, mid).reached);
 });
+ok('playground: kids who are not working can play on the slide, sandbox and swing', () => {
+  const KIDS = require('../kids.js'), spots = PL.playSpots({ play: { mod: 'playground', day: 1 } });
+  assert.deepStrictEqual(spots.map(s => s.kind).sort(), ['sandbox', 'slide', 'swing']);
+  const ctx = { actor: { x: 36, y: 50 }, playSpots: spots, regions: ['play'], areaAt: (x, y) => { const p = PL.plotAt(x, y); return p ? p.id : 'home'; } };
+  const kinds = KIDS.playTargets(ctx).map(t => t.kind);
+  for (const k of ['play-slide', 'play-sandbox', 'play-swing']) assert(kinds.includes(k), k);
+  assert(!KIDS.playTargets(Object.assign({}, ctx, { regions: [] })).some(t => t.kind === 'play-slide'), 'not bought: not played on');
+  assert(!KIDS.playTargets(Object.assign({}, ctx, { playSpots: [] })).some(t => /slide|swing|sandbox/.test(t.kind)));
+});
 console.log(`plots-test: ${n} ok`);
