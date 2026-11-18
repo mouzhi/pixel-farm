@@ -11,8 +11,9 @@
   const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
   const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
   const PL = (typeof require === 'function' && typeof document === 'undefined') ? require('./plots.js') : root.PFPlots; // v5.5.0
+  const PW = (typeof require === 'function' && typeof document === 'undefined') ? require('./works.js') : root.PFWorks; // v5.6.0
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 11;
+  const CURRENT = 12;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -74,17 +75,25 @@
     // v5.5.0 phase 7: the map grows outward in a ring (old coordinates do not move); no plot of the ring is bought yet,
     // and the fold has no grazing meadow yet
     11: s => Object.assign({}, s, { plots: s.plots && typeof s.plots === 'object' ? s.plots : {}, upgrades: Object.assign({ graze: 0 }, s.upgrades) }),
+    // v5.6.0 phase 8: nothing of it is bought yet (no sprinklers, workshops, wheel, hives or second pens); no wheat seeds;
+    // the second pens get empty troughs; the works state starts empty
+    12: s => Object.assign({}, s, {
+      upgrades: Object.assign({ sprinkler: 0, mill: 0, jam: 0, cheese: 0, wheel: 0, hive: 0, coop2: 0, sty2: 0, fold2: 0, shed2: 0 }, s.upgrades),
+      troughs: Object.assign({ coop2: { feed: 0, water: 0 }, sty2: { feed: 0, water: 0 }, fold2: { feed: 0, water: 0 }, shed2: { feed: 0, water: 0 } }, s.troughs),
+      works: s.works && typeof s.works === 'object' ? s.works : { sprinklers: [], works: {}, hives: [], penHost: null },
+    }),
   };
-  const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber']; // levels (shop order); max levels live in sim
-  const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
+  const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon', 'wheat']; // v5.6.0 wheat (a missing count reads as 0)
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2']; // levels (shop order); max levels live in sim
+  const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']; // v5.6.0 second pens
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const seeds = v => { const o = obj(v), out = {}; for (const k of CROP_IDS) out[k] = int(o[k], 0, 0, 1e6); return out; };
-  const itemOk = ty => CROP_IDS.includes(ty) || FRUIT_IDS.includes(ty) || PRODUCT_IDS.includes(ty) || FISH_IDS.includes(ty) || ty === 'flower';
+  const WORK_ITEMS = ['flour', 'jam', 'cheese', 'honey']; // v5.6.0 workshop products and honey
+  const itemOk = ty => WORK_ITEMS.includes(ty) || CROP_IDS.includes(ty) || FRUIT_IDS.includes(ty) || PRODUCT_IDS.includes(ty) || FISH_IDS.includes(ty) || ty === 'flower';
   // v5.1: a basket slot can be a string (including a wildflower) or a surprise item {type, glow, giant, rare}
   function validBasket(list) {
     return (Array.isArray(list) ? list : []).map(k => {
@@ -155,12 +164,12 @@
       },
       farmer: { x: num(f.x, 36, -260, 452), y: num(f.y, 40, -212, 388), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
-      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
+      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 16)])), // v5.6.0: 16 sprinklers, 12 chickens
       settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
       trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
       orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),
-      animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
+      animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 40), // v5.6.0: second pens double the room
       troughs: Object.fromEntries(PEN_IDS.map(k => { const t = obj(obj(s.troughs)[k]); return [k, { feed: int(t.feed, 0, 0, 99), water: t.water ? 1 : 0 }]; })),
       catches: (Array.isArray(s.catches) ? s.catches : []).map(validCatch).filter(Boolean).slice(0, 12),
       pondFish: CX.validPondFish(s.pondFish),
@@ -174,6 +183,7 @@
       bugNet: s.bugNet ? 1 : 0,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
       plots: PL.validPlots(s.plots), // v5.5.0
+      works: PW.valid(s.works, PL.validPlots(s.plots)), // v5.6.0
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children

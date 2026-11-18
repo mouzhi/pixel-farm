@@ -589,6 +589,7 @@ function fillYard(rnd, target) {
 
 // ---------- state ----------
 const FAM = window.PFFamily;
+const PW = window.PFWorks, PWA = window.PFWorksArt; // v5.6.0 phase 8
 const S = {
   day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [], surpriseGold: 0,
   store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
@@ -605,9 +606,11 @@ const S = {
   codex: BOOK.emptyCodex(), achievements: [], milestones: [], streaks: BOOK.emptyStreaks(),
   doorGift: null, loose: [], dogPlan: null,
   plots: {}, // v5.5.0: bought plots of the outer ring: id -> { mod, day }
+  works: PW.empty(), // v5.6.0: sprinklers, workshops, hives, the second pens' plot (saved as `works`)
 };
 Object.assign(S.prices, { egg: 1, wool: 1, milk: 1, truffle: 1 }); // animal products drift like crops
 const PASTURE = WD.region('pasture'), PENS = WD.PENS, COOP_DOOR = PENS.coop.door; // v4.7: each kind lives by its own building (world.js PENS)
+const homeOf = a => PW.homeOf(a), PEN1 = AN.PEN_IDS.filter(k => !PENS[k].second); // v5.6.0: an animal's own building (the second one past the first's room)
 const penOfKind = k => AN.KINDS[k].home, troughSpot = pen => ({ x: PENS[pen].trough.x - 9, y: PENS[pen].trough.y + 2 });
 const penBox = P => [Math.min(P.roam[0], P.bld.x - 16), Math.min(P.roam[1], P.bld.y - 16), Math.max(P.roam[2], P.bld.x + 16), Math.max(P.roam[3], P.bld.y + 12)];
 const anyPen = () => AN.PEN_IDS.some(k => S.eff[k]);
@@ -626,7 +629,7 @@ function navState() {
   return {
     houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
-    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff), // v5.3.1: the lumber hut
+    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops
     rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze)
   };
 }
@@ -678,6 +681,7 @@ function syncAnimals() { // the shop says how many of each kind; new ones arrive
   for (const k of AN.KIND_IDS) { const want = (S.eff.animals || {})[k] || 0; let have = S.animals.filter(a => a.kind === k);
     while (have.length > want) { const a = have.pop(); S.animals.splice(S.animals.indexOf(a), 1); AV.delete(a.id); }
     for (let i = have.length; i < want; i++) { let n = i; while (S.animals.some(a => a.id === k + n)) n++; S.animals.push(AN.animal(k + n, k)); } }
+  PW.assignPens(S.animals, S.eff); // v5.6.0: past the first building's room they live in the second
   PETS_LIVE.length = 0; for (const k of AN.PET_IDS) for (let i = 0; i < ((S.eff.pets || {})[k] || 0); i++) { const p = AN.pet(k, i); PETS_LIVE.push(PV.has(p.id) ? PV.get(p.id).pet : p); }
   if (typeof syncPastureProps === 'function') syncPastureProps();
 }
@@ -690,7 +694,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { const dirty = XP.dirtyRect(OPEN_REGIONS, S.eff.regions); OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(dirty); } // v5.5.0: a plot only repaints its own patch
   if (typeof syncLumberProps === 'function') syncLumberProps();
-  XP.sync();
+  XP.sync(); if (WORKS_ON) PWA.sync(); SPR_COVER = null;
   markNavDirty();
 }
 function buy(id) { // the player's one action: spend gold on the next level of a shop item, or a stall consumable (v5.4.0 fish food / goldfish)
@@ -720,9 +724,9 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   }
   const o = SIM.offer(S.up, S.coins, id, FARMER.wood);
   if (!o || o.maxed) return { ok: false, reason: 'maxed' };
-  if (o.locked) return { ok: false, reason: 'locked', needs: o.locked };
+  if (o.locked) return Object.assign({ ok: false, reason: 'locked', needs: o.locked }, o.lockText ? { why: o.lockText } : {});
   if (!o.ok) return Object.assign({ ok: false, reason: 'short', short: o.short }, o.shortWood ? { shortWood: o.shortWood } : {});
-  S.coins -= o.cost; FARMER.wood -= o.wood; S.up[id] = o.have + 1; applyUpgrades(); emit('purchase', { item: id, level: o.have + 1, gold: o.cost, wood: o.wood, who: 'player' });
+  S.coins -= o.cost; FARMER.wood -= o.wood; S.up[id] = o.have + 1; worksBought(id); applyUpgrades(); emit('purchase', { item: id, level: o.have + 1, gold: o.cost, wood: o.wood, who: 'player' });
   log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金` + (o.wood ? ` + 木材 ${o.wood} 份` : '') + '）'); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'coin');
   if (id === 'field') log('新的田地开放了，农夫会去清理');
   if (o.item.region) log(`${o.item.name}的篱笆门打开了`);
@@ -730,7 +734,8 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   if (id === 'house') { log(`房子扩建成了${o.level.label}，能住 ${popCap()} 个人`); burst(HOUSE.x, HOUSE.y, 30, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood');
     if (S.family.love >= FAM.LOVE_MAX && !S.family.moved) log('阿禾说明天就搬过来'); }
   if (id === 'fence') log('给每个动物棚子围上了木篱笆，动物们每晚更开心');
-  if (AN.KINDS[id]) log(`一只${AN.KINDS[id].name}住进了${PENS[AN.KINDS[id].home].name}`);
+  if (AN.KINDS[id]) { const a = S.animals.filter(q => q.kind === id).pop(); log(`一只${AN.KINDS[id].name}住进了${PENS[a ? homeOf(a) : AN.KINDS[id].home].name}`); }
+  worksBoughtLog(id);
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
   if (PENS[id]) for (let i = yard.length - 1; i >= 0; i--) { const c = yard[i], P = PENS[id]; if (Math.hypot(c.x - P.bld.x, c.y - P.bld.y) < 16 || Math.hypot(c.x - P.trough.x, c.y - P.trough.y) < 10) yard.splice(i, 1); } // builders tidy the spot
   noteLog('purchase', { id, name: o.item.name, label: o.level.label, cost: o.cost, region: !!o.item.region, day: S.day, t: S.t, createdAt: S.createdAt, now: Date.now() });
@@ -810,7 +815,9 @@ function board() {
   // v4.7: a pat for each pet once a day, when nothing better is waiting
   if (T < 18 * 60) { const p = PETS_LIVE.find(p => !p.patted && !CLAIM.has(petView(p))); if (p) { const v = petView(p); post('petpet', 20, { x: v.x - 7, y: v.y + 1 }, () => patPetTask(p), v); } }
   const spareWood = F === FARMER ? FARMER.wood - woodCap() : 0; // v5.0: wood stays in the storehouse; only what does not fit is sold
-  if (F.crops.length || spareWood > 0) {
+  worksBoard(post, T); // v5.6.0
+  const sellN = F.crops.length - worksKeepN(F); // v5.6.0: goods kept for a workshop do not send anyone to the stall
+  if (sellN > 0 || spareWood > 0) {
     const busy = ripe.length || dry.length || (tilledEmpty.length && bagN);
     const base = full ? 100 : T >= 17.5 * 60 ? 80 : F.crops.length >= BASK() * 0.6 || spareWood >= 20 ? 58 : !busy ? 30 : 0;
     if (base) post('sell', base, STALL_SPOT, sellTask);
@@ -825,7 +832,7 @@ function kidCtx() {
   const pens = [];
   for (const id of AN.PEN_IDS) {
     const kinds = [];
-    for (const a of S.animals) { const k = AN.KINDS[a.kind]; if (k && k.home === id && !kinds.includes(a.kind)) kinds.push(a.kind); }
+    for (const a of S.animals) { const k = AN.KINDS[a.kind]; if (k && homeOf(a) === id && !kinds.includes(a.kind)) kinds.push(a.kind); }
     if (!kinds.length) continue;
     const P = PENS[id];
     if (P.needs && !S.eff.regions.includes(P.needs) && P.needs !== null) continue;
@@ -857,7 +864,7 @@ function kidPickPlay() { return finishKidTask(PFKids.pickPlay(kidCtx())); }
 function chooseTask() {
   const T = S.t % 1440;
   if (T >= BEDTIME || T < WAKE - 30) {
-    if (F.crops.length && shopOpen(T)) return sellTask(); // v5.0: the stall is shut at night; the basket waits until morning
+    if (F.crops.length - worksKeepN(F) > 0 && shopOpen(T)) return sellTask(); // v5.0: the stall is shut at night; the basket waits until morning
     if (F.gathered > 0 && T < BEDTIME + 60) return storeTask();
     return homeTask();
   }
@@ -880,7 +887,7 @@ function chooseTask() {
 }
 // v5.3: 阿禾 takes her breaks in her own corner of the farm (by a pen she looks after, or under a fruit tree), not on his bench
 function idleSpotsOf(m) { const out = [];
-  for (const pen of AN.PEN_IDS) if (S.animals.some(a => AN.KINDS[a.kind].home === pen)) { const at = troughSpot(pen); out.push({ x: at.x - 2, y: at.y + 6, label: '在棚子边看着动物们' }); }
+  for (const pen of AN.PEN_IDS) if (S.animals.some(a => homeOf(a) === pen)) { const at = troughSpot(pen); out.push({ x: at.x - 2, y: at.y + 6, label: '在棚子边看着动物们' }); }
   for (const t of S.trees) if (t.stage === 'tree' && WD.FRUIT[t.kind] && treeReachable(t)) out.push({ x: t.x - 6, y: t.y + 5, label: '在果树下歇一会儿' });
   return out.filter(p => Math.hypot(p.x - FARMER.x, p.y - FARMER.y) > CROWD_R).sort((a, b) => Math.hypot(a.x - m.x, a.y - m.y) - Math.hypot(b.x - m.x, b.y - m.y)).slice(0, 3); } // a nearby one: a break, not a hike
 function harvestTask(t) {
@@ -912,7 +919,7 @@ function waterTask(t) {
   } };
 }
 function plantTask(t) {
-  const ty = SU.pickSeed(t, tiles, F.bag, () => SIM.pickFromBag(F.bag, S.prices));
+  const ty = SU.pickSeed(t, tiles, F.bag, () => wheatPick() || SIM.pickFromBag(F.bag, S.prices)); // v5.6.0: wheat only while the mill wants it
   return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || !ty || F.bag[ty] <= 0) return; F.bag[ty]--; t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; if (WX && WX.isRaining(S.weather, S.day, S.t)) t.watered = true; groundDirty = true; } };
 }
 function fetchTask(need) { // take the best seeds from the barn first
@@ -1029,9 +1036,9 @@ function offlineWood(r) {
   FARMER.wood += w; S.woodCut = (S.woodCut || 0) + w; r.wood = w; log(`离线期间家人在林场砍了 ${w} 份木材`);
 }
 // ---- v4.5 / v4.7 animal tasks ----
-const animalSpot = a => { const v = AV.get(a.id), P = PENS[penOfKind(a.kind)]; return { x: v ? v.x : P.bld.x, y: v ? v.y : P.bld.y + 14, an: a }; };
+const animalSpot = a => { const v = AV.get(a.id), P = PENS[homeOf(a)]; return { x: v ? v.x : P.bld.x, y: v ? v.y : P.bld.y + 14, an: a }; };
 function feedTask(pen) { const P = PENS[pen];
-  return { label: `正在往${P.name}的饲料槽里添干草`, to: troughSpot(pen), tile: P.trough, sfx: AN.KINDS && Object.keys(AN.KINDS).find(k => AN.KINDS[k].home === pen), dur: 6, fx: 'hay', pose: 'pull', done: () => {
+  return { label: `正在往${P.name}的饲料槽里添干草`, to: troughSpot(pen), tile: P.trough, sfx: AN.KINDS && Object.keys(AN.KINDS).find(k => AN.KINDS[k].home === (PENS[pen].base || pen)), dur: 6, fx: 'hay', pose: 'pull', done: () => {
     const n = Math.min(S.hay, AN.penNeed(S.animals, pen) - S.troughs[pen].feed); if (n <= 0) return;
     S.hay -= n; S.troughs[pen].feed += n; burst(P.trough.x, P.trough.y, 4, [Ac[1], Wd[4], Ac[2]], 8, 'leaf'); log(`往${P.name}的饲料槽添了 ${n} 份干草（仓库还剩 ${S.hay} 份）`); } };
 }
@@ -1069,7 +1076,7 @@ function patPetTask(p) { const v = petView(p), name = AN.PETS[p.kind].coats.find
 function hearts(x, y, z = 10) { burst(x, y, z, [Ac[3], Rf[3]], 3, 'heart'); } // fx.js draws them as little pixel hearts
 const PRODUCT_COL = { egg: [Ac[0], St[3]], wool: [Ac[0], St[3]], milk: [Ac[0], Wt[4]], truffle: [Wd[1], Wd[2]] };
 const FLOWER_PRICE = 5; // v5.0: a wildflower from a felled tree (a gift for 阿禾, or 5 gold at the stall)
-const basePrice = ty => ty === 'flower' ? FLOWER_PRICE : FS.isFish(ty) ? FS.priceOf(ty) : WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
+const basePrice = ty => PW.PRODUCTS[ty] ? PW.PRODUCTS[ty].price : ty === 'flower' ? FLOWER_PRICE : FS.isFish(ty) ? FS.priceOf(ty) : WD.FRUIT[ty] ? WD.FRUIT[ty].price : AN.PRODUCTS[ty] ? Math.max(1, Math.round(AN.PRODUCTS[ty].price * (S.prices[ty] || 1))) : SIM.priceOf(ty, S.prices);
 const priceOfAny = it => SU.priceOf(it, basePrice(SU.itemType(it)));
 // v5.0 the storehouse holds this much wood (a bigger house has a bigger woodshed)
 const woodCap = () => WD.HOUSE_TIERS[S.eff.house || 0].woodCap;
@@ -1078,6 +1085,7 @@ function storehouse() {
   const names = cropNames();
   for (const k of WD.FRUIT_IDS) names[k] = WD.FRUIT[k].name;
   for (const k of AN.PRODUCT_IDS) names[k] = AN.PRODUCTS[k].name;
+  for (const k of PW.PRODUCT_IDS) names[k] = PW.PRODUCTS[k].name; // v5.6.0
   names.flower = '野花';
   if (FS) for (const id of FS.FISH_IDS) { const f = FS.BY_ID[id] || (FS.fishOf && FS.fishOf(id)); if (f) names[id] = f.name; }
   const label = it => SU.itemName(it, names);
@@ -1158,11 +1166,11 @@ function sellTask() {
   return { label: F.crops.length ? '正在去市场卖菜' : S.animals.length && S.hay < AN.need(S.animals) * 2 ? '正在去市场买干草' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
     if (!shopOpen()) { if (F === FARMER) log('集市已经关门了，明天早上再来卖'); return; }
     if (F === FARMER) giftAtStall();
-    const n = F.crops.length, open = tiles.filter(t => t.open);
+    const keep = worksKeep(F), sell = F.crops.filter((_, i) => !keep[i]), kept = F.crops.filter((_, i) => keep[i]), n = sell.length, open = tiles.filter(t => t.open); // v5.6.0: workshop goods stay in the basket
     let sum = 0, nFish = 0, by = { crops: 0, fruit: 0, animals: 0, fish: 0, wood: 0 };
-    for (const it of F.crops) { const ty = SU.itemType(it), g = priceOfAny(it), base = basePrice(ty); sum += g;
+    for (const it of sell) { const ty = SU.itemType(it), g = priceOfAny(it), base = basePrice(ty); sum += g;
       if (SU.isSurpriseItem(it)) S.surpriseGold = (S.surpriseGold || 0) + Math.max(0, g - base);
-      if (WD.FRUIT[ty]) { S.fruitGold = (S.fruitGold || 0) + g; by.fruit += g; } else if (AN.PRODUCTS[ty]) { S.animalGold = (S.animalGold || 0) + g; by.animals += g; } else if (FS.isFish(ty)) { S.fishGold = (S.fishGold || 0) + g; by.fish += g; nFish++; } else by.crops += g; } F.crops.length = 0;
+      if (WD.FRUIT[ty]) { S.fruitGold = (S.fruitGold || 0) + g; by.fruit += g; } else if (AN.PRODUCTS[ty]) { S.animalGold = (S.animalGold || 0) + g; by.animals += g; } else if (FS.isFish(ty)) { S.fishGold = (S.fishGold || 0) + g; by.fish += g; nFish++; } else by.crops += g; } F.crops.length = 0; F.crops.push(...kept);
     const spare = F === FARMER ? FARMER.wood - woodCap() : 0; // v5.0: only wood the storehouse cannot hold is sold
     if (spare > 0) { const g = spare * WD.WOOD.price; sum += g; S.woodGold = (S.woodGold || 0) + g; by.wood += g; log(`仓库放不下，卖出多余木材 ${spare} 份，得 ${g} 金`); FARMER.wood -= spare; }
     const earn = () => { emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]); if (F !== FARMER) noteLog('work', F.id, 0, sum); };
@@ -1175,8 +1183,10 @@ function sellTask() {
     if (S.animals.length) { const need = AN.need(S.animals), want = Math.min(AN.HAY.stock, need * 4) - S.hay, can = Math.floor(S.coins * 0.5 / AN.HAY.price), n = Math.max(0, Math.min(want, can));
       if (n > 0 && S.hay < need * 3) { emit('purchase', { item: 'hay', n, gold: n * AN.HAY.price }); S.coins -= n * AN.HAY.price; S.hay += n; S.hayGold = (S.hayGold || 0) + n * AN.HAY.price; noteLog('spend', 'hay', n * AN.HAY.price); log(`买了 ${n} 捆干草（${n * AN.HAY.price} 金），放进仓库`); } }
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
-    if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops);
+    if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops.filter(k => k !== 'wheat')); // v5.6.0: wheat is bought for the mill below
       if (p.cost > 0) { emit('purchase', { item: 'seeds', n: seedCount(p.buy), gold: p.cost }); S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; noteLog('spend', 'seeds', p.cost); log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
+    const ws = wheatShort(), wk = Math.min(ws, Math.floor(S.coins * 0.3 / SIM.CROPS.wheat.seed)); // v5.6.0: seed for the mill's wheat
+    if (wk > 0) { S.coins -= wk * SIM.CROPS.wheat.seed; F.bag.wheat += wk; noteLog('spend', 'seeds', wk * SIM.CROPS.wheat.seed); log(`给磨坊买了 ${wk} 颗小麦种子（${wk * SIM.CROPS.wheat.seed} 金）`); }
     noteProgress();
   } };
 }
@@ -1294,6 +1304,7 @@ function overnight() {
   S.prices = Object.assign(SIM.driftPrices(S.prices, rand), driftProducts(S.prices));
   if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
     log((r.report.hungry ? `有 ${r.report.hungry} 只动物没吃饱，` : '') + (t ? `夜里产了：${t}` : '动物们夜里没有新产出')); }
+  worksNight(); // v5.6.0: honey, the lamps' orchard, the herded sheep
   for (const p of PETS_LIVE) p.patted = 0;
   const cats = (S.eff.pets || {}).cat || 0; if (cats) { const g = SU.catGifts(cats * AN.CAT_SEEDS, rand); for (const k of CROP_IDS) if (g.add[k]) S.store[k] = (S.store[k] || 0) + g.add[k];
     const bits = []; if (g.add.carrot) bits.push(`${g.add.carrot} 颗胡萝卜种子`);
@@ -1325,6 +1336,7 @@ function stepSim(dm) {
   }
   for (const a of S.members) { F = a; stepActor(dm); } // v5.0: the family first, so the farmer's own step leaves F on him
   F = FARMER; stepActor(dm);
+  worksTick(dm); // v5.6.0
 }
 function followInsect(k) { // play-chase: keep walking toward the live butterfly (window.__insects.nearest)
   if (!window.PFKids) return;
@@ -1517,7 +1529,7 @@ function groundAt(x, y) { // -> [palette colour, kind]
   }
   let out = Math.max(-x, x - WW, -y, y - WH, 0);
   for (const r of WD.REGIONS) out = Math.min(out, rectOut(x, y, r.rect) + 2);
-  for (const k of AN.PEN_IDS) if (!PENS[k].needs || !WD.region(PENS[k].needs) || !WD.inRect(PENS[k].bld.x, PENS[k].bld.y, WD.region(PENS[k].needs).rect)) out = Math.min(out, rectOut(x, y, penBox(PENS[k])) + 2); // v4.7: the coop and the sty sit in clearings
+  for (const k of PEN1) if (!PENS[k].needs || !WD.region(PENS[k].needs) || !WD.inRect(PENS[k].bld.x, PENS[k].bld.y, WD.region(PENS[k].needs).rect)) out = Math.min(out, rectOut(x, y, penBox(PENS[k])) + 2); // v4.7: the coop and the sty sit in clearings
   if (pd < pw + 8) out = Math.min(out, 4);                             // roads keep a strip of open grass beside them
   if (out > 22 + vnoise(x / 7, y / 7, 5) * 12) return [G[1], 'grass']; // forest floor under the tree line
   if (out > 6 + vnoise(x / 6, y / 6, 3) * 8) return [G[2], 'grass'];
@@ -1553,7 +1565,7 @@ const decals = [];
 }
 // ---------- the big map (v4.3): roads cut through the forest rim, wild forest between the clearings, fenced regions ----------
 for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) continue;
-  if (nearRoute(p.x, p.y, 14) || WD.seaAt(p.x, p.y) || PL.clearAt(p.x, p.y, 10) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10) || (r.water && WD.inRect(p.x, p.y, r.water, 8))) || AN.PEN_IDS.some(k => WD.inRect(p.x, p.y, penBox(PENS[k]), 8))) props.splice(i, 1); }
+  if (nearRoute(p.x, p.y, 14) || WD.seaAt(p.x, p.y) || PL.clearAt(p.x, p.y, 10) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10) || (r.water && WD.inRect(p.x, p.y, r.water, 8))) || PEN1.some(k => WD.inRect(p.x, p.y, penBox(PENS[k]), 8))) props.splice(i, 1); }
 { const fr = mulberry32(5150), P = a => a[Math.floor(fr() * a.length)];
   const kinds = () => P([...treeDefs.dark, ...treeDefs.pine, ...treeDefs.oak, ...treeDefs.olive, ...treeDefs.dark, ...treeDefs.birch]);
   for (let y = WORLD.y0 - 8; y <= WORLD.y1 + 14; y += 17) for (let x = WORLD.x0 - 8; x <= WORLD.x1 + 10; x += 18) {
@@ -1593,7 +1605,7 @@ const pierDeck = buildModel(14, 16, 4, Object.assign((x, y, z) => {
 // v5.5.0: the outer ring's props (expansion.js): cliffs, the bridge, wheels, the town, plot fences and signs, the modules
 const XPM = XP.mount({ S, buildModel, gableY, addProp, addTree, props, billboards, decals, regionProps, models, treeDefs, mulberry32, SIGN, LOCK, SPRITES, pierDeck, barrelModel, crateModel, logsModel,
   stackCanvas, ASTEP, cam, manual: MANUAL, tiles, FARMER, log: m => log(m), popText: (...a) => popText(...a), burst: (...a) => burst(...a), emit: (...a) => emit(...a), applyUpgrades: () => applyUpgrades(), saveNow: () => saveNow(), woodCap: () => woodCap(),
-  treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
+  plotBusy: id => worksBusy(id), treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
 // ---------- the pasture (v4.5): coop, shed, trough, hay; animals are billboards that wander slowly ----------
 function coopModel() { // a small red-roofed hen house with a ramp to its door
   const X0 = 3, X1 = 22, Y0 = 4, Y1 = 17, ZW = 12;
@@ -1664,6 +1676,7 @@ function foldModel() { // an open sheep shelter: four posts, a low wattle back w
   });
 }
 const pastureModels = { coop: coopModel(), sty: styModel(), fold: foldModel(), shed: shedModel(), trough: [0, 1, 2, 3].map(i => troughModel(i & 1, i & 2)) };
+Object.assign(pastureModels, { coop2: pastureModels.coop, sty2: pastureModels.sty, fold2: pastureModels.fold, shed2: pastureModels.shed }); // v5.6.0: the second pens look like the first
 const pens = Object.fromEntries(AN.PEN_IDS.map(k => [k, { bld: null, trough: null }])); let shedHay = null;
 var PASTURE_READY = true;
 function syncPastureProps() { // a building and its trough appear once bought
@@ -1694,6 +1707,147 @@ function syncLumberProps() {
   lumberProps = [addProp(lumberModel(), WA.HUT.x, WA.HUT.y, 0, { big: 1 }), addProp(logsModel, WA.HUT_LOGS.x, WA.HUT_LOGS.y, 0.2)];
 }
 function troughLook() { for (const k of AN.PEN_IDS) { const o = pens[k].trough; if (!o) continue; const t = S.troughs[k], m = pastureModels.trough[(t.feed > 0 ? 1 : 0) | (t.water ? 2 : 0)]; if (o.m !== m) o.m = m; } }
+// ---------- v5.6.0 phase 8: sprinklers, workshops + wheat, the water wheel and its lamps, hives, second pens, herding ----------
+// Rules: works.js (pure). Art: works-art.js. S.works is saved as `works` (save v12).
+var WORKS_ON = false;
+const worksRng = salt => mulberry32(((S.day * 2654435761) ^ salt) >>> 0); // own streams: the farm's RNG stays where it was
+const worksCtx = () => ({ plots: S.plots, regions: S.eff.regions, works: S.works.works, cows: S.animals.filter(a => a.kind === 'cow').length, fruit: S.trees.some(t => t.stage === 'tree' && WD.FRUIT[t.kind]) });
+const workersNow = () => 1 + S.members.filter(m => m.role === 'partner' || m.role === 'teen' || m.role === 'child').length;
+SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the shop card shows the text)
+  if (id === 'sprinkler') return PW.sprinklerGate(S.up, workersNow()) ? null : '先买花洒水壶，或等家里有 3 个能干活的人';
+  if (PW.WORKS[id]) return PW.workGate(id, worksCtx());
+  if (id === 'wheel') return PW.wheelGate(S.plots, have);
+  if (id === 'hive') return PW.hiveGate(S.plots, S.eff.regions, have, S.works.hives);
+  if (PW.PEN2[id]) return PW.pen2Gate(id, S.plots, S.works.penHost);
+  if (AN.KINDS[id]) return PW.animalGate(id, have, S.eff);
+  return null;
+};
+function worksBought(id) { // before applyUpgrades: put the new thing in its place
+  const W = S.works;
+  if (PW.WORKS[id]) { const sl = PW.freeSlot(S.plots, W.works); if (sl) W.works[id] = { at: sl.at, slot: sl.slot, inp: 0, left: 0, ready: 0 }; }
+  if (id === 'hive') { const sl = PW.hiveFree(S.plots, S.eff.regions, W.hives); if (sl) W.hives.push({ at: sl.at, s: sl.s, cd: PW.HIVE.every, ready: 0 });
+    if (W.hives.length === 1) { BOOK.record(S.codex, 'bug:bee', S.day); log('蜜蜂飞起来了，图鉴「昆虫」页记下了蜜蜂'); } }
+  if (PW.PEN2[id] && !W.penHost) { W.penHost = PW.pastureHost(S.plots, null); PW.applyPenLayout(PENS, W.penHost); }
+}
+function worksBoughtLog(id) {
+  if (id === 'sprinkler') log('浇水器买好了，家里人会把它装到田边');
+  if (PW.WORKS[id] && S.works.works[id]) log(`${PW.WORKS[id].name}在${PL.plot(S.works.works[id].at).name}的院子里盖好了`);
+  if (id === 'wheel') { const n = PW.wheelsOf(S.plots, S.eff.wheel).length; log(n ? '水车转起来了，天黑后够得着的路灯会亮' : '水车修好了'); }
+  if (PW.PEN2[id]) log(`${PW.PEN2[id].name}盖在了${PL.plot(S.works.penHost).name}`);
+}
+// a field's outline from its tiles (home first, then in tile order)
+function fieldList() { const by = new Map();
+  for (const t of tiles) { let f = by.get(t.f); if (!f) by.set(t.f, f = { id: t.f, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }); f.x0 = Math.min(f.x0, t.x); f.y0 = Math.min(f.y0, t.y); f.x1 = Math.max(f.x1, t.x); f.y1 = Math.max(f.y1, t.y); }
+  return [...by.values()].map(f => ({ id: f.id, c0: (f.x0 - TILE / 2) / TILE, r0: (f.y0 - TILE / 2) / TILE, cols: Math.round((f.x1 - f.x0) / TILE) + 1, rows: Math.round((f.y1 - f.y0) / TILE) + 1 })); }
+var SPR_COVER = null; // per sprinkler: the tiles it waters (rebuilt when one is added or moved)
+const sprCover = () => SPR_COVER || (SPR_COVER = PW.coveredBy(S.works.sprinklers, tiles));
+function sprinklerNext() { return S.eff.sprinkler > S.works.sprinklers.length ? PW.nextSpot(fieldList(), tiles, S.works.sprinklers) : null; }
+function installTask(sp) {
+  return { kind: 'install', key: 'spr:install', label: '正在田边装浇水器', to: { x: sp.x - 4, y: sp.y + 2 }, dur: 14, pose: 'pull', done: () => {
+    if (!(S.eff.sprinkler > S.works.sprinklers.length)) return; S.works.sprinklers.push({ x: sp.x, y: sp.y }); SPR_COVER = null;
+    burst(sp.x, sp.y, 8, ['#8cc6dc', '#5b9cc4', St[2]], 8, 'drop'); log(`${F === FARMER ? '' : F.name}在田边装好了一台浇水器（${S.works.sprinklers.length}/${S.eff.sprinkler}）`); } };
+}
+function sprinklerTick() {
+  if (!S.works.sprinklers.length) return; const cov = sprCover();
+  S.works.sprinklers.forEach((s, i) => { let n = 0; for (const t of cov[i] || []) if (t.open && t.crop && !t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.watered = true; n++; }
+    if (n) { groundDirty = true; s.spray = realT + 2.5; s.wday = S.day; } });
+}
+// workshops: what someone carrying goods would hand in (index flags into the basket), so the stall run keeps them
+function worksKeep(a) { const keep = new Array(a.crops.length).fill(false); if (a.role && !FAM.canDo(a.role, 'deliver')) return keep;
+  for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at) continue; let room = PW.WORKS[id].inCap - w.inp;
+    a.crops.forEach((it, i) => { if (room > 0 && !keep[i] && typeof it === 'string' && PW.WORKS[id].inputs.includes(it)) { keep[i] = true; room--; } }); }
+  return keep; }
+const worksKeepN = a => worksKeep(a).filter(Boolean).length;
+const workArea = { mill: 'field', jam: 'orchard', cheese: 'animal' };
+function deliverTask(id) { const def = PW.WORKS[id];
+  return { kind: 'deliver', key: 'w:' + id + ':in', label: `正在把原料送去${def.name}`, to: PWA.doorOf(id), dur: 6, pose: 'pull', done: () => {
+    const w = S.works.works[id]; if (!w) return; let n = 0;
+    for (let i = F.crops.length - 1; i >= 0 && w.inp < def.inCap; i--) { const it = F.crops[i]; if (typeof it === 'string' && def.inputs.includes(it)) { F.crops.splice(i, 1); w.inp++; n++; } }
+    if (n) { log(`${F === FARMER ? '' : F.name}往${def.name}送了 ${n} 份原料`); burst(PWA.doorOf(id).x, PWA.doorOf(id).y - 4, 8, [Ac[1], Wd[4]], 6, 'leaf'); } } };
+}
+function pickupTask(id) { const def = PW.WORKS[id], name = PW.PRODUCTS[def.out].name;
+  return { kind: 'pickup', key: 'w:' + id + ':out', label: `正在去${def.name}取${name}`, to: PWA.doorOf(id), dur: 5, done: () => {
+    const w = S.works.works[id]; if (!w) return; const n = Math.min(w.ready, BASK() - F.crops.length); if (n <= 0) return;
+    w.ready -= n; for (let i = 0; i < n; i++) F.crops.push(def.out); popText(PWA.doorOf(id).x, PWA.doorOf(id).y, 18, `+${n}${name}`, '#fff2a8'); log(`${F === FARMER ? '' : F.name}从${def.name}取了 ${n} 份${name}，拿去集市卖`); } };
+}
+function honeyTask(i) { const spot = PWA.hiveSpots()[i];
+  return { kind: 'honey', key: 'hive:' + i, label: '正在取蜂蜜', to: { x: spot.x - 6, y: spot.y + 4 }, dur: 8, pose: 'pull', done: () => {
+    const h = S.works.hives[i]; if (!h) return; const n = Math.min(h.ready, BASK() - F.crops.length); if (n <= 0) return;
+    h.ready -= n; for (let k = 0; k < n; k++) F.crops.push('honey'); popText(spot.x, spot.y, 16, `+${n}蜂蜜`, '#ffd76a'); log(`${F === FARMER ? '' : F.name}从蜂箱里取了 ${n} 罐蜂蜜`); } };
+}
+// wheat for the mill: planted on demand while growing + carried + in the mill + seeds is under PW.WHEAT_WANT
+function wheatHave() { let n = 0; for (const t of tiles) if (t.crop && t.crop.type === 'wheat') n++;
+  for (const a of actors()) { n += a.crops.filter(it => it === 'wheat').length + (a.bag.wheat || 0); } n += S.store.wheat || 0;
+  const m = S.works.works.mill; return n + (m ? m.inp : 0); }
+const wheatShort = () => S.eff.mill && S.works.works.mill ? Math.max(0, PW.WHEAT_WANT - wheatHave()) : 0;
+const wheatPick = () => (S.eff.mill && F.bag.wheat > 0 && wheatHave() - (F.bag.wheat || 0) - (S.store.wheat || 0) < PW.WHEAT_WANT) ? 'wheat' : null;
+function worksBoard(post, T) {
+  const W = S.works, space = BASK() - F.crops.length;
+  if (T < 18 * 60) { const sp = sprinklerNext(); if (sp) post('install', 66, { x: sp.x - 4, y: sp.y + 2 }, () => installTask(sp), 'spr:install', 'field'); }
+  const keep = worksKeep(F);
+  for (const id of PW.WORK_IDS) { const w = W.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], door = PWA.doorOf(id);
+    const carry = F.crops.filter((it, i) => keep[i] && def.inputs.includes(it)).length;
+    if (carry >= Math.min(def.need, def.inCap - w.inp) && carry > 0) post('deliver', space <= 0 ? 100 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
+    if (w.ready > 0 && space > 0 && T < 18 * 60) post('pickup', w.ready >= def.outCap ? 72 : 60, door, () => pickupTask(id), 'w:' + id + ':out', workArea[id]); }
+  if (space > 0 && T < 18 * 60) W.hives.forEach((h, i) => { const sp = PWA.hiveSpots()[i]; if (h.ready > 0 && sp) post('honey', 58, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard'); });
+}
+function worksTick(dm) {
+  sprinklerTick();
+  for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], made = PW.workStep(w, def, dm);
+    if (!made) continue;
+    if (def.feed) S.hay = Math.min(AN.HAY.stock, S.hay + def.feed * made);
+    const p = PW.slotPos(w.at, w.slot); burst(p.x, p.y, 16, ['#fff6dc', Ac[1]], 6, 'spark');
+    if (w._day !== S.day) { w._day = S.day; log(`${def.name}做好了${PW.PRODUCTS[def.out].name}` + (def.feed ? `，麸皮做成 ${def.feed} 份饲料进了仓库` : '')); } }
+}
+function worksNight() {
+  const W = S.works;
+  if (W.hives.length) { const n = PW.hiveNight(W.hives, worksRng(0x4E5)); if (n) log(`蜂箱里又攒了 ${n} 罐蜂蜜`); }
+  const lit = PWA.litLamps();
+  if (lit.length) { const r = worksRng(0x1A3); let n = 0;
+    for (const t of S.trees) { if (t.stage !== 'tree' || t.ripe || !WD.FRUIT[t.kind] || !lit.some(l => Math.hypot(l.x - t.x, l.y - t.y) <= PW.LAMP_R)) continue;
+      if (r() < PW.LAMP_FRUIT) { t.cd = (t.cd | 0) - 1; if (t.cd <= 0) { t.ripe = 1; t.cd = WD.FRUIT[t.kind].every || t.cd; treeChanged(t); } n++; } }
+    if (n) log(`路灯底下的 ${n} 棵果树夜里多长了一点`); }
+  let g = 0; for (const a of S.animals) { const v = AV.get(a.id); if (a.kind === 'sheep' && v && v.grazed === S.day - 1) { a.h = Math.min(100, a.h + PW.HERD.bonus); g++; } }
+  if (g) log(`边牧白天把 ${g} 只羊赶去吃了好草，羊心情更好`);
+}
+// herding: the border collie takes the fold's sheep out to the meadow in the morning and brings them back at dusk
+const herdOn = () => S.eff.graze && PETS_LIVE.some(p => AN.isCollie(p)) && S.animals.some(a => a.kind === 'sheep' && homeOf(a) === 'fold') && !(WX && WX.isRaining(S.weather, S.day, S.t));
+const herdRng = mulberry32(8123);
+function herdSheep(a, v, T) {
+  if (homeOf(a) !== 'fold' || !herdOn()) return; const ph = PW.herdPhase(T), G = PL.GRAZE.rect, i = (a.id.charCodeAt(a.id.length - 1) % 6);
+  if (ph === 'out' && v.herd !== S.day + 'o') { v.herd = S.day + 'o'; setWalkTarget(v, G[0] + 14 + (i % 3) * 12, G[1] + 26 + Math.floor(i / 3) * 12); v.wait = 25; }
+  if (ph === 'back' && v.herd !== S.day + 'b') { v.herd = S.day + 'b'; const P = PENS.fold; setWalkTarget(v, P.door.x - 8 + (i % 3) * 6, P.door.y - 3 + Math.floor(i / 3) * 3); v.wait = 120; }
+  if (T >= PW.HERD.noon && T < PW.HERD.noon + 60 && WD.inRect(v.x, v.y, G)) v.grazed = S.day;
+}
+function herdDog(p, v) { // -> true while the collie is herding (stepPets moves it)
+  if (!AN.isCollie(p) || !herdOn()) return false; const ph = PW.herdPhase(S.t % 1440); if (!ph) return false;
+  const flock = S.animals.filter(a => a.kind === 'sheep' && homeOf(a) === 'fold').map(a => AV.get(a.id)).filter(Boolean); if (!flock.length) return false;
+  v.job = null; const G = PL.GRAZE.rect;
+  if (ph === 'graze') { if (Math.hypot(v.tx - v.x, v.ty - v.y) < 0.6) { v.wait -= 1; if (v.wait <= 0) { const gap = PL.GRAZE.gap, edge = herdRng() < 0.5;
+      setWalkTarget(v, edge ? G[0] + 8 + herdRng() * (G[2] - G[0] - 16) : gap[0] + 6, edge ? (herdRng() < 0.5 ? G[1] + 6 : G[3] - 6) : (gap[1] + gap[3]) / 2); v.wait = 200 + herdRng() * 400; } }
+    return true; }
+  const cx = flock.reduce((s, q) => s + q.x, 0) / flock.length, cy = flock.reduce((s, q) => s + q.y, 0) / flock.length;
+  const dest = ph === 'out' ? { x: (G[0] + G[2]) / 2, y: (G[1] + G[3]) / 2 } : PENS.fold.door, dx = dest.x - cx, dy = dest.y - cy, d = Math.hypot(dx, dy) || 1;
+  const w = Math.sin(realT * 1.3) * 6, tx = cx - dx / d * 12 - dy / d * w, ty = cy - dy / d * 12 + dx / d * w;
+  if (Math.hypot(tx - v.tx, ty - v.ty) > 5) setWalkTarget(v, tx, ty);
+  return true;
+}
+// moving a sprinkler (tool bar: 挪浇水器): click one, then click a spot beside a field
+function sprinklerSpot(x, y, skip) { const r = PW.spotOk(x, y, tiles); if (!r.ok) return r;
+  if (S.works.sprinklers.some((s, i) => i !== skip && Math.hypot(s.x - x, s.y - y) < 5)) return { ok: false, why: '这里已经有一台了' }; return r; }
+function sprinklerAt(x, y) { let best = -1, bd = 8; S.works.sprinklers.forEach((s, i) => { const d = Math.hypot(s.x - x, s.y - y); if (d < bd) { bd = d; best = i; } }); return best; }
+function sprinklerClick(w) {
+  if (INPUT.sprPick == null || INPUT.sprPick < 0) { const i = sprinklerAt(w.x, w.y); if (i < 0) return { ok: false, why: S.works.sprinklers.length ? '先点一台浇水器（田边的小喷头）' : '还没有装好的浇水器' }; INPUT.sprPick = i; say('选中了一台浇水器，再点田边的新位置'); return null; }
+  const i = INPUT.sprPick; if (sprinklerAt(w.x, w.y) === i) { INPUT.sprPick = null; say('取消选择'); return null; }
+  const r = sprinklerSpot(w.x, w.y, i); if (!r.ok) return r;
+  const s = S.works.sprinklers[i]; s.x = Math.round(w.x * 10) / 10; s.y = Math.round(w.y * 10) / 10; SPR_COVER = null; INPUT.sprPick = null; say('把浇水器挪到了这里'); return { ok: true };
+}
+let worksSyncT = 0;
+function worksFrame() { if (!WORKS_ON) return; if (realT - worksSyncT > 0.2 || realT < worksSyncT) { worksSyncT = realT; PWA.sync(); } PWA.frame(realT); } // the key check is a few JSON strings: 5 times a second is plenty
+function worksBusy(id) { return PW.plotBusy(id, { works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }); }
+PWA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, tiles, markNavDirty: () => markNavDirty(), wheelProp: id => XP.wheelProp(id),
+  wheelFrames: () => { const md = XP.models(); return md ? [md.wheelFull, ...md.wheelTurn] : []; } });
+WORKS_ON = true;
 // animal sprites face right; frames: [step A, step B, head down]. Same palette and outline as the rest of style A.
 const lowerHead = (rows, col, dy) => rows.map((r, y) => r.slice(0, col) + (y - dy >= 0 ? rows[y - dy].slice(col) : '.'.repeat(r.length - col)));
 const ANIMAL_ROWS = {
@@ -1740,15 +1894,16 @@ function petSprite(p) { const key = p.kind + ':' + p.coat; let s = PET_SPR[key];
   const fr = PET_ROWS[p.kind].map(r => pix(coatRows(r, p.coat))); s = PET_SPR[key] = { r: fr, l: fr.map(flipCanvas) }; return s; }
 // wandering: walk to a random spot in the kind's patch, stop, graze, repeat; at night stand by the building. Own random stream.
 const anRng = mulberry32(99173), ASPEED = { chicken: 1.6, sheep: 1.1, cow: 0.9, pig: 1.0 };
-function animalView(a) { let v = AV.get(a.id); if (!v) { const R0 = PENS[penOfKind(a.kind)].roam; v = { x: R0[0] + anRng() * (R0[2] - R0[0]), y: R0[1] + anRng() * (R0[3] - R0[1]), tx: 0, ty: 0, wait: anRng() * 20, flip: anRng() < 0.5, graze: 0, step: 0, hold: 0, id: a.id, sim: a }; v.tx = v.x; v.ty = v.y; AV.set(a.id, v); } return v; }
+function animalView(a) { let v = AV.get(a.id); if (!v) { const R0 = PENS[homeOf(a)].roam; v = { x: R0[0] + anRng() * (R0[2] - R0[0]), y: R0[1] + anRng() * (R0[3] - R0[1]), tx: 0, ty: 0, wait: anRng() * 20, flip: anRng() < 0.5, graze: 0, step: 0, hold: 0, id: a.id, sim: a }; v.tx = v.x; v.ty = v.y; AV.set(a.id, v); } return v; }
 function stepAnimals(dm) {
   stepPets(dm); stepPondFish(dm);
   if (!S.animals.length) return;
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE, raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
     if (v.hold) { v.graze = 0; continue; }
-    const P = PENS[penOfKind(a.kind)], GZ = XP.roamOf(a, T), RA = GZ || P.roam, roam = GZ ? { x0: Math.min(GZ[0], P.roam[0]), y0: Math.min(GZ[1], P.roam[1]), x1: Math.max(GZ[2], P.roam[2]), y1: Math.max(GZ[3], P.roam[3]), pad: 8 } : { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 }; // v5.5.0: sheep out on the meadow by day
+    const P = PENS[homeOf(a)], GZ = XP.roamOf(a, T), RA = GZ || P.roam, roam = GZ ? { x0: Math.min(GZ[0], P.roam[0]), y0: Math.min(GZ[1], P.roam[1]), x1: Math.max(GZ[2], P.roam[2]), y1: Math.max(GZ[3], P.roam[3]), pad: 8 } : { x0: P.roam[0], y0: P.roam[1], x1: P.roam[2], y1: P.roam[3], pad: 8 }; // v5.5.0: sheep out on the meadow by day
     if (night || raining) { const home = a.kind === 'chicken' ? P.door : { x: P.door.x - 10 + (a.id.charCodeAt(a.id.length - 1) % 5) * 5, y: P.door.y - 4 }; setWalkTarget(v, home.x, home.y); v.wait = 0; }
+    else if (a.kind === 'sheep') herdSheep(a, v, T); // v5.6.0: the collie's flock
     const hop = nextHop(v, { x: v.tx, y: v.ty }, roam), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, (raining ? 0.45 : 1) * ASPEED[a.kind] * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.graze = 0;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
@@ -1823,6 +1978,7 @@ function stepPets(dm) {
     if (v.hold) { v.pose = 5; continue; } // happy face while being patted
     let speed = dog ? 4.2 : 2.4;
     if (night || (WX && WX.isRaining(S.weather, S.day, S.t)) || FARMER.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; v.job = null; }
+    else if (dog && herdDog(p, v)) speed = 5.2; // v5.6.0: herding the sheep out / home
     else if (dog) {
       const arriving = Math.hypot((v.tx || 0) - v.x, (v.ty || 0) - v.y) < 0.6;
       if (v.job && arriving) { v.wait -= dm; if (v.wait <= 0) { if (v.job.surprise) finishDogSurprise(p, v); else noteProgress({ dogJob: true }); v.job = null; } }
@@ -2012,6 +2168,8 @@ const RIPE_EXTRA = {
     '.mgmrRggmrrgg.', '.gmgrrmgmRmgm.', '..mmgmgrrgmm..', '...dmmgRrmd...', '....dmmmmd....', '......dd......', '..............']),
   watermelon: pix(['..........l...', '....ll..lgl...', '.....lggg.....', '..............', '...mmdmmdmm...', '..mdmmdmmdmm..', '.mdmhdmmdmmdm.',
     'mmdmhdmmdmmdmm', 'mmdmmdmmdmmdmm', 'mmdmmdmmdmmdmm', '.mdmmdmmdmmdm.', '..mdmmdmmdmd..', '...ddddddddd..', '..............']),
+  wheat: pix(['...y....y.....', '..ysy..ysy..y.', '..yky..yky.ysy', '..ysy..ysy.yky', '..yky.yysy.ysy', '...s..ysky..s.', '...s..yysy..s.', '...s...ss..s..',  // v5.6.0: golden wheat for the mill
+    '...ss..s..ss..', '....s..s.ss...', '....ss.sss....', '.....gsgs.....', '....mgmgm.....', '..............']),
 };
 const CROPX = { c: null };
 function cropAtlas() { // built once the SpriteCook sheet has loaded
@@ -2434,6 +2592,7 @@ function drawMarks() {
   for (const r of WD.REGIONS) if (!regionOpen(r.id) && onScreen(r.sign.x, r.sign.y, 30)) { const [sx, sy] = proj(r.sign.x, r.sign.y), x = Math.round(sx), y = Math.round(sy);
     ctx.drawImage(LOCK, x - 3, y - 22 + bob); }
   XP.drawLocks(ctx, proj, onScreen, bob); // v5.5.0
+  if (WORKS_ON) { const T = S.t % 1440; PWA.draw(ctx, proj, onScreen, realT, T, dayLight(T), !!(WX && WX.isRaining(S.weather, S.day, S.t)), { on: INPUT.mode === 'sprinkler', pick: INPUT.sprPick, hover: INPUT.mode === 'sprinkler' && INPUT.hover && INPUT.hover.spr }); }
 }
 function spritePixels(c) { return c.d32 || (c.d32 = new Uint32Array(c.getContext('2d').getImageData(0, 0, c.width, c.height).data.buffer)); }
 function stackPixels(m, a) { const k = stackCanvas(m, a); if (!k.d32) k.d32 = new Uint32Array(k.c.getContext('2d').getImageData(0, 0, k.c.width, k.c.height).data.buffer); return k; }
@@ -2480,6 +2639,7 @@ function lighting(night, T) {
   if (T >= 17 * 60 + 30 || T < WAKE + 30) { hz(HOUSE.x - 8.5, HOUSE.y + 10.5, 17, 46); hz(HOUSE.x + 8.5, HOUSE.y + 10.5, 17, 46); hz(HOUSE.x - 13, HOUSE.y, 17, 34); }
   hz(STALL.x, STALL.y, 30, 40, 0.8); hz(BARN_DOOR.x, BARN_DOOR.y, 16, 26, 0.6); hz(WELL.x, WELL.y, 14, 20, 0.5);
   if (!F.home) hz(F.x, F.y, 14, 40);
+  if (WORKS_ON) PWA.lights(hz); // v5.6.0: lamps on the wheel's grid, busy workshops
   const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer);
   d32.fill(((Math.round(255 * A) << 24) | (52 << 16) | (18 << 8) | 14) >>> 0); // unlit night tint everywhere, then only the light boxes
   for (const [lx, ly, r] of lights) { const x0 = Math.max(0, Math.floor(lx - r)), x1 = Math.min(W - 1, Math.ceil(lx + r)), y0 = Math.max(0, Math.floor(ly - r / 1.25)), y1 = Math.min(H - 1, Math.ceil(ly + r / 1.25));
@@ -2571,7 +2731,7 @@ function plantSpot(x, y) { // where a sapling may go: open ground in the farm or
   if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && Math.abs(t.x - x) < 9 && Math.abs(t.y - y) < 9)) return { ok: false, why: '不能种在田里' };
   if (yard.some(c => Math.hypot(c.x - x, c.y - y) < 7)) return { ok: false, why: '这里有杂物，等农夫收拾完再种' };
   if ([[HOUSE, 28], [BARN, 28], [STALL, 22], [WELL, 12]].some(([b, d]) => Math.hypot(b.x - x, b.y - y) < d)) return { ok: false, why: '离房子太近' };
-  if (AN.PEN_IDS.some(k => Math.hypot(PENS[k].bld.x - x, PENS[k].bld.y - y) < 20 || Math.hypot(PENS[k].trough.x - x, PENS[k].trough.y - y) < 10)) return { ok: false, why: '这里留给动物的棚子' }; // kept free even before it is built
+  if (AN.PEN_IDS.some(k => (!PENS[k].second || S.eff[k]) && Math.hypot(PENS[k].bld.x - x, PENS[k].bld.y - y) < 20 || Math.hypot(PENS[k].trough.x - x, PENS[k].trough.y - y) < 10)) return { ok: false, why: '这里留给动物的棚子' }; // kept free even before it is built
   if (props.some(p => !p.region && Math.hypot(p.x - x, p.y - y) < (p.tree ? 11 : 8)) || S.trees.some(t => Math.hypot(t.x - x, t.y - y) < 11) ||
       S.orders.some(o => o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
   return { ok: true };
@@ -2605,13 +2765,14 @@ function orderPlant(kind, x, y) {
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
   S.orders.push({ type: 'plant', kind, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }); noteLog('event', { type: 'plant', kind, x, y, day: S.day, t: S.t }); return { ok: true };
 }
-function setMode(mode, kind) { INPUT.mode = mode || null; if (kind) INPUT.kind = kind; INPUT.hover = null; cv.style.cursor = mode ? 'crosshair' : '';
+function setMode(mode, kind) { INPUT.mode = mode || null; INPUT.sprPick = null; if (kind) INPUT.kind = kind; INPUT.hover = null; cv.style.cursor = mode ? 'crosshair' : '';
   window.dispatchEvent(new CustomEvent('pf:mode', { detail: { mode: INPUT.mode, kind: INPUT.kind } })); }
 function hoverAt(e) {
   if (!INPUT.mode) { INPUT.hover = null; return; }
   const w = toWorld(e.clientX, e.clientY);
   if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); INPUT.hover = t ? { tree: t } : null; }
   else if (INPUT.mode === 'release') INPUT.hover = { release: 1, ok: inHomePond(w.x, w.y) };
+  else if (INPUT.mode === 'sprinkler') INPUT.hover = INPUT.sprPick != null && INPUT.sprPick >= 0 ? { spr: { x: w.x, y: w.y, ok: sprinklerSpot(w.x, w.y, INPUT.sprPick).ok } } : null;
   else INPUT.hover = { spot: w, ok: plantSpot(w.x, w.y).ok };
 }
 function clickAt(e) {
@@ -2619,6 +2780,7 @@ function clickAt(e) {
   if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); r = t ? orderChop(t.id) : { ok: false, why: '点一棵野树：家门口或已买区域里的都行（地图边上的森林是风景，不能砍）' }; if (r.ok) say(r.removed ? '取消了砍树' : '标记了要砍的树'); }
   else if (INPUT.mode === 'plant') { r = orderPlant(INPUT.kind, w.x, w.y); if (r.ok) say(`标记了种${WD.FRUIT[INPUT.kind].name}树苗的位置`); }
   else if (INPUT.mode === 'release') { r = inHomePond(w.x, w.y) ? orderRelease(INPUT.kind) : { ok: false, why: '点家门口的池塘，把观赏鱼放进去养着（海鱼不能放进淡水）' }; if (r.ok) say('标记了要放进池塘的' + ((FS.ORN_BY[INPUT.kind] && FS.ORN_BY[INPUT.kind].name) || '')); }
+  else if (INPUT.mode === 'sprinkler') r = sprinklerClick(w); // v5.6.0
   if (r && !r.ok && r.why) say(r.why);
   if (r && r.ok) saveNow();
 }
@@ -2661,6 +2823,7 @@ function advance(dt) {
   let dm = dt * MIN_PER_SEC * SPEED * (S.speed || 1) * mult; // SPEED: ?speed= debug multiplier; S.speed: the bought 1x / 2x / 4x
   while (dm > 0) { const s = Math.min(dm, 1); stepSim(s); dm -= s; }
   glowTick(dt);
+  worksFrame(); // v5.6.0
   updateFx(dt);
   tickWeather(dt);
 }
@@ -2709,7 +2872,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.5.0';
+const GAME_VERSION = '5.6.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2774,6 +2937,7 @@ function snapshot() {
     members: S.members.map(m => ({ id: m.id, water: m.water, bag: Object.assign({}, m.bag), gathered: m.gathered, basket: m.crops.slice() })),
     log: S.log.slice(),
     plots: JSON.parse(JSON.stringify(S.plots || {})), // v5.5.0
+    works: PW.valid(JSON.parse(JSON.stringify(S.works)), S.plots), // v5.6.0
   };
 }
 function restore(s) { // s has been migrated and validated by PFSave
@@ -2791,6 +2955,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   FARMER.wood = s.inventory.wood || 0; FARMER.saplings = Object.assign({ apple: 0, orange: 0 }, s.inventory.saplings);
   resetTreeViews(); S.trees = s.trees ? s.trees.map(t => Object.assign({}, t)) : WD.defaultTrees(); S.orders = (s.orders || []).map(o => Object.assign({}, o)); // a v2 save gets the default forest
   S.plots = PL.validPlots(s.plots); // v5.5.0 (before applyUpgrades: it opens plot fields and puts their modules down)
+  S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
   if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
@@ -2895,6 +3060,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
   NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
+Object.assign(window.__farm, { plotBusy: id => worksBusy(id), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.

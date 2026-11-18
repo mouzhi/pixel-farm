@@ -17,7 +17,7 @@ for (const f of fixtures) ok(`fixture ${f} migrates to v${SAVE.CURRENT}`, () => 
 });
 ok('minimal (older) v1 save gets defaults', () => {
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
-  assert.strictEqual(s.inventory.waterMax, 4); assert.deepStrictEqual(s.prices, { carrot: 1, cabbage: 1, pumpkin: 1, strawberry: 1, watermelon: 1, egg: 1, wool: 1, milk: 1, truffle: 1 }); assert.deepStrictEqual(s.stats.dayEarn, []);
+  assert.strictEqual(s.inventory.waterMax, 4); assert.deepStrictEqual(s.prices, { carrot: 1, cabbage: 1, pumpkin: 1, strawberry: 1, watermelon: 1, egg: 1, wool: 1, milk: 1, truffle: 1, wheat: 1 }); assert.deepStrictEqual(s.stats.dayEarn, []);
 });
 ok('write keeps the previous good save as :bak', () => {
   const m = new Mem(), a = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
@@ -175,7 +175,7 @@ ok('animals: each kind is gated by its region and its building; coop is a home b
   up.sty = 1; up.fold = 1; up.shed = 1; up.coop = 1; for (const id of ['chicken', 'pig', 'sheep', 'cow']) assert(SIM.offer(up, 1e5, id).ok, id);
   const cost = id => SIM.shopItem(id).levels.map(l => l.cost);
   assert.deepStrictEqual([cost('coop'), cost('sty'), cost('fold'), cost('shed')], [[300], [500], [900], [1500]]);
-  assert.deepStrictEqual([cost('chicken').length, cost('pig').length, cost('sheep').length, cost('cow').length], [6, 3, 3, 3]);
+  assert.deepStrictEqual([cost('chicken').length, cost('pig').length, cost('sheep').length, cost('cow').length], [12, 6, 6, 6]);
   for (const id of ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog']) { const c = cost(id); assert(c.every((v, i) => !i || v > c[i - 1]), id); }
   up.chicken = 2; up.cow = 1; up.pig = 1; assert.deepStrictEqual(SIM.effects(up).animals, { chicken: 2, sheep: 0, cow: 1, pig: 1 });
   assert.deepStrictEqual(SAVE.PRODUCT_IDS, AN.PRODUCT_IDS); assert.deepStrictEqual(SAVE.ANIMAL_IDS, AN.KIND_IDS); assert.deepStrictEqual(SAVE.PEN_IDS, AN.PEN_IDS); assert.deepStrictEqual(AN.PEN_IDS, WD.PEN_IDS);
@@ -306,7 +306,7 @@ ok('shop tabs cover every item once', () => {
 ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
   assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);
-  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; for (let i = 1; i < L.length; i++) assert(L[i].cost > L[i - 1].cost, id + ' gets dearer'); }
+  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive'); for (let i = 1; i < L.length; i++) assert(flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
 });
 ok('shop effects: base and fully upgraded', () => {
   const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.speedMax, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, 1, false]);

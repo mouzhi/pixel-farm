@@ -65,15 +65,17 @@
   }
   // v4.7: every building has its own trough; one night for all of them (a pen with no animals keeps its trough as it is)
   const PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
+  // v5.6.0: an animal past the first building's room lives in the second one (a.pen, set by works.js assignPens)
+  const homeOf = a => a.pen || KINDS[a.kind].home;
   function overnightPens(animals, troughs, bonus = 0) {
     const out = { troughs: {}, report: { fed: 0, hungry: 0, made: {} } };
-    for (const pen of PEN_IDS) { const t = (troughs && troughs[pen]) || { feed: 0, water: 0 }, list = animals.filter(a => KINDS[a.kind].home === pen);
+    for (const pen of PEN_IDS) { const t = (troughs && troughs[pen]) || { feed: 0, water: 0 }, list = animals.filter(a => homeOf(a) === pen);
       if (!list.length) { out.troughs[pen] = { feed: t.feed | 0, water: t.water ? 1 : 0 }; continue; }
       const r = overnight(list, t, bonus); out.troughs[pen] = r.trough; out.report.fed += r.report.fed; out.report.hungry += r.report.hungry;
       for (const k in r.report.made) out.report.made[k] = (out.report.made[k] || 0) + r.report.made[k]; }
     return out;
   }
-  const penNeed = (animals, pen) => need(animals.filter(a => KINDS[a.kind].home === pen));
-  const api = { PEN_IDS, overnightPens, penNeed, KINDS, KIND_IDS, PETS, PET_IDS, pet, DOG_WALK, CAT_SEEDS, DOG_JOBS, DOG_SURPRISES, DOG_SURPRISE_CHANCE, isCollie, pickDogJob, rollDogSurprise, PRODUCTS, PRODUCT_IDS, HAY, START_H, HAPPY, SULKY, MAX_READY, CARE, animal, need, yieldOf, mood, overnight };
+  const penNeed = (animals, pen) => need(animals.filter(a => homeOf(a) === pen));
+  const api = { PEN_IDS, overnightPens, penNeed, homeOf, KINDS, KIND_IDS, PETS, PET_IDS, pet, DOG_WALK, CAT_SEEDS, DOG_JOBS, DOG_SURPRISES, DOG_SURPRISE_CHANCE, isCollie, pickDogJob, rollDogSurprise, PRODUCTS, PRODUCT_IDS, HAY, START_H, HAPPY, SULKY, MAX_READY, CARE, animal, need, yieldOf, mood, overnight };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFAnimals = api;
 })(typeof window !== 'undefined' ? window : globalThis);

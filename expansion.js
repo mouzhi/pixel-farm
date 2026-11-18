@@ -100,12 +100,12 @@
     // trail barrier: a red-and-cream bar between two posts
     const barrier = B(18, 3, 10, (x, y, z) => (x <= 1 || x >= 16) ? Wd[2] : (z >= 6 && z <= 8) ? ((x >> 2) & 1 ? Rf[2] : Ac[0]) : null);
     // water wheel: axle east-west, wheel in the y-z plane. full: rim, spokes and paddles; frame: only the posts and axle
-    const wheel = full => B(8, 24, 24, (x, y, z) => { const dy = y - 11.5, dz = z - 12, r = Math.hypot(dy, dz);
+    const wheel = (full, turn = 0) => B(8, 24, 24, (x, y, z) => { const dy = y - 11.5, dz = z - 12, r = Math.hypot(dy, dz);
       if ((x === 0 || x === 7) && Math.abs(dy) < 1.5 && z <= 12) return Wd[1];                      // the two posts
       if (z === 12 && Math.abs(dy) < 1 && x > 0 && x < 7) return St[1];                               // axle
       if (!full || x < 2 || x > 5) return null;
       if (r > 9.5 && r < 11.2) return Wd[3];                                                          // rim
-      const ang = Math.atan2(dz, dy), k = ((ang / (Math.PI / 4)) % 1 + 1) % 1;
+      const ang = Math.atan2(dz, dy) + turn, k = ((ang / (Math.PI / 4)) % 1 + 1) % 1; // turn: v5.6.0 frames of a turning wheel
       if (r < 9.6 && (k < 0.12 || k > 0.88)) return Wd[2];                                            // spokes
       if (r >= 11.2 && r < 12 && (k < 0.2 || k > 0.8)) return Wd[4];                                  // paddles
       return null; });
@@ -136,7 +136,7 @@
       if (y <= 1 && z < 9 && x > 1 && x < 20) return z % 3 === 0 ? Wd[2] : Wd[3]; return null; });
     const trough = B(14, 6, 5, (x, y, z) => { if (x === 0 || x === 13 || y === 0 || y === 5 || z === 0) return Wd[2]; return z === 3 ? Wt[3] : null; });
     const board = B(14, 3, 14, (x, y, z) => ((x === 2 || x === 11) && z < 8) ? Wd[2] : (z >= 7 && z <= 13 && y === 1) ? (z === 7 || z === 13 || x === 0 || x === 13 ? Wd[2] : Wd[4]) : null);
-    MD = { ledges: [ledge(3), ledge(11), ledge(29)], boulders: [boulder(5), boulder(17)], abut, rail, barrier, wheelFull: wheel(true),
+    MD = { ledges: [ledge(3), ledge(11), ledge(29)], boulders: [boulder(5), boulder(17)], abut, rail, barrier, wheelFull: wheel(true), wheelTurn: [1, 2].map(i => wheel(true, i * Math.PI / 12)), // v5.6.0: a repaired wheel turns
       cottages: [cottage(Rf[2]), cottage(Rf[3]), cottage(St[1])], townGate, slide, sandbox, swing, shelter, trough, board };
     return MD;
   }
@@ -180,13 +180,13 @@
   // put each bought plot's module things down (and take a changed module's away); idempotent
   function sync(force) {
     if (!mounted) return; const plots = S.plots || {}, graze = !!(S.eff && S.eff.graze);
-    const key = JSON.stringify(plots) + graze; if (!force && key === lastKey) return; lastKey = key;
+    const key = JSON.stringify(plots) + graze + (S.works ? S.works.penHost : ''), host = S.works ? S.works.penHost : null; if (!force && key === lastKey) return; lastKey = key;
     if (GRAZED !== graze) { GRAZED = graze; const r = PL.GRAZE.rect; X.buildGroundBase && X.buildGroundBase([r[0] - 6, r[1] - 6, r[2] + 6, r[3] + 6]); }
     for (const p of PL.PLOTS) { const o = plotPropsOf(p.id), own = plots[p.id], mod = own ? own.mod : null;
-      if (o.mod === mod && !force) continue;
+      if (o.mod === mod && o.host === (host === p.id) && !force) continue; o.host = host === p.id; // v5.6.0: a pasture that hosts the second pens drops its shelter
       for (const q of o.list) { removeFrom(X.props, q); removeFrom(X.billboards, q); } o.list.length = 0;
       for (const d of o.decals) removeFrom(X.decals, d); o.decals.length = 0;
-      o.mod = mod; if (mod) place(p, mod, o); }
+      o.mod = mod; o.wheel = null; if (mod) place(p, mod, o); }
     // bridge deck
     if (plots.bridge && !bridgeDeck.length) { const B = PL.BRIDGE; for (let y = B.y0 + 4; y <= B.y1 - 4; y += 8) bridgeDeck.push(X.addProp(X.pierDeck, B.x, y, 0, { xp: 1 }), X.addProp(MD.rail, B.x - 4.2, y, 0, { xp: 1 }), X.addProp(MD.rail, B.x + 4.2, y, 0, { xp: 1 })); }
     if (!plots.bridge && bridgeDeck.length) { for (const q of bridgeDeck) removeFrom(X.props, q); bridgeDeck.length = 0; }
@@ -201,10 +201,10 @@
     const [x0, y0, x1, y1] = p.rect, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2, add = (m, x, y, rot = 0, extra) => { const q = X.addProp(m, x, y, rot, Object.assign({ xp: 1 }, extra)); o.list.push(q); return q; };
     const fr = X.mulberry32([...p.id].reduce((a, c) => a * 31 + c.charCodeAt(0), 7) >>> 0);
     if (mod === 'field' && p.barrel) add(X.barrelModel, p.barrel.x, p.barrel.y);
-    if (mod === 'pasture') { add(MD.shelter, x0 + 18, y0 + 14, 0); add(MD.trough, x1 - 18, y0 + 12, 0); }
+    if (mod === 'pasture' && !(S.works && S.works.penHost === p.id)) { add(MD.shelter, x0 + 18, y0 + 14, 0); add(MD.trough, x1 - 18, y0 + 12, 0); }
     if (mod === 'workshop') { add(MD.board, cx, y0 + 8, 0); add(X.crateModel, x0 + 12, y1 - 10, 0.2); add(X.crateModel, x0 + 20, y1 - 9, 1.1); add(X.logsModel, x1 - 16, y1 - 10, 0.15); }
     if (mod === 'road') { add(MD.board, x0 + 10, 56, 0); }
-    if (mod === 'dam' && p.wheel) add(MD.wheelFull, p.wheel.x, p.wheel.y, 0, { big: 1 });
+    if (mod === 'dam' && p.wheel) o.wheel = add(MD.wheelFull, p.wheel.x, p.wheel.y, 0, { big: 1 });
     if (mod === 'woodland') syncWoodland(p.id, true);
     if (mod === 'playground') for (const s of PL.playSpots({ [p.id]: { mod } }).filter(s => s.plot === p.id)) {
       if (s.kind === 'slide') add(MD.slide, s.x, s.y, 0); if (s.kind === 'sandbox') add(MD.sandbox, s.x, s.y, 0); if (s.kind === 'swing') add(MD.swing, s.x, s.y, 0); }
@@ -241,7 +241,7 @@
 
   // ---------- the family and the animals ----------
   // sheep go out to the meadow in the day once it is bought; null keeps the pen's own patch
-  function roamOf(a, T) { if (a.kind !== 'sheep' || !(S.eff && S.eff.graze) || !PL.grazeHours(T)) return null; const r = PL.GRAZE.rect; return [r[0] + 6, r[1] + 6, r[2] - 6, r[3] - 6]; }
+  function roamOf(a, T) { if (a.kind !== 'sheep' || (a.pen && a.pen !== 'fold') || !(S.eff && S.eff.graze) || !PL.grazeHours(T)) return null; const r = PL.GRAZE.rect; return [r[0] + 6, r[1] + 6, r[2] - 6, r[3] - 6]; }
 
   // ---------- buying and re-zoning (rules: plots.js offer / rezoneOffer) ----------
   // bought plot ids join S.eff.regions, so the old region machinery (gates, choppable trees, saplings, the ground) just works
@@ -272,6 +272,7 @@
   }
   function rezonePlot(id, mod) {
     const o = PL.rezoneOffer(S.plots, id, mod, S.coins, X.FARMER.wood); if (!o) return { ok: false, reason: 'unknown' }; if (!o.ok) return o;
+    const busy = X.plotBusy && X.plotBusy(id); if (busy) return Object.assign({}, o, { ok: false, reason: 'busy', why: busy }); // v5.6.0: workshops, hives or second pens stand on it
     pay(o); const back = clearPlot(id, o.from); S.plots[id] = { mod, day: S.day };
     S.coins += back.gold; X.FARMER.wood = Math.min(X.woodCap(), (X.FARMER.wood || 0) + back.wood);
     const p = o.plot; X.log(`「${p.name}」从${PL.MODULES[o.from].name}改成了${PL.MODULES[mod].name}（${o.cost} 金）${back.gold ? '，地里的庄稼折了 ' + back.gold + ' 金' : ''}${back.wood ? '，砍下的树得了 ' + back.wood + ' 木材' : ''}`);
@@ -300,6 +301,8 @@
   // a module change keeps the plot open, so applyUpgrades does not repaint: this does
   function repaint(id) { const r = dirtyRect([], [id]); if (r && X.buildGroundBase) X.buildGroundBase(r); }
 
-  const api = { ground, mount, applyEff, dirtyRect, repaint, buyPlot, rezonePlot, sync, drawLocks, minimap, roamOf, playSpots: () => PL.playSpots(S ? S.plots : {}), models: () => MD };
+  // v5.6.0: the water wheel prop of each 动力坝 plot (works-art.js swaps its frames while it turns)
+  const wheelProp = id => (plotProps[id] && plotProps[id].wheel) || null;
+  const api = { ground, mount, applyEff, dirtyRect, repaint, buyPlot, rezonePlot, sync, drawLocks, minimap, roamOf, playSpots: () => PL.playSpots(S ? S.plots : {}), models: () => MD, wheelProp };
   root.PFExpand = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -25,11 +25,11 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.5.0, saveVersion is 11', async ctx => {
+  await test('version 5.6.0, saveVersion is 12', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => ({ v: __farm.version, sv: __farm.snapshot().saveVersion }));
-    assert.strictEqual(r.v, '5.5.0');
-    assert.strictEqual(r.sv, 11);
+    assert.strictEqual(r.v, '5.6.0');
+    assert.strictEqual(r.sv, 12);
     assert.deepStrictEqual(p.errs, []);
   });
 
@@ -50,7 +50,7 @@ async function test(name, fn) {
       const price = __farm.surprise.priceOf({ type: 'pumpkin', glow: 1 }, 85);
       return { crop, price, sv: snap.saveVersion };
     });
-    assert.strictEqual(r.sv, 11);
+    assert.strictEqual(r.sv, 12);
     assert.strictEqual(r.crop.glow, 1);
     assert.strictEqual(r.price, 255);
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
