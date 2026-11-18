@@ -1,4 +1,4 @@
-// Unit checks for codex.js, fish food weights and dog surprises (v5.4.4): node tools/codex-test.js
+// Unit checks for codex.js, fish food weights and dog surprises (v5.4.2): node tools/codex-test.js
 'use strict';
 const assert = require('assert');
 const CX = require('../codex.js'), FS = require('../fish.js'), AN = require('../animals.js'), SAVE = require('../save.js'), ICN = require('../codex_icons.js');
