@@ -15,7 +15,7 @@
   const KID_AFTER = 7, KID_GAP = 10;               // days she has lived here before the first child; days between children
   const BABY_DAYS = 5, CHILD_DAYS = 14;            // age (days) when a baby becomes a child, and a child a teen
   // light chores a child can do; a teen does everything an adult does except buying at the market
-  const CHILD_KINDS = ['collect', 'pet', 'petpet', 'pick', 'feed', 'tidy', 'weed', 'store'];
+  const CHILD_KINDS = ['collect', 'pet', 'petpet', 'pick', 'feed', 'tidy', 'weed', 'store', 'feedpond', 'release'];
   const emptyToday = () => ({ day: 0, chat: 0, gift: 0, giftName: '', sales: 0 });
   const empty = () => ({ love: 0, met: 0, chatDay: 0, gifts: 0, sales: 0, moved: 0, kids: [], today: emptyToday() });
   const itemType = it => (it && typeof it === 'object') ? it.type : it; // v5.1: a basket slot may be a surprise object
@@ -58,7 +58,7 @@
   // one in an area somebody else owns -HELP (still well above fishing or resting, so nobody idles while there is work),
   // anything else 0. On his own the farmer is unaffected.
   const AREA_OF = { harvest: 'field', water: 'field', plant: 'field', fetch: 'field', buy: 'field', weed: 'field', clear: 'field', till: 'field',
-    chop: 'wood', transplant: 'wood', feed: 'animal', trough: 'animal', collect: 'animal', pet: 'animal', hay: 'animal', petpet: 'pets', pick: 'orchard', tidy: 'yard' };
+    chop: 'wood', transplant: 'wood', feed: 'animal', trough: 'animal', collect: 'animal', pet: 'animal', hay: 'animal', petpet: 'pets', pick: 'orchard', tidy: 'yard', feedpond: 'yard', release: 'yard' };
   const AREAS = { farmer: ['field', 'wood'], partner: ['animal', 'coop', 'orchard'],
     kid0: { child: ['yard', 'pets'], teen: ['field', 'yard', 'pets'] }, kid1: { child: ['coop', 'pets'], teen: ['animal', 'coop', 'orchard'] } };
   const OWN = 15, HELP = 18;

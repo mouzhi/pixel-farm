@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.3.2</title>
+<title>像素堆叠 · 放置农场 v5.4.0</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -54,7 +54,7 @@
   .meter .ticks{position:absolute;left:6px;top:0;width:1px;height:5px;background:#10202a;box-shadow:6px 0 #10202a,12px 0 #10202a,18px 0 #10202a,24px 0 #10202a,30px 0 #10202a,36px 0 #10202a;pointer-events:none}
   .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
   .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
-  #menuBtn,#shopBtn,#storeBtn{position:relative}
+  #menuBtn,#shopBtn,#storeBtn,#codexBtn{position:relative}
   #speed{position:relative;display:flex;gap:4px}#speed[hidden]{display:none}
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
   #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
@@ -90,7 +90,7 @@
   #minimap{position:relative;right:auto;top:auto;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
   #mapBtn{position:relative}
   #tools{position:relative;display:flex;gap:4px}#tools[hidden]{display:none}
-  #shop,#menu,#store{z-index:3}
+  #shop,#menu,#store,#codex{z-index:3}
   #store{position:relative;right:auto;top:auto;bottom:auto;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
   #store .shead .wallet{display:inline-flex;align-items:center;gap:4px;color:#ffd76a}
@@ -113,12 +113,35 @@
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip b, #loveVal{color:#ffd76a}
-  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
   /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
   @media (max-width:720px){
-    #shop,#store,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
+    #shop,#store,#codex,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
     #hud .row.res{gap:6px 10px}
   }
+
+  #codex{position:relative;right:auto;top:auto;bottom:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
+  #codex .shead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}#codex .shead b:first-child{font-size:16px}#codex .shead .x{margin-left:auto;padding:0 7px}
+  #codex .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
+  #codex .tabs .pbtn{padding:2px 8px;font-size:12px}
+  #codex .sec{font-size:12px;opacity:.7;margin:8px 0 4px}
+  #codex .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:5px}
+  #codex .cell{background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:4px 2px 3px;text-align:center;cursor:pointer;min-height:64px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+  #codex .cell .nm{font-size:11px;font-weight:500;line-height:1.2}
+  #codex .cell.locked{opacity:.55;cursor:default}
+  #codex .cell.on{border-color:#e8c78a}
+  #codex .sw{width:16px;height:10px;image-rendering:pixelated;display:block}
+  #codex .q{font-size:18px;color:#8a6a44;line-height:1}
+  #codex .detail{font-weight:500;font-size:12px;opacity:.9;margin:6px 0 2px;min-height:1.4em}
+  #codex .cards{display:flex;flex-direction:column;gap:5px}
+  #codex .card{display:flex;align-items:flex-start;gap:8px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;padding:5px 6px}
+  #codex .card.locked{opacity:.55}
+  #codex .card .nm{font-weight:600}
+  #codex .card .hint{font-weight:500;font-size:12px;opacity:.8}
+  #codex .card .when{font-size:11px;color:#ffd76a;margin-left:auto;flex:none;white-space:nowrap}
+  #codex .badge{color:#ffd76a;font-size:14px;flex:none}
+  #codex .later{font-size:11px;opacity:.7}
+  #codex .empty{opacity:.7;font-weight:500;padding:4px 2px}
 </style>
 </head>
 <body>
@@ -144,18 +167,20 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.3.2 · 农夫自己去林场砍树、伐木小屋（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.4.0 · 图鉴、狗的日常和池塘观赏鱼（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
       <div id="speed" hidden></div>
       <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
+      <button id="codexBtn" class="pbtn" title="图鉴（J）">图鉴 J</button>
       <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
       <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
     </div>
     <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
     <div id="shop" class="panel" hidden></div>
     <div id="store" class="panel" hidden></div>
+    <div id="codex" class="panel" hidden></div>
     <div id="menu" class="panel" hidden></div>
   </div>
   <div id="inv" class="panel"></div>
@@ -177,6 +202,7 @@
 <script src="fish.js"></script>
 <script src="family.js"></script>
 <script src="surprise.js"></script>
+<script src="codex.js"></script>
 <script src="save.js"></script>
 <script src="playlog.js"></script>
 <script src="fx.js"></script>

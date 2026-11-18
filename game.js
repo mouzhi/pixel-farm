@@ -10,6 +10,7 @@ const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // forest margin around the home farm (world units)
 const AN = window.PFAnimals; // v4.5: animal care rules
 const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
+const BOOK = window.PFCodex; // v5.4.0: the collection book, achievements and milestones
 const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
@@ -596,6 +597,9 @@ const S = {
   animals: [], troughs: Object.fromEntries(AN.PEN_IDS.map(k => [k, { feed: 0, water: 0 }])), hay: 0, // v4.5/v4.7: animals, one trough per building, hay bales in the barn
   catches: [], fishGold: 0, // v4.6: recent catches (id, name, gold, water, day) and gold earned from fish this session
   family: FAM.empty(), members: [], // v5.0: 阿禾 and the children (family.js rules); members: the family out working (runtime actors)
+  fishFood: 0, ornament: { koi: 0, goldfish: 0 }, pondFish: [], pondFed: 0, // v5.4.0: fish food and ornamental pond fish
+  codex: BOOK.emptyCodex(), achievements: [], milestones: [], streaks: BOOK.emptyStreaks(),
+  doorGift: null, loose: [], dogPlan: null,
 };
 Object.assign(S.prices, { egg: 1, wool: 1, milk: 1, truffle: 1 }); // animal products drift like crops
 const PASTURE = WD.region('pasture'), PENS = WD.PENS, COOP_DOOR = PENS.coop.door; // v4.7: each kind lives by its own building (world.js PENS)
@@ -604,7 +608,7 @@ const penBox = P => [Math.min(P.roam[0], P.bld.x - 16), Math.min(P.roam[1], P.bl
 const anyPen = () => AN.PEN_IDS.some(k => S.eff[k]);
 const AV = new Map(); // animal id -> its view (position, walk target, pose); positions are not saved
 const PETS_LIVE = [], PV = new Map(); // v4.7: the pets (from the shop levels, not saved) and their views
-const FARMER = S.farmer; // the player's farmer: the storehouse (wood, saplings) is his, pets follow him, the HUD shows his job
+const FARMER = S.farmer; // the player's farmer: the storehouse (wood, saplings) is his, the HUD shows his job
 let F = FARMER;          // v5.0: whoever is choosing or doing a task right now (stepSim points it at each family member in turn)
 const particles = [];
 let groundDirty = true;
@@ -641,7 +645,7 @@ const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so 
 // one-at-a-time errand like buying hay) is claimed, so two people never walk to the same tile. Each person has their own
 // walking speed and basket; children only take light jobs (family.js canDo).
 const BASK = () => F === FARMER ? S.eff.basket : Math.max(4, Math.round(S.eff.basket * (F.bmul || 1)));
-const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish'];
+const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond'];
 let CLAIM = new Set();
 // v5.3 roles: while one person picks a job, CROWD holds where the others stand and where they are heading. A target near
 // them costs up to CROWD_K px of extra walk per px inside CROWD_R (rngNear) and a quarter of that in score (chooseTask), so
@@ -678,7 +682,22 @@ function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   if (typeof syncLumberProps === 'function') syncLumberProps();
   markNavDirty();
 }
-function buy(id) { // the player's one action: spend gold on the next level of a shop item
+function buy(id) { // the player's one action: spend gold on the next level of a shop item, or a stall consumable (v5.4.0 fish food / goldfish)
+  if (id === 'fishfood') {
+    if (S.fishFood >= FS.FOOD.stock) return { ok: false, reason: 'maxed' };
+    if (S.coins < FS.FOOD.price) return { ok: false, reason: 'short', short: FS.FOOD.price - S.coins };
+    S.coins -= FS.FOOD.price; S.fishFood++; emit('purchase', { item: 'fishfood', n: 1, gold: FS.FOOD.price, who: 'player' });
+    log(`买了 1 包鱼食（${FS.FOOD.price} 金），放进仓库`); popText(FARMER.x, FARMER.y, 22, '-' + FS.FOOD.price, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#fff2a8'], 8, 'coin');
+    noteProgress(); return { ok: true, consumable: true };
+  }
+  if (id === 'goldfish') {
+    const price = FS.ORN_BY.goldfish.price, held = (S.ornament.goldfish || 0) + S.pondFish.filter(f => f.kind === 'goldfish').length;
+    if (held >= FS.POND_CAP) return { ok: false, reason: 'maxed' };
+    if (S.coins < price) return { ok: false, reason: 'short', short: price - S.coins };
+    S.coins -= price; S.ornament.goldfish = (S.ornament.goldfish || 0) + 1; emit('purchase', { item: 'goldfish', n: 1, gold: price, who: 'player' });
+    log(`买了一条金鱼（${price} 金），可以放到家门口的池塘里养着`); popText(FARMER.x, FARMER.y, 22, '-' + price, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#e8a02a'], 8, 'coin');
+    noteProgress(); return { ok: true, consumable: true };
+  }
   const o = SIM.offer(S.up, S.coins, id, FARMER.wood);
   if (!o || o.maxed) return { ok: false, reason: 'maxed' };
   if (o.locked) return { ok: false, reason: 'locked', needs: o.locked };
@@ -695,6 +714,7 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
   if (PENS[id]) for (let i = yard.length - 1; i >= 0; i--) { const c = yard[i], P = PENS[id]; if (Math.hypot(c.x - P.bld.x, c.y - P.bld.y) < 16 || Math.hypot(c.x - P.trough.x, c.y - P.trough.y) < 10) yard.splice(i, 1); } // builders tidy the spot
   noteLog('purchase', { id, name: o.item.name, label: o.level.label, cost: o.cost, region: !!o.item.region, day: S.day, t: S.t, createdAt: S.createdAt, now: Date.now() });
+  noteProgress();
   return { ok: true, offer: o };
 }
 
@@ -744,6 +764,11 @@ function board() {
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0);
   if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
+  // v5.4.0: sprinkle fish food, release an ornamental fish the player flagged, pick up a truffle a dog found
+  if (S.fishFood > 0 && S.pondFed !== S.day && T < 18 * 60) post('feedpond', 28, FS.POND_SPOT.stand, feedPondTask);
+  const rel = S.orders.filter(o => o.type === 'release');
+  if (rel.length && S.pondFish.length < FS.POND_CAP) { const o = rel[0]; post('release', 64, FS.POND_SPOT.stand, () => releaseTask(o)); }
+  if (S.loose && S.loose.length) { const it = S.loose[0]; post('collect', 50, { x: it.x, y: it.y }, () => looseTask(it), it, 'yard'); }
   // v4.5/v4.7: the animals. Hay into each building's trough in the morning, water, collect eggs / wool / milk / truffles, a pat each
   if (S.animals.length) { const need = AN.need(S.animals), space = BASK() - F.crops.length;
     const late = T >= 14 * 60 ? 40 : 0; // a far pen loses to field work all day on a big farm; by afternoon the night's feed and water win anyway
@@ -808,6 +833,7 @@ function harvestTask(t) {
     const crop = t0.crop, ty = crop.type, c = SIM.CROPS[ty], item = SU.harvestItem(crop), big = !!crop.giant;
     const cx = big ? t0.x + TILE / 2 : t0.x, cy = big ? t0.y + TILE / 2 : t0.y;
     F.crops.push(item); groundDirty = true;
+    const ck = BOOK.itemKey(item); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: /rare:/.test(ck), sawGiant: !!item.giant || /giant:/.test(ck), sawGiantPumpkin: item.giant && ty === 'pumpkin' }); }
     burst(cx, cy, big ? 12 : 4, ['#f0a030', '#8fd35a', '#ffffff', '#fff2a8'], big ? 16 : 8, big ? 'spark' : 'harvest');
     popText(cx, cy, 12, big ? '巨大!' : '+1', '#ffffff');
     if (big) { hearts(cx, cy, 16); say(F === FARMER ? `头顶着巨大的${c.name}，开心地去卖！` : `${F.name}头顶着巨大的${c.name}，开心地去卖！`); }
@@ -956,7 +982,7 @@ function troughTask(pen) { const P = PENS[pen];
 }
 function eggTask() {
   return { label: '正在鸡舍捡鸡蛋', to: COOP_DOOR, tile: PENS.coop.bld, dur: 6, fx: 'seed', pose: 'pull', done: () => {
-    let n = 0, rare = []; for (const a of S.animals) if (a.kind === 'chicken') while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; const it = SU.rollProduct('egg', rand); F.crops.push(it); n++; const ev = SU.productToast(it); if (ev) rare.push(ev); }
+    let n = 0, rare = []; for (const a of S.animals) if (a.kind === 'chicken') while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; const it = SU.rollProduct('egg', rand); F.crops.push(it); n++; const ev = SU.productToast(it); if (ev) rare.push(ev); const ck = BOOK.itemKey(it); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: true }); } }
     if (n) { popText(COOP_DOOR.x, COOP_DOOR.y, 16, '+' + n, '#ffffff'); burst(COOP_DOOR.x, COOP_DOOR.y, 6, [Ac[0], '#fff2a8'], 5, 'spark'); log(`在鸡舍捡了 ${n} 个鸡蛋`); }
     for (const ev of rare) surpriseNote(ev, COOP_DOOR.x, COOP_DOOR.y); } };
 }
@@ -967,7 +993,7 @@ function milkTask(a) {
   const at = v ? { x: v.x - 9 * (v.flip ? -1 : 1), y: v.y + 1 } : spot;
   return { label: W0[0], to: at, tile: v || spot, an: a, dur: W0[1], fx: W0[2], pose: 'pull', done: () => {
     if (v) v.hold = 0; let n = 0; const p = AN.KINDS[a.kind].product;
-    let rare = []; while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; const it = SU.rollProduct(p, rand); F.crops.push(it); n++; const ev = SU.productToast(it); if (ev) rare.push(ev); }
+    let rare = []; while (a.ready > 0 && F.crops.length < BASK()) { a.ready--; const it = SU.rollProduct(p, rand); F.crops.push(it); n++; const ev = SU.productToast(it); if (ev) rare.push(ev); const ck = BOOK.itemKey(it); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: true }); } }
     if (n) { const pv = v || spot; popText(pv.x, pv.y, 18, '+' + n, '#ffffff');
       if (a.kind === 'pig') burst(pv.x + 6, pv.y, 2, [Wd[1], Wd[2], '#6e452a'], 8, 'dirt'); else burst(pv.x, pv.y, 6, [Ac[0], St[3]], a.kind === 'cow' ? 8 : 10, a.kind === 'cow' ? 'drop' : 'leaf');
       log(W0[3](n)); for (const ev of rare) surpriseNote(ev, pv.x, pv.y); } } };
@@ -1020,6 +1046,9 @@ function storehouse() {
     baskets, basketGold,
     wood: { n: wood, cap, spare, unit: WD.WOOD.price, gold: woodGold },
     hay: { n: S.hay, unit: AN.HAY.price },
+    fishFood: { n: S.fishFood, unit: FS.FOOD.price },
+    ornament: FS.ORNAMENTAL.filter(o => (S.ornament[o.id] || 0)).map(o => ({ id: o.id, kind: 'ornament', name: o.name, n: S.ornament[o.id] || 0 })),
+    pondFish: S.pondFish.length,
     saplings: WD.FRUIT_IDS.map(k => ({ id: k, kind: 'sapling', name: WD.FRUIT[k].name + '树苗', n: (FARMER.saplings[k] || 0) })).filter(r => r.n),
     sellGold: basketGold + woodGold,
   };
@@ -1089,8 +1118,67 @@ function sellTask() {
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
     if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops);
       if (p.cost > 0) { emit('purchase', { item: 'seeds', n: seedCount(p.buy), gold: p.cost }); S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; noteLog('spend', 'seeds', p.cost); log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
+    noteProgress();
   } };
 }
+
+// v5.4.0: fish food, ornamental fish, a truffle a dog found
+function ornamentHeld(kind) {
+  if (kind === 'goldfish') return (S.ornament && S.ornament.goldfish) || 0;
+  if (kind === 'koi') {
+    let n = 0;
+    const count = list => { for (const it of list) if (SU.itemType(it) === 'koi') n++; };
+    count(FARMER.crops); for (const m of S.members) count(m.crops);
+    return n;
+  }
+  return 0;
+}
+function takeOrnament(kind) {
+  if (kind === 'goldfish') { if (!((S.ornament.goldfish || 0) > 0)) return false; S.ornament.goldfish--; return true; }
+  if (kind === 'koi') {
+    const bags = [FARMER].concat(S.members);
+    for (const a of bags) { const i = a.crops.findIndex(it => SU.itemType(it) === 'koi'); if (i >= 0) { a.crops.splice(i, 1); return true; } }
+  }
+  return false;
+}
+function placePondFish(kind) {
+  if (S.pondFish.length >= FS.POND_CAP) return null;
+  const ang = petRng() * Math.PI * 2, r = 0.25 + petRng() * 0.45;
+  const f = { id: 'pf' + (1 + S.pondFish.reduce((m, q) => Math.max(m, parseInt(String(q.id).replace(/\D/g, ''), 10) || 0), 0)),
+    kind, day: S.day, x: POND.x + Math.cos(ang) * POND.rx * r, y: POND.y + Math.sin(ang) * POND.ry * r, a: ang, v: 0.35 + petRng() * 0.4 };
+  S.pondFish.push(f); if (FS.isFish(kind)) BOOK.record(S.codex, BOOK.keyFish(kind), S.day);
+  return f;
+}
+function feedPondTask() {
+  return { kind: 'feedpond', label: '正在给池塘撒鱼食', to: FS.POND_SPOT.stand, dur: 6, fx: 'water', done: () => {
+    if (S.fishFood <= 0 || S.pondFed === S.day) return;
+    S.fishFood--; S.pondFed = S.day;
+    burst(POND.x, POND.y, 6, ['#e8c78a', '#8cc6dc', '#fff6dc'], 8, 'drop');
+    log(`${F === FARMER ? '农夫' : F.name}给池塘撒了一把鱼食（还剩 ${S.fishFood} 包）`);
+  } };
+}
+function releaseTask(o) {
+  const name = (FS.ORN_BY[o.kind] || {}).name || o.kind;
+  return { kind: 'release', label: `正在把${name}放进池塘`, to: FS.POND_SPOT.stand, dur: 6, fx: 'water', done: () => {
+    if (!S.orders.includes(o) || S.pondFish.length >= FS.POND_CAP) return;
+    if (!takeOrnament(o.kind)) { S.orders = S.orders.filter(q => q !== o); return; }
+    S.orders = S.orders.filter(q => q !== o);
+    const f = placePondFish(o.kind);
+    if (f) { const col = (FS.ORN_BY[o.kind] || {}).col || '#e06a2c'; burst(POND.x + 4, POND.y, 8, [col, '#8cc6dc', '#ffffff'], 10, 'splash');
+      log(`${F === FARMER ? '农夫' : F.name}把一条${name}放进了家门口的池塘`); noteProgress({ pondCount: S.pondFish.length }); }
+  } };
+}
+function looseTask(it) {
+  return { label: '正在捡狗发现的松露', to: { x: it.x - 6, y: it.y + 2 }, tile: it, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
+    const i = S.loose.indexOf(it); if (i < 0 || F.crops.length >= BASK()) return;
+    S.loose.splice(i, 1); const item = SU.rollProduct('truffle', rand); F.crops.push(item);
+    const ck = BOOK.itemKey(item); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: true }); }
+    const ev = SU.productToast(item); if (ev) surpriseNote(ev, it.x, it.y); else popText(it.x, it.y, 12, '+1', '#fff6dc');
+    log(`${F === FARMER ? '农夫' : F.name}捡到狗发现的松露`);
+  } };
+}
+function inHomePond(x, y) { const dx = (x - POND.x) / (POND.rx + 6), dy = (y - POND.y) / (POND.ry + 6); return dx * dx + dy * dy <= 1; }
+
 function fishSpot(water) { if (water === 'sea') { const r = WD.region('coast'); return r.fish; } return FS.POND_SPOT; }
 const FISH_FAMILY_CAP = 75; // game minutes of fishing a day once the family works too
 function fishTask(water) {
@@ -1106,32 +1194,35 @@ function fishTick(k) {
   const labels = { cast: k.water === 'sea' ? '正在码头抛竿' : '正在池塘边抛竿', wait: '静静等鱼上钩', bite: '有鱼咬钩了！', reel: '正在收线', show: '把鱼收进篮子' };
   k.label = labels[k.phase]; if (F === FARMER) S.label = k.label;
   if (prev !== 'bite' && k.phase === 'bite') {
-    if (!k.result) k.result = FS.roll(k.water, S.eff.rod, rand);
+    if (!k.result) k.result = FS.roll(k.water, S.eff.rod, rand, k.water === 'pond' && S.pondFed === S.day);
     burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#c8e8f0', '#ffffff'], 10, 'splash');
   }
   if (prev !== 'reel' && k.phase === 'reel' && k.result && !k.result.miss && FS.isRare(k.result.fish) && window.PF_FX)
     PF_FX.play('glow', k.hook.x, k.hook.y, 6);
 }
 function fishDone() {
-  const k = F.task, r = k.result || FS.roll(k.water, S.eff.rod, rand);
+  const k = F.task, r = k.result || FS.roll(k.water, S.eff.rod, rand, k.water === 'pond' && S.pondFed === S.day);
   if (r.miss) { log('浮标动了一下，没钓上来'); popText(k.hook.x, k.hook.y, 8, '空钩', '#c8e8f0'); burst(k.hook.x, k.hook.y, 2, ['#8cc6dc', '#ffffff'], 4, 'splash'); return; }
   if (F.crops.length >= BASK()) { log('篮子满了，这条鱼只好放回去'); return; }
   F.crops.push(r.fish);
   S.catches.unshift({ id: r.fish, name: r.name, gold: r.gold, water: k.water, day: S.day }); S.catches.length = Math.min(12, S.catches.length);
+  BOOK.record(S.codex, BOOK.keyFish(r.fish), S.day);
+  noteProgress({ caughtKoi: r.fish === 'koi', caughtSword: r.fish === 'sword' });
   log(`钓到一条${r.name}（${r.gold} 金）`); popText(F.x, F.y, 16, r.name, r.col); burst(F.x, F.y, 8, r.rare ? [r.col, '#fff2a8', '#ffffff', '#ffd76a'] : [r.col, '#ffffff'], r.rare ? 10 : 6, 'spark');
 }
 
 // ---------- simulation ----------
 function overnight() {
   noteLog('closeDay', logSnap());
+  noteProgress(); // catch a 2,000-gold day before todayEarn is cleared
   S.day++; S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
   let grew = 0; const justRipe = [];
   for (const t of tiles) { // a crop grows one day overnight, only if it was watered that day
     if (t.crop && t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.crop.age++; grew++; const st = SIM.stageOf(t.crop); if (st === 3 && t.crop.stage !== 3) { justRipe.push(t); burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); } t.crop.stage = st; }
     t.watered = false;
   }
-  for (const t of SU.rollGlow(justRipe, SIM.ripe, rand)) { const ev = SU.glowToast(t, cropNames()); surpriseNote(ev, t.x, t.y); t.crop.stage = 3; }
-  for (const t of SU.rollGiant(tiles, SIM.ripe, rand)) { const ev = SU.giantToast(t, cropNames()); surpriseNote(ev, t.x + TILE / 2, t.y + TILE / 2); t.crop.stage = 3; groundDirty = true; }
+  for (const t of SU.rollGlow(justRipe, SIM.ripe, rand)) { const ev = SU.glowToast(t, cropNames()); surpriseNote(ev, t.x, t.y); t.crop.stage = 3; BOOK.record(S.codex, BOOK.keyGlow(t.crop.type), S.day); }
+  for (const t of SU.rollGiant(tiles, SIM.ripe, rand)) { const ev = SU.giantToast(t, cropNames()); surpriseNote(ev, t.x + TILE / 2, t.y + TILE / 2); t.crop.stage = 3; groundDirty = true; BOOK.record(S.codex, BOOK.keyGiant(t.crop.type), S.day); noteProgress({ sawGiant: true, sawGiantPumpkin: t.crop.type === 'pumpkin' }); }
   let n = 0; tiles.forEach(t => { if (t.open && !t.crop && spawnClutter(t, 0.1, 0.14)) n++; });
   const before = yard.length, add = 2 + Math.floor(yardRng(S.day * 668265263)() * 3); // 2..4, without consuming rand()
   if (yard.length < YARD_CAP) fillYard(yardRng(S.day * 2147483647), Math.min(YARD_CAP, yard.length + add));
@@ -1150,6 +1241,11 @@ function overnight() {
     for (const k of g.rare) { const ev = SU.catToast(k, cropNames()); surpriseNote(ev, HOUSE.x, HOUSE.y + 6); bits.push(`一颗${SIM.CROPS[k].name}种子`); }
     log(`猫咪在门口放了${bits.join('、')}`); }
   familyMorning();
+  if (S.doorGift && S.doorGift.day < S.day) S.doorGift = null;
+  S.loose = []; // a truffle a dog found and nobody picked up does not linger
+  S.streaks = BOOK.tickStreaks(S.streaks, S.day, S.animals);
+  planDogDay();
+  noteProgress();
   markNavDirty();
   groundDirty = true; log(`新的一天！${grew} 棵作物长大了，夜里长出 ${n} 处田里杂物` + (yn ? `，院子里又出现 ${yn} 处杂物` : ''));
   onMorning();
@@ -1210,8 +1306,10 @@ function familyMorning() {
     if (e === 'waiting' && S.day % 3 === 0) log('阿禾在等房子扩建成大木屋，好搬过来一起住');
     if (e === 'born') { const k = S.family.kids[S.family.kids.length - 1]; log(`家里添了一个宝宝：${k.name}！`); hearts(DOOR.x, DOOR.y, 30); }
   }
+  let kidStarted = false;
   for (const k of S.family.kids) { const st = FAM.kidStage(k, S.day), was = FAM.kidStage(k, S.day - 1);
-    if (st !== was) log(st === 'child' ? `${k.name}会走路了，能帮忙喂鸡、摸摸动物、摘果子` : `${k.name}长成了少年，田里的活都能干了`); }
+    if (st !== was) { log(st === 'child' ? `${k.name}会走路了，能帮忙喂鸡、摸摸动物、摘果子` : `${k.name}长成了少年，田里的活都能干了`); if (k.id === 'kid0' && st === 'child') kidStarted = true; } }
+  if (kidStarted) noteProgress({ kidStarted: true });
   syncFamily(); if (S.members.map(m => m.id + m.role).join() !== before && window.__farm && window.__farm.onFamily) window.__farm.onFamily();
 }
 function fxTick(k) {
@@ -1547,7 +1645,7 @@ function petSprite(p) { const key = p.kind + ':' + p.coat; let s = PET_SPR[key];
 const anRng = mulberry32(99173), ASPEED = { chicken: 1.6, sheep: 1.1, cow: 0.9, pig: 1.0 };
 function animalView(a) { let v = AV.get(a.id); if (!v) { const R0 = PENS[penOfKind(a.kind)].roam; v = { x: R0[0] + anRng() * (R0[2] - R0[0]), y: R0[1] + anRng() * (R0[3] - R0[1]), tx: 0, ty: 0, wait: anRng() * 20, flip: anRng() < 0.5, graze: 0, step: 0, hold: 0, id: a.id, sim: a }; v.tx = v.x; v.ty = v.y; AV.set(a.id, v); } return v; }
 function stepAnimals(dm) {
-  stepPets(dm);
+  stepPets(dm); stepPondFish(dm);
   if (!S.animals.length) return;
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE;
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
@@ -1568,7 +1666,7 @@ function stepAnimals(dm) {
       v.wait = 20 + anRng() * 50; }
   }
 }
-// ---------- v4.7 pets: dogs walk with the farmer, cats nap on sunny spots; both sleep on the porch at night ----------
+// ---------- v4.7 pets: cats nap on sunny spots; both sleep on the porch at night. v5.4.0: dogs wander on their own ----------
 const petRng = mulberry32(4711);
 function petView(p) { let v = PV.get(p.id);
   if (!v) { v = { x: DOOR.x + 6 + petRng() * 14, y: DOOR.y + 6 + petRng() * 8, tx: 0, ty: 0, flip: petRng() < 0.5, step: 0, pose: 2, wait: 5 + petRng() * 30, idle: 0, hold: 0, pet: p };
@@ -1576,24 +1674,74 @@ function petView(p) { let v = PV.get(p.id);
   return v; }
 const napOpen = n => !n.area || S.eff.regions.includes(n.area);
 const dry = (x, y) => groundAt(x, y)[1] !== 'water';
+function dogTarget(kind, ctx) {
+  const jitter = (x, y, s) => ({ x: x + (petRng() - 0.5) * s, y: y + (petRng() - 0.5) * s });
+  const tryDry = (x, y, s = 6) => { for (let i = 0; i < 8; i++) { const q = jitter(x, y, s); if (dry(q.x, q.y)) return q; } return dry(x, y) ? { x, y } : { x: DOOR.x + 10, y: DOOR.y + 8 }; };
+  if (kind === 'sun') { const spots = WD.NAP_SPOTS.filter(napOpen), n = spots[Math.floor(petRng() * spots.length)] || { x: 60, y: 40 }; return tryDry(n.x, n.y); }
+  if (kind === 'well') return tryDry(WELL_SPOT.x + 6, WELL_SPOT.y + 2, 4);
+  if (kind === 'fence') { const pts = [{ x: 20, y: 46 }, { x: 88, y: 30 }, { x: 140, y: 54 }, { x: 64, y: 92 }]; const n = pts[Math.floor(petRng() * pts.length)]; return tryDry(n.x, n.y); }
+  if (kind === 'sniff' && ctx.cats && ctx.cats.length) { const c = ctx.cats[Math.floor(petRng() * ctx.cats.length)]; return tryDry(c.x + 6, c.y + 2, 3); }
+  if (kind === 'check') return tryDry(FARMER.x + (petRng() < 0.5 ? 10 : -10), FARMER.y + 4, 4);
+  if (kind === 'fold' && ctx.fold) return tryDry(PENS.fold.door.x + 8, PENS.fold.door.y + 6, 8);
+  if (kind === 'door') return tryDry(DOOR.x + 10, DOOR.y + 6, 3);
+  if (kind === 'dig') { const st = (S.trees || []).filter(q => q.stage === 'stump' || (q.kind === 'wild' && WD.areaAt(q.x, q.y) === 'home')); const q = st[Math.floor(petRng() * Math.max(1, st.length))]; return q ? tryDry(q.x + 6, q.y + 4, 3) : tryDry(80, 40); }
+  if (kind === 'truffle') return tryDry((PENS.sty && PENS.sty.door.x) || 170, (PENS.sty && PENS.sty.door.y + 8) || 10, 10);
+  const pts = [{ x: 50, y: 50 }, { x: 100, y: 40 }, { x: 130, y: 90 }, { x: 70, y: 100 }, { x: 40, y: 70 }, { x: 88, y: 70 }];
+  const n = pts[Math.floor(petRng() * pts.length)]; return tryDry(n.x, n.y, 10);
+}
+function dogCtx() {
+  return { cats: PETS_LIVE.filter(q => q.kind === 'cat').map(q => petView(q)), fold: !!(S.eff.fold || (S.eff.regions || []).includes('orchard')), evening: (S.t % 1440) >= 17 * 60 };
+}
+function planDogDay() {
+  const n = PETS_LIVE.filter(p => p.kind === 'dog').length;
+  if (!n) { S.dogPlan = null; return; }
+  if (S.dogPlan && S.dogPlan.day === S.day) return;
+  const kind = AN.rollDogSurprise({ didToday: S.streaks.dogDay === S.day, hasPigs: S.animals.some(a => a.kind === 'pig') }, petRng);
+  S.dogPlan = kind ? { day: S.day, kind, at: 8 * 60 + Math.floor(petRng() * 9 * 60), done: false } : { day: S.day, done: true };
+}
+function beginDogSurprise(p, kind) {
+  const v = petView(p), jobKind = kind === 'seed' ? 'dig' : kind === 'truffle' ? 'truffle' : 'door';
+  const t = dogTarget(jobKind, dogCtx());
+  v.job = { kind: jobKind, wait: kind === 'wait' ? 80 : 18, surprise: kind, x: t.x, y: t.y };
+  setWalkTarget(v, t.x, t.y); v.wait = 0;
+}
+function finishDogSurprise(p, v) {
+  const kind = v.job && v.job.surprise; if (!kind) return;
+  const name = AN.PETS.dog.coats.find(c => c.id === p.coat).name;
+  S.streaks.dogDay = S.day;
+  if (kind === 'flower' || kind === 'stick') { S.doorGift = { kind, day: S.day }; log(`${name}衔回一${kind === 'flower' ? '束野花' : '根树枝'}，放在门口`); }
+  else if (kind === 'seed') { S.store.carrot = (S.store.carrot || 0) + 1; log(`${name}在树桩边挖出一颗胡萝卜种子`); popText(v.x, v.y, 12, '+1种', '#e6c35c'); }
+  else if (kind === 'truffle') { S.loose.push({ id: 'loose' + S.day, type: 'truffle', x: v.x, y: v.y }); log(`${name}对着地上叫了两声，好像发现了松露`); say('汪汪'); }
+  else if (kind === 'wait') log(`${name}傍晚在门口等家人回来`);
+  noteProgress({ dogSurprise: true });
+}
 function stepPets(dm) {
   if (!PETS_LIVE.length) return;
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE; let dogs = 0, cats = 0;
+  if (!night && S.dogPlan && S.dogPlan.day === S.day && !S.dogPlan.done && T >= (S.dogPlan.at || 0)) {
+    const pack = PETS_LIVE.filter(p => p.kind === 'dog');
+    if (pack.length) { beginDogSurprise(pack[Math.floor(petRng() * pack.length)], S.dogPlan.kind); S.dogPlan.done = true; }
+  }
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
     if (v.hold) { v.pose = 5; continue; } // happy face while being patted
     let speed = dog ? 4.2 : 2.4;
-    if (night || F.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; }
-    else if (dog) { const side = F.fx >= 0 ? 1 : -1, c = [[-side, 3], [side, 3], [-side, -4], [side, -4]].map(([sx, oy]) => [F.x + sx * (9 + k * 6), F.y + oy + k * 2]).find(([x, y]) => dry(x, y));
-      if (!c) { v.pose = 2; continue; } const [bx, by] = c, far = Math.hypot(bx - v.x, by - v.y); // never wait in the pond
-      if (far > 10) setWalkTarget(v, bx, by); if (far > 26) speed = WALK * S.eff.walk * 1.15; }
+    if (night || FARMER.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; v.job = null; }
+    else if (dog) {
+      const arriving = Math.hypot((v.tx || 0) - v.x, (v.ty || 0) - v.y) < 0.6;
+      if (v.job && arriving) { v.wait -= dm; if (v.wait <= 0) { if (v.job.surprise) finishDogSurprise(p, v); else noteProgress({ dogJob: true }); v.job = null; } }
+      if (!v.job) {
+        const ctx = dogCtx(); v.job = AN.pickDogJob(p, ctx, petRng);
+        const t = dogTarget(v.job.kind, ctx); v.job.x = t.x; v.job.y = t.y; setWalkTarget(v, t.x, t.y); v.wait = v.job.wait;
+      } else if (!arriving) { setWalkTarget(v, v.job.x, v.job.y); const far = Math.hypot(v.job.x - v.x, v.job.y - v.y); if (far > 26) speed = WALK * S.eff.walk * 1.05; }
+    }
     else { // cat: nap somewhere sunny, sometimes come and sit by the farmer
       const d0 = Math.hypot(v.tx - v.x, v.ty - v.y);
-      if (d0 < 0.4) { v.wait -= dm; if (v.wait <= 0) { const spots = WD.NAP_SPOTS.filter(napOpen), near = petRng() < 0.25 && (WD.areaAt(F.x, F.y) === 'home' || S.eff.regions.includes(WD.areaAt(F.x, F.y)));
-        const n = near && dry(F.x + 8, F.y + 4) ? { x: F.x + 8, y: F.y + 4 } : spots[Math.floor(petRng() * spots.length)]; setWalkTarget(v, n.x + (petRng() - 0.5) * 6 + k * 5, n.y + (petRng() - 0.5) * 4); v.wait = 60 + petRng() * 150; v.idle = 0; } } }
+      if (d0 < 0.4) { v.wait -= dm; if (v.wait <= 0) { const spots = WD.NAP_SPOTS.filter(napOpen), near = petRng() < 0.25 && (WD.areaAt(FARMER.x, FARMER.y) === 'home' || S.eff.regions.includes(WD.areaAt(FARMER.x, FARMER.y)));
+        const n = near && dry(FARMER.x + 8, FARMER.y + 4) ? { x: FARMER.x + 8, y: FARMER.y + 4 } : spots[Math.floor(petRng() * spots.length)]; setWalkTarget(v, n.x + (petRng() - 0.5) * 6 + k * 5, n.y + (petRng() - 0.5) * 4); v.wait = 60 + petRng() * 150; v.idle = 0; } } }
     const hop = nextHop(v, { x: v.tx, y: v.ty }), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, speed * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.idle = 0; v.pose = Math.floor(v.step / 2.5) % 2;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
-    v.idle += dm; v.pose = night || F.home || v.idle > (dog ? 90 : 12) ? 3 : 2;
+    v.idle += dm; v.pose = night || FARMER.home || (dog && v.job && v.job.kind === 'sun') || v.idle > (dog ? 20 : 12) ? 3 : 2;
   }
 }
 function petAtScreen(px, py) { let best = null, bd = 9; setCam();
@@ -1922,6 +2070,33 @@ function drawPondLeaves() {
   for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); }
   for (const [x, y, c, sh] of pondDecor) { ctx.fillStyle = c; if (sh === 1) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } else if (sh === 2) ctx.fillRect(x, y, 1, 2); else ctx.fillRect(x, y, 1, 1); }
 }
+
+function stepPondFish(dm) {
+  for (const f of S.pondFish) {
+    f.a = (f.a || 0) + Math.sin((realT * 0.8 + (f.day || 0)) * 1.1) * 0.5 * dm;
+    const sp = (f.v || 0.45) * dm * 3;
+    f.x += Math.cos(f.a) * sp; f.y += Math.sin(f.a) * sp;
+    const dx = (f.x - POND.x) / (POND.rx * 0.7), dy = (f.y - POND.y) / (POND.ry * 0.7), h = dx * dx + dy * dy;
+    if (h > 1) { const s = Math.sqrt(h) || 1; f.a += 2.2; f.x = POND.x + dx / s * POND.rx * 0.68; f.y = POND.y + dy / s * POND.ry * 0.68; }
+  }
+}
+function drawPondFish() {
+  for (const f of S.pondFish) {
+    const col = (FS.ORN_BY[f.kind] || FS.fishOf(f.kind) || { col: '#e06a2c' }).col;
+    const [sx, sy] = proj(f.x, f.y), x = Math.round(sx), y = Math.round(sy);
+    const left = Math.cos(f.a || 0) < 0;
+    ctx.fillStyle = col; ctx.fillRect(x - 2, y - 1, 5, 2); ctx.fillRect(x + (left ? -3 : 2), y - 1, 1, 1);
+    ctx.fillStyle = '#fff6dc'; ctx.fillRect(x + (left ? -2 : 1), y - 1, 1, 1);
+  }
+  if (S.doorGift) {
+    const [sx, sy] = proj(DOOR.x + 7, DOOR.y + 5), x = Math.round(sx), y = Math.round(sy);
+    if (S.doorGift.kind === 'flower') { ctx.fillStyle = '#e57fa0'; ctx.fillRect(x, y - 3, 2, 2); ctx.fillStyle = '#5a9a3a'; ctx.fillRect(x, y - 1, 1, 3); }
+    else { ctx.fillStyle = '#7a5230'; ctx.fillRect(x - 1, y, 5, 1); ctx.fillRect(x + 3, y - 1, 1, 2); }
+  }
+  for (const it of (S.loose || [])) {
+    const [sx, sy] = proj(it.x, it.y); ctx.fillStyle = '#5e3524'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 1, 3, 2);
+  }
+}
 // style A: a whole-pixel rod, line and bobber. The line is a Bresenham of 1px ink. Pose maths live in PFFish.pose:
 // the rod points at the water (up and left at the pond's right bank), the bobber bobs, a bite dips it, and a catch
 // arcs the fish out toward the fisher. Rare fish glow (same gold rim + plus-spark as a glowing crop) and a heart emote
@@ -2092,6 +2267,7 @@ function render() {
     if (p.kind === 'heart') { const hx = Math.round(sx), hy = Math.round(sy - p.z * RS); ctx.fillRect(hx - 2, hy, 2, 1); ctx.fillRect(hx + 1, hy, 2, 1); ctx.fillRect(hx - 2, hy + 1, 5, 1); ctx.fillRect(hx - 1, hy + 2, 3, 1); ctx.fillRect(hx, hy + 3, 1, 1); continue; } const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), s, s); }
   for (const l of leaves) { const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
   drawPondLeaves();
+  drawPondFish();
   drawFishing();
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
   if (night > 0) lighting(night, T);
@@ -2130,9 +2306,11 @@ function drawMarks() {
   const bob = Math.round(Math.sin(realT * 4)) ;
   for (const o of S.orders) {
     if (o.type === 'chop') { const t = S.trees.find(q => q.id === o.id); if (!t || !onScreen(t.x, t.y, 40)) continue; const [x, y] = markAt(t); ctx.drawImage(AXE_MARK, x - 3, y - 10 + bob); }
+    else if (o.type === 'release') { const [sx, sy] = proj(FS.POND_SPOT.stand.x, FS.POND_SPOT.stand.y); ctx.drawImage(FLAG, Math.round(sx) + 2, Math.round(sy) - 9 + bob); }
     else if (onScreen(o.x, o.y, 20)) { const [sx, sy] = proj(o.x, o.y); ctx.globalAlpha = 0.55; ctx.drawImage(SAPLING[0], Math.round(sx) - 4, Math.round(sy) - 7); ctx.globalAlpha = 1; ctx.drawImage(FLAG, Math.round(sx) + 2, Math.round(sy) - 9 + bob); }
   }
   if (INPUT.hover) { const h = INPUT.hover; if (h.tree) { const [x, y] = markAt(h.tree); ctx.drawImage(AXE_MARK, x - 3, y - 12 + bob); }
+    else if (h.release) { const [sx, sy] = proj(FS.POND_SPOT.stand.x, FS.POND_SPOT.stand.y); ctx.globalAlpha = h.ok ? 0.9 : 0.35; ctx.drawImage(FLAG, Math.round(sx) + 2, Math.round(sy) - 11 + bob); ctx.globalAlpha = 1; }
     else if (h.spot) { const [sx, sy] = proj(h.spot.x, h.spot.y); ctx.globalAlpha = h.ok ? 0.7 : 0.35; ctx.drawImage(SAPLING[0], Math.round(sx) - 4, Math.round(sy) - 7); ctx.globalAlpha = 1;
       if (!h.ok) { ctx.fillStyle = Rf[2]; ctx.fillRect(Math.round(sx) - 3, Math.round(sy) - 4, 7, 1); } } }
   for (const r of WD.REGIONS) if (!regionOpen(r.id) && onScreen(r.sign.x, r.sign.y, 30)) { const [sx, sy] = proj(r.sign.x, r.sign.y), x = Math.round(sx), y = Math.round(sy);
@@ -2281,6 +2459,15 @@ function orderChop(id) {
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
   S.orders.push({ type: 'chop', id }); noteLog('event', { type: 'chop', id, day: S.day, t: S.t }); return { ok: true };
 }
+
+function orderRelease(kind) {
+  if (!FS.pondOk(kind)) return { ok: false, why: '海鱼不能放进淡水池塘' };
+  if (S.pondFish.length >= FS.POND_CAP) return { ok: false, why: '池塘已经养满了' };
+  const pending = S.orders.filter(o => o.type === 'release' && o.kind === kind).length;
+  if (pending >= ornamentHeld(kind)) return { ok: false, why: '没有可以放养的' + ((FS.ORN_BY[kind] && FS.ORN_BY[kind].name) || kind) };
+  if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
+  S.orders.push({ type: 'release', kind }); noteLog('event', { type: 'release', kind, day: S.day, t: S.t }); return { ok: true };
+}
 function orderPlant(kind, x, y) {
   if (!WD.FRUIT[kind]) return { ok: false };
   const sp = plantSpot(x, y); if (!sp.ok) return sp;
@@ -2295,12 +2482,14 @@ function hoverAt(e) {
   if (!INPUT.mode) { INPUT.hover = null; return; }
   const w = toWorld(e.clientX, e.clientY);
   if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); INPUT.hover = t ? { tree: t } : null; }
+  else if (INPUT.mode === 'release') INPUT.hover = { release: 1, ok: inHomePond(w.x, w.y) };
   else INPUT.hover = { spot: w, ok: plantSpot(w.x, w.y).ok };
 }
 function clickAt(e) {
   const w = toWorld(e.clientX, e.clientY); let r = null;
   if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); r = t ? orderChop(t.id) : { ok: false, why: '点一棵野树：家门口或已买区域里的都行（地图边上的森林是风景，不能砍）' }; if (r.ok) say(r.removed ? '取消了砍树' : '标记了要砍的树'); }
   else if (INPUT.mode === 'plant') { r = orderPlant(INPUT.kind, w.x, w.y); if (r.ok) say(`标记了种${WD.FRUIT[INPUT.kind].name}树苗的位置`); }
+  else if (INPUT.mode === 'release') { r = inHomePond(w.x, w.y) ? orderRelease(INPUT.kind) : { ok: false, why: '点家门口的池塘，把观赏鱼放进去养着（海鱼不能放进淡水）' }; if (r.ok) say('标记了要放进池塘的' + ((FS.ORN_BY[INPUT.kind] && FS.ORN_BY[INPUT.kind].name) || '')); }
   if (r && !r.ok && r.why) say(r.why);
   if (r && r.ok) saveNow();
 }
@@ -2318,7 +2507,13 @@ cv.addEventListener('pointermove', e => { hoverAt(e); if (!drag) return;
   if (drag.moved) { const r = cv.getBoundingClientRect(), k = W / r.width;
     if (drag.rot) cam.ta += (e.clientX - drag.x) * 0.008; else panScreen((e.clientX - drag.x) * k, (e.clientY - drag.y) * k); }
   drag.x = e.clientX; drag.y = e.clientY; });
-const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); } } drag = null; document.body.classList.remove('grab'); };
+function takeDoorGift() {
+  const g = S.doorGift; if (!g) return;
+  if (g.kind === 'flower') { if (FARMER.crops.length >= BASK()) { say('篮子满了，花还放在门口'); return; } FARMER.crops.push('flower'); log('捡起门口的野花'); }
+  else log('把门口的树枝收起来了');
+  S.doorGift = null;
+}
+const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (S.doorGift) { const [sx, sy] = (setCam(), proj(DOOR.x + 7, DOOR.y + 5)); if (Math.hypot(sx - w.px, sy - w.py) < 12) takeDoorGift(); } } } drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
@@ -2384,12 +2579,35 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.3.2';
+const GAME_VERSION = '5.4.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
 function noteLog(fn, a, b, c) { const L = window.PFPlaylog; if (L && L[fn]) try { return L[fn](a, b, c); } catch (e) {} }
 function cropNames() { return Object.fromEntries(CROP_IDS.map(k => [k, SIM.CROPS[k].name])); }
+function progressCtx(extra) {
+  return Object.assign({
+    day: S.day, coins: S.coins, todayEarn: S.todayEarn, dayEarn: S.dayEarn, upgrades: S.up,
+    family: S.family, stats: { totalSold: S.totalSold, earned: S.earned, todayEarn: S.todayEarn, dayEarn: S.dayEarn },
+    catches: S.catches.length, pondCount: S.pondFish.length, streaks: S.streaks,
+    achievements: S.achievements, milestones: S.milestones,
+    sawRare: BOOK.has(S.codex, BOOK.keyRare('gold')) || BOOK.has(S.codex, BOOK.keyRare('white')),
+    sawGiant: BOOK.has(S.codex, BOOK.keyGiant('pumpkin')) || BOOK.has(S.codex, BOOK.keyGiant('cabbage')) || BOOK.has(S.codex, BOOK.keyGiant('watermelon')),
+    sawGiantPumpkin: BOOK.has(S.codex, BOOK.keyGiant('pumpkin')),
+    caughtKoi: BOOK.has(S.codex, BOOK.keyFish('koi')),
+    caughtSword: BOOK.has(S.codex, BOOK.keyFish('sword')),
+  }, extra || {});
+}
+function noteProgress(extra) {
+  const ctx = progressCtx(extra);
+  const a = BOOK.unlock(S.achievements, BOOK.dueAchievements(ctx)); S.achievements = a.list;
+  const m = BOOK.unlock(S.milestones, BOOK.dueMilestones(ctx)); S.milestones = m.list;
+  for (const u of a.fresh) { const def = BOOK.ACH_BY[u.id]; log('成就：' + def.name); say('成就：' + def.name); }
+  for (const u of m.fresh) { const def = BOOK.MS_BY[u.id]; log('里程碑：' + def.name); }
+  return a.fresh.length + m.fresh.length;
+}
+function noteShopOpened() { S.streaks = BOOK.noteShopOpen(S.streaks, S.day); }
+
 function surpriseNote(ev, x, y) {
   if (!ev) return;
   say(ev.msg); log(ev.msg);
@@ -2404,7 +2622,7 @@ function snapshot() {
     clock: { day: S.day, t: S.t }, coins: S.coins,
     stats: { totalSold: S.totalSold, cleared: S.cleared, earned: S.earned, soldToday: S.soldToday, todayEarn: S.todayEarn, dayEarn: S.dayEarn.slice() },
     prices: Object.assign({}, S.prices),
-    inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay },
+    inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay, fishFood: S.fishFood, ornament: Object.assign({}, S.ornament) },
     farmer: { x: Math.round(FARMER.x * 100) / 100, y: Math.round(FARMER.y * 100) / 100, sleeping: FARMER.sleeping, home: FARMER.home },
     tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && SU.validCropExtras(t.crop, { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot }) })),
     upgrades: Object.assign({}, S.up), settings: { speed: S.speed },
@@ -2412,6 +2630,11 @@ function snapshot() {
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
     animals: S.animals.map(a => Object.assign({}, a)), troughs: Object.fromEntries(AN.PEN_IDS.map(k => [k, Object.assign({}, S.troughs[k])])),
     catches: S.catches.map(c => Object.assign({}, c)),
+    pondFish: S.pondFish.map(f => Object.assign({}, f)),
+    codex: { entries: Object.assign({}, (S.codex && S.codex.entries) || {}) },
+    achievements: (S.achievements || []).map(u => Object.assign({}, u)),
+    milestones: (S.milestones || []).map(u => Object.assign({}, u)),
+    streaks: Object.assign({}, S.streaks),
     family: JSON.parse(JSON.stringify(S.family)), // v5.0
     members: S.members.map(m => ({ id: m.id, water: m.water, bag: Object.assign({}, m.bag), gathered: m.gathered, basket: m.crops.slice() })),
     log: S.log.slice(),
@@ -2421,6 +2644,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   RNG.a = s.rng | 0; S.day = s.clock.day; S.t = s.clock.t; S.coins = s.coins; S.createdAt = s.createdAt;
   Object.assign(S, { totalSold: s.stats.totalSold, cleared: s.stats.cleared, earned: s.stats.earned, soldToday: s.stats.soldToday, todayEarn: s.stats.todayEarn, dayEarn: s.stats.dayEarn.slice() });
   S.prices = Object.assign(SIM.startPrices(), { egg: 1, wool: 1, milk: 1 }, s.prices); S.hay = s.inventory.hay || 0;
+  S.fishFood = s.inventory.fishFood || 0; S.ornament = Object.assign({ koi: 0, goldfish: 0 }, s.inventory.ornament);
   S.animals = (s.animals || []).map(a => Object.assign({}, a)); S.troughs = Object.fromEntries(AN.PEN_IDS.map(k => [k, Object.assign({ feed: 0, water: 0 }, (s.troughs || {})[k])])); AV.clear(); PV.clear(); S.waterMax = s.inventory.waterMax; S.store = Object.assign(SIM.emptySeeds(), s.inventory.store);
   Object.assign(F, { water: Math.min(s.inventory.water, s.inventory.waterMax), bag: Object.assign(SIM.emptySeeds(), s.inventory.bag), gathered: s.inventory.gathered, crops: s.inventory.basket.slice(), task: null, moving: false,
     x: s.farmer.x, y: s.farmer.y, sleeping: s.farmer.sleeping, home: s.farmer.home || s.farmer.sleeping });
@@ -2435,6 +2659,9 @@ function restore(s) { // s has been migrated and validated by PFSave
   if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
   else fillYard(mulberry32((s.rng || 1) ^ 0xC0FFEE), YARD_START); // old saves get a yard to tidy, without touching the sim RNG
   S.catches = (s.catches || []).map(c => Object.assign({}, c)); S.fishGold = 0;
+  S.pondFish = (s.pondFish || []).map(f => Object.assign({}, f)); S.pondFed = 0;
+  S.codex = BOOK.validCodex(s.codex); S.achievements = (s.achievements || []).map(u => Object.assign({}, u)); S.milestones = (s.milestones || []).map(u => Object.assign({}, u));
+  S.streaks = BOOK.validStreaks(s.streaks); S.doorGift = null; S.loose = []; S.dogPlan = null; planDogDay();
   S.family = Object.assign(FAM.empty(), JSON.parse(JSON.stringify(s.family || {}))); S.members.length = 0; syncFamily(); // v5.0: everyone wakes at the door
   for (const m of S.members) { const o = (s.members || []).find(q => q.id === m.id); m.sleeping = FARMER.sleeping;
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
@@ -2468,7 +2695,8 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
+Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+  BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish,
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },

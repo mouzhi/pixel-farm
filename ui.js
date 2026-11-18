@@ -48,6 +48,11 @@
     truffle: pixIcon(['', '', '', '', '', '     kkkk', '    kbbtbk', '   kbtbbbbk', '   kbbbbtbk', '   kbtbbbbk', '    kbbbbk', '     kkkk'].map(r => r.padEnd(16)), { k: ink, b: wd[1], t: wd[3] }),
     pasture: pixIcon(['', '', '', '', '  k   k   k   k', ' kwk kwk kwk kwk', ' kwkkkwkkkwkkkwk', ' kwwwwwwwwwwwwwk', ' kwkkkwkkkwkkkwk', ' kwwwwwwwwwwwwwk', ' kwkgkwkgkwkgkwk', 'gkwkgkwkgkwkgkwkg', 'ggggggggggggggggg'].map(r => r.padEnd(16)), { k: ink, w: wd[4], g: gr[3] }),
     hay: pixIcon(['', '', '', '', '   kkkkkkkkkk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '  kyyyyyyyyyyk', '  kbbbbbbbbbbk', '  kyyyyyyyyyyk', '   kkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#f2cf55', b: wd[3] }),
+    fishfood: pixIcon(['', '', '', '    kkkkkk', '   kyyyyyyk', '  kyykkkkkk', '  kykwwwwwk', '  kykwwwwwk', '  kyyyyyyyyk', '   kyyyyyyk', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#e8c78a', w: wt[4] }),
+    goldfish: pixIcon(['', '', '', '', '     kkkk', '    kooooook', '   kooooyoook', '  koooooooookk', '   kooooook wk', '    kkkkkk  k', '         kkk'].map(r => r.padEnd(16)), { k: ink, o: '#e8a02a', y: '#fff6dc', w: wt[4] }),
+    koi: pixIcon(['', '', '', '', '     kkkk', '    kororork', '   kororyrork', '  kororororokk', '   kororork wk', '    kkkkkk  k', '         kkk'].map(r => r.padEnd(16)), { k: ink, o: '#e06a2c', r: '#fff6dc', y: '#2a1d16', w: wt[4] }),
+    book: pixIcon(['', '', '   kkkkkkkk', '  kyyyyyyyyk', '  kykkkkkkyk', '  kyyyyyyyyk', '  kykkkkkkyk', '  kyyyyyyyyk', '  kykkkkkkyk', '  kyyyyyyyyk', '   kkkkkkkk'].map(r => r.padEnd(16)), { k: ink, y: '#e8c78a' }),
+    egg: pixIcon(['', '', '', '', '     kkkk', '    kwwwwk', '   kwwwwwwk', '   kwwwwwwk', '    kwwwwk', '     kkkk'].map(r => r.padEnd(16)), { k: ink, w: '#fff6dc' }),
     egg: pixIcon(['', '', '', '', '      kkk', '     kcccк', '    kcccccк', '    kccccck', '    kcccccck', '    kcecccck', '     keccck', '      kkkk'].map(r => r.replace(/к/g, 'k').padEnd(16)), { k: ink, c: '#f6ecd0', e: st[3] }),
     wool: pixIcon(['', '', '', '    kk kk', '   kcckcck', '  kcceccccck', '  kcccccecck', ' kceccccccck', ' kccccceccck', '  kccecccck', '   kkcckkk', '     kk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', e: st[3] }),
     milk: pixIcon(['', '', '      kkk', '      kak', '     kkkkk', '    kcccck', '    kcccck', '    kaaaak', '    kcccck', '    kcccck', '    kcccck', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, c: '#f6ecd0', a: wt[3] }),
@@ -134,7 +139,7 @@
   function drawShop(force) {
     const S = G.S, tabs = shopTabs();
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
-    const key = [shopTab, S.coins, G.F.wood, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
+    const key = [shopTab, S.coins, G.F.wood, S.fishFood, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -150,10 +155,27 @@
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
+    if (tab.id === 'tools') {
+      const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
+      h += `<div class="sec">池塘（鱼食买了以后家人会自己去撒；观赏鱼放进池塘只是看着玩）</div>`;
+      if (food) {
+        const maxed = S.fishFood >= food.stock, ok = !maxed && S.coins >= food.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(food.price - S.coins, 'coin')}</span></span>`;
+        h += `<div class="card${maxed ? ' max' : ''}" data-item="fishfood">${icon('fishfood')}<div class="ct"><div><b>鱼食</b> <span class="lv">仓库 ${S.fishFood}/${food.stock}</span></div>` +
+          (maxed ? `<div class="d">已经满了</div></div><div class="cb"><span class="done">✓</span></div>` :
+            `<div class="d">${food.price} 金一包。家里有鱼食时，空闲的家人会自己去池塘撒一把，那天鲈鱼和锦鲤更容易上钩，常见鱼还在</div></div><div class="cb"><button class="pbtn" data-buy="fishfood"${ok ? '' : ' disabled'}>${priceChips(food.price, 0)}</button>${short}</div>`) + '</div>';
+      }
+      if (gf) {
+        const held = ((S.ornament && S.ornament.goldfish) || 0) + (S.pondFish || []).filter(f => f.kind === 'goldfish').length;
+        const maxed = held >= (FS.POND_CAP || 8), ok = !maxed && S.coins >= gf.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(gf.price - S.coins, 'coin')}</span></span>`;
+        h += `<div class="card${maxed ? ' max' : ''}" data-item="goldfish">${icon('goldfish')}<div class="ct"><div><b>金鱼</b> <span class="lv">已有 ${held}/${FS.POND_CAP}</span></div>` +
+          (maxed ? `<div class="d">池塘已经养满了</div></div><div class="cb"><span class="done">✓</span></div>` :
+            `<div class="d">买来放到家门口池塘里养着，只是在水里游给人看，不再卖掉。海鱼不能放进淡水池塘</div></div><div class="cb"><button class="pbtn" data-buy="goldfish"${ok ? '' : ' disabled'}>${priceChips(gf.price, 0)}</button>${short}</div>`) + '</div>';
+      }
+    }
     shop.innerHTML = h + '</div>';
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
-  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; drawShop(true); } };
+  const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
     const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
@@ -171,6 +193,8 @@
     if (id && FRUIT_ICON[id]) return `<i style="background:url(${FRUIT_ICON[id]});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'wood') return `<i style="background:url(${FRUIT_ICON.wood});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'hay') return icon('hay');
+    if (id === 'fishfood' || id === 'fishFood') return icon('fishfood');
+    if (id === 'goldfish' || id === 'koi') return icon(id);
     if (id === 'flower') return icon('flower');
     if (ICONS[id]) return icon(id);
     const FS = window.PFFish, f = FS && FS.isFish(id) && (FS.BY_ID[id] || (FS.fishOf && FS.fishOf(id)));
@@ -198,11 +222,14 @@
     h += `<div class="sec">材料</div><div class="cards">`;
     h += storeCard({ id: 'wood', kind: 'item', name: `木材（${data.wood.n}/${data.wood.cap}）`, n: data.wood.n, unit: data.wood.unit, gold: data.wood.gold }, data.wood.spare ? `<div class="d">仓库放得下 ${data.wood.cap} 份，多出 ${data.wood.spare} 份可卖</div>` : `<div class="d">扩建房子和围篱笆要用，满了才拿去卖（${data.wood.unit} 金一份）${autoWood()}</div>`);
     h += storeCard({ id: 'hay', kind: 'item', name: '干草', n: data.hay.n }, `<div class="d">喂动物用，集市 ${data.hay.unit} 金一捆</div>`);
+    h += storeCard({ id: 'fishfood', kind: 'item', name: '鱼食', n: data.fishFood.n }, `<div class="d">家里有鱼食时，空闲的家人会自己去池塘撒一把，那天稀有鱼更容易上钩（${data.fishFood.unit} 金一包）</div>`);
+    for (const r of (data.ornament || [])) h += storeCard(r, '<div class="d">用右下角的放养按钮，放到家门口池塘里看着玩，不再卖掉</div>');
+    if (data.pondFish) h += storeCard({ id: 'koi', kind: 'item', name: '池塘里的观赏鱼', n: data.pondFish }, '<div class="d">在家门口的池塘里游，只是给人看</div>');
     for (const r of data.saplings) h += storeCard(r, '<div class="d">用右下角的种树按钮指定位置</div>');
     h += '</div>';
     store.innerHTML = h;
   }
-  const toggleStore = v => { store.hidden = v === undefined ? !store.hidden : !v; if (!store.hidden) { menu.hidden = true; shop.hidden = true; drawStore(true); } };
+  const toggleStore = v => { store.hidden = v === undefined ? !store.hidden : !v; if (!store.hidden) { menu.hidden = true; shop.hidden = true; if ($('codex')) $('codex').hidden = true; drawStore(true); } };
   store.addEventListener('click', e => { const d = e.target && e.target.dataset; if (d && d.a === 'close') toggleStore(false); });
   $('storeBtn').addEventListener('click', () => toggleStore());
   $('storeHud').addEventListener('click', () => toggleStore(true));
@@ -215,7 +242,85 @@
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return;
     if (e.key === 'b' || e.key === 'B') toggleShop();
     if (e.key === 'i' || e.key === 'I') toggleStore();
-    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
+    if (e.key === 'j' || e.key === 'J') toggleCodex();
+    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); toggleCodex(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
+
+  // ---- v5.4.0 collection book: 图鉴 / 成就 / 里程碑, next to the storehouse button ----
+  const BOOK = window.PFCodex, codexEl = $('codex');
+  let codexTab = 'book', codexKey = '', codexFocus = '';
+  function cellSw(it) {
+    if (it.col) return `<i class="sw" style="background:${it.col}"></i>`;
+    if (ICONS[it.id] || ICONS[it.type]) return icon(it.id || it.type);
+    if (it.group === 'glow') return icon(it.type) || icon('field');
+    if (it.group === 'giant') return icon(it.type) || icon('field');
+    if (it.group === 'rare') return it.type === 'truffle' ? icon('truffle') : icon('egg') || '<i class="sw" style="background:#ffd76a"></i>';
+    return '<i class="sw" style="background:#8a6a44"></i>';
+  }
+  function drawCodex(force) {
+    if (!codexEl || !BOOK) return;
+    const S = G.S, key = [codexTab, S.day, JSON.stringify(S.codex), (S.achievements || []).length, (S.milestones || []).length, codexFocus].join('|');
+    if (!force && key === codexKey) return; codexKey = key;
+    const tabs = [{ id: 'book', name: '图鉴' }, { id: 'ach', name: '成就' }, { id: 'ms', name: '里程碑' }];
+    let h = `<div class="shead"><b>图鉴</b><button class="pbtn x" data-a="close" title="关闭（J / Esc）">✕</button></div>`;
+    h += `<div class="tabs">${tabs.map(t => `<button type="button" class="pbtn${t.id === codexTab ? ' on' : ''}" data-tab="${t.id}">${esc(t.name)}</button>`).join('')}</div>`;
+    if (codexTab === 'book') {
+      const groups = BOOK.groups();
+      let detail = '';
+      if (codexFocus && BOOK.entryOf(S.codex, codexFocus)) {
+        const e = BOOK.entryOf(S.codex, codexFocus);
+        const item = groups.flatMap(g => g.items).find(it => it.key === codexFocus);
+        detail = `<div class="detail">${esc((item && item.name) || '图鉴')}：${BOOK.dayLabel(e.firstDay)}第一次遇到，一共遇到 ${e.count} 次</div>`;
+      } else detail = '<div class="detail">点开见到过的格子，能看到第一次是第几天、一共遇到几次。没见过的只显示剪影。</div>';
+      h += detail;
+      for (const g of groups) {
+        h += `<div class="sec">${esc(g.name)}${g.later ? '（以后）' : ''}</div>`;
+        if (!g.items.length) { h += '<div class="empty">以后会在这里记下捡到的装饰。</div>'; continue; }
+        h += '<div class="grid">';
+        for (const it of g.items) {
+          const e = BOOK.entryOf(S.codex, it.key);
+          if (e) h += `<button type="button" class="cell${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellSw(it)}<span class="nm">${esc(it.name)}</span></button>`;
+          else h += `<div class="cell locked"><span class="q">?</span><span class="nm">？</span></div>`;
+        }
+        h += '</div>';
+      }
+    } else if (codexTab === 'ach') {
+      const have = Object.fromEntries((S.achievements || []).map(u => [u.id, u]));
+      h += '<div class="cards">';
+      for (const a of BOOK.ACHIEVEMENTS) {
+        const u = have[a.id];
+        if (u) h += `<div class="card"><span class="badge">★</span><div class="ct"><div class="nm">${esc(a.name)}</div><div class="hint">${esc(a.hint)}</div></div><span class="when">${esc(BOOK.dayLabel(u.day))}</span></div>`;
+        else h += `<div class="card locked"><span class="badge">☆</span><div class="ct"><div class="nm">${esc(a.name)}</div><div class="hint">${esc(a.hint)}${a.later ? ' · 以后才能达成' : ''}</div></div></div>`;
+      }
+      h += '</div>';
+    } else {
+      const have = Object.fromEntries((S.milestones || []).map(u => [u.id, u]));
+      h += '<div class="cards">';
+      for (const m of BOOK.MILESTONES) {
+        const u = have[m.id];
+        if (u) h += `<div class="card"><span class="badge">●</span><div class="ct"><div class="nm">${esc(m.name)}</div></div><span class="when">${esc(BOOK.dayLabel(u.day))}</span></div>`;
+        else h += `<div class="card locked"><span class="badge">○</span><div class="ct"><div class="nm">？</div><div class="hint">${esc(m.hint)}</div></div></div>`;
+      }
+      h += '</div>';
+    }
+    codexEl.innerHTML = h;
+  }
+  const toggleCodex = v => { if (!codexEl) return; codexEl.hidden = v === undefined ? !codexEl.hidden : !v; if (!codexEl.hidden) { menu.hidden = true; shop.hidden = true; store.hidden = true; drawCodex(true); } };
+  if (codexEl) {
+    codexEl.addEventListener('click', e => {
+      const el = e.target.closest('[data-a],[data-tab],[data-key]'); if (!el || !codexEl.contains(el)) return;
+      const d = el.dataset;
+      if (d.a === 'close') toggleCodex(false);
+      if (d.tab) { codexTab = d.tab; drawCodex(true); }
+      if (d.key) { codexFocus = d.key; drawCodex(true); }
+    });
+    if ($('codexBtn')) $('codexBtn').addEventListener('click', () => toggleCodex());
+    addEventListener('pointerdown', e => {
+      if (!codexEl || codexEl.hidden) return;
+      if (codexEl.contains(e.target) || ($('codexBtn') && $('codexBtn').contains(e.target))) return;
+      toggleCodex(false);
+    });
+  }
+
   // ---- speed buttons (bought in the shop) ----
   let spKey = '';
   function speedBar() {
@@ -231,17 +336,20 @@
   let toolKey = '';
   function tools() {
     const S = G.S, F = G.F, m = G.input, chop = S.eff.axe; // v5.0: any wild tree at home or in a bought region
-    const key = [chop, F.saplings.apple, F.saplings.orange, m.mode, m.kind, S.orders.length].join(',');
+    const koiN = G.ornamentHeld ? G.ornamentHeld('koi') : 0, gfN = G.ornamentHeld ? G.ornamentHeld('goldfish') : 0;
+    const key = [chop, F.saplings.apple, F.saplings.orange, koiN, gfN, m.mode, m.kind, S.orders.length].join(',');
     if (key === toolKey) return; toolKey = key;
     let h = '';
     if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}" data-m="plant" data-k="${k}" title="点一块空草地，农夫会去种（Esc 退出）">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}</button>`;
-    const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树和种树指令">指令 ${n} ✕</button>`;
+    if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="点家门口的池塘，把篮子里的锦鲤放进去养着（Esc 退出）。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
+    if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="点家门口的池塘，把买来的金鱼放进去养着（Esc 退出）">放养金鱼 ${gfN}</button>`;
+    const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树、种树和放养指令">指令 ${n} ✕</button>`;
     $('tools').innerHTML = h; $('tools').hidden = !h;
   }
   $('tools').addEventListener('click', e => { const d = e.target.dataset; if (!d || !d.m) return;
     if (d.m === 'clear') { G.S.orders.length = 0; G.setMode(null); G.saveNow(); }
-    else if (G.input.mode === d.m && (d.m !== 'plant' || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
+    else if (G.input.mode === d.m && (!d.k || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
   let sayT = 0; addEventListener('pf:say', e => { const b = $('say'); b.textContent = e.detail; b.hidden = false; clearTimeout(sayT); sayT = setTimeout(() => { b.hidden = true; }, 2200); });
   addEventListener('pf:mode', () => tools());
   addEventListener('keydown', e => { if (e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName)) return; if (e.key === 'm' || e.key === 'M') toggleMap(); });
@@ -342,6 +450,6 @@
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };
   if (loveHud) loveHud.addEventListener('click', e => { e.stopPropagation(); toggleLoveTip(); });
   addEventListener('pointerdown', e => { if (!loveTip || loveTip.hidden) return; if (loveTip.contains(e.target) || (loveHud && loveHud.contains(e.target))) return; toggleLoveTip(false); });
-  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv(); speedBar();
-  G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (G.hud) G.hud(); };
+  setInterval(() => { inv(); speedBar(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (codexEl && !codexEl.hidden) drawCodex(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv(); speedBar();
+  G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; codexKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (codexEl && !codexEl.hidden) drawCodex(true); if (G.hud) G.hud(); };
 })();

@@ -12,11 +12,33 @@
   // to the door every morning. Coats follow the order they are bought in.
   const PETS = {
     cat: { name: '猫', coats: [{ id: 'ginger', name: '橘猫' }, { id: 'black', name: '黑猫' }, { id: 'calico', name: '三花猫' }] },
-    dog: { name: '狗', coats: [{ id: 'shiba', name: '柴犬' }, { id: 'collie', name: '黑白狗' }, { id: 'brown', name: '棕色小狗' }] },
+    dog: { name: '狗', coats: [{ id: 'shiba', name: '柴犬' }, { id: 'collie', name: '边境牧羊犬' }, { id: 'brown', name: '棕色小狗' }] },
   };
   const PET_IDS = Object.keys(PETS);
   const pet = (kind, i) => ({ id: kind + i, kind, coat: PETS[kind].coats[i % PETS[kind].coats.length].id });
   const DOG_WALK = 0.03, CAT_SEEDS = 1;  // per dog: walking +3%; per cat: 1 carrot seed each morning
+  // v5.4.0: dogs spend most of the day on their own (patrol, sun, sniff a cat, sit by a fence, drink at the well,
+  // glance at the farmer, the border collie hangs near the sheepfold). A light surprise at most once a day.
+  const DOG_JOBS = ['patrol', 'sun', 'sniff', 'fence', 'well', 'check', 'fold', 'door'];
+  const DOG_SURPRISES = ['flower', 'stick', 'seed', 'truffle', 'wait'];
+  const DOG_SURPRISE_CHANCE = 0.28;
+  const isCollie = p => p && p.kind === 'dog' && p.coat === 'collie';
+  function pickDogJob(p, ctx, rnd) {
+    const jobs = ['patrol', 'sun', 'fence', 'well', 'check'];
+    if (ctx && ctx.cats && ctx.cats.length) jobs.push('sniff');
+    if (isCollie(p) && ctx && ctx.fold) jobs.push('fold', 'fold');
+    if (ctx && ctx.evening) jobs.push('door');
+    const kind = jobs[Math.floor(rnd() * jobs.length)];
+    const wait = kind === 'sun' ? 80 + rnd() * 140 : kind === 'check' ? 16 + rnd() * 24 : 36 + rnd() * 70;
+    return { kind, wait };
+  }
+  function rollDogSurprise(ctx, rnd) {
+    if (ctx && ctx.didToday) return null;
+    if (rnd() >= DOG_SURPRISE_CHANCE) return null;
+    const opts = ['flower', 'stick', 'seed', 'wait'];
+    if (ctx && ctx.hasPigs) opts.push('truffle');
+    return opts[Math.floor(rnd() * opts.length)];
+  }
   const KIND_IDS = Object.keys(KINDS);
   // base prices; the merchant's multiplier drifts every morning like the crops' (0.8..1.2)
   const PRODUCTS = { egg: { name: '鸡蛋', price: 10 }, wool: { name: '羊毛', price: 60 }, milk: { name: '牛奶', price: 35 }, truffle: { name: '松露', price: 45 } };
@@ -52,6 +74,6 @@
     return out;
   }
   const penNeed = (animals, pen) => need(animals.filter(a => KINDS[a.kind].home === pen));
-  const api = { PEN_IDS, overnightPens, penNeed, KINDS, KIND_IDS, PETS, PET_IDS, pet, DOG_WALK, CAT_SEEDS, PRODUCTS, PRODUCT_IDS, HAY, START_H, HAPPY, SULKY, MAX_READY, CARE, animal, need, yieldOf, mood, overnight };
+  const api = { PEN_IDS, overnightPens, penNeed, KINDS, KIND_IDS, PETS, PET_IDS, pet, DOG_WALK, CAT_SEEDS, DOG_JOBS, DOG_SURPRISES, DOG_SURPRISE_CHANCE, isCollie, pickDogJob, rollDogSurprise, PRODUCTS, PRODUCT_IDS, HAY, START_H, HAPPY, SULKY, MAX_READY, CARE, animal, need, yieldOf, mood, overnight };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFAnimals = api;
 })(typeof window !== 'undefined' ? window : globalThis);
