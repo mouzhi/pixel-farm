@@ -1470,7 +1470,7 @@ const ANIMAL_SPR = {};
 for (const k in ANIMAL_ROWS) { const fr = [...ANIMAL_ROWS[k], lowerHead(ANIMAL_ROWS[k][0], HEAD_COL[k], HEAD_DY[k])].map(r => pix(r)); ANIMAL_SPR[k] = { r: fr, l: fr.map(flipCanvas) }; }
 const EGG = pix(['.c.', 'ccc', 'cEc']);
 // v5.3.2 pets, chibi (big head, readable at game zoom), facing right. Legend: X coat, Z coat shade, W light (muzzle, chest, belly),
-// x stripes (cat) / saddle (dog), Q and V calico or collie patches, U dog ears, Y eye, N nose, P pink (inner ear, cat nose, tongue).
+// x stripes (cat) / saddle (dog), Q and V calico patches or collie blaze, F dog face, M dog muzzle, U dog ears, Y eye, N nose, P pink (inner ear, cat nose, tongue).
 // Frames: walk A, walk B, sit, sleep (curled up), sit B (cat: tail flick + blink, dog: tail wag), happy (being patted).
 const PET_ROWS = {
   cat: [
@@ -1480,19 +1480,19 @@ const PET_ROWS = {
     ['.........X...X', '...XXXXX.XP.PX', '..XxXxXxXQQXXX', '.XXXXXXXXQCXCX', 'X.XxXxXxXWWPWW', 'XZXXXXXXXXWWW.', '.XVVXXXXXXXX..'],
     ['..X.....X..', '..XP...PX..', '..XQQXXXX..', '..QQXXXXX..', '..XXXXXXX..', '..XXCXXCX..', '..WXWPWXW..', '...XWWWX...', '...xWWWX...', '...XWWWXX..', 'XXXxWWWXX..', '.XXVZXXZX..'],
     ['..X.....X..', '..XP...PX..', '..XQQXXXX..', '..QQXXXXX..', '..XXXXXXX..', '..XXCXXCX..', '..PWWPWWP..', '...XWWWX...', '...xWWWX...', 'X..XWWWXX..', 'XV.xWWWXX..', '.XXVZXXZX..']],
-  dog: [
-    ['......XXXXX...', '.....UVVVXXX..', 'X...UUVYXXYX..', 'X...UUXYXXYWNN', '.X..UUXXXXWWWW', '.X...UXXXXWWP.', '.XXXXXXXXXWWP.', '.XxxxXXXXWWW..', '.XXXXXXWWWWX..', '.X.X....X.X...'],
-    ['......XXXXX...', '.....UVVVXXX..', '.X..UUVYXXYX..', '.X..UUXYXXYWNN', 'X...UUXXXXWWWW', 'X....UXXXXWWP.', '.XXXXXXXXXWWP.', '.XxxxXXXXWWW..', '.XXXXXXWWWWX..', '..XX....XX....'],
-    ['....XXXXX...', '...UVVVXXX..', '..UUVYXXYX..', '..UUXYXXYWNN', '..UUXXXXWWWW', '...UXXXXWWP.', '....XXXXXWP.', 'X..XWWWWX...', '.X.XWWWWX...', '.X.XWWWWX...', '.XXXXWWXXX..', '.XXXZXXZXX..'],
-    ['........XXXX..', '.......UVVXXX.', '..XXXXUUVXXXX.', '.XXxxxUUXXCWNN', 'XXXXXXUUXXXWWW', '.XXXXXXUXXXWW.', '..XXXXXXXXXX..'],
-    ['....XXXXX...', '...UVVVXXX..', '..UUVYXXYX..', '..UUXYXXYWNN', '..UUXXXXWWWW', '...UXXXXWWP.', '....XXXXXWP.', '...XWWWWX...', '...XWWWWX...', 'X..XWWWWX...', '.XXXXWWXXX..', '.XXXZXXZXX..'],
-    ['....XXXXX...', '...UVVVXXX..', '..UUVXXXXX..', '..UUXCXXCWNN', '..UUXXXXWWWW', '..PUXXXXWPP.', '....XXXXXPP.', 'X..XWWWWX...', '.X.XWWWWX...', 'X..XWWWWX...', '.XXXXWWXXX..', '.XXXZXXZXX..']],
+  dog: [ // round chibi face, big floppy ears hanging beside it (ears down = dog; cats' are up), nose dot, tail up
+    ['.......XXXX...', '......XXXVXX..', '.X..UUXXXVXXUU', 'X...UUFYFFYFUU', 'X...UUFFFNFFUU', '.X...UMMMPMMU.', '.XXXXXXWWWWWX.', '.XxxxXXWWWWWX.', '.XXXXXXXWWWXX.', '..X.X....X.X..', '..W.W....W.W..'],
+    ['.......XXXX...', '......XXXVXX..', 'X...UUXXXVXXUU', 'X...UUFYFFYFUU', '.X..UUFFFNFFUU', '.X...UMMMPMMU.', '.XXXXXXWWWWWX.', '.XxxxXXWWWWWX.', '.XXXXXXXWWWXX.', '...X.X..X.X...', '...W.W..W.W...'],
+    ['....XXXX....', '...XXXVXX...', '.UUXXXVXXUU.', '.UUFYFFYFUU.', '.UUFFFNFFUU.', '..UMMMPMMU..', 'X..XWWWWX...', 'X..XWWWWX...', '.X.XWWWWXX..', '.XXXXWWXXX..', '.XXXXWWXXX..', '..XWW..WWX..'],
+    ['.........XXX..', '........XXVXX.', '..XXXXXUXXVXXU', '.XXxxXUUFCFCFU', 'XXXXXXUUFFNFFU', 'X.XXXXXUMMMMU.', '.XXXXXXXWWWW..'],
+    ['....XXXX....', '...XXXVXX...', '.UUXXXVXXUU.', '.UUFYFFYFUU.', '.UUFFFNFFUU.', '..UMMMPMMU..', '.X.XWWWWX...', '..XXWWWWX...', '...XWWWWXX..', 'XXXXXWWXXX..', '.XXXXWWXXX..', '..XWW..WWX..'],
+    ['....XXXX....', '...XXXVXX...', '.UUXXXVXXUU.', '.UUFCFFCFUU.', '.UUFFFNFFUU.', '..UMMMPMMU..', 'X..XWWPWX...', 'X..XWWWWX...', '.X.XWWWWXX..', '.XXXXWWXXX..', '.XXXXWWXXX..', '..XWW..WWX..']],
 };
-const COATS = { // cat: ginger / black / calico; dog: shiba / black-and-white / brown
+const COATS = { // cat: ginger / black / calico; dog: shiba / border collie (black, white blaze, chest and paws) / brown
   ginger: { X: 'o', Z: 'r', W: 'c', x: 'r', Y: 'i', P: 'p' }, black: { X: 'j', Z: 'i', W: 'j', x: 'i', Y: 'y', C: 'k', P: 'p' },
   calico: { X: 'c', Z: 'k', W: 'c', Q: 'o', V: 'w', C: 'w', Y: 'i', P: 'p' },
-  shiba: { X: 'o', Z: 'r', W: 'c', U: 'b', Y: 'i', P: 'p', N: 'i' }, collie: { X: 'c', Z: 'k', W: 'c', x: 'i', U: 'i', C: 'w', Y: 'i', P: 'p', N: 'i' },
-  brown: { X: 't', Z: 'b', W: 's', x: 'b', U: 'w', Y: 'i', P: 'p', N: 'i' } };
+  shiba: { X: 'o', Z: 'r', W: 'c', M: 'c', U: 'w', Y: 'i', P: 'p', N: 'i' }, collie: { X: 'j', Z: 'i', W: 'c', F: 'c', M: 'c', V: 'c', U: 'i', C: 'i', Y: 'i', P: 'p', N: 'i' },
+  brown: { X: 't', Z: 'b', W: 's', M: 's', x: 'b', U: 'w', Y: 'i', P: 'p', N: 'i' } };
 const coatRows = (rows, coat) => { const C = COATS[coat]; return rows.map(r => [...r].map(ch => ch === '.' ? ch : C[ch] || (ch === 'C' && C.Z) || C.X).join('')); };
 const PET_SPR = {}; // kind:coat -> { r: frames, l: flipped frames }, built on first use (at most 6)
 function petSprite(p) { const key = p.kind + ':' + p.coat; let s = PET_SPR[key]; if (s) return s;
