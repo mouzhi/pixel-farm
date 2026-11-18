@@ -10,6 +10,7 @@ const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
 const M = 40;                    // forest margin around the home farm (world units)
 const AN = window.PFAnimals; // v4.5: animal care rules
 const SU = window.PFSurprise; // v5.1: glowing / giant crops, rare gifts
+const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
@@ -616,7 +617,7 @@ function navState() {
   return {
     houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
-    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })),
+    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff), // v5.3.1: the lumber hut
     rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y }))
   };
 }
@@ -674,6 +675,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   groundDirty = true;
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(); }
+  if (typeof syncLumberProps === 'function') syncLumberProps();
   markNavDirty();
 }
 function buy(id) { // the player's one action: spend gold on the next level of a shop item
@@ -739,6 +741,7 @@ function board() {
   if (ripeTrees.length && F.crops.length + WD.FRUIT.apple.n <= BASK()) { const t = rngNear(ripeTrees); post('pick', 75, t, () => pickTask(t)); }
   const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
   if (chop.length) { const t = rngNear(chop); post('chop', 64, t, () => chopTask(t)); }
+  postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0);
   if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
   // v4.5/v4.7: the animals. Hay into each building's trough in the morning, water, collect eggs / wool / milk / truffles, a pat each
@@ -884,11 +887,11 @@ function pickTask(t) {
   } };
 }
 function chopTask(t) {
-  return { label: '正在砍树', to: treeStand(t), tile: t, dur: 20, fx: 'wood', pose: 'hoe', done: () => {
+  return { label: '正在砍树', to: treeStand(t), tile: t, dur: WA.chopMinutes(S.eff), fx: 'wood', pose: 'hoe', done: () => {
     S.orders = S.orders.filter(o => !(o.type === 'chop' && o.id === t.id));
     if (t.stage !== 'tree' || t.kind !== 'wild') return;
     // v5.0: only the 林场 forest grows back; anywhere else the stump is dug out overnight (the sapling is the tree's legacy)
-    const y = WD.chopYield(rand), back = WD.regrows(t); t.stage = 'stump'; t.age = 0; treeChanged(t);
+    const y = WD.chopYield(rand), back = WD.regrows(t); y.wood = WA.perTree(S.eff, back); t.stage = 'stump'; t.age = 0; treeChanged(t);
     FARMER.wood += y.wood; FARMER.saplings[y.sapling]++; S.woodCut = (S.woodCut || 0) + y.wood;
     burst(t.x, t.y, 6, [Wd[3], Wd[4], G[3]], 16, 'wood'); popText(t.x, t.y, 20, '+' + y.wood, '#e0b880');
     log(`砍倒一棵树：木材 ${y.wood} 份进仓库，${WD.FRUIT[y.sapling].name}树苗 1 棵` + (back ? '' : '（这里的树不会再长，树桩夜里挖走）'));
@@ -918,6 +921,27 @@ function transplantTask(o) {
     S.trees.push(t); treeChanged(t); burst(o.x, o.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop');
     log(`种下一棵${WD.FRUIT[o.kind].name}树苗，浇了第一次水（${WD.SAPLING_DAYS} 天后结果）`);
   } };
+}
+// ---- v5.3.1 wood automation (rules and numbers in wood.js) ----
+// While the storehouse holds less than the next wood purchase needs, a free hand walks to 林场 and fells a grown tree by
+// themselves (kind 'chop'; v5.3.2: only the person whose area is the wood, the farmer, gets this job). Only 林场's regrowing trees, never fruit
+// trees or the trees at home and in other regions (those still wait for the player's mark), and a few always stay up.
+const woodTarget = () => WA.target(SIM.SHOP, S.up, woodCap());
+function postAutoChop(post, marked) {
+  if (!FAM.areasOf(whoId(F), F.role).includes('wood')) return; // v5.3.2: the trip to 林场 is the wood owner's (the farmer), not 阿禾's or the children's
+  if (S.t % 1440 >= WA.AUTO_END || !WA.wants(S.eff, FARMER.wood, woodTarget())) return;
+  const free = WA.autoTrees(S.trees, S.eff).filter(t => !CLAIM.has(t) && !marked.includes(t));
+  if (free.length <= WA.KEEP) return;
+  const t = rngNear(free); if (t) post('chop', WA.AUTO_BASE, t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
+}
+function woodNight() {
+  const re = WA.replant(S.trees, FARMER.saplings, S.eff); for (const t of re) treeChanged(t);
+  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵树苗补种了林场`);
+}
+function offlineWood(r) {
+  const forestN = S.trees.filter(t => t.kind === 'wild' && WD.regrows(t)).length;
+  const w = WA.offline(r.days, S.eff, forestN, FARMER.wood, woodTarget()); if (!w) return;
+  FARMER.wood += w; S.woodCut = (S.woodCut || 0) + w; r.wood = w; log(`离线期间家人在林场砍了 ${w} 份木材`);
 }
 // ---- v4.5 / v4.7 animal tasks ----
 const animalSpot = a => { const v = AV.get(a.id), P = PENS[penOfKind(a.kind)]; return { x: v ? v.x : P.bld.x, y: v ? v.y : P.bld.y + 14, an: a }; };
@@ -1115,6 +1139,7 @@ function overnight() {
   let dug = 0; // v5.0: a stump outside the forest is dug out overnight; the forest's stumps sprout again (world.js treeOvernight)
   for (let i = S.trees.length - 1; i >= 0; i--) { const t = S.trees[i]; if (t.kind === 'wild' && t.stage === 'stump' && !WD.regrows(t)) { S.trees.splice(i, 1); TV.delete(t.id); dug++; } }
   if (dug) log(`夜里挖走了 ${dug} 个树桩，空地可以移植果树苗`);
+  woodNight(); // v5.3.1: the lumber hut replants 林场 stumps before they age
   for (const t of S.trees) { const before = t.stage + t.ripe; WD.treeOvernight(t); if (t.stage + t.ripe !== before) treeChanged(t); }
   S.prices = Object.assign(SIM.driftPrices(S.prices, rand), driftProducts(S.prices));
   if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
@@ -1452,6 +1477,27 @@ function syncPastureProps() { // a building and its trough appear once bought
     o.bld = addProp(pastureModels[k], P.bld.x, P.bld.y, 0, { big: 1 }); o.trough = addProp(pastureModels.trough[0], P.trough.x, P.trough.y, 0); }
   if (S.eff.shed && !shedHay) shedHay = addProp(hayModel, PENS.shed.hay.x, PENS.shed.hay.y, 0.4);
 }
+// v5.3.1 the lumber hut: a plank cabin with a moss-green roof and a log pile, in 林场's empty south strip east of the gate
+function lumberModel() {
+  const X0 = 3, X1 = 22, Y0 = 4, Y1 = 15, ZW = 10;
+  const roof = { z0: ZW + 1, pitch: 0.8, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 2, y1: Y1 + 2, fy0: Y0, fy1: Y1, base: G[1], line: G[0], ridge: Wd[1], trim: Wd[3] };
+  return buildModel(26, 20, 20, (x, y, z) => {
+    if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
+      const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+      if (!(front || side || back)) return null;
+      if (front && x >= 10 && x <= 14 && z >= 1 && z <= 7) return z <= 1 ? Wd[1] : null;                  // doorway
+      if (front && (x === 6 || x === 18) && z >= 5 && z <= 7) return Wt[3];                                  // two little windows
+      if (z === ZW) return Wd[4];
+      return (front || back) ? (z % 3 === 0 ? Wd[2] : Wd[3]) : (z % 3 === 0 ? Wd[2] : Wd[4]);
+    }
+    const r = gableY(x, y, z, roof); return r === 'fill' ? G[1] : r;
+  });
+}
+var LUMBER_READY = true; let lumberProps = null;
+function syncLumberProps() {
+  if (!LUMBER_READY || !S.eff.lumber || lumberProps) return;
+  lumberProps = [addProp(lumberModel(), WA.HUT.x, WA.HUT.y, 0, { big: 1 }), addProp(logsModel, WA.HUT_LOGS.x, WA.HUT_LOGS.y, 0.2)];
+}
 function troughLook() { for (const k of AN.PEN_IDS) { const o = pens[k].trough; if (!o) continue; const t = S.troughs[k], m = pastureModels.trough[(t.feed > 0 ? 1 : 0) | (t.water ? 2 : 0)]; if (o.m !== m) o.m = m; } }
 // animal sprites face right; frames: [step A, step B, head down]. Same palette and outline as the rest of style A.
 const lowerHead = (rows, col, dy) => rows.map((r, y) => r.slice(0, col) + (y - dy >= 0 ? rows[y - dy].slice(col) : '.'.repeat(r.length - col)));
@@ -1571,7 +1617,7 @@ function setView(o, t) {
   if (o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; o._ck = null; o.tree = o.m = o.spr = undefined; o.sway = 0;
   if (t.stage === 'tree') { o.tree = t.kind === 'wild' ? WILD[t.v % WILD.length] : fruitDef(t.kind, t.v % 3, t.ripe); o.m = o.tree.union; }
   else if (t.stage === 'stump') { o.m = stumpModel; o.rot = (t.x * 7) % 6; }
-  else { o.spr = t.age >= (t.kind === 'wild' ? 5 : 3) ? SAPLING[1] : SAPLING[0]; o.sway = 0.6; }
+  else { o.spr = t.age >= (t.kind === 'wild' ? WD.STUMP_TO_TREE - 1 : 3) ? SAPLING[1] : SAPLING[0]; o.sway = 0.6; }
 }
 function treeView(t) { let o = TV.get(t.id); if (!o) { o = { x: t.x, y: t.y, rot: 0, z: 0, lean: 0, leanV: 0, tick: (treeN++ % 6) / 6, sim: t }; TV.set(t.id, o); setView(o, t); } return o; }
 function treeChanged(t) { const o = TV.get(t.id); if (o) { o.sim = t; setView(o, t); } markNavDirty(); }
@@ -2338,7 +2384,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.3.1';
+const GAME_VERSION = '5.3.2';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2399,9 +2445,10 @@ function saveNow() {
   if (SAVE.off) return false;
   const r = PFSave.write(snapshot()); SAVE.error = r.ok ? null : r.error; if (r.ok) { SAVE.at = Date.now(); noteLog('flush'); noteLog('syncSoon', 'autosave'); } return r.ok;
 }
-function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; only gold changes
+function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; gold, plus a little wood (v5.3.1)
   const r = SIM.offlineSettle(sec, S.dayEarn); if (!r) return null;
   S.coins += r.gold; S.earned += r.gold; if (r.gold > 0) log(`离线期间赚了 ${r.gold} 金`);
+  offlineWood(r); // v5.3.1: the family also chopped a little in 林场
   noteLog('offline', r, logSnap());
   SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
 }
@@ -2421,7 +2468,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
+Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },

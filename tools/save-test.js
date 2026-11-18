@@ -274,9 +274,9 @@ ok('a planted sapling fruits 5 days later; a stump grows back', () => {
   const w = { id: 'w', x: 0, y: 0, kind: 'wild', v: 0, stage: 'stump', age: 0, ripe: 0, cd: 0 }; let d = 0; while (w.stage !== 'tree' && d < 30) { WD.treeOvernight(w); d++; }
   assert.strictEqual(d, WD.STUMP_TO_TREE); // counted from the chop
 });
-ok('chopping (v5.0): 5 wood and a sapling; any wild tree at home or in a bought region; fruit trees and the rim forest never', () => {
+ok('chopping (v5.0; v5.3.1: 8 wood): wood and a sapling; any wild tree at home or in a bought region; fruit trees and the rim forest never', () => {
   const seq = a => { let i = 0; return () => a[i++ % a.length]; };
-  assert.deepStrictEqual(WD.chopYield(seq([0.1, 0.9])), { wood: 5, sapling: 'apple', drop: null }); assert.strictEqual(WD.chopYield(seq([0.9, 0.99])).sapling, 'orange');
+  assert.deepStrictEqual(WD.chopYield(seq([0.1, 0.9])), { wood: WD.WOOD.perChop, sapling: 'apple', drop: null }); assert.strictEqual(WD.chopYield(seq([0.9, 0.99])).sapling, 'orange');
   const trees = WD.defaultTrees(), wild = trees.filter(t => t.kind === 'wild'), a = trees.find(t => t.kind === 'apple');
   assert(wild.length >= 29); assert.strictEqual(trees.filter(t => t.kind === 'apple').length, 3); assert.deepStrictEqual(WD.defaultTrees(), trees);
   const w = wild.find(t => WD.areaAt(t.x, t.y) === 'forest'), home = wild.filter(t => WD.areaAt(t.x, t.y) === 'home');
