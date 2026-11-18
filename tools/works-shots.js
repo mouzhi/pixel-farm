@@ -2,7 +2,7 @@
 //   writes /workspace/pf-shots/v560_*.png (PF_SHOTS to change); exits 1 on a page error, a console error or a failed check
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
-const ROOT = path.resolve(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
+const ROOT = path.resolve(__dirname, '..'), VERSION = (fs.readFileSync(path.join(path.resolve(__dirname, '..'), 'game.js'), 'utf8').match(/GAME_VERSION = '([^']+)'/) || [])[1], OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
 const only = process.argv[2];
@@ -83,7 +83,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 9. the shop's 工坊 tab, with the gates spelled out
   await shot('v560_shop_works.png', `(() => { ${setup} f.refreshUI(); document.getElementById('shopBtn').click(); const t = document.querySelector('#shop [data-tab="works"]'); t && t.click(); f.refreshUI();
     return { tab: !!t, text: document.getElementById('shop').textContent.includes('工坊院') }; })()`, r => !r.tab || !r.text ? 'works tab' : null);
-  // 10. the day-59 manor save (v10) loads in v5.6.0 and plays on
+  // 10. the day-59 manor save (v10) loads in the current version and plays on
   if (!only || 'v560_fixture_day59.png'.includes(only)) {
     const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8')), save = raw.save || raw;
     const p = await page('?manual');
@@ -92,7 +92,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const r = await p.evaluate(() => { const f = __farm, s = f.snapshot(); f.advance(120, 10); f.setAngle(0); f.panTo(96, 70); f.advance(0.3, 10);
       return { v: f.version, sv: s.saveVersion, day: s.clock.day, coins: s.coins - ((f.SAVE.offline && f.SAVE.offline.gold) || 0), works: s.works, animals: s.animals.length, up: s.upgrades.house }; });
     await p.screenshot({ path: path.join(OUT, 'v560_fixture_day59.png') });
-    const bad = r.v !== '5.6.0' ? 'version' : r.sv !== 12 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : r.animals !== save.animals.length ? 'animals' : null;
+    const bad = r.v !== VERSION ? 'version' : r.sv < 12 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : r.animals !== save.animals.length ? 'animals' : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'v560_fixture_day59.png', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close();
   }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

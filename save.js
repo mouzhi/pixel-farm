@@ -12,8 +12,9 @@
   const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
   const PL = (typeof require === 'function' && typeof document === 'undefined') ? require('./plots.js') : root.PFPlots; // v5.5.0
   const PW = (typeof require === 'function' && typeof document === 'undefined') ? require('./works.js') : root.PFWorks; // v5.6.0
+  const DC = (typeof require === 'function' && typeof document === 'undefined') ? require('./decor.js') : root.PFDecor; // v5.7.0
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 12;
+  const CURRENT = 13;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -82,9 +83,14 @@
       troughs: Object.assign({ coop2: { feed: 0, water: 0 }, sty2: { feed: 0, water: 0 }, fold2: { feed: 0, water: 0 }, shed2: { feed: 0, water: 0 } }, s.troughs),
       works: s.works && typeof s.works === 'object' ? s.works : { sprinklers: [], works: {}, hives: [], penHost: null },
     }),
+    // v5.7.0 phase 9: no decorations yet (none in the storehouse, none set down), no party held; nothing else moves
+    13: s => Object.assign({}, s, {
+      upgrades: Object.assign(DC.SHOP_IDS.reduce((o, k) => (o[k] = 0, o), {}), s.upgrades),
+      decor: s.decor && typeof s.decor === 'object' ? s.decor : DC.empty(),
+    }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon', 'wheat']; // v5.6.0 wheat (a missing count reads as 0)
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS]; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']; // v5.6.0 second pens
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
@@ -184,6 +190,7 @@
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
       plots: PL.validPlots(s.plots), // v5.5.0
       works: PW.valid(s.works, PL.validPlots(s.plots)), // v5.6.0
+      decor: DC.valid(s.decor), // v5.7.0
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children

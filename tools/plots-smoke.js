@@ -34,7 +34,7 @@ async function test(name, fn) {
       wild: f.groundAt(-80, 160)[1], high: f.groundAt(0, -190)[1], gate: f.plotOffer('glade', 'field').reason, v: f.version, regions: f.S.eff.regions.length }; });
     assert.deepStrictEqual(r.world, { x0: -256, y0: -208, x1: 448, y1: 384 }); assert.deepStrictEqual(r.plots, {});
     assert.strictEqual(r.river, 'water'); assert.strictEqual(r.bank, 'sand'); assert.strictEqual(r.cliff, 'rock'); assert.strictEqual(r.wild, 'wild'); assert.strictEqual(r.high, 'high');
-    assert.strictEqual(r.gate, 'gate'); assert.strictEqual(r.v, '5.6.0'); assert.strictEqual(r.regions, 0);
+    assert.strictEqual(r.gate, 'gate'); assert.strictEqual(r.v, '5.7.0'); assert.strictEqual(r.regions, 0);
     await p.keyboard.press('b'); await p.click('#shop [data-tab="land"]');
     const txt = await p.textContent('#shop'); assert(txt.includes('外圈新地块') && txt.includes('阿禾搬来后开放') && txt.includes('林间空地'), txt.slice(0, 200));
     await p.click('#shop [data-plot="glade"]'); const d = await p.textContent('#shop'); assert(d.includes('要先有 2 个人一起干活'));
@@ -138,7 +138,7 @@ async function test(name, fn) {
   });
 
   const USER = process.env.PF_USER_SAVE;
-  if (USER && fs.existsSync(USER)) await test('a real player save loads in v5.6.0, keeps everything, buys a plot and plays a day', async ctx => {
+  if (USER && fs.existsSync(USER)) await test('a real player save loads in v5.7.0, keeps everything, buys a plot and plays a day', async ctx => {
     const raw = JSON.parse(fs.readFileSync(USER, 'utf8')), save = raw.save || raw, p = await open(ctx);
     await p.evaluate(s => { __farm.SAVE.off = true; localStorage.clear(); localStorage.setItem('mouzhi/pixel-farm:save', JSON.stringify(s)); }, save);
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI);

@@ -89,7 +89,11 @@
   let atlas = null;
   const cropIcon = k => { atlas = atlas || (G.cropAtlasURL && G.cropAtlasURL());
     return `<i style="background:url(${atlas || (window.PF_CROPS && window.PF_CROPS.src)}) no-repeat;background-size:${32 * SIM.IDS.length}px 32px;background-position:${-32 * SIM.IDS.indexOf(k)}px 0"></i>`; };
-  const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${ICONS[id]});background-size:32px;image-rendering:pixelated"></i>`);
+  const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+  const DART = () => window.PFDecorArt; // v5.7.0: decorations draw their own icons from their models
+  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || BLANK;
+  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)));
+  const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${iconURL(id)});background-size:32px;image-rendering:pixelated"></i>`);
   const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
   const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
   if (ICN) {
@@ -163,7 +167,7 @@
       return icoTag(url, 'rare', s, s);
     }
     if (k.kind === 'glow' || k.kind === 'giant' || k.kind === 'glow-giant') return decorateCrop(k.id, k.kind, seen, fit || opt.w);
-    if (k.id && (ICONS[k.id] || (SIM.CROPS && SIM.CROPS[k.id]))) return icon(k.id);
+    if (k.id && (hasIcon(k.id) || (SIM.CROPS && SIM.CROPS[k.id]))) return icon(k.id);
     return '<i></i>';
   }
   function rarityClass(spec) {
@@ -256,6 +260,9 @@
     if (tabId === 'works' && ['mill', 'jam', 'cheese'].includes(it.id)) return '加工坊（盖在选成「工坊院」的地块里，家人送原料、取成品）';
     if (tabId === 'works' && it.id === 'wheel') return '水车和路灯（动力坝上的水车点亮附近的路灯）';
     if (tabId === 'works' && it.id === 'hive') return '养蜂（花甸或果园坡）';
+    if (tabId === 'decor' && PFDecor.CATALOG[it.id] && PFDecor.CATALOG[it.id].light && it.id !== 'party') return '夜灯（接上水车的电，天一黑自己亮；没电时也能先摆着）';
+    if (tabId === 'decor' && it.id === 'party') return '派对区（不定期的晚上一家人聚在这里，有时镇上的人来做客）';
+    if (tabId === 'decor') return '装饰（买了放进仓库，家人会找空地摆上；用「挪东西」可以换地方）';
     if (tabId === 'animals' && it.pet) return '小伙伴（猫猫狗狗，不吃干草）';
     if (tabId === 'animals' && it.farm) return '养殖（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）';
     return '';
@@ -337,7 +344,7 @@
     if (id === 'bugnet' || id === 'net') return icon('bugnet');
     if (id === 'goldfish' || id === 'koi') return icon(id);
     if (id === 'flower') return icon('flower');
-    if (ICONS[id]) return icon(id);
+    if (hasIcon(id)) return icon(id);
     return '<i></i>';
   }
   // v5.3.1: with an axe and 林场, the family keeps the storehouse topped up to what the next build needs
@@ -397,6 +404,7 @@
       return url ? icoTag(url, 'bug', 72, 72) : '<i class="ico"></i>';
     }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
+    if (it.group === 'decor' && DART()) { const url = DART().bookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.7.0: 36px art at 2x, like fish and bugs
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
   function drawCodex(force) {
@@ -423,7 +431,7 @@
           const e = BOOK.entryOf(S.codex, it.key);
           const tier = BOOK.rarityOf ? BOOK.rarityOf(it) : (it.rarity || 'common');
           if (e) h += `<button type="button" class="cell r-${esc(tier)}${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellArt(it, true)}<span class="nm">${esc(it.name)}</span></button>`;
-          else h += `<div class="cell locked">${cellArt(it, false)}<span class="nm">？</span></div>`;
+          else h += `<div class="cell locked" data-lock="${it.key}">${cellArt(it, false)}<span class="nm">？</span></div>`;
         }
         h += '</div>';
       }
@@ -482,19 +490,24 @@
     const S = G.S, F = G.F, m = G.input, chop = S.eff.axe; // v5.0: any wild tree at home or in a bought region
     const koiN = G.ornamentHeld ? G.ornamentHeld('koi') : 0, gfN = G.ornamentHeld ? G.ornamentHeld('goldfish') : 0;
     const sprN = S.works ? S.works.sprinklers.length : 0; // v5.6.0
-    const key = [chop, F.saplings.apple, F.saplings.orange, koiN, gfN, m.mode, m.kind, S.orders.length, sprN].join(',');
+    const DCm = window.PFDecor, D = S.decor, free = id => (D.inv[id] | 0) - D.orders.filter(q => q.op === 'place' && q.id === id).length; // v5.7.0
+    const deco = DCm && D ? DCm.IDS.filter(id => free(id) > 0) : [], movN = G.movables ? G.movables().length : 0, ordN = D ? D.orders.filter(q => q.mine).length : 0;
+    const key = [chop, F.saplings.apple, F.saplings.orange, koiN, gfN, m.mode, m.kind, S.orders.length, sprN, deco.map(id => id + free(id)).join(';'), movN, ordN].join(',');
     if (key === toolKey) return; toolKey = key;
     let h = '';
     if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}" data-m="plant" data-k="${k}" title="点一块空草地，农夫会去种（Esc 退出）">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}</button>`;
     if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="点家门口的池塘，把篮子里的锦鲤放进去养着（Esc 退出）。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
     if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="点家门口的池塘，把买来的金鱼放进去养着（Esc 退出）">放养金鱼 ${gfN}</button>`;
-    if (sprN) h += `<button class="pbtn${m.mode === 'sprinkler' ? ' on' : ''}" data-m="sprinkler" title="先点一台浇水器，再点田边的新位置（Esc 退出）。亮起的格子是它浇得到的">挪浇水器 ${sprN}</button>`;
+    for (const id of deco) h += `<button class="pbtn${m.mode === 'decor' && m.kind === id ? ' on' : ''}" data-m="decor" data-k="${id}" title="点一块草地（亮绿色就能放），家人会从仓库搬过去（Esc 退出）。不放也没关系，家人会自己找地方摆上">摆${DCm.CATALOG[id].name} ${free(id)}</button>`;
+    if (movN) h += `<button class="pbtn${m.mode === 'move' ? ' on' : ''}" data-m="move" title="先点要挪的东西（装饰、派对区、加工坊、蜂箱、浇水器；老房子不能挪），再点新位置，家人会搬过去（Esc 退出）">挪东西</button>`;
+    if (ordN) h += `<button class="pbtn" data-m="clearmove" title="取消还没搬完的摆放和挪动">要搬的 ${ordN} ✕</button>`;
     const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树、种树和放养指令">指令 ${n} ✕</button>`;
     $('tools').innerHTML = h; $('tools').hidden = !h;
   }
   $('tools').addEventListener('click', e => { const d = e.target.dataset; if (!d || !d.m) return;
     if (d.m === 'clear') { G.S.orders.length = 0; G.setMode(null); G.saveNow(); }
+    else if (d.m === 'clearmove') { G.clearMoves(); G.setMode(null); G.saveNow(); } // v5.7.0
     else if (G.input.mode === d.m && (!d.k || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
   let sayT = 0; addEventListener('pf:say', e => { const b = $('say'); b.textContent = e.detail; b.hidden = false; clearTimeout(sayT); sayT = setTimeout(() => { b.hidden = true; }, 2200); });
   addEventListener('pf:mode', () => tools());
