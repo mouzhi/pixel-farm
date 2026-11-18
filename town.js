@@ -68,7 +68,7 @@
 
   // ---------- classmates ----------
   const MATES = [{ id: 'm0', name: '阿团', look: 'mateA' }, { id: 'm1', name: '朵朵', look: 'mateB' }, { id: 'm2', name: '石头', look: 'mateC' }];
-  const MATE = { after: 6, gap: 3, p: 0.25, leave: 16 * 60 + 40 };
+  const MATE = { after: 6, gap: 3, p: 0.25, leave: 16 * 60 }; // leave at 16:00 so they are off the farm well before dusk
   // ctx: { day, schoolDays (this child), last (day of the last visit), rain, party } -> a classmate comes home with them today?
   function mateToday(ctx, r) {
     if ((ctx.schoolDays | 0) < MATE.after || ctx.rain || ctx.party) return false;

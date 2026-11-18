@@ -77,13 +77,12 @@
       if (c < 0.8 && z >= 10 && z <= 12) return Wt[4];
       return null; });
     // the town gate: open (two stone posts and a beam with a sign) and the town's fence
-    // posts a little taller than the shut gate's, a beam with a small hanging sign, and both door leaves swung back inside along the fence
-    const gateOpen = B(18, 28, 32, (x, y, z) => { const post = x >= 1 && x <= 4;
+    // posts a little taller than the shut gate's and a beam with a small hanging sign; nothing in the opening
+    const gateOpen = B(6, 28, 32, (x, y, z) => { const post = true;
       if (post && (y <= 3 || y >= 24) && z <= 28) return z >= 27 ? St[3] : ((z % 6) === 0 ? St[1] : St[2]);
       if (post && z >= 26 && z <= 28 && y > 3 && y < 24) return Wd[2];
       if (x >= 2 && x <= 3 && z >= 19 && z <= 24 && y >= 9 && y <= 18) return (z === 19 || z === 24 || y === 9 || y === 18) ? Wd[1] : (((y + z) % 3) ? Wd[4] : Ac[1]);
       if (x >= 2 && x <= 3 && z === 25 && (y === 10 || y === 17)) return Ink[0];
-      if ((y === 4 || y === 23) && x >= 5 && x <= 16 && z >= 2 && z <= 16) return (z === 2 || z === 16 || x === 16) ? Wd[1] : ((x % 3) ? Wd[3] : Wd[2]);
       return null; });
     const flowers = B(10, 6, 5, (x, y, z) => { if (z <= 1) return (x === 0 || x === 9 || y === 0 || y === 5) ? Wd[2] : Wd[1];
       if (z <= 3 && x > 0 && x < 9 && y > 0 && y < 5) { const k = (x * 5 + y * 3) % 7; return z === 3 ? (k === 0 ? Ac[3] : k === 2 ? Ac[1] : k === 4 ? Rf[3] : null) : G[3]; } return null; });
@@ -110,7 +109,7 @@
     for (let fy = R0[1]; fy < R0[3]; fy += 8) for (const fx of [R0[0], R0[2]]) { if (fx === R0[0] && Math.abs(fy + 4 - TN.GATE.y) < 10) continue; own.always.push(add(fence, fx, fy + 4, Math.PI / 2, { xp: 1, town: 'fence' })); }
     // trees on the town's grass, kept off streets, buildings and the square
     { let s = 4242; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [506, 132], [548, 132], [588, 132], [622, 132], [624, 90], [622, 4], [562, 2], [516, 4], [478, 2], [604, 90], [504, 90], [548, 92]]) {
+      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [506, 132], [548, 132], [588, 132], [622, 132], [622, 4], [562, 2], [516, 4], [478, 2], [470, 112], [624, 96]]) {
         const defs = rnd() < 0.5 ? x.treeDefs.oak : x.treeDefs.small; x.addTree(defs[Math.floor(rnd() * defs.length)], tx + (rnd() - 0.5) * 3, ty + (rnd() - 0.5) * 3); } }
     // the strip east of the old map edge: cliff slabs where the ridge runs on
     const xmod = xm && xm.ledges; if (xmod) for (let gx = 448; gx <= 640; gx += 8) { const ry = PL.ridgeY(gx); own.always.push(add(xmod[((gx / 8) | 0) % 3], gx, ry - 1.5, 0, { xp: 1 })); }

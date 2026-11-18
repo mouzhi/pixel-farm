@@ -2101,7 +2101,7 @@ function townMateHome(a, ex) { // the child is back from school: does a classmat
   M.last = S.day; M.kid = a.id; M.who = (M.who + 1) % TN.MATES.length; spawnMate(a, ex); }
 function spawnMate(a, ex) {
   const i = S.town.mate.who, open = townOpen(), name = TN.mateName(i, open), back = ex.via.slice().reverse();
-  VISITORS.push({ id: 'mate', look: TN.MATES[i].look, name, kid: a.id, x: ex.to.x + 3, y: ex.to.y + 2, fx: -1, fy: 0, moving: true, wait: 0, leaving: false, ex,
+  VISITORS.push({ id: 'mate', fast: 1, look: TN.MATES[i].look, name, kid: a.id, x: ex.to.x + 3, y: ex.to.y + 2, fx: -1, fy: 0, moving: true, wait: 0, leaving: false, ex,
     pts: back.map(p => ({ x: p.x + 2, y: p.y + 2 })).concat([{ x: DOOR.x + 14, y: DOOR.y + 10 }]), stops: mateStops() });
   log(`${a.name}放学带着${open ? '同学' + name : '一位同学'}回家玩`); }
 function visitorTick(dm) {
