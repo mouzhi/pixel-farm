@@ -837,7 +837,7 @@ function kidCtx() {
 }
 function finishKidTask(k) {
   if (!k) return k;
-  if (k.leave) k.done = () => { F.away = 'school'; F.x = k.to.x; F.y = k.to.y; log(`${F.name}去上学了`); };
+  if (k.leave) k.done = () => { F.away = 'school'; F.x = k.to.x; F.y = k.to.y; log(`${F.name}去上学了`); noteProgress({ wentSchool: true }); };
   if (k.comeBack) {
     const ex = window.PFKids.schoolExit(kidCtx());
     const x1 = (WD.WORLD && WD.WORLD.x1) || 352;
@@ -2727,6 +2727,8 @@ function progressCtx(extra) {
     caughtKoi: BOOK.has(S.codex, BOOK.keyFish('koi')),
     caughtSword: BOOK.has(S.codex, BOOK.keyFish('sword')),
     sawRain: !!(S.weather && S.weather.lastDay),
+    // a kid who is in (or already past) the school stage has been to school: old saves light it too
+    wentSchool: !!(S.family && (S.family.kids || []).some(k => ['school', 'helper', 'teen'].includes(FAM.kidStage(k, S.day)))),
     caughtBug: !!(BOOK.has && BOOK.keyBug && Object.keys((S.codex && S.codex.entries) || {}).some(k => k.indexOf('bug:') === 0)),
   }, extra || {});
 }

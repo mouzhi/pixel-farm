@@ -21,7 +21,7 @@
     { id: 'allland', name: '遥遥领先', hint: '把现有 7 块区域全部买下' },
     { id: 'movedin', name: '安排上了', hint: '阿禾搬来的那天早上' },
     { id: 'kidwork', name: '村里来了个神童', hint: '小豆第一次出门干轻活' },
-    { id: 'school', name: '小镇做题家', hint: '孩子第一次去上学', later: 1 },
+    { id: 'school', name: '小镇做题家', hint: '孩子第一次去上学' },
     { id: 'sprinkler', name: '懒人福音', hint: '家人第一次自动在田边摆好浇水器', later: 1 },
     { id: 'nightlight', name: '今晚月色真美', hint: '电网接通后，夜里第一次点亮一座夜灯', later: 1 },
     { id: 'dogjob', name: '旺旺队出动', hint: '狗第一次没有跟着农夫，自己去办成一件小事' },
@@ -278,6 +278,7 @@
     want('firstrain', !!ctx.sawRain);
     want('firstbug', !!ctx.caughtBug);
     want('firstpark', !!ctx.playedPark);
+    want('school', !!ctx.wentSchool); // v5.5.0: the school stage exists since v5.4.3
     return due;
   }
 

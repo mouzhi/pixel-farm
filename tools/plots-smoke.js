@@ -108,6 +108,17 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs, []);
   });
 
+  await test('小镇做题家: a school-age kid walks off to school in the morning and the achievement lights', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const f = __farm, S = f.S; f.SAVE.off = true; S.coins = 1e6; f.FARMER.wood = 900; for (const id of ['house', 'house', 'house']) f.buy(id);
+      S.day = 40; Object.assign(S.family, { love: 100, met: 3, moved: 10, kids: [{ id: 'kid0', name: '小豆', born: 22 }] }); f.syncFamily();
+      const stage = f.FAM.kidStage(S.family.kids[0], S.day); S.t = Math.floor(S.t / 1440) * 1440 + 6 * 60 + 40; let away = false;
+      for (let i = 0; i < 3000 && !away; i++) { f.advance(0.5, 5); const k = S.members.find(m => m.id === 'kid0'); away = !!(k && k.away === 'school'); }
+      return { stage, away, ach: (S.achievements || []).map(a => a.id), log: document.body.textContent.includes('去上学了') }; });
+    assert.strictEqual(r.stage, 'school'); assert(r.away, 'went to school'); assert(r.ach.includes('school'), 'achievement: ' + r.ach.join(','));
+    assert.deepStrictEqual(p.errs, []);
+  });
+
   const USER = process.env.PF_USER_SAVE;
   if (USER && fs.existsSync(USER)) await test('a real player save loads in v5.5.0, keeps everything, buys a plot and plays a day', async ctx => {
     const raw = JSON.parse(fs.readFileSync(USER, 'utf8')), save = raw.save || raw, p = await open(ctx);
