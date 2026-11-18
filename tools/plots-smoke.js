@@ -95,6 +95,19 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs, []);
   });
 
+  await test('乐园: a play-stage kid walks to the slide / sandbox / swing on her own, and the first go unlocks 童年 DNA 动了', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(() => { const f = __farm, S = f.S; f.SAVE.off = true; S.coins = 1e6; f.FARMER.wood = 900; for (const id of ['house', 'house', 'house']) f.buy(id);
+      S.day = 40; Object.assign(S.family, { love: 100, met: 3, moved: 10, kids: [{ id: 'kid0', name: '小豆', born: 32 }] }); f.syncFamily();
+      const buy = f.buyPlot('play', 'playground').ok; S.t = Math.floor(S.t / 1440) * 1440 + 9 * 60; const seen = {};
+      for (let i = 0; i < 3000 && !(S.achievements || []).some(a => a.id === 'firstpark'); i++) { f.advance(0.5, 5);
+        const k = S.members.find(m => m.id === 'kid0'); if (k && k.task) seen[k.task.kind] = 1; }
+      return { buy, seen: Object.keys(seen), ach: (S.achievements || []).map(a => a.id) }; });
+    assert(r.buy); assert(r.seen.some(k => /play-(slide|sandbox|swing)/.test(k)), 'played in the park: ' + r.seen.join(','));
+    assert(r.ach.includes('firstpark'), 'achievement: ' + r.ach.join(','));
+    assert.deepStrictEqual(p.errs, []);
+  });
+
   const USER = process.env.PF_USER_SAVE;
   if (USER && fs.existsSync(USER)) await test('a real player save loads in v5.5.0, keeps everything, buys a plot and plays a day', async ctx => {
     const raw = JSON.parse(fs.readFileSync(USER, 'utf8')), save = raw.save || raw, p = await open(ctx);
