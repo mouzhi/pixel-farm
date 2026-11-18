@@ -2275,20 +2275,47 @@ function glowTick(dt) {
     if (t._glowT > 0.7) { t._glowT = 0; PF_FX.play('glow', t.crop.giant ? t.x + TILE / 2 : t.x, t.crop.giant ? t.y + TILE / 2 : t.y, t.crop.giant ? 16 : 10); }
   }
 }
-let last = performance.now();
-function frame(now) {
-  const dt = Math.min(0.1, (now - last) / 1000); last = now;
-  if (dt > 0) noteLog('sampleFps', 1 / dt);
+let last = 0;
+function frame() {
+  // Use performance.now() (not the rAF timestamp): after a long game.js task the
+  // rAF "now" can be an earlier vsync, which made dt negative, skipped stepSim,
+  // and left the farmer hidden in the house until a later frame.
+  const t = performance.now();
+  let dt = last ? (t - last) / 1000 : 1 / 60;
+  last = t;
+  if (!(dt > 0)) dt = 1 / 60;
+  else if (dt > 0.1) dt = 0.1;
+  noteLog('sampleFps', 1 / dt);
   advance(dt); render(); hud(); requestAnimationFrame(frame);
 }
 window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
-// warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
-{ const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
-  const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
-  const work = dl => { const b = Math.round(cam.ta / ASTEP); if (b !== base) { base = b; n = 1; }
-    while (n <= 128 && dl.timeRemaining() > 4 && stkPx < STK_BUDGET * 0.8) { for (const s of [n, -n]) for (const p of big) stackCanvas(p.m, (base + s) * ASTEP + p.rot); n++; }
-    setTimeout(() => idle(work), n > 128 || stkPx >= STK_BUDGET * 0.8 ? 400 : 0); }; // keep watching: after a manual turn, warm around the new angle
-  if (!MANUAL) idle(work); }
+// Warm per-angle caches of the big buildings after the loop is already painting,
+// in short wall-clock slices. Do not trust requestIdleCallback.timeRemaining()
+// (some WebViews keep returning a large budget, and the setTimeout fallback
+// always returns 8ms) — that used to precompute ~128 angles in one burst and
+// freeze the farm for ~12s on a mid-range phone.
+{ const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000);
+  let n = 1, side = 0, pi = 0, base = null;
+  const SLICE_MS = 6;
+  const work = () => {
+    if (document.hidden) { setTimeout(work, 400); return; }
+    const b = Math.round(cam.ta / ASTEP);
+    if (b !== base) { base = b; n = 1; side = 0; pi = 0; }
+    const t0 = performance.now();
+    while (n <= 128 && (performance.now() - t0) < SLICE_MS && stkPx < STK_BUDGET * 0.8) {
+      const p = big[pi];
+      if (p) stackCanvas(p.m, (base + (side ? -n : n)) * ASTEP + p.rot);
+      pi++;
+      if (pi >= big.length) { pi = 0; side++; if (side > 1) { side = 0; n++; } }
+    }
+    setTimeout(work, (n > 128 || stkPx >= STK_BUDGET * 0.8) ? 400 : 50);
+  };
+  if (!MANUAL) {
+    let c = 0;
+    const kick = () => { c++; if (c >= 8) work(); else requestAnimationFrame(kick); };
+    requestAnimationFrame(kick);
+  }
+}
 // Watchdog: if the browser ever hands back a blanked canvas anyway (context lost / restored), throw away every cache and rebuild
 // it from the voxel data, instead of drawing an empty farm until reload.
 function cacheBlank() { // the ground is fully painted, and a weed sprite always has some opaque pixels
