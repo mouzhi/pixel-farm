@@ -13,8 +13,8 @@
     birdbath: { name: '石头水盆', foot: [4.5, 4.5], block: [3, 3], shop: { cost: 450, wood: 0, max: 3 }, desc: '一个盛着水的石盆，偶尔有小鸟落下' },
     lamppost: { name: '路灯', foot: [3, 3], block: [1, 1], light: 26, shop: { cost: 600, wood: 5, max: 8 }, desc: '接上水车的电，天一黑就亮' },
     stonelamp: { name: '石灯', foot: [3.5, 3.5], block: [2, 2], light: 18, shop: { cost: 800, wood: 0, max: 6 }, desc: '矮矮的石灯笼，接上电后夜里透出暖光' },
-    stringlights: { name: '串灯', foot: [11, 3.5], block: null, light: 22, shop: { cost: 700, wood: 10, max: 4 }, desc: '两根木杆之间挂一串小灯泡，接上电后夜里亮' },
-    party: { name: '派对区', foot: [16, 12], block: [6, 4], light: 26, big: 1, shop: { cost: 2000, wood: 40, max: 1 }, desc: '长桌、两条长凳和一圈串灯。不定期的晚上一家人会聚在这里，有时镇上的人也来做客' },
+    stringlights: { name: '串灯', foot: [7, 3], block: null, light: 22, shop: { cost: 700, wood: 10, max: 4 }, desc: '两根木杆之间挂一串小灯泡，接上电后夜里亮' },
+    party: { name: '派对区', foot: [12, 8.5], block: [5.5, 2.5], light: 26, big: 1, shop: { cost: 2000, wood: 40, max: 1 }, desc: '长桌、两条长凳和一圈串灯。不定期的晚上一家人会聚在这里，有时镇上的人也来做客' },
     carving: { name: '木雕小熊', foot: [3.5, 3.5], block: [2, 2], src: '砍树时偶尔从木头里刻出来' },
     shell: { name: '贝壳堆', foot: [3.5, 3], block: null, src: '海钓时偶尔捞上来' },
     bottle: { name: '漂流瓶', foot: [3, 3], block: null, src: '钓鱼时偶尔钓上来' },
@@ -55,10 +55,10 @@
   }
   const guestCount = r => (r() < PARTY.guests ? 1 + (r() < 0.5 ? 1 : 0) : 0);
   const partyOn = T => T >= PARTY.from && T < PARTY.to;
-  // where people stand round the table (8 places); the table is at c
-  const SEATS = [[-10, -3], [-10, 4], [-3, 7.5], [4, 7.5], [10, 4], [10, -3], [4, -7.5], [-3, -7.5]];
+  // where people stand round the table (10 places along the benches and at the ends); the table is at c
+  const SEATS = [[-4, -4.6], [-1.3, -4.6], [1.3, -4.6], [4, -4.6], [-4, 4.6], [-1.3, 4.6], [1.3, 4.6], [4, 4.6], [-7.2, 0], [7.2, 0]];
   const partySeats = c => SEATS.map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy }));
-  const POSTS = [[-13, -9], [13, -9], [13, 9], [-13, 9]]; // the string-light posts
+  const POSTS = [[-10.75, -7.25], [10.75, -7.25], [10.75, 7.25], [-10.75, 7.25]]; // the string-light posts
   const partyPosts = c => POSTS.map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy }));
 
   // ---------- placement on the nav grid (path.js) ----------
