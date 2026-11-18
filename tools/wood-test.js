@@ -12,7 +12,10 @@ assert.deepStrictEqual([1, 2, 3].map(a => WA.chopMinutes(eff({ axe: a }))), [20,
 const up = Object.assign(SIM.emptyUpgrades(), { house: 2, fence: 1, forest: 1, lumber: 1 });
 assert.strictEqual(WA.target(SIM.SHOP, up, 400), 400);
 assert.strictEqual(WA.target(SIM.SHOP, up, 200), 200);
-assert.strictEqual(WA.target(SIM.SHOP, Object.assign({}, up, { house: 3 }), 800), WA.RESERVE);
+assert.strictEqual(WA.target(SIM.SHOP, Object.assign({}, up, { house: 3 }), 800), 800); // v5.4.5: nothing left needs wood: fill the storehouse
+assert.strictEqual(WA.autoBase(SIM.SHOP, Object.assign({}, up, { house: 3 })), WA.SPARE_BASE);
+assert.strictEqual(WA.autoBase(SIM.SHOP, up), WA.AUTO_BASE);
+assert.ok(WA.SPARE_BASE > 12 && WA.SPARE_BASE < 18); // above fishing, below tidying and every chore
 assert.strictEqual(WA.target(SIM.SHOP, Object.assign(SIM.emptyUpgrades(), { house: 0 }), 100), 60); // fence 60 > cabin 40
 // the hut needs the forest, so before 林场 it does not count
 assert.strictEqual(WA.target(SIM.SHOP, Object.assign(SIM.emptyUpgrades(), { house: 1, fence: 1 }), 200), 150);

@@ -25,13 +25,13 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.4.4 and a fresh save is v10 with an empty book', async ctx => {
+  await test('version 5.4.5 and a fresh save is v10 with an empty book', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const s = __farm.snapshot();
       return { v: __farm.version, sv: s.saveVersion, entries: Object.keys(s.codex.entries).length, food: s.inventory.fishFood, pond: (s.pondFish || []).length, btn: !!document.getElementById('codexBtn') };
     });
-    assert.strictEqual(r.v, '5.4.4'); assert.strictEqual(r.sv, 10); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
+    assert.strictEqual(r.v, '5.4.5'); assert.strictEqual(r.sv, 10); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
     assert.deepStrictEqual(p.errs, []);
   });
 
@@ -213,7 +213,7 @@ async function test(name, fn) {
       const s = __farm.snapshot();
       return { sv: s.saveVersion, v: __farm.version, bass: !!(s.codex.entries && s.codex.entries['fish:bass']), sword: !!(s.codex.entries && s.codex.entries['fish:sword']), food: s.inventory.fishFood, coins: s.coins };
     });
-    assert.strictEqual(r.sv, 10); assert.strictEqual(r.v, '5.4.4'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
+    assert.strictEqual(r.sv, 10); assert.strictEqual(r.v, '5.4.5'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
     assert.deepStrictEqual(p.errs, []);
     await p.close();
   });
