@@ -64,7 +64,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const g = f.VISITORS[0]; if (!g) return { none2: true, d };
     const first = g.stops[0] && g.stops[0].what; until(() => g.what === 'play' && !g.pts.length, 2000); look(g.x, g.y, 0.3);
     const spot = [Math.round(g.x), Math.round(g.y)], name = g.name, t = tod(); f.advance(0.1, 10);
-    return { d, name, first, spot, t, log: S.events.map(e => e.msg).filter(l => /同学/.test(l)).slice(0, 1) }; })()`,
+    return { d, name, first, spot, t, log: S.events.map(e => e.msg).filter(l => /同学/.test(l)).slice(-1) }; })()`,
     r => r.none || r.none2 ? 'no classmate' : !(r.log[0] || '').includes('同学' + r.name) ? 'no arrival log' : r.first !== 'play' ? 'playground not first: ' + r.first : !['阿团', '朵朵', '石头'].includes(r.name) ? 'name ' + r.name : r.t > 16 * 60 ? 'too late' : null);
   // 6. the classmate goes home by 16:40, off the farm by evening
   await shot('v580_classmate_leaves.png', `(() => { ${setup} dry(); S.town.school.kid0 = 9; road();
