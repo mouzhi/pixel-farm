@@ -205,6 +205,7 @@ async function test(name, fn) {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day59-manor.json'), 'utf8')); s.savedAt = Date.now();
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => { const f = __farm, S = f.S, F = f.FARMER; f.SAVE.off = true;
+      S.up.graze = 1; // v5.5.0 adds 放牧草地 (600 + 30 wood) after the fold; counted as built so nothing is left to build, as in the report
       const wood0 = F.wood, tgt = f.woodAuto().target, cap = f.woodCap(), day0 = S.day, by = {}, kinds = {};
       while (S.day < day0 + 2) { f.advance(2.5, 5);
         for (const a of f.actors()) if (a.task && a.task.label === '自己去林场砍树') by[a === F ? 'farmer' : a.id] = (by[a === F ? 'farmer' : a.id] || 0) + 1;
