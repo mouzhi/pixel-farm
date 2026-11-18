@@ -628,3 +628,14 @@ html.xhs-mobile .xhs-ico.busy { opacity: .6; }
   margin-top: 12px; min-width: 120px; min-height: 44px;
   background: #e8c78a; color: #3a2a20; border: 2px solid #3a2a20; font: inherit;
 }
+
+/* 面板打开时提示叠在面板上、底栏上方，带实底，保证点按反馈看得到 */
+html.xhs-mobile #xhs-toast.over-sheet {
+  z-index: 40;
+  padding: 7px 14px;
+  border-radius: 14px;
+  background: rgba(30, 18, 10, 0.92);
+  border: 2px solid #e0b880;
+  max-width: min(300px, calc(100vw - 48px));
+}
+html.xhs-mobile #xhs-toast.over-sheet .xhs-toast-back { display: none; }

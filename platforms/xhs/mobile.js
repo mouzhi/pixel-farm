@@ -67,6 +67,19 @@
     var hud = doc.getElementById('hud');
     if (!el || !hud) return;
     var r = hud.getBoundingClientRect();
+    // 商店/仓库/榜单盖住了 HUD 下方那行，提示改到底栏上方，叠在面板之上，不然点了看不到反馈。
+    var over = ['shop', 'store', 'xhs-board', 'xhs-inv-dock'].some(function (id) {
+      var s = doc.getElementById(id);
+      return s && !s.hidden && s.getBoundingClientRect().height > 0;
+    });
+    el.classList.toggle('over-sheet', over);
+    if (over) {
+      var bar = doc.getElementById('xhs-bar');
+      var br = bar && bar.getBoundingClientRect();
+      var bottom = br && br.height ? br.top : ((root.innerHeight || 800) - 90);
+      el.style.top = Math.max(0, Math.round(bottom - 64)) + 'px';
+      return;
+    }
     if (r.height) el.style.top = Math.round(r.bottom + 14) + 'px';
   }
   P.toast = function (msg) {
