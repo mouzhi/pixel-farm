@@ -908,6 +908,9 @@
         list[i].classList.add('xhs-short');
         list[i].setAttribute('aria-disabled', 'true');
       }
+      // 页签跟标题栏一起吸顶：从地块木牌跳进来时列表已经滚下去，页签也要看得见
+      var head = shop.querySelector('.shead');
+      if (head && head.offsetHeight) shop.style.setProperty('--xhs-shead-h', head.offsetHeight + 'px');
     }
     unlock();
     if (root.MutationObserver) new MutationObserver(unlock).observe(shop, { childList: true, subtree: true });

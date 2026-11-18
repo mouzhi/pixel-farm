@@ -639,3 +639,13 @@ html.xhs-mobile #xhs-toast.over-sheet {
   max-width: min(300px, calc(100vw - 48px));
 }
 html.xhs-mobile #xhs-toast.over-sheet .xhs-toast-back { display: none; }
+
+html.xhs-mobile #shop .tabs {
+  position: -webkit-sticky;
+  position: sticky;
+  top: calc(var(--xhs-shead-h, 60px) - 10px);
+  z-index: 2;
+  margin: -8px -12px 10px;
+  padding: 0 12px 8px;
+  background: rgba(40, 28, 22, .98);
+}
