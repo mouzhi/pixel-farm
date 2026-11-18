@@ -25,7 +25,7 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.4.2 and a fresh save is v10 with an empty book', async ctx => {
+  await test('version 5.4.4 and a fresh save is v10 with an empty book', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const s = __farm.snapshot();

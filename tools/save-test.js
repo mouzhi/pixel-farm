@@ -474,3 +474,28 @@ ok('v10 validation: junk book entries dropped, pond cap 8, sea fish stay out, un
   assert.deepStrictEqual(s.milestones.filter(u => u.id === 'open'), [{ id: 'open', day: 1 }]);
   assert.strictEqual(s.streaks.noShop, 0); assert.strictEqual(s.streaks.happy, 99);
 });
+
+ok('v10 append-only: missing weather and bug net get defaults; insect book keys are kept', () => {
+  const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
+  delete raw.weather; delete raw.bugNet;
+  raw.codex = { entries: { 'bug:white': { firstDay: 4, count: 2 }, 'fish:koi': { firstDay: 2, count: 1 } } };
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.bugNet, 0);
+  assert.ok(s.weather);
+  assert.strictEqual(s.weather.rained, 0);
+  assert.strictEqual(s.weather.nextDay, 0);
+  assert.ok(s.codex.entries['bug:white']);
+  assert.ok(s.codex.entries['fish:koi']);
+});
+ok('v10 validate keeps a scheduled shower and a bought net', () => {
+  const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
+  raw.weather = { nextDay: 12, start: 600, dur: 180, lastDay: 4, rained: 1, nextStart: 700, nextDur: 120 };
+  raw.bugNet = 1;
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.weather.lastDay, 4);
+  assert.strictEqual(s.weather.nextDay, 12);
+  assert.strictEqual(s.weather.dur, 180);
+  assert.strictEqual(s.weather.nextStart, 700);
+  assert.strictEqual(s.bugNet, 1);
+});

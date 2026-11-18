@@ -63,6 +63,7 @@
   ICONS.lumber = house(gr[2]); // v5.3.1 the lumber hut: a cabin with a moss-green roof
   ICONS.heart = pixIcon(['', '', '', '   kkk   kkk', '  kpppk kpppk', ' kpphppkpppppk', ' kphhpppppppk', ' kpppppppppppk', '  kpppppppppk', '   kpppppppk', '    kpppppk', '     kpppk', '      kpk', '       k'].map(r => r.padEnd(16)), { k: ink, p: '#e57fa0', h: '#f6ecd0' });
   ICONS.flower = pixIcon(['', '', '', '      y', '     kyk', '    ykyky', '     kyk', '      b', '      b', '     kbk', '      k'].map(r => r.padEnd(16)), { k: ink, y: '#ffd76a', b: gr[3] });
+  ICONS.bugnet = pixIcon(['', '', '     kk', '    kwwk', '    kwwk', '     kk', '     kb', '    kb', '   kb', '  kb', ' kb', 'kb', 'k'].map(r => r.padEnd(16)), { k: ink, w: '#fff6dc', b: wd[3] });
   const artIcon = k => { const a = G.animalArt(k), n = Math.max(16, a.width, a.height), c = document.createElement('canvas'); c.width = c.height = n;
     c.getContext('2d').drawImage(a, (n - a.width) >> 1, n - a.height - ((n - a.height) >> 2)); return c.toDataURL(); };
   for (const k of PFAnimals.KIND_IDS) ICONS[k] = artIcon(k);
@@ -244,7 +245,7 @@
   function drawShop(force) {
     const S = G.S, tabs = shopTabs();
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
-    const key = [shopTab, S.coins, G.F.wood, S.fishFood, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
+    const key = [shopTab, S.coins, G.F.wood, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas].join(',');
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -262,6 +263,12 @@
     }
     if (tab.id === 'tools') {
       const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
+      const netPrice = (window.PFInsects && PFInsects.NET_PRICE) || 150;
+      const netOwned = !!S.bugNet, netOk = !netOwned && S.coins >= netPrice, netShort = netOk || netOwned ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(netPrice - S.coins, 'coin')}</span></span>`;
+      h += `<div class="sec">院子</div>`;
+      h += `<div class="card${netOwned ? ' max' : ''}" data-item="bugnet">${icon('bugnet')}<div class="ct"><div><b>捕虫网</b> <span class="lv">${netOwned ? '已有' : '未购买'}</span></div>` +
+        (netOwned ? `<div class="d">买一次就留在家里。玩耍的孩子会自己带网去捉昆虫，看一眼再放走，记进图鉴</div></div><div class="cb"><span class="done">✓</span></div>` :
+          `<div class="d">${netPrice} 金，买一次就留在家里。有网之后，孩子偶尔会自己去捉一只昆虫，记进图鉴的「昆虫」页，看完就放走，不能卖</div></div><div class="cb"><button class="pbtn" data-buy="bugnet"${netOk ? '' : ' disabled'}>${priceChips(netPrice, 0)}</button>${netShort}</div>`) + '</div>';
       h += `<div class="sec">池塘（鱼食买了以后家人会自己去撒；观赏鱼放进池塘只是看着玩）</div>`;
       if (food) {
         const maxed = S.fishFood >= food.stock, ok = !maxed && S.coins >= food.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(food.price - S.coins, 'coin')}</span></span>`;
@@ -301,6 +308,8 @@
     if (id === 'wood') return `<i style="background:url(${FRUIT_ICON.wood});background-size:32px;image-rendering:pixelated"></i>`;
     if (id === 'hay') return icon('hay');
     if (id === 'fishfood' || id === 'fishFood') return icon('fishfood');
+    if (id === 'bugnet' || id === 'net') return icon('bugnet');
+    if (id === 'goldfish' || id === 'koi') return icon(id);
     if (id === 'flower') return icon('flower');
     if (ICONS[id]) return icon(id);
     return '<i></i>';
@@ -356,6 +365,11 @@
   function cellArt(it, seen) {
     if (it.group === 'fish') return itemArt(it, { seen, w: 72 });
     if (it.group === 'rare') return itemArt(it, { seen, w: 48 });
+    const INS = window.PFInsects;
+    if (it.group === 'bug' && INS && INS.bugURL) {
+      const url = seen ? INS.bugURL(it.id, true) : INS.silURL(it.id);
+      return url ? icoTag(url, 'bug', 48, 48) : '<i class="ico"></i>';
+    }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
@@ -537,6 +551,7 @@
     box.innerHTML = `<h3>欢迎回来</h3><div>离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}</div>` +
       (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
       (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
+      (r.rain ? `<div>这天下过小雨，田都湿了</div>` : '') +
       `<div class="row" style="justify-content:center;display:flex;margin-top:8px"><button class="pbtn" id="offOk">好的</button></div>`;
     box.hidden = false; $('offOk').onclick = () => { box.hidden = true; };
   }
