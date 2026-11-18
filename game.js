@@ -50,7 +50,7 @@ function outlineCanvas(c) {
   g.putImageData(img, 0, 0); return c;
 }
 // tiny hand-drawn 2D sprites (decals and billboards): rows of legend characters
-const PIXK = { d: G[1], m: G[2], g: G[3], l: G[4], h: G[5], w: Wd[1], b: Wd[2], t: Wd[3], s: Wd[4], k: Wd[5], c: Ac[0], y: Ac[1], o: Ac[2], p: Ac[3], r: Rf[2], R: Rf[3], e: St[2], E: St[3], a: Wt[3], A: Wt[5], u: Wt[2], i: Ink[0] };
+const PIXK = { d: G[1], m: G[2], g: G[3], l: G[4], h: G[5], w: Wd[1], b: Wd[2], t: Wd[3], s: Wd[4], k: Wd[5], c: Ac[0], y: Ac[1], o: Ac[2], p: Ac[3], r: Rf[2], R: Rf[3], e: St[2], E: St[3], a: Wt[3], A: Wt[5], u: Wt[2], i: Ink[0], j: Ink[1] };
 function pix(rows, outline = true) { const h = rows.length, w = Math.max(...rows.map(r => r.length)), c = mkc(w + 2, h + 2), g = c.getContext('2d');
   rows.forEach((r, y) => [...r].forEach((ch, x) => { if (PIXK[ch]) { g.fillStyle = PIXK[ch]; g.fillRect(x + 1, y + 1, 1, 1); } }));
   return outline ? outlineCanvas(c) : c; }
@@ -1469,21 +1469,31 @@ function flipCanvas(c) { const f = mkc(c.width, c.height), g = f.getContext('2d'
 const ANIMAL_SPR = {};
 for (const k in ANIMAL_ROWS) { const fr = [...ANIMAL_ROWS[k], lowerHead(ANIMAL_ROWS[k][0], HEAD_COL[k], HEAD_DY[k])].map(r => pix(r)); ANIMAL_SPR[k] = { r: fr, l: fr.map(flipCanvas) }; }
 const EGG = pix(['.c.', 'ccc', 'cEc']);
-// v4.7 pets, facing right; X = coat, x = second coat colour, Y = eye. Frames: walk A, walk B, sit, sleep (curled up)
+// v5.3.1 pets, chibi (big head, readable at game zoom), facing right. Legend: X coat, Z coat shade, W light (muzzle, chest, belly),
+// x stripes (cat) / saddle (dog), Q and V calico patches or collie blaze, F dog face, M dog muzzle, U dog ears, Y eye, N nose, P pink (inner ear, cat nose, tongue).
+// Frames: walk A, walk B, sit, sleep (curled up), sit B (cat: tail flick + blink, dog: tail wag), happy (being patted).
 const PET_ROWS = {
-  cat: [['........X.X', 'X.......XXX', 'X......XXYX', '.XXXXXXXXX.', '.XxXxXXXX..', '.X.X..X.X..'],
-        ['........X.X', 'X.......XXX', 'X......XXYX', '.XXXXXXXXX.', '.XxXxXXXX..', '..X.X.X.X..'],
-        ['.....X.X', '.....XXX', '.....XYX', '....XXX.', '...XxXX.', 'XX.XxXX.', '.XXXXXX.'],
-        ['......X.X', '.XXXXXXXX', 'XXxXxXXXX', '.XXXXXXX.']],
-  dog: [['........XX..', '.......XXXX.', 'X......XXYXi', '.X.....XXXX.', '.XXXXXXXXx..', '.XXXXXXXXx..', '.X.X....X.X.'],
-        ['........XX..', '.......XXXX.', 'X......XXYXi', '.X.....XXXX.', '.XXXXXXXXx..', '.XXXXXXXXx..', '..X.X..X.X..'],
-        ['.....XX..', '....XXXX.', '....XXYXi', '....XXXX.', 'X..XXXx..', '.XXXXXx..', '.XXXXXX..', '..X..XX..'],
-        ['.......XX.', '..XXXXXXXX', 'XXXXXXXXXi', '.XXxxxXXX.']],
+  cat: [
+    ['.....X.....X.', '.XX..XP...PX.', '.X...XQQXXXX.', '.x...QQXXXXX.', '.X...XXYXXYX.', '.x...XXYXXYX.', '.XxXxWXWPWXW.', '..VVxXXWWWX..', '..XVWWWZWWZ..', '..X.X...X.X..'],
+    ['.....X.....X.', '.XX..XP...PX.', '.X...XQQXXXX.', '.x...QQXXXXX.', '.X...XXYXXYX.', '.x...XXYXXYX.', '.XxXxWXWPWXW.', '..VVxXXWWWX..', '..XVWWWZWWZ..', '...XX....XX..'],
+    ['..X.....X..', '..XP...PX..', '..XQQXXXX..', '..QQXXXXX..', '..XXYXXYX..', '..XXYXXYX..', '..WXWPWXW..', '...XWWWX...', '...xWWWX...', 'X..XWWWXX..', 'XV.xWWWXX..', '.XXVZXXZX..'],
+    ['.........X...X', '...XXXXX.XP.PX', '..XxXxXxXQQXXX', '.XXXXXXXXQCXCX', 'X.XxXxXxXWWPWW', 'XZXXXXXXXXWWW.', '.XVVXXXXXXXX..'],
+    ['..X.....X..', '..XP...PX..', '..XQQXXXX..', '..QQXXXXX..', '..XXXXXXX..', '..XXCXXCX..', '..WXWPWXW..', '...XWWWX...', '...xWWWX...', '...XWWWXX..', 'XXXxWWWXX..', '.XXVZXXZX..'],
+    ['..X.....X..', '..XP...PX..', '..XQQXXXX..', '..QQXXXXX..', '..XXXXXXX..', '..XXCXXCX..', '..PWWPWWP..', '...XWWWX...', '...xWWWX...', 'X..XWWWXX..', 'XV.xWWWXX..', '.XXVZXXZX..']],
+  dog: [ // round chibi face, big floppy ears hanging beside it (ears down = dog; cats' are up), nose dot, tail up
+    ['.......XXXX...', '......XXXVXX..', '.X..UUXXXVXXUU', 'X...UUFYFFYFUU', 'X...UUFFFNFFUU', '.X...UMMMPMMU.', '.XXXXXXWWWWWX.', '.XxxxXXWWWWWX.', '.XXXXXXXWWWXX.', '..X.X....X.X..', '..W.W....W.W..'],
+    ['.......XXXX...', '......XXXVXX..', 'X...UUXXXVXXUU', 'X...UUFYFFYFUU', '.X..UUFFFNFFUU', '.X...UMMMPMMU.', '.XXXXXXWWWWWX.', '.XxxxXXWWWWWX.', '.XXXXXXXWWWXX.', '...X.X..X.X...', '...W.W..W.W...'],
+    ['....XXXX....', '...XXXVXX...', '.UUXXXVXXUU.', '.UUFYFFYFUU.', '.UUFFFNFFUU.', '..UMMMPMMU..', 'X..XWWWWX...', 'X..XWWWWX...', '.X.XWWWWXX..', '.XXXXWWXXX..', '.XXXXWWXXX..', '..XWW..WWX..'],
+    ['.........XXX..', '........XXVXX.', '..XXXXXUXXVXXU', '.XXxxXUUFCFCFU', 'XXXXXXUUFFNFFU', 'X.XXXXXUMMMMU.', '.XXXXXXXWWWW..'],
+    ['....XXXX....', '...XXXVXX...', '.UUXXXVXXUU.', '.UUFYFFYFUU.', '.UUFFFNFFUU.', '..UMMMPMMU..', '.X.XWWWWX...', '..XXWWWWX...', '...XWWWWXX..', 'XXXXXWWXXX..', '.XXXXWWXXX..', '..XWW..WWX..'],
+    ['....XXXX....', '...XXXVXX...', '.UUXXXVXXUU.', '.UUFCFFCFUU.', '.UUFFFNFFUU.', '..UMMMPMMU..', 'X..XWWPWX...', 'X..XWWWWX...', '.X.XWWWWXX..', '.XXXXWWXXX..', '.XXXXWWXXX..', '..XWW..WWX..']],
 };
-const COATS = { ginger: { X: 'o', x: 'y', Y: 'i' }, black: { X: 'i', x: 'i', Y: 'y' }, calico: { X: 'c', x: 'o', Y: 'i', patch: 'i' },
-  shiba: { X: 'o', x: 'c', Y: 'i' }, collie: { X: 'c', x: 'c', Y: 'i', patch: 'i' }, brown: { X: 't', x: 's', Y: 'i' } };
-function coatRows(rows, coat) { const C = COATS[coat];
-  return rows.map((r, y) => [...r].map((ch, x) => ch === 'X' ? (C.patch && (x * 3 + y * 5) % 7 < 2 && y < rows.length - 1 ? C.patch : C.X) : ch === 'x' ? C.x : ch === 'Y' ? C.Y : ch).join('')); }
+const COATS = { // cat: ginger / black / calico; dog: shiba / border collie (black, white blaze, chest and paws) / brown
+  ginger: { X: 'o', Z: 'r', W: 'c', x: 'r', Y: 'i', P: 'p' }, black: { X: 'j', Z: 'i', W: 'j', x: 'i', Y: 'y', C: 'k', P: 'p' },
+  calico: { X: 'c', Z: 'k', W: 'c', Q: 'o', V: 'w', C: 'w', Y: 'i', P: 'p' },
+  shiba: { X: 'o', Z: 'r', W: 'c', M: 'c', U: 'w', Y: 'i', P: 'p', N: 'i' }, collie: { X: 'j', Z: 'i', W: 'c', F: 'c', M: 'c', V: 'c', U: 'i', C: 'i', Y: 'i', P: 'p', N: 'i' },
+  brown: { X: 't', Z: 'b', W: 's', M: 's', x: 'b', U: 'w', Y: 'i', P: 'p', N: 'i' } };
+const coatRows = (rows, coat) => { const C = COATS[coat]; return rows.map(r => [...r].map(ch => ch === '.' ? ch : C[ch] || (ch === 'C' && C.Z) || C.X).join('')); };
 const PET_SPR = {}; // kind:coat -> { r: frames, l: flipped frames }, built on first use (at most 6)
 function petSprite(p) { const key = p.kind + ':' + p.coat; let s = PET_SPR[key]; if (s) return s;
   const fr = PET_ROWS[p.kind].map(r => pix(coatRows(r, p.coat))); s = PET_SPR[key] = { r: fr, l: fr.map(flipCanvas) }; return s; }
@@ -1524,7 +1534,7 @@ function stepPets(dm) {
   if (!PETS_LIVE.length) return;
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE; let dogs = 0, cats = 0;
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
-    if (v.hold) { v.pose = 2; continue; }
+    if (v.hold) { v.pose = 5; continue; } // happy face while being patted
     let speed = dog ? 4.2 : 2.4;
     if (night || F.home) { setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; }
     else if (dog) { const side = F.fx >= 0 ? 1 : -1, c = [[-side, 3], [side, 3], [-side, -4], [side, -4]].map(([sx, oy]) => [F.x + sx * (9 + k * 6), F.y + oy + k * 2]).find(([x, y]) => dry(x, y));
@@ -1541,8 +1551,10 @@ function stepPets(dm) {
   }
 }
 function petAtScreen(px, py) { let best = null, bd = 9; setCam();
-  for (const p of PETS_LIVE) { const v = PV.get(p.id); if (!v) continue; const [sx, sy] = proj(v.x, v.y), d = Math.hypot(sx - px, sy - 4 - py); if (d < bd) { bd = d; best = p; } }
+  for (const p of PETS_LIVE) { const v = PV.get(p.id); if (!v) continue; const [sx, sy] = proj(v.x, v.y), d = Math.hypot(sx - px, sy - 6 - py); if (d < bd) { bd = d; best = p; } }
   return best; }
+function petFrame(p, v) { if (v.pose !== 2) return v.pose; // sitting: dogs wag their tail, cats now and then flick theirs and blink
+  const ph = (v.x * 0.37 + v.y * 0.11) % 1; return p.kind === 'dog' ? (Math.floor(realT * 3 + ph * 2) % 2 ? 4 : 2) : ((realT * 0.4 + ph) % 1 < 0.12 ? 4 : 2); }
 function patPet(p) { const v = petView(p); hearts(v.x, v.y, 8); if (v.pose === 3) v.pose = 2; v.idle = 0; return AN.PETS[p.kind].coats.find(c => c.id === p.coat).name; }
 // ---------- trees with a state (v4.3): forest trees to chop, stumps that grow back, transplanted saplings, fruit trees ----------
 const FRUIT_COL = { apple: [Rf[2], Rf[3]], orange: [Ac[2], Ac[1]] };
@@ -2001,7 +2013,7 @@ function render() {
       list.push({ spr: (v.flip ? sp.l : sp.r)[moving ? Math.floor(v.step / 3) % 2 : v.graze ? 2 : 0], x: v.x, y: v.y, w: 1 }); }
     const eggs = Math.min(4, S.animals.reduce((n, a) => n + (a.kind === 'chicken' ? a.ready : 0), 0));
     for (let i = 0; i < eggs; i++) list.push({ spr: EGG, x: PENS.coop.bld.x - 6 + i * 4, y: PENS.coop.bld.y + 15 + (i % 2), flat: 1 }); }
-  for (const p of PETS_LIVE) { const v = petView(p); if (!onScreen(v.x, v.y, 20)) continue; const sp = petSprite(p); list.push({ spr: (v.flip ? sp.l : sp.r)[v.pose], x: v.x, y: v.y, w: 1 }); }
+  for (const p of PETS_LIVE) { const v = petView(p); if (!onScreen(v.x, v.y, 20)) continue; const sp = petSprite(p); list.push({ spr: (v.flip ? sp.l : sp.r)[petFrame(p, v)], x: v.x, y: v.y, w: 1 }); }
   let farmerD = null;
   if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y }, carryFields(F), farmerPose()); list.push(farmerD); }
   const familyD = familyDraw(list, T); // v5.0: 阿禾 (at her flower stall, or at home on the farm), the children, a cradle on the porch
@@ -2326,7 +2338,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.3.0';
+const GAME_VERSION = '5.3.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2409,7 +2421,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
+Object.assign(window.__farm, { waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, plantSpot, input: INPUT,
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
