@@ -1019,7 +1019,7 @@ function postAutoChop(post, marked) {
   if (S.t % 1440 >= WA.AUTO_END || !WA.wants(S.eff, FARMER.wood, woodTarget())) return;
   const free = WA.autoTrees(S.trees, S.eff).filter(t => !CLAIM.has(t) && !marked.includes(t));
   if (free.length <= WA.KEEP) return;
-  const t = rngNear(free); if (t) post('chop', WA.AUTO_BASE, t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
+  const t = rngNear(free); if (t) post('chop', WA.autoBase(SIM.SHOP, S.up), t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
 }
 function woodNight() {
   const re = WA.replant(S.trees, FARMER.saplings, S.eff); for (const t of re) treeChanged(t);
@@ -2711,7 +2711,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.4';
+const GAME_VERSION = '5.4.5';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

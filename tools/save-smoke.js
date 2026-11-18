@@ -199,6 +199,24 @@ async function test(name, fn) {
     assert.deepStrictEqual(Object.keys(r.by), ['farmer'], 'only the farmer: ' + JSON.stringify(r)); assert(r.wood > 0);
     assert.deepStrictEqual(p.errs, []);
   });
+  await test('v5.4.5 a player\'s day-59 manor farm (nothing left to build, 40 wood): the farmer still goes to 林场 and fills the storehouse', async ctx => {
+    // fixture: the player's own v5.4.1 save from the morning they reported "auto chopping never runs" (their chop marks removed).
+    // Everything needing wood was bought, so the old 40-wood reserve was already met and he never left the fields again.
+    const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day59-manor.json'), 'utf8')); s.savedAt = Date.now();
+    const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
+    const r = await p.evaluate(() => { const f = __farm, S = f.S, F = f.FARMER; f.SAVE.off = true;
+      const wood0 = F.wood, tgt = f.woodAuto().target, cap = f.woodCap(), day0 = S.day, by = {}, kinds = {};
+      while (S.day < day0 + 2) { f.advance(2.5, 5);
+        for (const a of f.actors()) if (a.task && a.task.label === '自己去林场砍树') by[a === F ? 'farmer' : a.id] = (by[a === F ? 'farmer' : a.id] || 0) + 1;
+        if (F.task && F.task.kind) kinds[F.task.kind] = 1; }
+      return { wood0, tgt, cap, wood: F.wood, by, kinds, orders: S.orders.length, house: S.up.house, members: S.members.map(m => m.id) }; });
+    assert.strictEqual(r.house, 3); assert.strictEqual(r.wood0, 40); assert.strictEqual(r.orders, 0); assert(r.members.includes('partner'));
+    assert.strictEqual(r.tgt, r.cap, 'with nothing left to build he fills the storehouse: ' + JSON.stringify(r));
+    assert(r.by.farmer > 0, 'the farmer walks to 林场 by himself: ' + JSON.stringify(r)); assert.deepStrictEqual(Object.keys(r.by), ['farmer']);
+    assert(r.wood >= 40 + 8 * 14, 'at least 8 trees of wood in two days: ' + JSON.stringify(r)); assert(r.wood <= r.cap);
+    for (const k of ['harvest', 'water', 'plant']) assert(r.kinds[k], 'field work still gets done: ' + k + ' ' + JSON.stringify(r.kinds));
+    assert.deepStrictEqual(p.errs, []);
+  });
   await test('chop and transplant orders: wood, a sapling, then fruit he picks and sells', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => { const f = __farm, S = f.S, F = f.F; S.coins = 5000; f.buy('axe'); f.buy('forest');
