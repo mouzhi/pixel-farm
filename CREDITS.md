@@ -10,7 +10,7 @@
 - 音效 `sfx/*.mp3`（首屏用：点击、锄地、浇水、收获、金币）和 `assets/audio/sfx/*.mp3`（其余：播种、打水、摘果、砍树、喂草、
   抛竿、出水、购买、解锁、闪光、清理、鸡、羊、牛、猪、猫、狗、鸟叫）：由 **ElevenLabs Sound Effects**（eleven_text_to_sound_v2）
   于 2026-11-17 生成，账号为 ElevenLabs **Starter** 付费档（付费档可商用、无需署名；免费档才要求署名）。
-  处理：截取单次动作、单声道、去低频、按响度统一、短淡出、64 kbps MP3。文件缺失或未加载时用下方 ZzFX 合成音效代替。
+  处理：截取单次动作、单声道、去低频、按响度统一、短淡出、64 kbps MP3。 其中打水音效 `assets/audio/sfx/refill.mp3` 于 2026-11-18 重生成（木头辘轳、绳子和轻倒水，去掉冲水感）。文件缺失或未加载时用下方 ZzFX 合成音效代替。
 - 程序生成的背景音乐（音频文件加载前或加载失败时使用）、环境声（鸟叫、虫鸣）、提示音：运行时用 WebAudio 生成，本仓库原创。
 - 音效合成器：音效的采样生成函数改写自 **ZzFX**（Zuper Zmall Zound Zynth），MIT 许可。
   - Copyright (c) 2019 Frank Force — https://github.com/KilledByAPixel/ZzFX
