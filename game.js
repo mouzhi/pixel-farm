@@ -1315,12 +1315,21 @@ function stepSim(dm) {
   for (const a of S.members) { F = a; stepActor(dm); } // v5.0: the family first, so the farmer's own step leaves F on him
   F = FARMER; stepActor(dm);
 }
+function followInsect(k) { // play-chase: keep walking toward the live butterfly (window.__insects.nearest)
+  if (!window.PFKids) return;
+  const bug = PFKids.nearbyInsect(F.x, F.y, 'butterfly') || PFKids.nearbyInsect(F.x, F.y);
+  if (!bug || bug.x == null) return;
+  const moved = Math.hypot((k.to && k.to.x || 0) - bug.x, (k.to && k.to.y || 0) - bug.y);
+  k.to = { x: bug.x, y: bug.y }; k.insect = bug;
+  if (moved > 5) k.via = routeVia(F, k.to);
+}
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
   if (!F.task) { F.task = chooseTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
+  if (k && k.kind === 'play-chase') followInsect(k);
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
   const dx = tgt.x - F.x, dy = tgt.y - F.y, dist = Math.hypot(dx, dy);
@@ -2658,7 +2667,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.3';
+const GAME_VERSION = '5.4.4';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2779,7 +2788,8 @@ function tickWeather(dt) {
       day: S.day, t: S.t, raining, night, summer: !!(WX && WX.isSummer(S.day)),
       pond: POND, orchard: !!(S.eff.regions && S.eff.regions.includes('orchard')),
       hasNet: !!S.bugNet,
-      kids: (S.members || []).filter(m => m.role === 'child').map(m => ({ x: m.x, y: m.y, id: m.id })),
+      // play / school / helper kids (not only role==='child'); skip anyone still off-map at school
+      kids: (S.members || []).filter(m => m.id && /^kid/.test(m.id) && m.away !== 'school').map(m => ({ x: m.x, y: m.y, id: m.id })),
     });
     for (const ev of evs || []) {
       if (BOOK) BOOK.record(S.codex, ev.key, ev.day || S.day);

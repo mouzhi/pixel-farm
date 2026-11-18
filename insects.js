@@ -386,10 +386,11 @@
     return ev;
   }
 
-  function nearest(x, y) {
+  function nearest(x, y, kind) {
     let best = null, bestD = 1e9;
     for (const b of live) {
       if (!b.alive) continue;
+      if (kind && b.group !== kind && b.kind !== kind) continue;
       const d = Math.hypot(b.x - x, b.y - y);
       if (d < bestD) { bestD = d; best = { id: b.id, kind: b.kind, name: b.name, group: b.group, x: b.x, y: b.y, z: b.z, dist: d }; }
     }

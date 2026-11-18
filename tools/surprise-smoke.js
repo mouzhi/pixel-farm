@@ -28,7 +28,7 @@ async function test(name, fn) {
   await test('version 5.4.4, saveVersion is 10', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => ({ v: __farm.version, sv: __farm.snapshot().saveVersion }));
-    assert.strictEqual(r.v, '5.4.3');
+    assert.strictEqual(r.v, '5.4.4');
     assert.strictEqual(r.sv, 10);
     assert.deepStrictEqual(p.errs, []);
   });

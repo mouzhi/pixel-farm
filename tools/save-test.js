@@ -499,3 +499,16 @@ ok('v10 validate keeps a scheduled shower and a bought net', () => {
   assert.strictEqual(s.weather.nextStart, 700);
   assert.strictEqual(s.bugNet, 1);
 });
+
+ok('v10 keeps weather, bugNet and kids growth fields together (no version bump)', () => {
+  const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
+  raw.weather = { nextDay: 12, start: 600, dur: 180, lastDay: 4, rained: 1, nextStart: 700, nextDur: 120 };
+  raw.bugNet = 1;
+  raw.family = { moved: 1, kidGrowth: 1, kids: [{ id: 'kid0', name: '小豆', born: 0, floor: 'helper' }] };
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.bugNet, 1);
+  assert.strictEqual(s.weather.nextDay, 12);
+  assert.strictEqual(s.family.kidGrowth, 1);
+  assert.strictEqual(s.family.kids[0].floor, 'helper');
+});

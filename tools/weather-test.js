@@ -127,4 +127,34 @@ ok('insect catalog has 8 species with rarity colours and the 昆虫 group is in 
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'firefly')), 'epic');
 });
 
+
+ok('nearest(x, y, "butterfly") skips dragonflies so a chasing kid aims at a butterfly', () => {
+  INS.reset();
+  const pond = { x: 34, y: 100, rx: 19, ry: 12 };
+  INS.tick(0, { day: 2, raining: false, night: false, butterflies: 1, dragonflies: 1, fireflies: 0, pond, rng: () => 0.4 });
+  const list = INS.list();
+  const fly = list.find(x => x.group === 'dragonfly');
+  const but = list.find(x => x.group === 'butterfly');
+  assert(fly && but, 'need both');
+  // stand on the dragonfly; unfiltered nearest would pick it
+  const any = INS.nearest(fly.x, fly.y);
+  assert.strictEqual(any.group, 'dragonfly');
+  const only = INS.nearest(fly.x, fly.y, 'butterfly');
+  assert(only && only.group === 'butterfly' && only.id === but.id, only);
+});
+
+ok('a kid with a net standing next to an insect catches it (then it is released)', () => {
+  INS.reset();
+  const pond = { x: 34, y: 100, rx: 19, ry: 12 };
+  INS.tick(0, { day: 5, raining: false, night: false, butterflies: 1, dragonflies: 0, pond, rng: () => 0.2 });
+  const b = INS.list()[0];
+  assert(b);
+  const evs = INS.tick(1, {
+    day: 5, raining: false, night: false, butterflies: 1, dragonflies: 0, pond,
+    hasNet: true, kids: [{ x: b.x, y: b.y, id: 'kid0' }], rng: () => 0
+  });
+  assert(evs && evs.length === 1 && evs[0].id === b.id, evs);
+  assert.strictEqual(INS.list().filter(x => x.id === b.id).length, 0);
+});
+
 console.log(n + ' tests ok');

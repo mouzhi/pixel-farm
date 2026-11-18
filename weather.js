@@ -155,25 +155,55 @@
     if (ctx.ellipse) ctx.ellipse(x, y, rx, ry, rot || 0, 0, Math.PI * 2);
     else { ctx.save(); ctx.translate(x, y); ctx.rotate(rot || 0); ctx.scale(rx, ry); ctx.arc(0, 0, 1, 0, Math.PI * 2); ctx.restore(); }
   }
-  function drawWet(ctx, proj, RS, st) {
-    if (V.wet < 0.04) return 0;
-    st = st || {};
-    ensureVisual(st.pathSegs);
-    const W = st.W || 1e4, H = st.H || 1e4, scale = RS || 2;
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.strokeStyle = `rgba(120, 116, 122, ${0.4 * V.wet})`;
+  // Stroke every path onto a scratch canvas first (opaque, source-over) so intersections
+  // stay one layer of ink; then multiply that stamp once. Stroking each segment directly
+  // on the game canvas made corners and crossings a darker square where two tints overlapped.
+  function wetScratch(w, h) {
+    if (typeof document === 'undefined' || !w || !h || w > 4096 || h > 4096) return null;
+    let c = V.wetCv;
+    if (!c || c.width !== w || c.height !== h) {
+      c = document.createElement('canvas'); c.width = w; c.height = h;
+      V.wetCv = c; V.wetCx = c.getContext('2d');
+    }
+    return V.wetCx;
+  }
+  function strokeWetPaths(ctx, proj, RS, st, W, H) {
+    const scale = RS || 2;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
     ctx.lineWidth = Math.max(4, 3.2 * scale);
+    ctx.beginPath();
     for (const s of (st.pathSegs || [])) {
       if (s[4] && st.regionOpen && !st.regionOpen(s[4])) continue;
       const a = proj(s[0], s[1]), b = proj(s[2], s[3]);
       if ((a[0] < -20 && b[0] < -20) || (a[0] > W + 20 && b[0] > W + 20) || (a[1] < -20 && b[1] < -20) || (a[1] > H + 20 && b[1] > H + 20)) continue;
-      ctx.beginPath();
       ctx.moveTo(a[0], a[1]);
       ctx.lineTo(b[0], b[1]);
-      ctx.stroke();
+    }
+    ctx.stroke();
+  }
+  function drawWet(ctx, proj, RS, st) {
+    if (V.wet < 0.04) return 0;
+    st = st || {};
+    ensureVisual(st.pathSegs);
+    const W = (st.W || (ctx.canvas && ctx.canvas.width) || 0) | 0;
+    const H = (st.H || (ctx.canvas && ctx.canvas.height) || 0) | 0;
+    const scale = RS || 2;
+    ctx.save();
+    const sctx = wetScratch(W, H);
+    if (sctx) {
+      sctx.clearRect(0, 0, W, H);
+      sctx.strokeStyle = 'rgb(120, 116, 122)';
+      strokeWetPaths(sctx, proj, RS, st, W, H);
+      ctx.globalAlpha = 0.4 * V.wet;
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.drawImage(V.wetCv, 0, 0);
+      ctx.globalAlpha = 1;
+    } else if (W && H) {
+      // no document (tests): stroke once; still better than per-segment multiply overlap
+      ctx.globalCompositeOperation = 'multiply';
+      ctx.strokeStyle = `rgba(120, 116, 122, ${0.4 * V.wet})`;
+      strokeWetPaths(ctx, proj, RS, st, W || 1e4, H || 1e4);
     }
     ctx.globalCompositeOperation = 'source-over';
     for (const p of V.puddles) {
