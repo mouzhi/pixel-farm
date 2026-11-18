@@ -191,7 +191,7 @@
     for (const b of (opts && opts.blocks) || []) paintBox(g, b[0], b[1], b[2], b[3], BLOCKED); // v5.3.1: e.g. the lumber hut
     const pens = (opts && opts.pens) || {};
     if (WD) for (const k of WD.PEN_IDS) if (pens[k]) {
-      const P = WD.PENS[k], [hx, hy] = PEN_FOOT[k] || [6, 5];
+      const P = WD.PENS[k], [hx, hy] = PEN_FOOT[k] || PEN_FOOT[P.base] || [6, 5]; // v5.6.0: a second pen has its first one's footprint
       paintBox(g, P.bld.x - hx, P.bld.y - hy, P.bld.x + hx, P.bld.y + hy, BLOCKED);
       paintBox(g, P.trough.x - 4, P.trough.y - 2.2, P.trough.x + 4, P.trough.y + 2.2, BLOCKED);
     }

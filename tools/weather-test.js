@@ -120,7 +120,7 @@ ok('a v10 save keeps weather and insect entries (and validates to the current ve
 
 ok('insect catalog has 8 species with rarity colours and the 昆虫 group is in the book', () => {
   const g = CX.groups().find(x => x.id === 'bug');
-  assert(g && g.name === '昆虫' && g.items.length === 8);
+  assert(g && g.name === '昆虫' && g.items.length === 9);
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'white')), 'common');
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'grey')), 'rare');
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'swallow')), 'epic');
@@ -174,8 +174,8 @@ ok('index.html scripts are cache-busted with the current version', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
   assert(scripts.length >= 20, 'scripts ' + scripts.length);
-  for (const s of scripts) assert(/\?v=5\.5\.0$/.test(s), 'missing cache bust: ' + s);
-  assert(html.indexOf('v5.5.0') >= 0);
+  for (const s of scripts) assert(/\?v=5\.6\.0$/.test(s), 'missing cache bust: ' + s);
+  assert(html.indexOf('v5.6.0') >= 0);
 });
 
 ok('forceCatch can attach the catching kid so the popup can sit above their head', () => {

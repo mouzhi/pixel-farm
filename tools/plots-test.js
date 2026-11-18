@@ -98,7 +98,7 @@ ok('shop: 放牧草地 is a fold upgrade for 600 gold + 30 wood, no plot needed'
 });
 ok('save: v10 -> v11 adds no plots and no meadow; v11 keeps plots and plot field tiles', () => {
   const v10 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8'));
-  const s = SAVE.migrate(v10); assert.strictEqual(s.saveVersion, 11); assert.deepStrictEqual(s.plots, {}); assert.strictEqual(s.upgrades.graze, 0);
+  const s = SAVE.migrate(v10); assert.strictEqual(s.saveVersion, 12); assert.deepStrictEqual(s.plots, {}); assert.strictEqual(s.upgrades.graze, 0);
   assert.deepStrictEqual(s.tiles, SAVE.migrate(v10).tiles);
   const v11 = Object.assign({}, s, { plots: { glade: { mod: 'field', day: 5 }, bridge: { mod: 'bridge', day: 6 }, swacross: { mod: 'meadow', day: 7 } }, upgrades: Object.assign({}, s.upgrades, { graze: 1 }),
     tiles: s.tiles.concat([{ f: 'glade', c: 2, r: 1, open: true, tilled: true, watered: false, crop: { type: 'carrot', age: 0, rot: 1 } }]), farmer: { x: -240, y: 370, sleeping: false, home: false } });

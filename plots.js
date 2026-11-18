@@ -16,12 +16,12 @@
   // cost / wood: a one-off setup on top of the plot price (only the playground's swings and slide cost extra, unless the plot bundles them)
   const MODULES = {
     field: { name: '农田', icon: 'field', desc: '新的耕地，家人会来开垦、播种、浇水', now: '24 格新田，带水桶' },
-    pasture: { name: '牧场', icon: 'pasture', desc: '围栏草场。第 8 阶段可以在这里盖第二套棚舍', now: '先围好草场和小水槽' },
+    pasture: { name: '牧场', icon: 'pasture', desc: '围栏草场，能盖第二套鸡舍、猪圈、羊圈、牛棚（商店「建筑」里买）', now: '先围好草场和小水槽' },
     orchard: { name: '果园', icon: 'orchard', desc: '能移植仓库里的果树苗（用「种树」工具点这块地）', now: '空出成排的移植位' },
-    meadow: { name: '花甸', icon: 'flower', desc: '一片野花，以后可以放蜂箱和装饰', now: '开满野花' },
+    meadow: { name: '花甸', icon: 'flower', desc: '一片野花，能放 6 个蜂箱（商店「工坊」里买），以后还能摆装饰', now: '开满野花' },
     woodland: { name: '林地', icon: 'forest', desc: '种上一片会再生的树，砍了会长回来', now: '一片会长回来的树（最多 10 棵）' },
-    workshop: { name: '工坊院', icon: 'workshop', desc: '平整的空院子。第 8 阶段在这里盖磨坊、果酱铺、奶酪坊', now: '先铺好院子' },
-    dam: { name: '动力坝', icon: 'dam', desc: '河边的水车。第 8 阶段修好以后给农场供电', now: '河边立起一架水车，第 8 阶段通电后转起来' },
+    workshop: { name: '工坊院', icon: 'workshop', desc: '平整的空院子，能盖三座加工坊：磨坊、果酱铺、奶酪坊（商店「工坊」里买）', now: '先铺好院子' },
+    dam: { name: '动力坝', icon: 'dam', desc: '河边的水车。在商店「工坊」里修好以后转起来，给农场供电', now: '河边立起一架水车，修好以后转起来' },
     road: { name: '大道', icon: 'road', desc: '通向隔壁镇子的大路，孩子以后上学走这里', now: '路修通到镇口（镇子第 10 阶段开放）' },
     playground: { name: '乐园', icon: 'playground', desc: '滑梯、沙坑（能堆沙堡）和秋千，孩子会自己来玩', now: '滑梯、沙坑和秋千', cost: 800, wood: 40 },
     bridge: { name: '石桥', icon: 'bridge', desc: '修好以后家人、羊群和上学的孩子都从桥上过河', now: '桥修好了' },
