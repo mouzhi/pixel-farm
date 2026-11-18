@@ -180,6 +180,9 @@ def stage() -> None:
         print("warn: staged JS still contains ?. or ?? :", ", ".join(leftover), file=sys.stderr)
 
     src = (ROOT / "index.html").read_text()
+    # Web builds append ?v= for GitHub Pages cache-busting. The offline zip
+    # loads scripts via boot.js with bare filenames — query strings can miss
+    # files under the container file protocol and are not needed here.
     out = re.sub(r'\s*<script src="[^"]+"></script>\s*', "\n", src)
     out = out.replace(
         'content="width=device-width,initial-scale=1"',
@@ -194,6 +197,8 @@ def stage() -> None:
         1,
     )
     out = out.replace("像素堆叠 · 放置农场", "像素农场（小红书小工具预览）", 1)
+    if re.search(r'<script[^>]+src="[^"]*\?', out):
+        raise SystemExit("staged index.html still has query-string script src; offline zip must use bare paths")
     (STAGE / "index.html").write_text(out)
     print("wrote staged index.html")
 
