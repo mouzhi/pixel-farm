@@ -94,16 +94,28 @@
     return null;
   }
 
+  // name colours in the book: common = green, uncommon = blue, very rare = orange
+  const TIER_EPIC = new Set(['koi', 'tuna', 'sword', 'gold', 'white']);
+  const TIER_RARE = new Set(['bass', 'seabass', 'snapper', 'goldfish', 'double', 'big']);
+  function rarityOf(it) {
+    if (!it) return 'common';
+    if (it.group === 'glow' || it.group === 'giant') return 'epic';
+    if (TIER_EPIC.has(it.id)) return 'epic';
+    if (TIER_RARE.has(it.id)) return 'rare';
+    return 'common';
+  }
+  function withRarity(it) { it.rarity = rarityOf(it); return it; }
+
   function catalog() {
-    const fish = (FS && FS.ALL ? FS.ALL : []).map(f => ({ key: keyFish(f.id), id: f.id, name: f.name, col: f.col, rare: !!f.rare, group: 'fish', water: (FS.POND || []).some(p => p.id === f.id) ? 'pond' : 'sea' }));
+    const fish = (FS && FS.ALL ? FS.ALL : []).map(f => withRarity({ key: keyFish(f.id), id: f.id, name: f.name, col: f.col, rare: !!f.rare, group: 'fish', water: (FS.POND || []).some(p => p.id === f.id) ? 'pond' : 'sea' }));
     const gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
     if (gf && !fish.some(f => f.id === 'goldfish')) {
       const i = fish.findIndex(f => f.id === 'koi');
-      fish.splice(i < 0 ? fish.length : i + 1, 0, { key: keyFish('goldfish'), id: 'goldfish', name: gf.name, col: gf.col, group: 'fish', water: 'pond', shop: 1 });
+      fish.splice(i < 0 ? fish.length : i + 1, 0, withRarity({ key: keyFish('goldfish'), id: 'goldfish', name: gf.name, col: gf.col, group: 'fish', water: 'pond', shop: 1 }));
     }
-    const rares = RARE_ITEMS.map(r => ({ key: keyRare(r.id), id: r.id, name: r.name, group: 'rare', type: r.type, rare: r.rare }));
-    const glow = GLOW_CROPS.map(id => ({ key: keyGlow(id), id, name: '发光的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'glow', type: id }));
-    const giant = GIANT_CROPS.map(id => ({ key: keyGiant(id), id, name: '巨大的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'giant', type: id }));
+    const rares = RARE_ITEMS.map(r => withRarity({ key: keyRare(r.id), id: r.id, name: r.name, group: 'rare', type: r.type, rare: r.rare }));
+    const glow = GLOW_CROPS.map(id => withRarity({ key: keyGlow(id), id, name: '发光的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'glow', type: id }));
+    const giant = GIANT_CROPS.map(id => withRarity({ key: keyGiant(id), id, name: '巨大的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'giant', type: id }));
     return { fish, rare: rares, glow, giant, decor: [] };
   }
 
@@ -293,7 +305,7 @@
   const api = {
     REGIONS7, ACHIEVEMENTS, MILESTONES, RARE_ITEMS, GLOW_CROPS, GIANT_CROPS, ACH_BY, MS_BY,
     keyFish, keyRare, keyGlow, keyGiant, keyDecor, itemKey,
-    emptyCodex, emptyList, emptyStreaks, record, has, entryOf, catalog, groups,
+    emptyCodex, emptyList, emptyStreaks, record, has, entryOf, catalog, groups, rarityOf,
     validEntry, validCodex, validUnlocks, validStreaks, validPondFish, validOrnament,
     seedFromSave, inferAchievements, inferMilestones, regionsBought, allRegions,
     tickStreaks, noteShopOpen, dueAchievements, dueMilestones, unlock, dayLabel,

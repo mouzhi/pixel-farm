@@ -145,4 +145,26 @@ ok('every catalog fish and rare item has a pixel sprite, goldfish is in the book
   assert(diff > 20, 'sword and sardine silhouettes must be distinct');
 });
 
+ok('book names use green / blue / orange rarity tiers', () => {
+  const cat = CX.catalog();
+  const of = (id) => (cat.fish.find(f => f.id === id) || cat.rare.find(r => r.id === id)).rarity;
+  assert.strictEqual(of('crucian'), 'common');
+  assert.strictEqual(of('carp'), 'common');
+  assert.strictEqual(of('grassc'), 'common');
+  assert.strictEqual(of('sardine'), 'common');
+  assert.strictEqual(of('bass'), 'rare');
+  assert.strictEqual(of('seabass'), 'rare');
+  assert.strictEqual(of('snapper'), 'rare');
+  assert.strictEqual(of('goldfish'), 'rare');
+  assert.strictEqual(of('double'), 'rare');
+  assert.strictEqual(of('koi'), 'epic');
+  assert.strictEqual(of('tuna'), 'epic');
+  assert.strictEqual(of('sword'), 'epic');
+  assert.strictEqual(of('gold'), 'epic');
+  assert.strictEqual(of('white'), 'epic');
+  assert.strictEqual(CX.rarityOf({ group: 'glow', type: 'pumpkin' }), 'epic');
+  assert.strictEqual(CX.rarityOf({ group: 'giant', type: 'cabbage' }), 'epic');
+});
+
 console.log('codex-test: ' + n + ' ok');
+

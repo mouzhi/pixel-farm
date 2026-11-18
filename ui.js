@@ -293,11 +293,11 @@
   function cellArt(it, seen) {
     if (ICN && it.group === 'fish' && ICN.has('fish', it.id)) {
       const url = seen ? ICN.fishURL(it.id) : ICN.silURL('fish', it.id);
-      return icoTag(url, 'fish', 48, 32);
+      return icoTag(url, 'fish', 72, 48);
     }
     if (ICN && it.group === 'rare' && ICN.has('rare', it.id)) {
       const url = seen ? ICN.rareURL(it.id) : ICN.silURL('rare', it.id);
-      return icoTag(url, 'rare', 32, 32);
+      return icoTag(url, 'rare', 48, 48);
     }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     if (ICONS[it.id] || ICONS[it.type]) return icon(it.id || it.type);
@@ -325,7 +325,8 @@
         h += '<div class="grid">';
         for (const it of g.items) {
           const e = BOOK.entryOf(S.codex, it.key);
-          if (e) h += `<button type="button" class="cell${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellArt(it, true)}<span class="nm">${esc(it.name)}</span></button>`;
+          const tier = BOOK.rarityOf ? BOOK.rarityOf(it) : (it.rarity || 'common');
+          if (e) h += `<button type="button" class="cell r-${esc(tier)}${codexFocus === it.key ? ' on' : ''}" data-key="${it.key}">${cellArt(it, true)}<span class="nm">${esc(it.name)}</span></button>`;
           else h += `<div class="cell locked">${cellArt(it, false)}<span class="nm">？</span></div>`;
         }
         h += '</div>';
