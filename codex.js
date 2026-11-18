@@ -96,6 +96,11 @@
 
   function catalog() {
     const fish = (FS && FS.ALL ? FS.ALL : []).map(f => ({ key: keyFish(f.id), id: f.id, name: f.name, col: f.col, rare: !!f.rare, group: 'fish', water: (FS.POND || []).some(p => p.id === f.id) ? 'pond' : 'sea' }));
+    const gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
+    if (gf && !fish.some(f => f.id === 'goldfish')) {
+      const i = fish.findIndex(f => f.id === 'koi');
+      fish.splice(i < 0 ? fish.length : i + 1, 0, { key: keyFish('goldfish'), id: 'goldfish', name: gf.name, col: gf.col, group: 'fish', water: 'pond', shop: 1 });
+    }
     const rares = RARE_ITEMS.map(r => ({ key: keyRare(r.id), id: r.id, name: r.name, group: 'rare', type: r.type, rare: r.rare }));
     const glow = GLOW_CROPS.map(id => ({ key: keyGlow(id), id, name: '发光的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'glow', type: id }));
     const giant = GIANT_CROPS.map(id => ({ key: keyGiant(id), id, name: '巨大的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'giant', type: id }));

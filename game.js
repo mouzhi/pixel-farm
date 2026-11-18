@@ -695,6 +695,7 @@ function buy(id) { // the player's one action: spend gold on the next level of a
     if (held >= FS.POND_CAP) return { ok: false, reason: 'maxed' };
     if (S.coins < price) return { ok: false, reason: 'short', short: price - S.coins };
     S.coins -= price; S.ornament.goldfish = (S.ornament.goldfish || 0) + 1; emit('purchase', { item: 'goldfish', n: 1, gold: price, who: 'player' });
+    if (BOOK) BOOK.record(S.codex, BOOK.keyFish('goldfish'), S.day);
     log(`买了一条金鱼（${price} 金），可以放到家门口的池塘里养着`); popText(FARMER.x, FARMER.y, 22, '-' + price, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#e8a02a'], 8, 'coin');
     noteProgress(); return { ok: true, consumable: true };
   }
@@ -1146,7 +1147,7 @@ function placePondFish(kind) {
   const ang = petRng() * Math.PI * 2, r = 0.25 + petRng() * 0.45;
   const f = { id: 'pf' + (1 + S.pondFish.reduce((m, q) => Math.max(m, parseInt(String(q.id).replace(/\D/g, ''), 10) || 0), 0)),
     kind, day: S.day, x: POND.x + Math.cos(ang) * POND.rx * r, y: POND.y + Math.sin(ang) * POND.ry * r, a: ang, v: 0.35 + petRng() * 0.4 };
-  S.pondFish.push(f); if (FS.isFish(kind)) BOOK.record(S.codex, BOOK.keyFish(kind), S.day);
+  S.pondFish.push(f); if (BOOK) BOOK.record(S.codex, BOOK.keyFish(kind), S.day);
   return f;
 }
 function feedPondTask() {
@@ -2124,8 +2125,21 @@ function drawBobber(x, y) {
   ctx.fillStyle = Rf[2]; ctx.fillRect(bx - 1, by - 2, 2, 2);
   ctx.fillStyle = Ac[0]; ctx.fillRect(bx - 1, by, 2, 1);
 }
-function drawTinyFish(x, y, col, dir, glow, t) {
+function drawTinyFish(x, y, col, dir, glow, t, id) {
   const bx = Math.round(x), by = Math.round(y), s = dir < 0 ? -1 : 1;
+  const ICN = window.PFCodexIcons;
+  if (id && ICN && ICN.has('fish', id)) {
+    const img = ICN.paint('fish', id);
+    if (glow) {
+      const ph = Math.abs(Math.floor((t || 0) * 5 + bx + by)) % 6;
+      ctx.fillStyle = ph % 2 ? '#ffffff' : '#ffd76a';
+      ctx.fillRect(bx - 4 + (ph % 3), by - 10, 5, 1); ctx.fillRect(bx, by - 11, 1, 5);
+      ctx.fillRect(bx + 10, by - 1 + (ph % 2), 1, 1);
+      ctx.fillRect(bx - 12, by + 2, 1, 1);
+    }
+    ICN.blit(ctx, img, bx - (img.w >> 1), by - (img.h >> 1), { flip: s < 0, scale: 1 });
+    return;
+  }
   const pix = (ox, oy, c) => { ctx.fillStyle = c; ctx.fillRect(bx + ox * s - (s < 0 ? 1 : 0), by + oy, 1, 1); };
   const body = [[-3, 0], [-2, -1], [-2, 0], [-2, 1], [-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 0], [0, 1], [1, 0], [2, -1], [2, 1], [3, 0]];
   if (glow) { // plus-sparks around the fish (same language as a glowing crop), then the body on top so it stays readable
@@ -2176,7 +2190,7 @@ function drawFishing() {
     if (p.bob.show) drawBobber(p.bob.x, p.bob.y);
     if (p.fish) {
       const col = (k.result && k.result.col) || (k.result && FS.fishOf(k.result.fish) && FS.fishOf(k.result.fish).col) || '#cf6a3c';
-      drawTinyFish(p.fish.x, p.fish.y, col, p.fish.dir, p.fish.glow, realT);
+      drawTinyFish(p.fish.x, p.fish.y, col, p.fish.dir, p.fish.glow, realT, k.result && k.result.fish);
       if (p.fish.glow && window.PF_FX) {
         const slot = Math.floor(realT / 0.45);
         if (k._glowSlot !== slot) { k._glowSlot = slot; PF_FX.play('glow', P.x + (k.hook.x - P.x) * (1 - p.fish.p), P.y + (k.hook.y - P.y) * (1 - p.fish.p), 8 + p.fish.p * 6); }
@@ -2579,7 +2593,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.4.0';
+const GAME_VERSION = '5.4.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -2700,7 +2714,10 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
   toClient: (x, y) => { setCam(); const [sx, sy] = proj(x, y), r = cv.getBoundingClientRect(); return { x: r.left + sx * r.width / W, y: r.top + sy * r.height / H }; }, buy: id => { const r = buy(id); if (r.ok) saveNow(); return r; }, board: () => board().map(j => ({ kind: j.kind, base: j.base, score: Math.round((j.base - travel(F, j.at) / 8) * 10) / 10 })),
   setGameSpeed: v => { if ([1, 2, 4].includes(v) && v <= S.eff.speedMax) { S.speed = v; noteLog('event', { type: 'speed', speed: v, day: S.day, t: S.t }); saveNow(); return true; } return false; },
-  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
+  cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; },
+  cropFrame: k => { const a = cropAtlas(); if (!a) return null; const i = CROP_IDS.indexOf(k); if (i < 0) return null;
+    const t = 16, c = document.createElement('canvas'); c.width = t; c.height = t; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
+    g.drawImage(a, i * t, 0, t, t, 0, 0, t, t); return c; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },

@@ -1,7 +1,7 @@
-// Unit checks for codex.js, fish food weights and dog surprises (v5.4.0): node tools/codex-test.js
+// Unit checks for codex.js, fish food weights and dog surprises (v5.4.1): node tools/codex-test.js
 'use strict';
 const assert = require('assert');
-const CX = require('../codex.js'), FS = require('../fish.js'), AN = require('../animals.js'), SAVE = require('../save.js');
+const CX = require('../codex.js'), FS = require('../fish.js'), AN = require('../animals.js'), SAVE = require('../save.js'), ICN = require('../codex_icons.js');
 
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 
@@ -114,6 +114,35 @@ ok('unlock helper is idempotent and keeps the first date', () => {
   const b = CX.unlock(a.list, [{ id: 'gold1000', day: 9 }, { id: 'allland', day: 12 }]);
   assert.strictEqual(a.fresh.length, 1); assert.strictEqual(b.fresh.length, 1);
   assert.deepStrictEqual(b.list, [{ id: 'gold1000', day: 8 }, { id: 'allland', day: 12 }]);
+});
+
+ok('every catalog fish and rare item has a pixel sprite, goldfish is in the book, silhouettes keep the same shape', () => {
+  const cat = CX.catalog();
+  assert(cat.fish.some(f => f.id === 'goldfish'), 'shop goldfish appears in the 图鉴');
+  for (const f of cat.fish) assert(ICN.has('fish', f.id), 'missing fish sprite ' + f.id);
+  for (const r of cat.rare) assert(ICN.has('rare', r.id), 'missing rare sprite ' + r.id);
+  const koi = ICN.paint('fish', 'koi');
+  assert.strictEqual(koi.w, 24); assert.strictEqual(koi.h, 16);
+  const opaque = [];
+  for (let i = 3; i < koi.px.length; i += 4) if (koi.px[i] > 0) opaque.push((i - 3) / 4);
+  assert(opaque.length > 40, 'koi has a body');
+  const sil = ICN.silhouette(koi);
+  assert.strictEqual(sil.w, 24);
+  let same = 0, dark = 0;
+  for (let i = 3; i < koi.px.length; i += 4) {
+    if ((koi.px[i] > 0) === (sil.px[i] > 0)) same++;
+    if (sil.px[i] > 0) {
+      // silhouette should not stay in the bright body colours
+      const bright = sil.px[i - 3] > 140 || sil.px[i - 2] > 140;
+      if (!bright) dark++;
+    }
+  }
+  assert.strictEqual(same, koi.w * koi.h, 'silhouette uses the same pixels');
+  assert(dark > 40);
+  const sword = ICN.paint('fish', 'sword'), sardine = ICN.paint('fish', 'sardine');
+  let diff = 0;
+  for (let i = 3; i < sword.px.length; i += 4) if ((sword.px[i] > 0) !== (sardine.px[i] > 0)) diff++;
+  assert(diff > 20, 'sword and sardine silhouettes must be distinct');
 });
 
 console.log('codex-test: ' + n + ' ok');
