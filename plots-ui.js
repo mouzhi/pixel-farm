@@ -74,7 +74,7 @@
   // Every price sign on the map (the old regions' from ui.js, whose rAF runs first, and the ring's above) is laid out once per frame:
   // each keeps its anchor if it can, else steps up / down / sideways to the first spot that hits neither another sign nor the HUD
   // (panels, buttons, the title, the minimap and the strip where the achievement toast appears); with no free spot it hides.
-  const HUD_IDS = ['hud', 'title', 'minimap', 'log', 'catches', 'inv', 'menuBtn', 'shopBtn', 'storeBtn', 'codexBtn', 'mapBtn', 'speed', 'tools', 'loveTip', 'syncHint'];
+  const HUD_IDS = ['hud', 'title', 'minimap', 'log', 'catches', 'inv', 'menuBtn', 'shopBtn', 'storeBtn', 'codexBtn', 'mapBtn', 'tools', 'loveTip', 'syncHint'];
   const SIZE = new WeakMap(); let hud = [], hudAt = 0;
   const hit = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
   const STEPS = [[0, 0], [0, -1], [0, 1], [-0.55, 0], [0.55, 0], [-0.55, -1], [0.55, -1], [-0.55, 1], [0.55, 1], [0, -2], [0, 2]];

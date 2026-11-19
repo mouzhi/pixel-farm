@@ -1,6 +1,6 @@
 // 像素农场 · 节奏、经济与商店规则（纯函数，没有画面依赖；浏览器里是 window.PFSim，Node 里可以直接 require 做单元测试）
 // Phase 1: day-based crops, one watering lasts the whole day, auto crop choice by profit, daily price drift, offline settlement.
-// Phase 2: shop (tools, basket, speed, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
+// Phase 2: shop (tools, basket, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
 // Phase 3: the axe and four regions on the big map (geometry and tree rules live in world.js).
 // Phase 4: the north pasture, a coop and a shed, chickens / sheep / cows (care rules live in animals.js).
 // Phase 5 (v5.0): house tiers and pen fences cost wood as well as gold; family rules live in family.js.
@@ -17,6 +17,11 @@
   const WATER_MAX0 = 4;           // watering can capacity at the start
   const BASKET = 10;              // crops carried before a market trip (start)
   const OFFLINE_RATE = 0.5, OFFLINE_CAP_DAYS = 3, OFFLINE_MIN_SEC = 60;
+  const OFFLINE_FREE_SEC = 300, OFFLINE_FREE_GOLD = 100; // v5.10.2: a short absence (under 5 min, or under 100 gold) is paid but not counted in the 24-hour window
+  // v5.10.2: the 2x / 4x game speed is gone (one speed for everyone; the night still runs SLEEP_MULT faster while the farmer sleeps).
+  // Saves that bought it get the price back once: level 1 cost 600, level 2 another 3000.
+  const SPEED_REFUND = [600, 3000];
+  const speedRefund = lv => SPEED_REFUND.slice(0, Math.max(0, Math.min(SPEED_REFUND.length, lv | 0))).reduce((a, b) => a + b, 0);
   // seed: shop price, days: watered days to the first harvest, price: base sell price, seedSell: what the merchant pays
   // for a spare seed, drop: [chance of >= 1 seed, chance of a 2nd] from a harvest (expected < 1, so the merchant still
   // matters), regrow / harvests: berry bushes keep fruiting every `regrow` days for `harvests` pickings
@@ -41,7 +46,6 @@
     { id: 'shoe', name: '鞋子', icon: 'shoe', levels: [{ cost: 200, label: '布鞋', desc: '走路 ×1.25' }, { cost: 800, label: '皮靴', desc: '走路 ×1.5' }, { cost: 2500, label: '风行靴', desc: '走路 ×1.8' }] },
     { id: 'hoe', name: '锄头', icon: 'hoe', levels: [{ cost: 250, label: '钢锄头', desc: '开垦快一倍' }, { cost: 3000, label: '宽锄头', desc: '一锄翻 3×3' }] },
     { id: 'basket', name: '篮子', icon: 'basket', levels: [{ cost: 300, label: '大篮子', desc: '一次装 20 个' }, { cost: 1200, label: '手推车', desc: '一次装 40 个' }] },
-    { id: 'speed', name: '游戏倍速', icon: 'speed', levels: [{ cost: 600, label: '2× 速度', desc: '解锁 2× 按钮' }, { cost: 3000, label: '4× 速度', desc: '解锁 4× 按钮' }] },
     { id: 'strawberry', name: '草莓种子', icon: 'strawberry', levels: [{ cost: 800, label: '草莓', desc: '4 天结果，之后每天摘一次，共 10 次' }] },
     { id: 'watermelon', name: '西瓜种子', icon: 'watermelon', levels: [{ cost: 2500, label: '西瓜', desc: '6 天成熟，卖 220' }] },
     { id: 'axe', name: '斧头', icon: 'axe', levels: [
@@ -109,7 +113,7 @@
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
   const SHOP_TABS = [
-    { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'speed', 'rod', 'searod'] },
+    { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
     { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : [])] },
     { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
@@ -128,7 +132,6 @@
       walk: Math.round([1, 1.25, 1.5, 1.8][lv('shoe')] * (1 + 0.03 * lv('dog')) * 1000) / 1000, // v4.7: each dog +3%
       tillDur: lv('hoe') >= 1 ? 2 : 4, till3: lv('hoe') >= 2,
       basket: [BASKET, 20, 40][lv('basket')],
-      speedMax: [1, 2, 4][lv('speed')],
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
       axe: lv('axe') > 0, axeLv: lv('axe'), lumber: lv('lumber') > 0, // v5.3.1: axe levels and the lumber hut (wood.js)
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
@@ -230,7 +233,7 @@
     for (const k of IDS) { const m = (prices && prices[k]) || 1; out[k] = Math.round(Math.min(1.2, Math.max(0.8, m + 0.3 * (1 - m) + (rnd() * 2 - 1) * 0.05)) * 1000) / 1000; }
     return out;
   }
-  // offline: away time -> game days at 50% of the online rate (always 1x speed), at most 3 days, times the recent daily income.
+  // offline: away time -> game days at 50% of the online rate, at most 3 days, times the recent daily income.
   // v5.10.1: and at most 3 days in any 24 real hours. `win` is the save's list of past settlements [{ at: ms, days }]; without it
   // (old callers, unit tests of the per-visit rule) there is no 24-hour window.
   const OFFLINE_WIN_MS = 24 * 3600 * 1000, OFFLINE_WIN_MAX = 12;
@@ -245,8 +248,14 @@
     if (!(awaySec >= OFFLINE_MIN_SEC)) return null;
     const raw = awaySec / DAY_REAL_SEC * OFFLINE_RATE, asked = Math.round(Math.min(OFFLINE_CAP_DAYS, raw) * 100) / 100;
     const recent = (dayEarn || []).slice(-3), avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
-    const out = { awaySec, asked, days: asked, capped: raw > OFFLINE_CAP_DAYS, avg: Math.round(avg), used: 0, limited: false };
-    if (win !== undefined) {
+    const out = { awaySec, asked, days: asked, capped: raw > OFFLINE_CAP_DAYS, avg: Math.round(avg), used: 0, limited: false, free: false };
+    // v5.10.2: under 5 minutes away, or under 100 gold, is paid in full and leaves the 24-hour window alone
+    out.free = awaySec < OFFLINE_FREE_SEC || Math.floor(avg * asked) < OFFLINE_FREE_GOLD;
+    if (win !== undefined && out.free) {
+      now = +now || Date.now();
+      const w = offlineWindow(win, now); out.used = Math.round(w.reduce((a, x) => a + x.days, 0) * 100) / 100;
+      out.win = w; out.nextFullAt = w.length ? Math.max(...w.map(x => x.at)) + OFFLINE_WIN_MS : now;
+    } else if (win !== undefined) {
       now = +now || Date.now();
       const w = offlineWindow(win, now), used = Math.round(w.reduce((a, x) => a + x.days, 0) * 100) / 100;
       out.used = used; out.days = Math.max(0, Math.round(Math.min(asked, OFFLINE_CAP_DAYS - used) * 100) / 100); out.limited = out.days < asked;
@@ -258,7 +267,7 @@
     return out;
   }
   // v5.10.1 「家人帮忙添置」 (off by default): the only things the family ever buys for the player, in this order. No wood, no
-  // decorations, pets, speed, land, buildings, workshops or town things: those are the player's own choices.
+  // decorations, pets, land, buildings, workshops or town things: those are the player's own choices.
   const AUTO_BUY = ['field', 'field', 'field', 'can', 'shoe', 'hoe', 'basket', 'coop', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken',
     'can', 'shoe', 'strawberry', 'basket'];
   const AUTO_MULT = 3, AUTO_FLOOR = 300; // buy only with 3x the price in hand, and keep max(300, 2x the recent daily average) after it
@@ -280,7 +289,7 @@
     if (!o.ok || coins < o.cost * AUTO_MULT || coins - o.cost < keep) return { id: null, why: 'purse', next: next.id, cost: o.cost, keep };
     return { id: next.id, cost: o.cost, keep };
   }
-  const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC,
+  const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC, OFFLINE_FREE_SEC, OFFLINE_FREE_GOLD, SPEED_REFUND, speedRefund,
     CROPS, IDS, SHOP, SHOP_IDS, SHOP_TABS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
     ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, gate: null };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
