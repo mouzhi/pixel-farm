@@ -20,13 +20,15 @@
   }
   // ---------- the home yard (world units; house door at 36,40; field 72..120 x 56..88 inside the path loop 68/124 x 54/92) ----------
   const HOME = {
-    // the house front (by the door, the far corner), the yard road's north edge, then round the field every 12 (lamps and
-    // scarecrows take turns on the south and east edges), the road east, the stall path
-    lamp: [P(45.5, 44.5), P(66.5, 44.5), P(80, 44.5), P(112, 44.5), P(128, 44.5), P(76, 101.5), P(100, 101.5), P(124, 101.5),
-      P(134.5, 62), P(134.5, 82), P(148, 62), P(164, 62), P(131, 108), P(186, 76), P(186, 96)],
+    // the house front (by the door, the far corner), the yard road's north edge, the south corners of the field (wide),
+    // the east edge, the road east, then south of the stall path (not hugging 阿禾's stall)
+    // v5.10.4: the south field and stall lamps were too tight (a lamp every 12, plus scarecrows in the gaps);
+    // same number of spots, just wider — overflow still goes to the storehouse
+    lamp: [P(45.5, 44.5), P(66.5, 44.5), P(80, 44.5), P(112, 44.5), P(128, 44.5), P(70, 101.5), P(122, 101.5),
+      P(134.5, 56), P(134.5, 86), P(148, 62), P(164, 62), P(172, 50), P(172, 126), P(186, 68), P(198, 96)],
     // the doorstep and under the front windows, then round the pond's south and west shore
     pot: [P(52.5, 44), P(59.5, 44), P(24, 119.5), P(34, 119.5), P(44, 119.5), P(8, 96), P(8, 106), P(14, 119.5), P(54, 119.5)],
-    scarecrow: [P(88, 101.5), P(112, 101.5), P(134.5, 72)],
+    scarecrow: [P(100, 130), P(56, 132), P(134.5, 73)],
     // benches: facing the field from the south lawn, by the house's east side, out east
     bench: [P(84, 114), P(116, 114), P(82, 16), P(82, 28), P(156, 80), P(188, 104), P(188, 120), P(156, 126)],
     string: [P(100, 114)],

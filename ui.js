@@ -353,6 +353,15 @@
       if (m.pick) h += `<div class="mkpick">带去集市：` + m.kinds.map(k => `<button class="pbtn${m.take[k.id] ? ' on' : ' off'}" data-mk="take:${k.id}">${m.take[k.id] ? '✓ ' : ''}${esc(k.name)}${k.id === m.hotId ? '（抢手）' : ''}</button>`).join('') + `<div class="more">没勾的东西留在家里的摊子卖</div></div>`;
       else h += `<div class="more">全自动：篮子里能卖的都带去（加工坊要用的除外）。点「全自动」换成「我来挑」，自己选带哪几样。</div>`;
     }
+    const b = G.bakeryView && G.bakeryView(); // v5.10.4 订单板
+    if (b) {
+      const st = b.done ? '今天的订单已经送到' : b.take ? `已接：${esc(b.text)}` : '还没接单';
+      h += `<div class="sec">面包房订单（每天 2 单，接更划算的一单送到小桃店里，按单多付五成；不接也没有惩罚）</div>`;
+      h += `<div class="card" data-item="bakery">${icon('town')}<div class="ct"><div><b>${st}</b> <span class="lv">已完成 ${b.days} 单，收了 ${b.gold} 金，多赚 ${b.extra} 金</span></div><div class="d">${b.open ? '面包房开门中（8:00–16:00）' : '面包房还没开门 / 已经打烊'}</div></div><div class="cb">` +
+        `<button class="pbtn" data-bk="mode">${b.pick ? '我来挑' : '全自动'}</button></div></div>`;
+      if (b.pick) h += `<div class="mkpick">今天的订单：` + b.offer.map(o => `<button class="pbtn${o.take ? ' on' : ' off'}" data-bk="take:${o.id}"${b.done ? ' disabled' : ''}>${o.take ? '✓ ' : ''}${esc(o.text)}（${o.pay} 金${o.have ? '' : ' · 原料不够'}）</button>`).join('') + `<div class="more">点一单接它。今天不点的话，家人仍会自动接更划算的一单。</div></div>`;
+      else h += `<div class="more">全自动：家人接更能赚钱、而且家里有原料的那一单，跑腿送到面包房。点「全自动」换成「我来挑」。${b.offer.length ? '今天：' + b.offer.map(o => esc(o.text) + '（' + o.pay + ' 金）').join('；') : ''}</div>`;
+    }
     h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
     const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));
     if (!rows.length) h += `<div class="more">仓库和院子里还没有能送的装饰（派对区留在家里）</div>`;
@@ -362,7 +371,7 @@
   }
   const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; plotView = (opt && opt.plot) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
-    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk]'); if (!el || !shop.contains(el)) return;
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk],[data-bk]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
     if (d.a === 'autobuy') { G.setAutoBuy(!G.S.autoBuy); drawShop(true); return; } // v5.10.1
@@ -374,6 +383,7 @@
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); if (!r.ok) el.classList.add('shake'); }
     if (d.mk) { const [a, k] = d.mk.split(':'); if (a === 'mode') G.setMarketPick(!G.marketView().pick); else G.setMarketPick(null, k); drawShop(true); return; } // v5.10.3
+    if (d.bk) { const [a, k] = d.bk.split(':'); if (a === 'mode') G.setBakeryPick(!G.bakeryView().pick); else G.setBakeryPick(null, k); drawShop(true); return; } // v5.10.4
     if (d.hall) { const [a, id, u] = d.hall.split(':'), r = a === 'start' ? G.hallStart(id) : G.hallGive(id, u === '' || u === undefined ? undefined : +u); drawShop(true); if (!r.ok) el.classList.add('shake'); } // v5.10.0
   });
   $('shopBtn').addEventListener('click', () => toggleShop());
