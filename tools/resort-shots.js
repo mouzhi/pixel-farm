@@ -136,6 +136,18 @@ fs.mkdirSync(OUT, { recursive: true });
       : (typeof r.fade === 'number' && r.fade < 0.9) ? 'fade not full at 18:00 ' + r.fade
       : null);
 
+  // 2c. the home pond at 18:00 — same sheen as the sea, still reads as water
+  await shot('v5108_sunset_pond.png', `(() => { ${setup} ${readyTown} ${zoneResort} ${raiseResort}
+    at(18 * 60); dry(); parkFam();
+    const P = f.POND; look(P.x, P.y, 0); hide();
+    return { t: S.t % 1440, sunset: f.IN.isSunset(S.t), fade: f.sunsetFade(S.t), deck: S.inn.resort.deck, pond: !!(P && P.x) }; })()`,
+    r => r.t < 17 * 60 || r.t >= 19 * 60 ? 'not sunset hour ' + r.t
+      : !r.sunset ? 'isSunset false'
+      : r.deck !== 1 ? 'no deck'
+      : !r.pond ? 'no pond'
+      : (typeof r.fade === 'number' && r.fade < 0.9) ? 'fade not full at 18:00 ' + r.fade
+      : null);
+
   // 3. seafood stall (day, smoke)
   await shot('v5108_seafood_stall.png', `(() => { ${setup} ${readyTown} ${zoneResort} ${raiseResort}
     S.inn.arrived = 0; S.inn._morn = 0; f.innMorning();

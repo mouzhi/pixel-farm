@@ -3632,35 +3632,70 @@ function sunsetFade(T) { // v5.10.8: 0 at 17:00, full by 17:20, full until 18:40
   if (t > to - edge) { const u = (to - t) / edge; return u * u * (3 - 2 * u); }
   return 1;
 }
-function drawSunsetWash(ctx, T, realT) { // v5.10.8: one full-viewport gradient (no box edge) + orange-pink on the sea's own pixels
+let SUN_WMASK = null, SUN_MW = 0, SUN_MH = 0, SUN_WCOLS = null;
+function captureSunsetWater() { // after waterPass, before objects: sea + pond masks, plus palette-matched river
+  if (!SUN_WCOLS) SUN_WCOLS = new Set([...Wt, ...(PAL.ramps.shallow || [])].map(u32));
+  const m = new Uint8Array(W * H), img = ctx.getImageData(0, 0, W, H), px = new Uint32Array(img.data.buffer);
+  for (let i = 0; i < px.length; i++) if (SUN_WCOLS.has(px[i])) m[i] = 1;
+  for (const key of ['sea', 'pond']) {
+    const Gm = WG && WG[key]; if (!Gm || !Gm.n || !Gm.mask) continue;
+    const { bx, by, bw, bh, mask } = Gm;
+    for (let i = 0; i < mask.length; i++) if (mask[i]) {
+      const x = bx + (i % bw), y = by + ((i / bw) | 0);
+      if (x >= 0 && y >= 0 && x < W && y < H) m[y * W + x] = 1;
+    }
+  }
+  SUN_WMASK = m; SUN_MW = W; SUN_MH = H;
+}
+function drawSunsetWash(ctx, T, realT) { // v5.10.8: full-viewport sky wash + a light sheen on all water (sea, river, pond), gold column
   const a = sunsetFade(T);
   if (a <= 0) return;
   const sky = ctx.createLinearGradient(0, 0, 0, H);
   sky.addColorStop(0, `rgba(255, 118, 48, ${0.36 * a})`);
   sky.addColorStop(0.3, `rgba(255, 150, 90, ${0.18 * a})`);
   sky.addColorStop(0.55, `rgba(255, 170, 130, ${0.08 * a})`);
-  sky.addColorStop(0.78, `rgba(255, 140, 120, ${0.07 * a})`);
-  sky.addColorStop(1, `rgba(255, 110, 105, ${0.05 * a})`);
+  sky.addColorStop(0.78, `rgba(255, 140, 120, ${0.06 * a})`);
+  sky.addColorStop(1, `rgba(255, 110, 105, ${0.04 * a})`);
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-  const Gm = WG && WG.sea;
-  if (Gm && Gm.n && Gm.mask) {
-    const { bx, by, bw, bh, mask, far, pondH } = Gm, img = ctx.getImageData(bx, by, bw, bh), d = img.data, N = bw * bh, depth = pondH || bh;
-    for (let i = 0; i < N; i++) if (mask[i]) {
-      const x = i % bw, y = (i / bw) | 0, row = far[x] >= 0 ? y - far[x] : 0;
-      const farAmt = Math.max(0, Math.min(1, 1 - row / Math.max(1, depth * 0.55))); // horizon / far water reflects more of the sky
-      const amt = a * (0.38 + 0.44 * farAmt), p = i * 4;
-      const tr = 255, tg = 118 + 78 * farAmt, tb = 138 - 18 * farAmt; // far: peach-orange; near: rose-pink
-      d[p] += (tr - d[p]) * amt; d[p + 1] += (tg - d[p + 1]) * amt; d[p + 2] += (tb - d[p + 2]) * amt;
+  const m = (SUN_WMASK && SUN_MW === W && SUN_MH === H) ? SUN_WMASK : null;
+  if (m) {
+    const img = ctx.getImageData(0, 0, W, H), d = img.data, top = new Int16Array(W).fill(32767), bot = new Int16Array(W).fill(-1);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (m[y * W + x]) { if (y < top[x]) top[x] = y; if (y > bot[x]) bot[x] = y; }
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (!m[y * W + x]) continue;
+      const run = Math.max(8, bot[x] - top[x]), t01 = (y - top[x]) / run;
+      // open sea runs off the bottom of the view: the horizon is that far edge. closed water (pond, river) reflects on the back (top) bank.
+      const farAmt = (bot[x] >= H - 6)
+        ? Math.max(0, Math.min(1, (t01 - 0.2) / 0.8))
+        : Math.max(0, Math.min(1, 1 - t01 / 0.6));
+      const k = a * (0.06 + 0.28 * farAmt), p = (y * W + x) * 4; // additive sheen: keep the blue/teal and the waves
+      d[p] = Math.min(255, d[p] + k * 100); d[p + 1] = Math.min(255, d[p + 1] + k * 48); d[p + 2] = Math.min(255, d[p + 2] + k * 20);
     }
-    ctx.putImageData(img, bx, by);
-    const skyPix = Gm.sky || [];
-    if (skyPix.length) {
-      ctx.fillStyle = `rgba(255, 210, 170, ${0.8 * a})`;
-      for (let i = 0; i < 10; i++) {
-        if (((realT * 2 + i) % 2) >= 1.2) continue;
-        const idx = skyPix[(i * 47 + ((realT * 13) | 0)) % skyPix.length];
-        ctx.fillRect(bx + (idx % bw), by + ((idx / bw) | 0), 2, 1);
+    ctx.putImageData(img, 0, 0);
+  }
+  // a column of gold glints down each painted body, brightest toward the horizon
+  for (const key of ['sea', 'pond']) {
+    const Gm = WG && WG[key]; if (!Gm || !Gm.n) continue;
+    let pathX = Math.round(Gm.bx + Gm.cx);
+    const y0 = Math.max(0, Gm.by), y1 = Math.min(H - 1, Gm.by + Gm.bh);
+    if (m) { // snap the path onto water if the centroid landed on a pier or the sand
+      let hit = false;
+      for (const dx of [0, 2, -2, 5, -5, 9, -9, 14, -14]) {
+        const xx = pathX + dx; if (xx < 0 || xx >= W) continue;
+        for (let y = y0; y <= y1; y += 3) if (m[y * W + xx]) { pathX = xx; hit = true; break; }
+        if (hit) break;
       }
+    }
+    const openFar = y1 >= H - 8;
+    for (let i = 0; i < 56; i++) {
+      const u = i / 55, y = openFar ? y0 + Math.round((0.25 + 0.75 * u) * (y1 - y0)) : y0 + Math.round(u * (y1 - y0));
+      const x = pathX + Math.round(Math.sin(i * 1.7 + realT * 2.1) * (1.5 + u * 5));
+      if (x < 0 || y < 0 || x >= W || y >= H) continue;
+      if (m && !m[y * W + x]) continue;
+      const g = 0.9 * a * (openFar ? 0.45 + 0.55 * u : 1 - u * 0.4);
+      ctx.fillStyle = `rgba(255, 220, 120, ${g})`;
+      ctx.fillRect(x, y, 2, 1);
+      if (i % 2 === 0) ctx.fillRect(x + 1, y - 1, 1, 1);
     }
   }
 }
@@ -4048,6 +4083,8 @@ function render() {
     if (x1 > x0 && y1 > y0) ctx.drawImage(groundBase, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); ctx.setTransform(1, 0, 0, 1, 0, 0); }
   tick('ground');
   waterPass(realT); tick('water');
+  if (IN && S.inn && IN.deckUp(S.inn) && IN.isSunset(T)) captureSunsetWater();
+  else { SUN_WMASK = null; }
   if (WX) WX.drawWet(ctx, proj, RS, { pathSegs, W, H, regionOpen });
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
   const allTiles = HT.length ? tiles.concat(HT) : tiles; // v5.9.0: the little farms' six tiles each
