@@ -250,7 +250,8 @@
   const shop = $('shop'); let shopKey = '', shopFocus = '', plotView = ''; // plotView: v5.5.0 one plot's page (plots-ui.js)
   const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
   const HALL_TAB = { id: 'hall', name: '镇公所', title: '镇公所的告示板：建设项目、繁荣度、送给镇上的装饰', ids: [] }; // v5.10.0
-  const shopTabs = () => (SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }]).concat(G.hallView ? [HALL_TAB] : []);
+  const INN_TAB = { id: 'inn', name: '农家乐', title: '民宿院里的小木屋和农家菜馆。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7
+  const shopTabs = () => (SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }]).concat(G.hallView ? [HALL_TAB] : []).concat(G.innView ? [INN_TAB] : []);
   const readShopTab = () => { try { const v = localStorage.getItem(SHOP_TAB_KEY); if (shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
   let shopTab = readShopTab();
   const setShopTab = id => { if (!shopTabs().some(t => t.id === id)) return; shopTab = id; try { localStorage.setItem(SHOP_TAB_KEY, id); } catch (e) {} };
@@ -278,14 +279,14 @@
     return '';
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
-  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑和镇公所的项目都不会碰。'; // v5.10.1
+  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目和农家乐都不会碰。'; // v5.10.1; v5.10.7 inn
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
-  const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
+  const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'inn' ? !!(G.innView && G.innView() && G.innView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
     const S = G.S, tabs = shopTabs().filter(tabShown);
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, !!S.autoBuy, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length, S.coins, G.F && G.F.wood]) : ''].join(','); // v5.6.0: what the phase-8 gates read
+    const key = [shopTab, !!S.autoBuy, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length, S.coins, G.F && G.F.wood]) : '', shopTab === 'inn' && S.inn ? JSON.stringify([S.inn, S.coins, G.F && G.F.wood, S.town && S.town.hall]) : ''].join(','); // v5.6.0: what the phase-8 gates read; v5.10.7 inn
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button type="button" class="pbtn auto${S.autoBuy ? ' on' : ''}" data-a="autobuy" aria-pressed="${S.autoBuy ? 'true' : 'false'}" title="${AUTO_TIP}">家人帮忙添置 · ${S.autoBuy ? '开' : '关'}</button><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -306,6 +307,7 @@
     }
     if (hidden) h += `<div class="more" title="还有 ${hidden} 项，等前面的东西买了、家里有了新变化就会出现">更多内容随进度解锁</div>`;
     if (tab.id === 'hall') h += hallHtml();
+    if (tab.id === 'inn') h += innHtml();
     if (tab.id === 'land' && PU) h += PU.listHtml(PH); // v5.5.0: the outer ring
     if (tab.id === 'tools') {
       const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
@@ -334,6 +336,51 @@
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
   // v5.10.0 镇公所的告示板: prosperity, the building projects (one at a time, done the next morning), gifts to the town
+  function innHtml() { // v5.10.7 农家乐 shop tab: cabins, the restaurant, the kitchen, 「我来挑」 the menu
+    const v = G.innView && G.innView(); if (!v) return '';
+    const stars = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
+    const starTxt = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+    let h = '';
+    h += `<div class="sec">民宿院${v.plotName ? ' · ' + esc(v.plotName) : ''}</div>`;
+    if (!v.plot) h += `<div class="more">先在「地块」里把林间空地、南河湾、河对岸或东坡改建成民宿院。东南滩是以后度假村用的。</div>`;
+    h += `<div class="more">现在 ${v.cabins} / 4 间小木屋，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
+      (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +
+      (v.guests && v.guests.length ? `，今天住着 ${v.guests.length} 组共 ${v.people} 人` : '，今天还没有客人') +
+      `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
+    if (v.job) h += `<div class="more">家人正在盖${v.job.id === 'cabin' ? '小木屋' : v.job.id === 'diner' ? '农家菜馆' : '厨房'}，明天一早搭好。</div>`;
+    const label = o => o.id === 'cabin' ? (v.cabins ? '再盖一间小木屋' : '第一间小木屋') : o.id === 'diner' ? '农家菜馆' : (o.name || '厨房升级');
+    const desc = o => o.id === 'cabin' ? (v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。')
+      : o.id === 'diner' ? '院子南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜。'
+      : '厨房升一级，多 2 道菜、多 4 个座位。一共可以升两级。';
+    for (const o of v.offers) {
+      const maxed = o.reason === 'full' || o.reason === 'done';
+      const why = o.why && !maxed ? `<span class="short lock">${esc(o.why)}</span>` : '';
+      const short = !o.ok && (o.shortGold || o.shortWood) && (o.reason !== 'locked' && o.why && (o.shortGold || o.shortWood))
+        ? `<span class="short"><span class="lab">还差</span><span class="price">${o.shortGold ? costChip(o.shortGold, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>` : why;
+      h += `<div class="card${maxed ? ' max' : ''}" data-item="inn:${o.id}"><div class="ct"><div><b>${esc(label(o))}</b> <span class="lv">${o.id === 'cabin' ? v.cabins + '/4' : o.id === 'kitchen' ? v.diner + '/3' : (v.diner ? '已有' : '未盖')}</span></div>` +
+        (maxed ? `<div class="d">${esc(o.why || '已满')}</div></div><div class="cb"><span class="done">✓</span></div>` :
+          `<div class="d">${esc(desc(o))}</div></div><div class="cb"><button class="pbtn" data-inn="start:${o.id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost || 0, o.wood || 0)}</button>${short}</div>`) + '</div>';
+    }
+    if (v.diner) {
+      h += `<div class="sec">菜馆菜单（「我来挑」只上架仓库里做得出的菜；不够的会自动撤掉）</div>`;
+      h += `<div class="card"><div class="ct"><div><b>点菜方式</b> <span class="lv">${v.auto ? '全自动' : '我来挑'}</span></div><div class="d">自动时家人用库存最多的原料做。一天两顿，住客每人两份，集市那天会多来几个散客。</div></div>` +
+        `<div class="cb"><button type="button" class="pbtn" data-inn="mode">${v.auto ? '我来挑' : '改回自动'}</button></div></div>`;
+      if (!v.auto) {
+        for (const d of v.listed) {
+          const on = Array.isArray(v.menu) && v.menu.includes(d.id);
+          h += `<div class="card${d.can ? '' : ' max'}"><div class="ct"><div><b>${esc(d.name)}</b> <span class="lv">${d.pay} 金${d.special ? ' · 拿手菜' : ''}</span></div><div class="d">${d.can ? '仓库里的料够做' : '原料不够，会上架也做不了'}</div></div>` +
+            `<div class="cb"><button type="button" class="pbtn${on ? ' on' : ''}" data-inn="dish:${d.id}"${v.auto ? ' disabled' : ''}>${on ? '已上架' : '上架'}</button></div></div>`;
+        }
+      } else {
+        h += `<div class="more">今天会做：${v.listed.filter(d => v.today.includes(d.id)).map(d => d.name).join('、') || '仓库里暂时做不了菜'}</div>`;
+      }
+    }
+    if (v.book && v.book.length) {
+      h += `<div class="sec">留言本（最近 ${v.book.length} 条）</div>`;
+      for (const b of v.book) h += `<div class="more">第 ${b.day} 天 · ${'★'.repeat(b.s || 3)}${b.note ? ' · ' + esc(b.note) : ''}</div>`;
+    }
+    return h;
+  }
   function hallHtml() {
     const v = G.hallView(); if (!v) return '';
     const stars = '★'.repeat(v.lv) + '☆'.repeat(Math.max(0, 5 - v.lv));
@@ -387,7 +434,7 @@
   }
   const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; plotView = (opt && opt.plot) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
-    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk],[data-bk],[data-ws],[data-sm]'); if (!el || !shop.contains(el)) return;
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk],[data-bk],[data-ws],[data-sm],[data-inn]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
     if (d.a === 'autobuy') { G.setAutoBuy(!G.S.autoBuy); drawShop(true); return; } // v5.10.1
@@ -403,10 +450,12 @@
     if (d.ws) { if (d.ws === 'mode') G.setWoodshopAuto(!G.woodshopView().auto); drawShop(true); return; } // v5.10.5
     if (d.sm) { const [a, id] = d.sm.split(':'); if (a === 'buy') { const r = G.smithyBuy(id); drawShop(true); if (!r.ok) el.classList.add('shake'); } return; } // v5.10.5
     if (d.hall) { const [a, id, u] = d.hall.split(':'), r = a === 'start' ? G.hallStart(id) : G.hallGive(id, u === '' || u === undefined ? undefined : +u); drawShop(true); if (!r.ok) el.classList.add('shake'); } // v5.10.0
+    if (d.inn) { const [a, id] = d.inn.split(':'); if (a === 'start') { const r = G.innStart(id); drawShop(true); if (!r.ok) el.classList.add('shake'); } else if (a === 'mode') { const v = G.innView(); G.setInnMenu(v && v.auto ? [] : 'auto'); drawShop(true); } else if (a === 'dish') { const v = G.innView(); const cur = Array.isArray(v.menu) ? v.menu.slice() : v.listed.filter(d => d.can).map(d => d.id); const i = cur.indexOf(id); if (i >= 0) cur.splice(i, 1); else if (cur.length < v.dishes) cur.push(id); G.setInnMenu(cur.length ? cur : 'auto'); drawShop(true); } } // v5.10.7
   });
   $('shopBtn').addEventListener('click', () => toggleShop());
   G.openPlot = id => toggleShop(true, { tab: 'land', plot: id }); // v5.5.0: the plot labels on the map
   G.openHall = () => toggleShop(true, { tab: 'hall' }); // v5.10.0: the notice board in the town
+  G.openInn = () => toggleShop(true, { tab: 'inn' }); // v5.10.7
 
   const store = $('store'); let storeKey = '';
   function rowIcon(row) {
@@ -678,13 +727,23 @@
   function placeLoveTip() { if (loveTip) loveTip.style.top = ''; } // v5.1.2: tip sits in the left dock under the HUD, no floating offset
   // v5.9.0: who the children are close to and the neighbours the family knows (it only grows: school, visits, parties)
   const hearts5 = v => { const n = Math.max(0, Math.min(5, Math.round((v | 0) / 20))); return '<span class="rh">' + '♥'.repeat(n) + '<i>' + '♥'.repeat(5 - n) + '</i></span>'; };
+  function innBookHtml() { // v5.10.7: stars + guestbook in the family panel
+    const v = G.innView && G.innView(); if (!v || !v.plot) return '';
+    const s = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
+    const star = '★'.repeat(s) + '☆'.repeat(5 - s);
+    let h = '<div class="rel innbook"><div class="rk"><b>民宿留言本</b> <span class="lv">' + star + '</span></div>';
+    h += `<div class="rr"><span>今天 ${v.guests && v.guests.length ? v.guests.length + ' 组 / ' + v.people + ' 人' : '还没有客人'}</span><span class="rl">${v.earn.today ? '今日 ' + v.earn.today + ' 金' : '星级 ' + (Math.round(v.stars * 10) / 10)}</span></div>`;
+    if (v.book && v.book.length) for (const b of v.book.slice(0, 5)) h += `<div class="rr"><span>第 ${b.day} 天 ${'★'.repeat(b.s || 3)}</span><span class="rl">${esc(b.note || '')}</span></div>`;
+    else h += '<div class="rr"><span>还没有留言，客人走时会写几句</span></div>';
+    return h + '</div>';
+  }
   function relHtml(H) {
     if (!H || (!H.kids.length && !H.nb.length)) return '';
     let h = '<div class="rel">';
     for (const k of H.kids) { const top = k.rel.filter(r => r.v > 0).slice(0, k.married ? 0 : 3);
       if (k.married) { const mate = k.wed && k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '';
       const p = k.path, way = p && p.way, pending = p && p.pending;
-      const pathLine = way === 'work' ? '在镇上上班' : way === 'shop' ? '在镇上开店' : '留家种地';
+      const pathLine = way === 'work' ? '在镇上上班' : way === 'shop' ? '在镇上开店' : way === 'inn' ? '经营民宿 / 菜馆' : '留家种地';
       h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(mate)}成家了，${pathLine}${pending ? '（明天换）' : ''}，住在新房子</div>`;
       h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">换个活法</button></div>`; continue; }
       if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }
@@ -696,7 +755,7 @@
   function drawLoveTip() {
     if (!loveTip || loveTip.hidden || !G.loveStatus) return;
     const love = G.loveStatus();
-    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home);
+    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home) + innBookHtml();
     placeLoveTip();
   }
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };

@@ -2,6 +2,7 @@
 // Every saveVersion keeps a fixture in tools/fixtures/save-v<N>*.json; all of them must migrate to the current version.
 const assert = require('assert'), fs = require('fs'), path = require('path');
 const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js'), FAM = require('../family.js'), CX = require('../codex.js');
+const IN = require('../inn.js');
 const FIX = path.join(__dirname, 'fixtures');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 class Mem { constructor(o = {}) { this.m = new Map(Object.entries(o)); } get length() { return this.m.size; } key(i) { return [...this.m.keys()][i]; }
@@ -518,3 +519,25 @@ ok('v10 keeps weather, bugNet and kids growth fields together through the v11 mi
   assert.strictEqual(s.family.kidGrowth, 1);
   assert.strictEqual(s.family.kids[0].floor, 'helper');
 });
+
+ok('v15 old save gets an empty inn; a filled inn round-trips (append-only, saveVersion stays 15)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v15-day72-cottage.json'), 'utf8'));
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.saveVersion, 15);
+  assert.deepStrictEqual(s.inn.cabins, 0);
+  assert.strictEqual(s.inn.diner.lv, 0);
+  assert.deepStrictEqual(s.inn.guests, []);
+  assert.strictEqual(s.inn.stars.avg, 3);
+  assert.deepStrictEqual(s.inn.earn, { rooms: 0, meals: 0 });
+  const filled = Object.assign({}, raw, { inn: { cabins: 2, guests: [{ id: 'g11', look: 'innC', n: 2, room: 1, from: 70, until: 72, at: 700 }], diner: { lv: 2, menu: 'auto', served: 40 }, stars: { last: [{ day: 70, s: 4, note: '羊好软' }] }, earn: { rooms: 900, meals: 1600 } } });
+  const t2 = SAVE.validate(SAVE.migrate(filled));
+  assert.strictEqual(t2.saveVersion, 15);
+  assert.strictEqual(t2.inn.cabins, 2);
+  assert.strictEqual(t2.inn.guests[0].look, 'innC');
+  assert.strictEqual(t2.inn.diner.lv, 2);
+  assert.strictEqual(t2.inn.stars.avg, 4);
+  assert.strictEqual(t2.inn.earn.rooms, 900);
+  const again = SAVE.validate(JSON.parse(JSON.stringify(t2)));
+  assert.deepStrictEqual(again.inn, t2.inn);
+});
+

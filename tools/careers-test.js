@@ -195,4 +195,37 @@ ok('round-trip of a filled home.path / town.lots', () => {
   const lots = CR.validLots({ L2: 'kid0' }); assert.deepStrictEqual(CR.validLots(JSON.parse(JSON.stringify(lots))), lots);
 });
 
+
+ok('v5.10.7: 经营民宿 / 菜馆 is a fourth option on the same choice UI, free, no town lot', () => {
+  const st = home(), hall = richTown();
+  const locked = CR.options(st, 'kid0', ctxOf(hall, { mate: 'm1' }));
+  assert.strictEqual(locked.length, 4);
+  assert.strictEqual(locked[3].way, 'inn');
+  assert.strictEqual(locked[3].title, '经营民宿 / 菜馆');
+  assert.strictEqual(locked[3].ok, false);
+  assert.ok(/民宿院|小木屋|菜馆/.test(locked[3].why));
+  const open = CR.options(st, 'kid0', ctxOf(hall, { mate: 'm1', innPlot: 'glade', cabins: 1 }));
+  assert.strictEqual(open[3].ok, true);
+  assert.strictEqual(open[3].cost, 0);
+  const r = CR.take(st, {}, 'kid0', { way: 'inn' }, ctxOf(hall, { innPlot: 'glade', cabins: 2, diner: 1 }), 80);
+  assert.ok(r.ok); assert.strictEqual(r.way, 'inn'); assert.strictEqual(r.paid, 0); assert.strictEqual(r.wood, 0);
+  assert.strictEqual(st.path.kid0.way, 'inn');
+  assert.strictEqual(CR.innsToday(st, 'kid0'), true);
+  assert.strictEqual(CR.innStaffed(st), true);
+  assert.strictEqual(CR.awayForFarm(st, 'kid0'), true);
+  assert.strictEqual(CR.isAway(st, 'kid0'), true);
+});
+
+ok('v5.10.7: 换个活法 can switch onto and off the inn path; a shop still refunds as before', () => {
+  const st = home(), lots = {}, hall = richTown();
+  const s = CR.take(st, lots, 'kid0', { way: 'shop', kind: 'flower' }, ctxOf(hall, { mate: 'm1' }), 80);
+  assert.ok(s.ok); lots.L2 = 'kid0'; st.path.kid0.ready = 81;
+  const plan = CR.planChange(st, 'kid0', { way: 'inn' }, ctxOf(hall, { mate: 'm1', innPlot: 'glade', cabins: 1, coins: 200000, day: 82 }), 82);
+  assert.ok(plan.ok); assert.strictEqual(plan.fee, 2000);
+  const r = CR.applyPending(st, lots, 'kid0', ctxOf(hall, { mate: 'm1', innPlot: 'glade', cabins: 1, coins: 200000, day: 83 }), 83);
+  assert.ok(r.ok); assert.strictEqual(r.way, 'inn'); assert.strictEqual(r.refund, Math.round(15000 * 0.5));
+  assert.deepStrictEqual(lots, {});
+  assert.strictEqual(st.path.kid0.way, 'inn');
+});
+
 console.log('\n' + n + ' tests ok');

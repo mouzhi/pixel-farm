@@ -73,6 +73,7 @@
     if (mod === 'orchard') { const row = ((y - y0) % 16 + 16) % 16; return [row < 2 ? G[2] : G[3], 'grass']; }
     if (mod === 'road') { const d = Math.abs(y - 66); return d < 5 ? [d > 3.8 ? Wd[3] : Wd[4], 'dirt'] : [G[3], 'grass']; }
     if (mod === 'playground') { const s = playSand(p, x, y); if (s) return s; return [v > 0.7 ? G[4] : G[3], 'grass']; }
+    if (mod === 'inn') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const w = vnoise(x / 4, y / 4, 51); return [w > 0.78 ? Wd[3] : w < 0.12 ? St[2] : Wd[4], 'dirt']; }
     if (mod === 'trail') return null;
     return [G[3], 'grass'];
   }

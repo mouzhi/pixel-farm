@@ -1,0 +1,233 @@
+// v5.10.7 unit tests: guest schedule, room fees and star coefficients, menu stock (missing dishes drop off),
+// star sources, old-save defaults, the 民宿院 layout.  node tools/inn-test.js
+const assert = require('assert');
+const WD = require('../world.js'); globalThis.PFWorld = WD;
+const PL = require('../plots.js');
+const IN = require('../inn.js');
+
+let n = 0;
+function ok(name, fn) { try { fn(); n++; console.log('ok  ' + name); } catch (e) { console.error('FAIL ' + name); console.error(e && e.stack || e); process.exit(1); } }
+
+ok('valid() fills missing fields as nothing built; save stays append-only', () => {
+  assert.deepStrictEqual(IN.valid(null).cabins, 0);
+  assert.deepStrictEqual(IN.valid(undefined).diner.lv, 0);
+  assert.strictEqual(IN.valid({}).stars.avg, 3);
+  assert.deepStrictEqual(IN.valid({ earn: { rooms: -1 } }).earn, { rooms: 0, meals: 0 });
+  const I = IN.valid({ cabins: 9, inn2: true, guests: [{ id: 'g1', look: 'innA', n: 2, room: 0, from: 10, until: 12 }, { id: 'nope' }, { id: 'g2', look: 'townE', n: 8, room: 0, from: 10, until: 11 }], diner: { lv: 9, menu: ['nope', 'grill_fish'], served: -3 }, stars: { last: [{ day: 4, s: 9, note: 'x'.repeat(40) }] }, resort: { huts: 99 }, job: { id: 'rocket', day: 1 } });
+  assert.strictEqual(I.cabins, 4);
+  assert.strictEqual(I.inn2, 1);
+  assert.strictEqual(I.guests.length, 1, 'two groups cannot share a room; invalid rows drop');
+  assert.strictEqual(I.guests[0].look, 'innA');
+  assert.strictEqual(I.guests[0].n, 2);
+  assert.strictEqual(IN.valid({ cabins: 1, guests: [{ id: 'g9', look: 'innA', n: 8, room: 0, from: 1, until: 2 }] }).guests[0].n, 3, 'group size clamps to 1–3');
+  assert.strictEqual(I.diner.lv, 3);
+  assert.deepStrictEqual(I.diner.menu, ['grill_fish']);
+  assert.strictEqual(I.stars.last[0].s, 5);
+  assert.ok(I.stars.last[0].note.length <= 24);
+  assert.strictEqual(I.resort.huts, 4);
+  assert.strictEqual(I.job, null);
+  assert.strictEqual(I.stars.avg, 5);
+});
+
+ok('star coefficient is 0.8 at 1 star and 1.3 at 5; room fee is 300 × nights × coefficient', () => {
+  assert.strictEqual(IN.starCoef(1), 0.8);
+  assert.strictEqual(IN.starCoef(5), 1.3);
+  assert.strictEqual(IN.starCoef(3), 1.05);
+  assert.strictEqual(IN.roomFee(1, 3), Math.round(300 * 1.05));
+  assert.strictEqual(IN.roomFee(2, 5), Math.round(300 * 2 * 1.3));
+  assert.strictEqual(IN.roomFee(1, 1), 240);
+});
+
+ok('3 stars bring 1 group a day, 5 stars at most 3; festive days double; below 3 some days are skipped', () => {
+  assert.strictEqual(IN.groupsWanted(3, 80, false), 1);
+  assert.strictEqual(IN.groupsWanted(4, 80, false), 2);
+  assert.strictEqual(IN.groupsWanted(5, 80, false), 3);
+  assert.strictEqual(IN.groupsWanted(5, 80, true), 6);
+  const lows = Array.from({ length: 40 }, (_, i) => IN.groupsWanted(1.5, 20 + i, false));
+  assert.ok(lows.some(v => v === 0) && lows.some(v => v === 1), '1–2 stars skip some days');
+  assert.ok(lows.every(v => v === 0 || v === 1));
+});
+
+ok('cabin / restaurant / kitchen prices and the one-day build; prosperity 3 and a 民宿院 are required', () => {
+  const I = IN.empty();
+  assert.deepStrictEqual(IN.cabinCost(0), { cost: 20000, wood: 300 });
+  assert.deepStrictEqual(IN.cabinCost(1), { cost: 25000, wood: 250 });
+  assert.strictEqual(IN.offer(I, 'cabin').cost, 20000);
+  assert.strictEqual(IN.offer(I, 'diner').cost, 35000);
+  assert.strictEqual(IN.offer(I, 'diner').wood, 400);
+  assert.ok(/先盖农家菜馆/.test(IN.offer(I, 'kitchen').why));
+  const poor = { plot: 'glade', lv: 3, coins: 100, wood: 10 };
+  assert.strictEqual(IN.canStart(I, 'cabin', { plot: null, lv: 3, coins: 1e6, wood: 999 }), '先把一块地改建成民宿院（林间空地、南河湾、河对岸或东坡）');
+  assert.ok(/繁荣度到 3/.test(IN.canStart(I, 'cabin', { plot: 'glade', lv: 2, coins: 1e6, wood: 999 })));
+  assert.strictEqual(IN.canStart(I, 'cabin', poor), '金币不够');
+  const rich = { plot: 'glade', lv: 3, coins: 1e6, wood: 999 };
+  assert.strictEqual(IN.canStart(I, 'cabin', rich), null);
+  IN.start(I, 'cabin', 80); assert.ok(/正在盖|一次只盖/.test(IN.canStart(I, 'diner', rich)));
+  assert.strictEqual(IN.finish(I, 80), null, 'same day is still scaffolding');
+  assert.strictEqual(IN.finish(I, 81), 'cabin'); assert.strictEqual(I.cabins, 1);
+  IN.start(I, 'cabin', 81); IN.finish(I, 82);
+  IN.start(I, 'cabin', 82); IN.finish(I, 83);
+  IN.start(I, 'cabin', 83); IN.finish(I, 84);
+  assert.strictEqual(I.cabins, 4);
+  assert.ok(/最多 4/.test(IN.offer(I, 'cabin').why));
+  IN.start(I, 'diner', 84); IN.finish(I, 85); assert.strictEqual(I.diner.lv, 1);
+  assert.strictEqual(IN.seatsOf(I), 4); assert.strictEqual(IN.dishSlots(I, false), 2);
+  IN.start(I, 'kitchen', 85); IN.finish(I, 86); assert.strictEqual(I.diner.lv, 2);
+  assert.strictEqual(IN.seatsOf(I), 8); assert.strictEqual(IN.dishSlots(I, false), 4);
+  IN.start(I, 'kitchen', 86); IN.finish(I, 87);
+  assert.strictEqual(IN.seatsOf(I), 12); assert.strictEqual(IN.dishSlots(I, false), 6);
+  assert.strictEqual(IN.dishSlots(I, true), 7);
+  assert.ok(/已经升到/.test(IN.offer(I, 'kitchen').why));
+  const totalGold = 20000 + 3 * 25000 + 35000 + 2 * 20000;
+  const totalWood = 300 + 3 * 250 + 400 + 2 * 200;
+  assert.strictEqual(totalGold, 95000 + 75000 - 0, '4 cabins 95,000 + diner with two kitchen levels 75,000');
+  assert.strictEqual(totalWood, 1050 + 800);
+});
+
+ok('guests: groups of 1–3 stay 1–2 nights, one cabin each, arrivals 10:00–16:00, the same day is stable after a reload', () => {
+  const I = IN.empty(); I.cabins = 4;
+  const a = IN.planArrivals(I, 90, 5, false);
+  const b = IN.planArrivals(I, 90, 5, false);
+  assert.deepStrictEqual(a, b);
+  assert.ok(a.length >= 1 && a.length <= 3);
+  const rooms = new Set();
+  for (const g of a) {
+    assert.ok(g.n >= 1 && g.n <= 3);
+    assert.ok(g.until === g.from + 1 || g.until === g.from + 2);
+    assert.ok(g.at >= 10 * 60 && g.at < 16 * 60);
+    assert.ok(IN.LOOKS.includes(g.look));
+    assert.ok(!rooms.has(g.room)); rooms.add(g.room);
+  }
+  IN.checkIn(I, 90, 5, false);
+  assert.strictEqual(I.guests.length, a.length);
+  const again = IN.planArrivals(I, 90, 5, false);
+  const taken = new Set(I.guests.map(g => g.room));
+  assert.ok(again.every(g => !taken.has(g.room)), 'later arrivals only take free cabins');
+  assert.ok(I.guests.length + again.length <= 4);
+});
+
+ok('checkout pays the room fee, writes a guestbook star, and frees the cabin the next or third morning', () => {
+  const I = IN.empty(); I.cabins = 1;
+  I.guests.push({ id: 'g90', look: 'innA', n: 2, room: 0, from: 90, until: 92, at: 12 * 60 });
+  const morning = IN.checkOut(I, 91, () => ({ s: 4, note: '羊好软' }));
+  assert.strictEqual(morning.groups.length, 0, 'they stay the second night');
+  assert.strictEqual(I.guests.length, 1);
+  const out = IN.checkOut(I, 92, () => ({ s: 4, note: '羊好软' }));
+  assert.strictEqual(out.groups.length, 1);
+  assert.strictEqual(out.gold, IN.roomFee(2, 3), 'fee uses the average from before this review');
+  assert.strictEqual(I.earn.rooms, out.gold);
+  assert.strictEqual(I.guests.length, 0);
+  assert.strictEqual(I.stars.last.length, 1);
+  assert.strictEqual(I.stars.last[0].s, 4);
+  assert.strictEqual(I.stars.last[0].note, '羊好软');
+  assert.strictEqual(I.stars.avg, 4);
+});
+
+ok('menu: 1.6× stall; auto picks the most abundant stock; missing dishes drop off and never stall', () => {
+  assert.strictEqual(IN.dishPay(IN.DISH.cabbage_egg), Math.round((10 + 30) * 1.6));
+  assert.strictEqual(IN.dishPay(IN.DISH.pumpkin_pie), Math.round((85 + 60) * 1.6));
+  assert.strictEqual(IN.dishPay(IN.DISH.jam_muffin), Math.round((60 + 80 + 35) * 1.6));
+  assert.strictEqual(IN.dishPay(IN.DISH.grill_fish), Math.round(20 * 1.6));
+  const I = IN.empty(); I.diner.lv = 3;
+  const stock = { egg: 8, cabbage: 8, pumpkin: 1, flour: 1, jam: 0, milk: 0, fish: 0, cheese: 0, honey: 0, carrot: 0, apple: 0 };
+  const auto = IN.autoMenu(I, stock, false).map(d => d.id);
+  assert.ok(auto[0] === 'cabbage_egg', 'most stocked dish first: ' + auto);
+  assert.ok(!auto.includes('jam_muffin') && !auto.includes('grill_fish'), 'missing stock is not listed');
+  const r = IN.serve(I, 20, stock, false);
+  assert.ok(r.n > 0 && r.missed > 0, 'serves what it can, then reports the shortfall');
+  assert.strictEqual(r.n + r.missed, 20);
+  assert.strictEqual(stock.egg + stock.cabbage < 2 || stock.pumpkin + stock.flour < 2, true, 'used up what it cooked');
+  assert.strictEqual(I.earn.meals, r.gold);
+  const I2 = IN.empty(); I2.diner.lv = 3; IN.setMenu(I2, ['grill_fish', 'jam_muffin'], false);
+  const r2 = IN.serve(I2, 4, { fish: 1 }, false);
+  assert.strictEqual(r2.n, 1); assert.strictEqual(r2.missed, 3, 'the fish dish drops off once the last fish is used');
+});
+
+ok('meals: two a day per staying guest, plus walk-ins on a festive / market day', () => {
+  const I = IN.empty(); I.cabins = 4;
+  I.guests = [
+    { id: 'a', look: 'innA', n: 2, room: 0, from: 90, until: 92, at: 600 },
+    { id: 'b', look: 'innB', n: 3, room: 1, from: 90, until: 91, at: 700 },
+    { id: 'c', look: 'innC', n: 1, room: 2, from: 89, until: 91, at: 700 },
+  ];
+  assert.strictEqual(IN.peopleOf(I, 90), 6);
+  assert.strictEqual(IN.mealsWanted(I, 90, false, 0), 12);
+  assert.ok(IN.mealsWanted(I, 90, true, 0) >= 12 + 6);
+  assert.ok(IN.walkinsOf(true, 0, 90) >= 4 && IN.walkinsOf(true, 0, 90) <= 8);
+  assert.strictEqual(IN.walkinsOf(false, 0, 90), 0);
+});
+
+ok('star sources: happy animals, a tidy yard, flowers, a full menu, fireflies; a short note is written', () => {
+  const good = IN.rateStay({ animals: [{ h: 90 }, { h: 88 }], yard: 0, yardCap: 18, decor: 8, flowers: 10, missed: 0, diner: 1, fireflies: 1, servedDish: 'pumpkin_pie' });
+  assert.ok(good.s >= 4, 'a well-kept farm rates high: ' + good.s);
+  assert.ok(/南瓜饼|萤火虫/.test(good.note), good.note);
+  const poor = IN.rateStay({ animals: [{ h: 20 }], yard: 18, yardCap: 18, decor: 0, flowers: 0, missed: 6, diner: 1 });
+  assert.ok(poor.s <= 3, 'a messy, hungry stay rates low: ' + poor.s);
+  assert.ok(/菜不够|乱/.test(poor.note), poor.note);
+  const mid = IN.rateStay({});
+  assert.ok(mid.s >= 1 && mid.s <= 5);
+});
+
+ok('staffed path adds 0.3 stars and a signature dish; furniture from the woodshop is a small comfort bonus', () => {
+  const I = IN.empty(); I.diner.lv = 1; I.stars.avg = 3;
+  assert.strictEqual(IN.effectiveStars(I, false, false), 3);
+  assert.strictEqual(IN.effectiveStars(I, true, false), 3.3);
+  assert.ok(IN.unlocked(I, true).some(d => d.special));
+  assert.ok(!IN.unlocked(I, false).some(d => d.special));
+  assert.ok(IN.effectiveStars(I, true, true) > IN.effectiveStars(I, true, false));
+});
+
+ok('the 民宿院 module is offered on 林间空地, 南河湾, 河对岸 and 东坡; layout stays inside the fence and does not overlap', () => {
+  assert.deepStrictEqual(IN.INN_PLOTS, ['glade', 'sbank', 'swacross', 'seacross', 'eslope']);
+  for (const id of IN.INN_PLOTS) {
+    const p = PL.plot(id);
+    assert.ok(p.mods.includes('inn'), id + ' can be zoned 民宿院');
+    const L = IN.layout(id); assert.ok(L, 'layout ' + id);
+    const [x0, y0, x1, y1] = p.rect;
+    const boxes = L.cabins.map(c => ({ id: 'c' + c.i, a: [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd] }))
+      .concat([{ id: 'diner', a: [L.diner.x - L.diner.hw, L.diner.y - L.diner.hd, L.diner.x + L.diner.hw, L.diner.y + L.diner.hd] }]);
+    for (const b of boxes) {
+      assert.ok(b.a[0] >= x0 + 2 && b.a[2] <= x1 - 2 && b.a[1] >= y0 + 2 && b.a[3] <= y1 - 2, id + ' ' + b.id + ' inside ' + b.a);
+    }
+    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+      const A = boxes[i].a, B = boxes[j].a;
+      const hit = A[0] < B[2] - 1 && B[0] < A[2] - 1 && A[1] < B[3] - 1 && B[1] < A[3] - 1;
+      assert.ok(!hit, id + ' overlap ' + boxes[i].id + ' / ' + boxes[j].id);
+    }
+    assert.strictEqual(L.cabins.length, 4);
+    assert.strictEqual(L.tables.length, 6);
+    assert.ok(L.lamps.length >= 4 && L.pots.length >= 4);
+    assert.ok(L.board && L.diner.door && L.diner.stand);
+    // south-facing doors (default camera)
+    for (const c of L.cabins) assert.ok(c.door.y >= c.y, 'cabin door on the south side');
+    assert.ok(L.diner.door.y >= L.diner.y, 'restaurant door on the south side');
+  }
+  assert.ok(!PL.plot('eshore').mods.includes('inn'), '东南滩 is reserved for the resort');
+  assert.ok(!PL.plot('play').mods.includes('inn'), 'the playground plot stays a playground');
+});
+
+ok('plotBusy blocks a rezone once a cabin or the restaurant is up', () => {
+  const plots = { glade: { mod: 'inn', day: 80 } };
+  assert.strictEqual(IN.plotBusy('glade', plots, IN.empty()), null);
+  const I = IN.empty(); I.cabins = 1;
+  assert.ok(/民宿/.test(IN.plotBusy('glade', plots, I)));
+  assert.strictEqual(IN.plotBusy('sbank', plots, I), null);
+});
+
+ok('east-avenue entry: the town gate when the town is open, otherwise the east-road mouth', () => {
+  assert.deepStrictEqual(IN.entryOf({ eroad: { mod: 'road', day: 10 } }, true), { x: 440, y: 66 });
+  assert.deepStrictEqual(IN.entryOf({ eroad: { mod: 'road', day: 10 } }, false), { x: 362, y: 66 });
+  assert.deepStrictEqual(IN.entryOf({}, false), { x: 352, y: 66 });
+});
+
+ok('guestbook keeps the last 10 notes, stars the last 20', () => {
+  const I = IN.empty();
+  for (let i = 0; i < 25; i++) I.stars.last.push({ day: 10 + i, s: 3 + (i % 3 === 0 ? 1 : 0), note: 'n' + i });
+  I.stars.last = I.stars.last.slice(-20);
+  I.stars.avg = IN.avgOf(I.stars.last);
+  assert.strictEqual(IN.book(I).length, 10);
+  assert.strictEqual(IN.book(I)[0].note, 'n24', 'newest first');
+  assert.strictEqual(I.stars.last.length, 20);
+});
+
+console.log('\n' + n + ' tests ok');

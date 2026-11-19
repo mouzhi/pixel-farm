@@ -17,6 +17,7 @@
   const HM = (typeof require === 'function' && typeof document === 'undefined') ? require('./home.js') : root.PFHome; // v5.9.0
   const HL = (typeof require === 'function' && typeof document === 'undefined') ? require('./hall.js') : root.PFHall; // v5.10.0
   const YD = (typeof require === 'function' && typeof document === 'undefined') ? require('./yard.js') : root.PFYard; // v5.10.3
+  const IN = (typeof require === 'function' && typeof document === 'undefined') ? require('./inn.js') : root.PFInn; // v5.10.7
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -217,6 +218,7 @@
       town: Object.assign(TN.valid(s.town), { hall: HL.valid(s.town && s.town.hall) }), // v5.8.0; v5.10.0: + hall (镇公所: projects, gifts), filled in when missing
       home: HM.valid(s.home), // v5.9.0
       ...(s.homeyard && YD ? { homeyard: YD.valid(s.homeyard) } : {}), // v5.10.3 append-only: the yard, stall and animal-care things set up
+      ...(IN ? { inn: IN.valid(s.inn) } : {}), // v5.10.7 append-only: 民宿 + 农家菜馆 (missing = nothing built)
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
