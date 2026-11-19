@@ -210,7 +210,74 @@
       if (y === 2 && x >= 1 && x <= 12 && z >= 6 && z <= 16) { if (x === 1 || x === 12 || z === 6 || z === 16) return Wd[1];
         return ((x + z) % 3 === 0) ? Ink[0] : Ac[0]; }
       return null; });
-    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard };
+    // v5.10.5 木工坊 — timber-frame shed, a saw-and-log on the ridge (readable from the usual south camera), a stone chimney, lumber in the windows
+    const woodshop = B(W2, D2 + 6, 48, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 20, wall = Wd[4], beam = Wd[2], roof = Wd[1];
+      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+        if (!(front || side || back)) return Wd[3];
+        if (z === 0) return St[1];
+        if (front && x >= 12 && x <= 19 && z <= 10) return z === 10 || x === 12 || x === 19 ? beam : (z <= 2 ? St[2] : Wd[1]); // a wide workshop door
+        if ((front || back) && z >= 3 && z <= 9 && ((x >= 4 && x <= 9) || (x >= 22 && x <= 27))) return z === 3 || z === 9 || x === 4 || x === 9 || x === 22 || x === 27 ? beam : ((x + z) % 3 === 0 ? Wd[3] : Wd[5] || Wd[4]);
+        if (side && y >= 8 && y <= 17 && z >= 4 && z <= 9 && (y - 8) % 5 < 3) return beam;
+        if (z === ZW) return beam;
+        return (x === X0 || x === X1 || (front || back) && (x === 11 || x === 20)) ? beam : wall; }
+      if (y >= 26 && y <= 31 && x >= 3 && x <= 28 && z === 11 - (y - 26)) return ((x >> 2) & 1) ? Wd[3] : Wd[5] || Wd[4]; // a short awning over the door
+      if (y >= 27 && y <= 30 && ((x >= 3 && x <= 9) || (x >= 22 && x <= 28)) && z <= 3) return z === 3 ? Wd[4] : Wd[2]; // crates of offcuts
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: roof, line: PAL.dark(roof, 1), ridge: Wd[3], trim: Wd[4] });
+      if (r === 'fill') return Wd[3]; if (r) return r;
+      if (y <= 1 && x >= 10 && x <= 21 && z >= 12 && z <= 22) { // a south-facing sign (the usual camera looks this way)
+        if (x === 15 && z <= 16) return Wd[1];
+        if (z >= 16 && z <= 22 && x >= 11 && x <= 20) {
+          if (x === 11 || x === 20 || z === 16 || z === 22) return Wd[1];
+          return ((x + z) % 3 === 0) ? Wd[4] : Wd[2]; } }
+      // a pale log and a steel saw standing on the ridge, large enough to read from the usual south camera
+      if (z >= 30 && z <= 42 && y >= 9 && y <= 21 && x >= 5 && x <= 22) {
+        const cx = 13, cy = 15, cz = 35, e = ((x - cx) / 8.5) ** 2 + ((y - cy) / 3.8) ** 2 + ((z - cz) / 4.2) ** 2;
+        if (e < 1) return e < 0.18 ? Wd[2] : (e < 0.7 ? (Wd[5] || Wd[4]) : Wd[3]); }
+      if (z >= 32 && z <= 50 && x >= 19 && x <= 30 && y >= 11 && y <= 19) {
+        const cx = 24.5, cy = 15, cz = 41, rr = Math.hypot(x - cx, y - cy, (z - cz) * 0.55);
+        if (rr < 6.6 && rr > 4.4) return St[3] || St[1]; if (rr <= 4.4 && Math.abs(z - cz) < 1.2) return St[2]; }
+      if (x >= 5 && x <= 8 && y >= 7 && y <= 11 && z <= 40) return z >= 38 ? St[1] : St[2]; // chimney
+      return null; });
+    const timber = B(16, 10, 12, (x, y, z) => { // three logs in a pile
+      for (const [cx, cy, cz, ax] of [[4, 4, 3, 1], [10, 5, 3, 1], [7, 4, 7, 0]]) {
+        const dx = ax ? (x - cx) / 5.5 : (x - cx) / 2.2, dy = ax ? (y - cy) / 2.2 : (y - cy) / 4.5, dz = (z - cz) / 2.2;
+        if (dx * dx + dy * dy + dz * dz < 1) return (dx * dx + dy * dy + dz * dz < 0.2) ? Wd[2] : ((x + y + z) % 3 ? Wd[3] : Wd[1]); }
+      return null; });
+    // v5.10.5 铁匠铺 — sooty brick, a slate roof, a south-facing forge mouth (glow the usual camera can see), a horseshoe on the ridge, a tall chimney
+    const ember = Ac[2], coal = Rf[1], steel = St[1];
+    const smithy = B(W2, D2 + 6, 52, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 20;
+      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+        if (!(front || side || back)) return St[1];
+        if (z === 0) return St[0] || St[1];
+        if (front && x >= 13 && x <= 18 && z <= 9) return z === 9 || x === 13 || x === 18 ? Wd[1] : (z <= 1 ? St[2] : Wd[2]); // a heavy door
+        // the forge mouth on the south wall (back of the model): a dark arch with a bright heart, readable from the usual camera
+        if (back && x >= 10 && x <= 21 && z >= 1 && z <= 10) {
+          const cx = 15.5, cz = 5.5, e = ((x - cx) / 5.4) ** 2 + ((z - cz) / 4.4) ** 2;
+          if (e < 1) { if (e > 0.72) return St[0] || St[1]; if (e < 0.22) return Ac[1]; return ((x + z) % 2 ? ember : coal); } }
+        if (front && z >= 3 && z <= 8 && ((x >= 4 && x <= 9) || (x >= 22 && x <= 27))) return z === 3 || z === 8 || x === 4 || x === 9 || x === 22 || x === 27 ? St[2] : ((x + z) % 4 === 0 ? ember : Wt[2]);
+        if (side && y >= 8 && y <= 17 && z >= 4 && z <= 9 && (y - 8) % 5 < 3) return St[2];
+        if (z === ZW) return St[2];
+        return ((z + (((x + y) >> 2) & 1)) % 3 === 0) ? Rf[1] : St[2]; } // sooty brick
+      if (y >= 26 && y <= 30 && x >= 4 && x <= 27 && z === 10 - (y - 26)) return ((x >> 2) & 1) ? St[2] : coal; // a short iron awning
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: steel, line: PAL.dark(steel, 1), ridge: St[0] || St[1], trim: St[2] });
+      if (r === 'fill') return St[1]; if (r) return r;
+      if (y <= 1 && x >= 10 && x <= 21 && z >= 12 && z <= 22) { // a south-facing iron sign above the forge
+        if (x === 15 && z <= 16) return St[1];
+        if (z >= 16 && z <= 22 && x >= 11 && x <= 20) {
+          if (x === 11 || x === 20 || z === 16 || z === 22) return St[1];
+          return ((x + z) % 3 === 0) ? ember : St[2]; } }
+      // a bright horseshoe on the ridge, large enough to read from the usual south camera
+      if (z >= 32 && z <= 50 && x >= 8 && x <= 24 && y >= 9 && y <= 21) {
+        const cx = 16, cy = 15, cz = 41, rx = Math.abs(x - cx), rz = z - cz, ry = Math.abs(y - cy);
+        const ring = Math.hypot(rx, rz); if (ry < 3.6 && ring > 4.0 && ring < 7.2 && rz > -3.5) return (ring > 6.2 ? St[3] : St[1]); }
+      if (x >= 22 && x <= 27 && y >= 7 && y <= 12 && z <= 50) return z >= 48 ? St[1] : (z % 5 === 0 ? Rf[1] : St[2]); // a tall chimney
+      return null; });
+    const anvil = B(10, 8, 10, (x, y, z) => {
+      if (z <= 2 && x >= 2 && x <= 7 && y >= 2 && y <= 5) return St[1];
+      if (z >= 3 && z <= 6 && x >= 3 && x <= 6 && y >= 2 && y <= 5) return St[2];
+      if (z >= 7 && z <= 9 && x >= 1 && x <= 8 && y >= 2 && y <= 5) return (z === 9 ? St[3] : St[2]);
+      return null; });
+    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil };
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -235,7 +302,7 @@
     for (let fy = R0[1]; fy < R0[3]; fy += 8) for (const fx of [R0[0], R0[2]]) { if (fx === R0[0] && Math.abs(fy + 4 - TN.GATE.y) < 10) continue; own.always.push(add(fence, fx, fy + 4, Math.PI / 2, { xp: 1, town: 'fence' })); }
     // trees on the town's grass, kept off streets, buildings and the square
     { let s = 4242; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [492, 135], [588, 132], [622, 132], [622, 4], [562, 2], [516, 4], [478, 2], [624, 96]]) {
+      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [492, 135], [470, 146], [628, 48], [622, 4], [562, 2], [516, 4], [478, 2], [624, 96]]) {
         const defs = rnd() < 0.5 ? x.treeDefs.oak : x.treeDefs.small; x.addTree(defs[Math.floor(rnd() * defs.length)], tx + (rnd() - 0.5) * 3, ty + (rnd() - 0.5) * 3); } }
     // the strip east of the old map edge: cliff slabs where the ridge runs on
     const xmod = xm && xm.ledges; if (xmod) for (let gx = 448; gx <= 640; gx += 8) { const ry = PL.ridgeY(gx); own.always.push(add(xmod[((gx / 8) | 0) % 3], gx, ry - 1.5, 0, { xp: 1 })); }
@@ -261,7 +328,9 @@
     for (const l of HL.LOTS) { const built = !!H.built[l.id], up = H.job && H.job.id === l.id; if (!built && !up) continue;
       own.hall.push(X.addProp(built ? (MD.two[l.style] || MD.two[2]) : MD.scaffold, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id }));
       if (built) { const fy = l.y - l.hd - 3; own.hall.push(X.addProp(MD.flowers, l.x - 10, fy, 0, { xp: 1, town: 'flowers' })); }
-      if (built && l.id === 'bakery' && MD.orderBoard) { const BK = root.PFBakery; own.hall.push(X.addProp(MD.orderBoard, (BK && BK.BOARD.x) || (l.door.x - 8), (BK && BK.BOARD.y) || (l.door.y + 1), 0, { xp: 1, town: 'orders' })); } }
+      if (built && l.id === 'bakery' && MD.orderBoard) { const BK = root.PFBakery; own.hall.push(X.addProp(MD.orderBoard, (BK && BK.BOARD.x) || (l.door.x - 8), (BK && BK.BOARD.y) || (l.door.y + 1), 0, { xp: 1, town: 'orders' })); }
+      if (built && l.id === 'woodshop' && MD.timber) { const WS = root.PFWoodshop; own.hall.push(X.addProp(MD.timber, (WS && WS.PILE.x) || (l.door.x - 7), (WS && WS.PILE.y) || (l.door.y + 1), 0, { xp: 1, town: 'timber' })); }
+      if (built && l.id === 'smithy' && MD.anvil) { const SM = root.PFSmithy; own.hall.push(X.addProp(MD.anvil, (SM && SM.ANVIL.x) || (l.door.x - 6), (SM && SM.ANVIL.y) || (l.door.y + 1), 0, { xp: 1, town: 'anvil' })); } }
     const MKS = root.PFMarket; // v5.10.3: the market stalls (bare frames while 阿松 is putting them up)
     if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
@@ -272,6 +341,18 @@
   // v5.9.1: the town's lamps and windows for game.js's lighting pass (only while the town is open)
   function lights(hz, T) { if (!(S && S.eff && S.eff.town)) return; for (const l of TN.lightsAt(T)) hz(l.x, l.y, l.z, l.r, l.s);
     if (HL && S.town && S.town.hall) for (const l of HL.lightsAt(S.town.hall, T, root.PFDecor && root.PFDecor.CATALOG)) hz(l.x, l.y, l.z, l.r, l.s); } // v5.10.0: the new houses' windows, the gift lamps
-  const api = { ground, mount, sync, lights, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
+  // chimney tops in world units (model voxels are 2 per world unit; lots with rot π flip the footprint)
+  function chimneyOf(lot, vx, vy, vz, W, D) {
+    let dx = (vx - (W - 1) / 2) / 2, dy = (vy - (D - 1) / 2) / 2;
+    if (lot.rot === Math.PI) { dx = -dx; dy = -dy; }
+    return { x: lot.x + dx, y: lot.y + dy, z: vz / 2 };
+  }
+  function smoke() {
+    const H = S && S.town && S.town.hall, out = []; if (!(S && S.eff && S.eff.town) || !H) return out;
+    if (H.built && H.built.woodshop) { const WS = root.PFWoodshop, l = (WS && WS.LOT) || (HL && HL.LOT.woodshop); if (l) out.push(chimneyOf(l, 6.5, 9, 40, 32, 34)); }
+    if (H.built && H.built.smithy) { const SM = root.PFSmithy, l = (SM && SM.LOT) || (HL && HL.LOT.smithy); if (l) out.push(Object.assign(chimneyOf(l, 24.5, 9.5, 50, 32, 34), { forge: 1 })); }
+    return out;
+  }
+  const api = { ground, mount, sync, lights, smoke, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
   root.PFTownArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

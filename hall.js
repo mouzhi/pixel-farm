@@ -50,7 +50,7 @@
   // ---------- the people: 镇长 from the day the town opens, one family per house from the morning after it is done ----------
   const SPOTS = { hall: P(HALL.door.x + 5, HALL.door.y + 4), board: P(BOARD.x + 3, BOARD.y + 5), plaza2: P(TN.PLAZA.x - 14, TN.PLAZA.y - 6),
     street2: P(600, 72), street3: P(478, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17), bakery: BK ? BK.STAND : P(490, 79),
-    woodshop: WS ? WS.STAND : P(573, 121), smithy: SM ? SM.STAND : P(611, 125) };
+    woodshop: WS ? WS.STAND : P(576, 139), smithy: SM ? SM.STAND : P(608, 139) };
   const NEIGHBOURS = [
     { id: 'n4', name: '镇长老顾', look: 'townE', home: 'h5', plan: [[8 * 60 + 30, 12 * 60, 'hall'], [13 * 60, 17 * 60, 'hall'], [17 * 60 + 30, 19 * 60 + 30, 'square']] },
     { id: 'n5', name: '裁缝阿梅', look: 'townF', lot: 'L5', plan: [[8 * 60, 11 * 60, 'plaza2'], [14 * 60, 17 * 60, 'board'], [18 * 60 + 30, 20 * 60 + 30, 'plaza2']] },

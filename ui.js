@@ -198,7 +198,7 @@
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0); if (!n && k !== 'carrot') continue; // v5.9.1: seeds he has none of stay out of the one-row bar
       h += `<div class="slot${n ? '' : ' dim'}" title="${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟">${cropIcon(k)}<span class="k">${SIM.CROPS[k].name}种</span><span class="n">${n}</span></div>`; }
     h += `<div class="slot${F.crops.length ? '' : ' dim'}" title="篮子：装满 ${E.basket} 个就去集市"><i style="background:url(${BASKET});background-size:32px"></i><span class="k">篮子</span><span class="n">${F.crops.length}/${E.basket}</span></div>`;
-    if (F.wood || E.axe) { const cap = PFWorld.HOUSE_TIERS[E.house || 0].woodCap; // v5.0: wood is a material kept in the storehouse
+    if (F.wood || E.axe) { const cap = (G.woodCap && G.woodCap()) || PFWorld.HOUSE_TIERS[E.house || 0].woodCap; // v5.0: wood is a material kept in the storehouse; v5.10.5 cap +400 with the woodshop
       h += `<div class="slot${F.wood ? '' : ' dim'}" title="仓库里的木材：扩建房子、给动物棚子围篱笆要用。仓库最多放 ${cap} 份（房子越大越多），放不下的才拿去集市卖（${PFWorld.WOOD.price} 金一份）"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}/${cap}</span></div>`; }
     { const fam = S.family, FA = window.PFFamily, tier = PFWorld.HOUSE_TIERS[E.house || 0]; // v5.0: 阿禾 and the children
       if (!fam.moved && fam.met) h += `<div class="slot" title="阿禾是集市的店主（7:00–19:00 开门）。农夫每天第一次去集市会和她聊几句（+${FA.CHAT}），篮子里有野花、鱼、果子或鸡蛋就送她一样；每天头两趟卖东西各 +${FA.SALE}。好感满 ${FA.LOVE_MAX}、房子扩建成大木屋后，她就搬来一起经营农场，摊子交给她爸爸。"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">阿禾</span><span class="n">${fam.love}/${FA.LOVE_MAX}</span></div>`;
@@ -285,7 +285,7 @@
     const S = G.S, tabs = shopTabs().filter(tabShown);
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, !!S.autoBuy, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length]) : ''].join(','); // v5.6.0: what the phase-8 gates read
+    const key = [shopTab, !!S.autoBuy, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length, S.coins, G.F && G.F.wood]) : ''].join(','); // v5.6.0: what the phase-8 gates read
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button type="button" class="pbtn auto${S.autoBuy ? ' on' : ''}" data-a="autobuy" aria-pressed="${S.autoBuy ? 'true' : 'false'}" title="${AUTO_TIP}">家人帮忙添置 · ${S.autoBuy ? '开' : '关'}</button><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -362,6 +362,22 @@
       if (b.pick) h += `<div class="mkpick">今天的订单：` + b.offer.map(o => `<button class="pbtn${o.take ? ' on' : ' off'}" data-bk="take:${o.id}"${b.done ? ' disabled' : ''}>${o.take ? '✓ ' : ''}${esc(o.text)}（${o.pay} 金${o.have ? '' : ' · 原料不够'}）</button>`).join('') + `<div class="more">点一单接它。今天不点的话，家人仍会自动接更划算的一单。</div></div>`;
       else h += `<div class="more">全自动：家人接更能赚钱、而且家里有原料的那一单，跑腿送到面包房。点「全自动」换成「我来挑」。${b.offer.length ? '今天：' + b.offer.map(o => esc(o.text) + '（' + o.pay + ' 金）').join('；') : ''}</div>`;
     }
+    const w = G.woodshopView && G.woodshopView(); // v5.10.5 木工坊
+    if (w) {
+      h += `<div class="sec">木工坊（仓库上限 +${w.bonus}，现在 ${w.cap}；木头多过 ${w.keep} 时阿松每天用 ${w.cost} 份做一张长椅）</div>`;
+      h += `<div class="card" data-item="woodshop">${icon('town')}<div class="ct"><div><b>${w.auto ? '自动做家具' : '先留着木材'}</b> <span class="lv">已经做了 ${w.days} 张，用掉 ${w.used} 份木材</span></div><div class="d">${w.auto ? '木头够用的时候，阿松会做成街上的长椅（街上满了就放进仓库）' : '先把木头留着，镇上要盖东西时用得上'}</div></div><div class="cb">` +
+        `<button class="pbtn" data-ws="mode">${w.auto ? '自动做家具' : '先留着木材'}</button></div></div>`;
+    }
+    const sm = G.smithyView && G.smithyView(); // v5.10.5 铁匠铺
+    if (sm) {
+      h += `<div class="sec">铁匠铺升级（一次性，每项 8,000–25,000 金；家人帮忙添置不会买）</div>`;
+      for (const u of sm.items) {
+        const st = u.maxed ? '已满级' : (u.max > 1 ? `${u.have}/${u.max}` : '未升级'), can = !u.why;
+        const short = u.maxed ? '' : u.why === '金币不够' ? `<span class="short"><span class="lab">还差</span><span class="price">${costChip(u.cost - G.S.coins, 'coin')}</span></span>` : u.why ? `<span class="short lock">${esc(u.why)}</span>` : '';
+        h += `<div class="card${u.maxed ? ' max' : ''}" data-item="smithy:${u.id}">${icon('town')}<div class="ct"><div><b>${esc(u.label)}</b> <span class="lv">${st}</span></div><div class="d">${esc(u.desc)}</div></div><div class="cb">` +
+          (u.maxed ? '<span class="done">✓</span>' : `<button class="pbtn" data-sm="buy:${u.id}"${can ? '' : ' disabled'}>${priceChips(u.cost, 0)}</button>${short}`) + '</div></div>';
+      }
+    }
     h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
     const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));
     if (!rows.length) h += `<div class="more">仓库和院子里还没有能送的装饰（派对区留在家里）</div>`;
@@ -371,7 +387,7 @@
   }
   const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; plotView = (opt && opt.plot) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
-    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk],[data-bk]'); if (!el || !shop.contains(el)) return;
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk],[data-bk],[data-ws],[data-sm]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
     if (d.a === 'autobuy') { G.setAutoBuy(!G.S.autoBuy); drawShop(true); return; } // v5.10.1
@@ -384,6 +400,8 @@
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); if (!r.ok) el.classList.add('shake'); }
     if (d.mk) { const [a, k] = d.mk.split(':'); if (a === 'mode') G.setMarketPick(!G.marketView().pick); else G.setMarketPick(null, k); drawShop(true); return; } // v5.10.3
     if (d.bk) { const [a, k] = d.bk.split(':'); if (a === 'mode') G.setBakeryPick(!G.bakeryView().pick); else G.setBakeryPick(null, k); drawShop(true); return; } // v5.10.4
+    if (d.ws) { if (d.ws === 'mode') G.setWoodshopAuto(!G.woodshopView().auto); drawShop(true); return; } // v5.10.5
+    if (d.sm) { const [a, id] = d.sm.split(':'); if (a === 'buy') { const r = G.smithyBuy(id); drawShop(true); if (!r.ok) el.classList.add('shake'); } return; } // v5.10.5
     if (d.hall) { const [a, id, u] = d.hall.split(':'), r = a === 'start' ? G.hallStart(id) : G.hallGive(id, u === '' || u === undefined ? undefined : +u); drawShop(true); if (!r.ok) el.classList.add('shake'); } // v5.10.0
   });
   $('shopBtn').addEventListener('click', () => toggleShop());

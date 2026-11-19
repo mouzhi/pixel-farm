@@ -8,8 +8,8 @@
   const P = (x, y) => ({ x, y });
   // south of 小桃's house (h4 at 606, 112), east of the woodshop, inside the town fence
   const LOT = { id: 'smithy', x: 606, y: 134, hw: 7, hd: 7, door: P(606, 127), rot: Math.PI, style: 5 };
-  const STAND = P(LOT.door.x + 5, LOT.door.y - 2);
-  const ANVIL = P(LOT.door.x - 6, LOT.door.y + 1);
+  const STAND = P(608, 139); // in front of the forge, on the path (east of the anvil; out of the trees)
+  const ANVIL = P(598, 138); // anvil in front of the south wall
   const HOURS = { from: 8 * 60, to: 17 * 60 };
   const SPR_REACH = 16, SPR_REACH_UP = 24, WORK_SPEED = 1.5, CART_EXTRA = 20;
   const AXE_BONUS = [0, 2, 4, 6], AXE_CUT = [0, 2, 3, 5];
