@@ -9,6 +9,7 @@ const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/p
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!p.startsWith(ROOT) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
 const readSave = f => { const t = fs.readFileSync(f, 'utf8'), a = t.indexOf('===SAVE==='), z = t.indexOf('===LOG==='); const s = JSON.parse((a >= 0 ? t.slice(a + 10, z > a ? z : undefined) : t).trim()); return s.save || s; };
 const FIXTURE = readSave(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'));
+FIXTURE.upgrades.speed = 0; // v5.10.2: the fixture bought 2x / 4x; the refund is checked in nospeed-shots.js, here coins must only move by offline gold
 const H = 3600e3;
 fs.mkdirSync(OUT, { recursive: true });
 (async () => { await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;

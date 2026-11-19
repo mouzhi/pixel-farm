@@ -29,7 +29,7 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
   });
   await test('icons do not overlap other HUD buttons', async () => {
     const hit = await p.evaluate(() => { const r = e => e.getBoundingClientRect(), a = r(document.getElementById('audioBar'));
-      return [...document.querySelectorAll('#wrap > button, #wrap > div.panel, #minimap, #tools, #speed, #log')].filter(e => e.offsetParent && e.id !== 'audioBar')
+      return [...document.querySelectorAll('#wrap > button, #wrap > div.panel, #minimap, #tools, #log')].filter(e => e.offsetParent && e.id !== 'audioBar')
         .filter(e => { const q = r(e); return q.width && !(q.right <= a.left || q.left >= a.right || q.bottom <= a.top || q.top >= a.bottom); }).map(e => e.id); });
     assert.deepStrictEqual(hit, []);
   });
@@ -89,7 +89,7 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
     await p.click('#musicBtn'); await p.waitForFunction(() => PFAudio.state().generating || PFAudio.state().mode === 'files', null, { timeout: 3000 });
   });
   await test('a fast farm day with sound on has no errors', async () => {
-    await p.evaluate(() => { PFAudio.setSfx(true); __farm.setGameSpeed && __farm.setGameSpeed(4); });
+    await p.evaluate(() => { PFAudio.setSfx(true); __farm.setSpeed(4); }); // the test-only clock multiplier (no bought 2x / 4x since v5.10.2)
     await p.waitForTimeout(6000); assert.deepStrictEqual(errs, []);
   });
   await b.close(); server.close();

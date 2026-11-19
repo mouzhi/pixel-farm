@@ -1,4 +1,4 @@
-// Unit tests for v5.10.1 (sim.js + save.js): the 24-hour offline window and 「家人帮忙添置」.   node tools/econ-test.js
+// Unit tests for v5.10.1 / v5.10.2 (sim.js + save.js): the 24-hour offline window (short absences outside it) and 「家人帮忙添置」.   node tools/econ-test.js
 // PF_REAL_SAVE=/path/to/export.txt also loads a real exported save (===SAVE=== ... ===LOG===); it is only read, never written.
 const assert = require('assert'), fs = require('fs'), path = require('path');
 const WD = require('../world.js'); globalThis.PFWorld = WD;
@@ -43,6 +43,17 @@ ok('wood and rain follow the capped days (offline wood is a function of r.days)'
   const w3 = WA.offline(full.days, eff, 20, 0, 400), w0 = WA.offline(cut.days, eff, 20, 0, 400);
   assert(w3 > 0, 'wood ' + w3); assert.strictEqual(cut.days, 0); assert.strictEqual(w0, 0, 'a used-up window brings no wood either');
 });
+ok('v5.10.2: under 5 minutes away, or under 100 gold, is paid in full and not counted in the 24-hour window', () => {
+  const full = [{ at: T0 - H, days: 3 }];
+  const a = SIM.offlineSettle(299, earn, full, T0); assert(a.free); assert(!a.limited); assert.strictEqual(a.days, Math.round(299 / DAY * 0.5 * 100) / 100); assert.strictEqual(a.gold, Math.floor(1000 * a.days)); assert.strictEqual(a.used, 3);
+  assert.deepStrictEqual(a.win, full, 'window untouched');
+  const tiny = SIM.offlineSettle(DAY * 2, [40, 50, 60], [], T0); assert(tiny.free); assert.strictEqual(tiny.gold, 50); assert.deepStrictEqual(tiny.win, [], 'under 100 gold: not stored');
+  const big = SIM.offlineSettle(300, earn, [], T0); assert(!big.free, '5 minutes and 479 gold counts'); assert.strictEqual(big.win.length, 1);
+  const used = SIM.offlineSettle(DAY * 6, earn, full, T0); assert(!used.free); assert.strictEqual(used.days, 0); assert(used.limited);
+  // the friend's day-1..6 tab switches (0-80 gold each) no longer use up the window
+  let win = []; for (const [sec, avg] of [[92, 0], [103, 0], [61, 14], [462, 14], [345, 14], [81, 81]]) win = SIM.offlineSettle(sec, [avg], win, T0).win;
+  assert.deepStrictEqual(win, []);
+});
 ok('save: offline.win and settings.autoBuy are append-only; old saves get an empty window and autoBuy off', () => {
   const FIX = f => JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', f), 'utf8'));
   for (const f of ['save-v10-day59-manor.json', 'save-v15-day72-cottage.json']) {
@@ -51,7 +62,7 @@ ok('save: offline.win and settings.autoBuy are append-only; old saves get an emp
     assert.deepStrictEqual(s.offline, { win: [] }, f); assert.strictEqual(s.settings.autoBuy, false, f); assert.strictEqual(s.settings.autoN, 0, f);
     s.settings.autoBuy = true; s.settings.autoDay = 60; s.settings.autoN = 4; s.offline.win = [{ at: T0, days: 1.25 }];
     const back = SAVE.validate(JSON.parse(JSON.stringify(s)));
-    assert.deepStrictEqual(back.settings, { speed: s.settings.speed, autoBuy: true, autoDay: 60, autoN: 4 }, f); assert.deepStrictEqual(back.offline.win, [{ at: T0, days: 1.25 }], f);
+    assert.deepStrictEqual(back.settings, { speed: 1, speedRefund: 0, autoBuy: true, autoDay: 60, autoN: 4 }, f); assert.deepStrictEqual(back.offline.win, [{ at: T0, days: 1.25 }], f);
   }
   const s = SAVE.migrate(FIX('save-v10-day59-manor.json')); s.settings.autoBuy = 'yes'; s.offline = { win: [{ at: 'x', days: 1 }, { at: T0, days: 9 }, 5] };
   const v = SAVE.validate(s); assert.strictEqual(v.settings.autoBuy, false, 'only a real true turns it on'); assert.deepStrictEqual(v.offline.win, [{ at: T0, days: 3 }]);
@@ -67,7 +78,8 @@ const up0 = () => SIM.emptyUpgrades();
 ok('the list: 18 steps, basics only, no wood, about 6,210 gold in all', () => {
   assert.strictEqual(SIM.AUTO_BUY.length, 18); let gold = 0, wood = 0; const have = {};
   for (const id of SIM.AUTO_BUY) { const it = SIM.shopItem(id), L = it.levels[have[id] | 0]; have[id] = (have[id] | 0) + 1; gold += L.cost; wood += L.wood || 0;
-    assert(!it.deco && !it.pet && !it.region && !it.home && !it.works && id !== 'speed', id); }
+    assert(!it.deco && !it.pet && !it.region && !it.home && !it.works, id); }
+  assert(!SIM.SHOP_IDS.includes('speed'), 'v5.10.2: there is no game speed to buy');
   assert.strictEqual(wood, 0); assert.strictEqual(gold, 6210);
 });
 ok('order: the k-th field is field level k; bought steps are skipped', () => {

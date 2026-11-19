@@ -26,7 +26,7 @@
       income: emptyIncome(), spend: {}, purchases: [],
       tiles: snap.tiles || 0, regions: snap.regions || 0, animals: snap.animals || 0,
       busyMin: 0, idleMin: 0, sleepMin: 0, idle: emptyIdle(),
-      speed: snap.speed || 1, fps: null, offline: [],
+      fps: null, offline: [], // v5.10.2: no `speed` (one game speed); old logs may still carry it
       family: {} // v5.0: busy game minutes per family member (partner / kid0 / kid1), and the gold they brought in from the market
     };
   }
@@ -51,7 +51,7 @@
   }
   function normalizeDay(x) {
     if (!x || typeof x !== 'object') return null;
-    const d = emptyDay({ day: x.day || 1, createdAt: x.farm, now: x.realAt, coins: x.goldStart, tiles: x.tiles, regions: x.regions, animals: x.animals, speed: x.speed });
+    const d = emptyDay({ day: x.day || 1, createdAt: x.farm, now: x.realAt, coins: x.goldStart, tiles: x.tiles, regions: x.regions, animals: x.animals });
     d.goldEnd = x.goldEnd != null ? x.goldEnd : d.goldStart;
     d.open = !!x.open;
     d.income = emptyIncome();
@@ -95,7 +95,7 @@
     if (!data.startedAt) data.startedAt = nowOf(snap);
     startSession(snap);
     openDay(snap);
-    event({ type: 'session-start', day: snap.day, t: snap.t, coins: snap.coins, farm: snap.createdAt, gameVersion: snap.gameVersion, speed: snap.speed });
+    event({ type: 'session-start', day: snap.day, t: snap.t, coins: snap.coins, farm: snap.createdAt, gameVersion: snap.gameVersion });
     flush();
     if (opts && opts.getSave) getSave = opts.getSave;
     else if (!getSave && typeof window !== 'undefined' && window.__farm && window.__farm.snapshot) getSave = () => window.__farm.snapshot();
@@ -103,13 +103,13 @@
     return data;
   }
   function startSession(snap) {
-    session = { startedAt: nowOf(snap), endedAt: null, dayStart: snap.day, dayEnd: snap.day, coinsStart: snap.coins || 0, coinsEnd: snap.coins || 0, speed: snap.speed || 1, gameVersion: snap.gameVersion || null, farm: snap.createdAt || null };
+    session = { startedAt: nowOf(snap), endedAt: null, dayStart: snap.day, dayEnd: snap.day, coinsStart: snap.coins || 0, coinsEnd: snap.coins || 0, gameVersion: snap.gameVersion || null, farm: snap.createdAt || null };
     data.sessions.push(session);
     cap();
   }
   function endSession(snap) {
     if (!session) return;
-    if (snap) { session.endedAt = nowOf(snap); session.dayEnd = snap.day; session.coinsEnd = snap.coins; session.speed = snap.speed || session.speed; }
+    if (snap) { session.endedAt = nowOf(snap); session.dayEnd = snap.day; session.coinsEnd = snap.coins; }
     else session.endedAt = Date.now();
     event({ type: 'session-end', day: session.dayEnd, coins: session.coinsEnd, farm: session.farm, startedAt: session.startedAt, endedAt: session.endedAt });
     session = null;
@@ -144,7 +144,6 @@
     if (snap.tiles != null) d.tiles = snap.tiles;
     if (snap.regions != null) d.regions = snap.regions;
     if (snap.animals != null) d.animals = snap.animals;
-    if (snap.speed != null) d.speed = snap.speed;
     if (snap.coins != null) d.goldEnd = snap.coins;
   }
   function applyFps(d) {

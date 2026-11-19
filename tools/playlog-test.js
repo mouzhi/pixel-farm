@@ -7,7 +7,7 @@ function mem() {
   const m = {};
   return { getItem: k => (k in m ? m[k] : null), setItem: (k, v) => { m[k] = String(v); }, removeItem: k => { delete m[k]; }, raw: m };
 }
-function snap(o) { return Object.assign({ day: 1, t: 360, coins: 0, createdAt: 1_000_000, speed: 1, gameVersion: '4.7.1', tiles: 12, regions: 0, animals: 0, now: 1_000_000 }, o); }
+function snap(o) { return Object.assign({ day: 1, t: 360, coins: 0, createdAt: 1_000_000, gameVersion: '4.7.1', tiles: 12, regions: 0, animals: 0, now: 1_000_000 }, o); }
 
 let n = 0;
 function test(name, fn) { fn(); n++; }
@@ -40,7 +40,7 @@ test('income by source, spend by item, closeDay sets goldEnd and counts', () => 
   LOG.income('wood', 4);
   LOG.spend('seeds', 3);
   LOG.spend('hay', 2);
-  const ended = LOG.closeDay(snap({ day: 1, coins: 27, tiles: 16, regions: 1, animals: 2, speed: 2, now: 1_000_000 + 300000 }));
+  const ended = LOG.closeDay(snap({ day: 1, coins: 27, tiles: 16, regions: 1, animals: 2, now: 1_000_000 + 300000 }));
   assert.strictEqual(ended.open, false);
   assert.strictEqual(ended.goldStart, 4);
   assert.strictEqual(ended.goldEnd, 27);
@@ -50,7 +50,7 @@ test('income by source, spend by item, closeDay sets goldEnd and counts', () => 
   assert.strictEqual(ended.tiles, 16);
   assert.strictEqual(ended.regions, 1);
   assert.strictEqual(ended.animals, 2);
-  assert.strictEqual(ended.speed, 2);
+  assert(!('speed' in ended), 'v5.10.2: one game speed, nothing to log');
   assert.strictEqual(LOG.current(), null);
 });
 
