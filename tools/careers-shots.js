@@ -58,7 +58,8 @@ fs.mkdirSync(OUT, { recursive: true });
       : !r.wed || r.wed.mate !== 'm1' ? 'no wedding'
       : r.lv < 3 ? 'lv ' + r.lv
       : !r.opts.includes('farm') || !r.opts.includes('work*') || !r.opts.find(s => s.startsWith('shop')) ? 'opts ' + JSON.stringify(r.opts)
-      : r.opts.some(s => s.endsWith('!')) ? 'an option locked ' + JSON.stringify(r.opts)
+      : r.opts.filter(s => !s.startsWith('inn')).some(s => s.endsWith('!')) ? 'an option locked ' + JSON.stringify(r.opts)
+      : !r.opts.some(s => s.startsWith('inn')) ? 'missing inn option ' + JSON.stringify(r.opts)
       : !r.v || r.v.fee !== 0 ? 'fee ' + JSON.stringify(r.v)
       : null);
 
