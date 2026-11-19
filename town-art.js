@@ -277,7 +277,26 @@
       if (z >= 3 && z <= 6 && x >= 3 && x <= 6 && y >= 2 && y <= 5) return St[2];
       if (z >= 7 && z <= 9 && x >= 1 && x <= 8 && y >= 2 && y <= 5) return (z === 9 ? St[3] : St[2]);
       return null; });
-    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil };
+    // v5.10.6: a child's own shop (flower / sweet / tackle), a size down from the two-storey lots so it fits L2/L3
+    const kidShop = kind => B(24, 22, 32, (x, y, z) => { const X0 = 2, X1 = 21, Y0 = 2, Y1 = 19, ZW = 14;
+      const wall = kind === 'flower' ? Ac[0] : kind === 'sweet' ? Wd[4] : Wd[2];
+      const trim = kind === 'flower' ? G[2] : kind === 'sweet' ? Rf[3] : St[1];
+      const roof = kind === 'flower' ? G[3] : kind === 'sweet' ? (Rf[3] || Rf[2]) : St[2];
+      const goods = kind === 'flower' ? [G[3], Ac[3], Rf[3], G[2]] : kind === 'sweet' ? [Wd[4], Rf[3], Ac[0], G[3]] : [St[2], Wd[1], Wt[3], Ink[0]];
+      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+        if (!(front || side || back)) return Wd[3];
+        if (z === 0) return St[1];
+        if (front && x >= 9 && x <= 13 && z <= 7) return z === 7 ? Wd[2] : (x === 12 && z === 3 ? Ac[1] : Wd[1]);
+        if ((front || back) && z >= 2 && z <= 7 && ((x >= 3 && x <= 7) || (x >= 15 && x <= 19))) return z === 2 || z === 7 || x === 3 || x === 7 || x === 15 || x === 19 ? Wd[1] : (z <= 4 ? goods[(x + z) % goods.length] : Wt[3]);
+        if (side && y >= 6 && y <= 14 && z >= 3 && z <= 7 && (y - 6) % 5 < 3) return Wt[3];
+        if (z === ZW) return trim;
+        return wall; }
+      if (y >= 20 && y <= 21 && x >= 2 && x <= 21 && z === 9 - (y - 20)) return ((x >> 2) & 1) ? trim : roof;
+      if (y >= 20 && y <= 21 && x >= 16 && x <= 20 && z <= 2) return z === 2 ? goods[(x + y) % goods.length] : Wd[2];
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 1, x1: X1 + 1, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[4] });
+      if (r === 'fill') return wall; if (r) return r; return null; });
+    const kidShops = { flower: kidShop('flower'), sweet: kidShop('sweet'), tackle: kidShop('tackle') };
+    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops };
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -323,7 +342,8 @@
   let hallKey = '';
   function syncHall(force) {
     if (!mounted || !HL) return; const H = S.town && S.town.hall, open = !!(S.eff && S.eff.town);
-    const k = open && H ? JSON.stringify([H.built, H.job, H.gifts]) : ''; if (!force && k === hallKey) return; hallKey = k;
+    const lots = S.town && S.town.lots, path = S.home && S.home.path;
+    const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path]) : ''; if (!force && k === hallKey) return; hallKey = k;
     for (const q of own.hall) removeFrom(q); own.hall.length = 0; if (!k) return;
     for (const l of HL.LOTS) { const built = !!H.built[l.id], up = H.job && H.job.id === l.id; if (!built && !up) continue;
       own.hall.push(X.addProp(built ? (MD.two[l.style] || MD.two[2]) : MD.scaffold, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id }));
@@ -335,12 +355,16 @@
     if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
     if (DM) { const gp = HL.giftPos(H); H.gifts.forEach((id, i) => { const at = gp[i], m = DM[id]; if (m && at) own.hall.push(X.addProp(m, at.x, at.y, 0, { xp: 1, town: 'gift' })); }); } // v5.10.3: by kind (slots.js)
+    const CR = root.PFCareers; // v5.10.6: a child's own shop (scaffolding the first day, then the model for its kind)
+    if (CR && lots) for (const l of CR.LOTS) { const kid = lots[l.id]; if (!kid) continue; const p = path && path[kid], ready = CR.shopReady(p, S.day), kind = (p && p.kind) || 'flower';
+      const m = ready ? ((MD.kidShops && MD.kidShops[kind]) || MD.two[2]) : MD.scaffold; if (m) own.hall.push(X.addProp(m, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id })); }
     X.markNavDirty();
   }
   // a little sign over the shut gate while the town is locked (drawn by game.js with the plot locks)
   // v5.9.1: the town's lamps and windows for game.js's lighting pass (only while the town is open)
   function lights(hz, T) { if (!(S && S.eff && S.eff.town)) return; for (const l of TN.lightsAt(T)) hz(l.x, l.y, l.z, l.r, l.s);
-    if (HL && S.town && S.town.hall) for (const l of HL.lightsAt(S.town.hall, T, root.PFDecor && root.PFDecor.CATALOG)) hz(l.x, l.y, l.z, l.r, l.s); } // v5.10.0: the new houses' windows, the gift lamps
+    if (HL && S.town && S.town.hall) for (const l of HL.lightsAt(S.town.hall, T, root.PFDecor && root.PFDecor.CATALOG)) hz(l.x, l.y, l.z, l.r, l.s); // v5.10.0: the new houses' windows, the gift lamps
+    if (root.PFCareers && S.town && S.town.lots) for (const l of root.PFCareers.lightsAt(S.town.lots, S.home && S.home.path, T, S.day)) hz(l.x, l.y, l.z, l.r, l.s); } // v5.10.6: the child's shop window at dusk
   // chimney tops in world units (model voxels are 2 per world unit; lots with rot π flip the footprint)
   function chimneyOf(lot, vx, vy, vz, W, D) {
     let dx = (vx - (W - 1) / 2) / 2, dy = (vy - (D - 1) / 2) / 2;

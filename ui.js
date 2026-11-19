@@ -467,7 +467,7 @@
     if (e.key === 'b' || e.key === 'B') toggleShop();
     if (e.key === 'i' || e.key === 'I') toggleStore();
     if (e.key === 'j' || e.key === 'J') toggleCodex();
-    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); toggleCodex(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; } });
+    if (e.key === 'Escape') { toggleShop(false); toggleStore(false); toggleCodex(false); if (!menu.hidden) menu.hidden = true; if (loveTip) loveTip.hidden = true; const cb = $('career'); if (cb && !cb.hidden) closeCareer(true); } });
 
   // ---- v5.4.0 collection book: 图鉴 / 成就 / 里程碑, next to the storehouse button ----
   const codexEl = $('codex');
@@ -682,7 +682,11 @@
     if (!H || (!H.kids.length && !H.nb.length)) return '';
     let h = '<div class="rel">';
     for (const k of H.kids) { const top = k.rel.filter(r => r.v > 0).slice(0, k.married ? 0 : 3);
-      if (k.married && k.wed) { h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '')}成家了，住在新房子</div>`; continue; }
+      if (k.married) { const mate = k.wed && k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '';
+      const p = k.path, way = p && p.way, pending = p && p.pending;
+      const pathLine = way === 'work' ? '在镇上上班' : way === 'shop' ? '在镇上开店' : '留家种地';
+      h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(mate)}成家了，${pathLine}${pending ? '（明天换）' : ''}，住在新房子</div>`;
+      h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">换个活法</button></div>`; continue; }
       if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }
       if (!top.length) continue;
       h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join(''); }
@@ -699,5 +703,54 @@
   if (loveHud) loveHud.addEventListener('click', e => { e.stopPropagation(); toggleLoveTip(); });
   addEventListener('pointerdown', e => { if (!loveTip || loveTip.hidden) return; if (loveTip.contains(e.target) || (loveHud && loveHud.contains(e.target))) return; toggleLoveTip(false); });
   setInterval(() => { inv(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (codexEl && !codexEl.hidden) drawCodex(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv();
+  if (loveTip) loveTip.addEventListener('click', e => { const b = e.target.closest('[data-cr]'); if (!b) return; e.stopPropagation(); const v = G.careerView && G.careerView(b.getAttribute('data-cr'), 'change'); if (v) showCareer(v); });
+
+  // v5.10.6: wedding-morning path, or later 「换个活法」 from the family panel
+  const careerBox = $('career');
+  let careerSel = null, careerData = null;
+  function optLabel(o) {
+    const cost = (o.cost ? o.cost + ' 金' : '') + (o.wood ? (o.cost ? ' + ' : '') + o.wood + ' 木材' : '');
+    return `<b>${esc(o.title)}</b>${cost ? ' · ' + cost : ''}<span class="cd">${esc(o.desc)}</span>` + (o.ok ? '' : `<span class="cwhy">${esc(o.why || '现在还不行')}</span>`);
+  }
+  function paintCareer() {
+    if (!careerBox || !careerData) return;
+    const v = careerData, wedding = v.mode === 'wedding';
+    const fee = v.fee | 0;
+    const sub = wedding ? `${esc(v.name)}今天成家。选一个去向，之后就不用再管；关了窗口按推荐的来。` : (fee ? `换条路要 2,000 金，明天早上生效。关店会退一半装修费。` : `第一次换不用花钱，明天早上生效。`);
+    careerBox.innerHTML = `<h3>${wedding ? '成家以后做什么' : '换个活法'}</h3><div class="csub">${sub}</div>` +
+      v.options.map(o => `<button type="button" class="pbtn copt${careerSel && careerSel.way === o.way ? ' on' : ''}${o.ok ? '' : ' off'}" data-way="${o.way}" ${o.ok ? '' : 'disabled'}>${optLabel(o)}</button>`).join('') +
+      `<div class="crow"><button type="button" class="pbtn" id="careerOk">${wedding ? '就按这个' : '明天换过去'}</button>` + (wedding ? '' : `<button type="button" class="pbtn" id="careerNo">先不换</button>`) + `</div>`;
+    careerBox.hidden = false;
+    careerBox.querySelectorAll('[data-way]').forEach(b => b.onclick = () => { const o = v.options.find(q => q.way === b.getAttribute('data-way')); if (o && o.ok) { careerSel = o; paintCareer(); } });
+    const ok = $('careerOk'); if (ok) ok.onclick = () => confirmCareer();
+    const no = $('careerNo'); if (no) no.onclick = () => closeCareer(false);
+  }
+  function showCareer(v) {
+    if (!careerBox || !v) return;
+    careerData = v; careerSel = v.options.find(o => o.selected && o.ok) || v.options.find(o => o.ok) || v.options[0];
+    if (loveTip) loveTip.hidden = true;
+    paintCareer();
+  }
+  function closeCareer(useDefault) {
+    if (!careerBox) return;
+    const v = careerData, wedding = v && v.mode === 'wedding';
+    careerBox.hidden = true;
+    if (useDefault && wedding && G.careerPick && v) {
+      const o = v.options.find(q => q.selected) || careerSel || v.options[0];
+      if (o) G.careerPick(v.kid, o.way, o.at, o.kind);
+    }
+    careerData = null; careerSel = null;
+  }
+  function confirmCareer() {
+    if (!careerData || !careerSel) return closeCareer(true);
+    const v = careerData, o = careerSel;
+    const r = v.mode === 'wedding' ? (G.careerPick && G.careerPick(v.kid, o.way, o.at, o.kind)) : (G.careerChange && G.careerChange(v.kid, o.way, o.at, o.kind));
+    if (r && !r.ok && r.why) { const s = careerBox.querySelector('.csub'); if (s) s.innerHTML = '<span class="cwhy">' + esc(r.why) + '</span>'; return; }
+    careerBox.hidden = true; careerData = null; careerSel = null; if (G.refreshUI) G.refreshUI();
+  }
+  addEventListener('pf:career', e => showCareer(e.detail));
+  addEventListener('pf:career-done', () => { if (careerBox) careerBox.hidden = true; careerData = null; careerSel = null; });
+  addEventListener('pointerdown', e => { if (!careerBox || careerBox.hidden) return; if (careerBox.contains(e.target)) return; closeCareer(true); });
+
   G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; codexKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (codexEl && !codexEl.hidden) drawCodex(true); if (G.hud) G.hud(); };
 })();

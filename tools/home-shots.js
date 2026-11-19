@@ -118,7 +118,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const r = await p.evaluate(() => { const f = __farm, s = f.snapshot(); f.advance(120, 10); const s2 = f.snapshot(); f.setAngle(0.5); f.panTo(100, 60); f.advance(0.3, 10);
       return { v: f.version, sv: s.saveVersion, day: s.clock.day, home: s.home, up: s.upgrades.cottage, plots: Object.keys(s.plots).length, animals: s.animals.length, later: s2.clock.t > s.clock.t, spouses: f.SPOUSES.length, gate: f.homeGate(0) }; });
     await p.screenshot({ path: path.join(OUT, 'v590_fixture_day59.png') });
-    const empty = JSON.stringify({ houses: [], rel: {}, nb: {}, wed: {}, help: {}, teen: {}, earn: 0 });
+    const empty = JSON.stringify({ houses: [], rel: {}, nb: {}, wed: {}, help: {}, teen: {}, earn: 0, path: {}, wage: 0 }); // v5.10.6: + path, wage
     const bad = r.v !== VERSION ? 'version' : r.sv !== 15 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.home) !== empty ? 'home not empty ' + JSON.stringify(r.home) : r.up !== 0 ? 'cottage bought' : r.spouses ? 'spouses' : !r.later ? 'clock' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : r.animals !== save.animals.length ? 'animals' : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'v590_fixture_day59.png', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close();
   }

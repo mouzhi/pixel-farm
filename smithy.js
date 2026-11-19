@@ -46,7 +46,7 @@
     return { up: validUp(o.up || o) };
   }
   const lv = (S, id) => ((S && S.up && S.up[id]) | 0);
-  const costOf = (u, have) => { const c = u.cost; return Array.isArray(c) ? c[Math.min(have, c.length - 1)] : c; };
+  const costOf = (u, have, off) => { const c = u.cost, n = Array.isArray(c) ? c[Math.min(have, c.length - 1)] : c; return off ? Math.round(n * 0.9) : n; };
   const labelOf = (u, have) => (u.labels && u.labels[have]) || u.name;
   const descOf = (u, have) => (u.descs && u.descs[have]) || u.desc;
   // why the player cannot buy `id` now (null: ok). ctx: { open, coins, built }
@@ -54,14 +54,14 @@
     const u = BY[id]; if (!u) return '没有这个升级';
     if (!(ctx && ctx.built)) return '先把铁匠铺盖好';
     const have = lv(S, id); if (have >= u.max) return '已经满级';
-    const cost = costOf(u, have);
+    const cost = costOf(u, have, ctx && ctx.off);
     if ((ctx.coins | 0) < cost) return '金币不够';
     return null;
   }
   // pay and bump one level. -> { ok, id, cost, have } or { ok: false, why }
   function buy(S, id, ctx) {
     const why = canBuy(S, id, ctx); if (why) return { ok: false, why };
-    const u = BY[id], have = lv(S, id), cost = costOf(u, have);
+    const u = BY[id], have = lv(S, id), cost = costOf(u, have, ctx && ctx.off);
     S.up[id] = have + 1; return { ok: true, id, cost, have: S.up[id], name: labelOf(u, have) };
   }
   function effects(up) {

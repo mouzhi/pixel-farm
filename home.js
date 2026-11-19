@@ -11,9 +11,12 @@
   const PLm = NODE ? require('./plots.js') : null, plots = () => PLm || root.PFPlots;
   const PL = new Proxy({}, { get: (_, k) => plots()[k] });
   const TN = root.PFTown || (NODE ? require('./town.js') : null);
+  const careers = () => root.PFCareers || (NODE ? require('./careers.js') : null);
+  const hallNb = () => (root.PFHall || (NODE ? require('./hall.js') : null) || {}).NEIGHBOURS || [];
   const HS = { tiles: 6, helpPerDay: 2, helpMinutes: 60 }; // = PL.HOMESTEAD (the phase 7 stub; tools/home-test.js checks they agree)
   const MATES = TN.MATES, NEIGHBOURS = TN.NEIGHBOURS;
-  const MATE_IDS = MATES.map(m => m.id), NB_IDS = NEIGHBOURS.map(n => n.id);
+  const MATE_IDS = MATES.map(m => m.id);
+  const NB_IDS = Array.from(new Set(NEIGHBOURS.map(n => n.id).concat(hallNb().map(n => n.id)))); // v5.10.6: 铁匠阿锤 and the new houses
   const KID_IDS = ['kid0', 'kid1'];
 
   // ---------- 好感 ----------
@@ -52,7 +55,7 @@
   }
   const mateIndex = id => Math.max(0, MATE_IDS.indexOf(id));
   const mateName = id => MATES[mateIndex(id)].name;
-  const nbName = id => (NEIGHBOURS.find(n => n.id === id) || { name: id }).name;
+  const nbName = id => ((NEIGHBOURS.find(n => n.id === id) || hallNb().find(n => n.id === id)) || { name: id }).name;
 
   // ---------- the new house ----------
   // the shop sells up to two (one for each child); the second costs a little more ("按人口再加一档")
@@ -137,7 +140,7 @@
   // rel: { kid0: { m0: 12, ... } }, nb: { n0: 3, ... }, wed: { kid0: { mate, day (the wedding), moved (day they moved out), house } }
   // help: { kid0: { day, n, last, until } }, teen: { kid0: day of the last visit }, earn: what the little farms made, n: weddings
   const emptyTile = () => ({ t: 0, w: 0, c: null });
-  const empty = () => ({ houses: [], rel: {}, nb: {}, wed: {}, help: {}, teen: {}, earn: 0 });
+  const empty = () => ({ houses: [], rel: {}, nb: {}, wed: {}, help: {}, teen: {}, earn: 0, path: {}, wage: 0 }); // v5.10.6: path + wage
   const num = (v, d, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo, hi) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -166,6 +169,8 @@
     const help = obj(o.help); for (const k of KID_IDS) { const h = obj(help[k]); if (h.day) out.help[k] = { day: int(h.day, 0, 0, 1e6), n: int(h.n, 0, 0, HELP.perDay), last: int(h.last, 0, 0, 1440), until: int(h.until, 0, 0, 1440) }; }
     const teen = obj(o.teen); for (const k of KID_IDS) { const n = int(teen[k], 0, 0, 1e6); if (n) out.teen[k] = n; }
     out.earn = int(o.earn, 0, 0, 1e12);
+    const CR = careers();
+    if (CR) { const c = CR.valid({ path: o.path, wage: o.wage }); out.path = c.path; out.wage = c.wage; }
     return out;
   }
 
@@ -174,7 +179,14 @@
   function kidRel(st, kid) { const o = st.rel[kid] || {}; return MATE_IDS.map(id => ({ id, name: mateName(id), v: o[id] | 0, level: levelOf(o[id] | 0) })).sort((a, b) => b.v - a.v); }
   const nbRel = st => NB_IDS.filter(id => (st.nb[id] | 0) > 0).map(id => ({ id, name: nbName(id), v: st.nb[id] | 0, level: levelOf(st.nb[id] | 0) })).sort((a, b) => b.v - a.v);
   function kidNote(st, kid, name) { // 「小豆和朵朵走得很近」, 「小豆和朵朵成家了，住在新房子」
-    const w = st.wed[kid]; if (w && w.moved) return `${name}和${mateName(w.mate)}成家了，住在新房子`;
+    const w = st.wed[kid];
+    if (w && w.moved) {
+      let s = `${name}和${mateName(w.mate)}成家了，住在新房子`;
+      const CR = careers(), p = CR && CR.pathOf(st, kid);
+      if (p && p.way === 'work' && p.at && CR.JOB[p.at]) s += `，在${CR.JOB[p.at].name}上班`;
+      else if (p && p.way === 'shop' && p.kind) s += `，在镇上开了${CR.shopName(name, p.kind)}`;
+      return s;
+    }
     if (w && w.mate) return `${name}今晚和${mateName(w.mate)}办婚礼`;
     const b = best(st, kid); if (!b || b.v <= 0) return ''; return `${name}和${mateName(b.id)}${levelOf(b.v)}（${b.v}）`;
   }

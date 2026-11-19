@@ -42,10 +42,11 @@
   const needText = need => need.map(x => { const w = WORD[x.id] || ['', x.id]; return `${x.n} ${w[0]}${w[1]}`; }).join(' + ');
   const have = (need, counts) => need.every(x => (counts[x.id] | 0) >= x.n);
   // two different templates for the day, quantities from the day number (the same after a reload)
-  function offers(day) {
-    const d = day | 0, h = (Math.imul(d + 19, 0x9E3779B1) >>> 0);
-    const i0 = h % TEMPLATES.length, i1 = (i0 + 1 + ((h >>> 8) % (TEMPLATES.length - 1))) % TEMPLATES.length;
-    return [i0, i1].map((ti, k) => {
+  function offers(day, extra) {
+    const d = day | 0, h = (Math.imul(d + 19, 0x9E3779B1) >>> 0), n = 2 + Math.max(0, extra | 0), idx = [];
+    let i = h % TEMPLATES.length;
+    for (let k = 0; k < n; k++) { idx.push(i); i = (i + 1 + ((h >>> (8 + k * 3)) % (TEMPLATES.length - 1))) % TEMPLATES.length; }
+    return idx.map((ti, k) => {
       const bits = h >>> (k * 10);
       const need = TEMPLATES[ti].map((row, j) => { const lo = row[1], hi = row[2]; return { id: row[0], n: lo + ((bits >>> (j * 3)) % (hi - lo + 1)) }; });
       return { id: 'o' + k, need, text: needText(need), base: baseOf(need), pay: payOf(need) };
@@ -74,15 +75,15 @@
     const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {}, out = empty();
     out.pick = o.pick ? 1 : 0;
     out.days = int(o.days, 0, 1e6); out.gold = int(o.gold, 0, 1e12); out.extra = int(o.extra, 0, 1e12); out.last = int(o.last, 0, 1e6);
-    out.offer = (Array.isArray(o.offer) ? o.offer : []).map(validOffer).filter(Boolean).slice(0, 2);
+    out.offer = (Array.isArray(o.offer) ? o.offer : []).map(validOffer).filter(Boolean).slice(0, 3);
     out.take = typeof o.take === 'string' && out.offer.some(q => q.id === o.take) ? o.take : null;
     out.done = o.done ? 1 : 0;
     return out;
   }
   // a new day: post 2 orders, clear yesterday's pick; auto-accept is applied later once we know the stock
-  function roll(B, day) {
+  function roll(B, day, extra) {
     const d = day | 0; if (B.last === d) return B;
-    B.last = d; B.offer = offers(d); B.take = null; B.done = 0; return B;
+    B.last = d; B.offer = offers(d, extra); B.take = null; B.done = 0; return B;
   }
   // pick mode: the player chose `id` (null clears it so auto can run). ignored once today's order is delivered.
   function setTake(B, id) {
