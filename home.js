@@ -6,9 +6,12 @@
 // child comes back for an hour to help on the main farm (at most twice a day). Art: home-art.js; wiring: game.js.
 'use strict';
 (function (root) {
-  const PL = root.PFPlots || (typeof require === 'function' ? require('./plots.js') : null);
-  const TN = root.PFTown || (typeof require === 'function' ? require('./town.js') : null);
-  const HS = PL.HOMESTEAD; // phase 7 stub: 6 tiles, help at most 2 a day for about an hour, only 花甸 / 农田 on flat ground
+  // the page loads this before plots.js (sim.js reads the house's price); plots.js is looked up when it is first needed
+  const NODE = typeof require === 'function' && typeof document === 'undefined';
+  const PLm = NODE ? require('./plots.js') : null, plots = () => PLm || root.PFPlots;
+  const PL = new Proxy({}, { get: (_, k) => plots()[k] });
+  const TN = root.PFTown || (NODE ? require('./town.js') : null);
+  const HS = { tiles: 6, helpPerDay: 2, helpMinutes: 60 }; // = PL.HOMESTEAD (the phase 7 stub; tools/home-test.js checks they agree)
   const MATES = TN.MATES, NEIGHBOURS = TN.NEIGHBOURS;
   const MATE_IDS = MATES.map(m => m.id), NB_IDS = NEIGHBOURS.map(n => n.id);
   const KID_IDS = ['kid0', 'kid1'];
@@ -31,10 +34,10 @@
   const clampAdd = (o, k, n) => { o[k] = Math.min(REL.max, Math.max(0, (o[k] | 0) + n)); return o[k]; };
   const relOf = (st, kid) => (st.rel[kid] || (st.rel[kid] = {}));
   // a school day: everyone in class a little, the day's 同桌 a little more. r: random -> returns the 同桌's id
-  function schoolDay(st, kid, r) {
+  function schoolDay(st, kid, r, open) {
     const o = relOf(st, kid); for (const id of MATE_IDS) clampAdd(o, id, REL.school);
     const desk = MATE_IDS[Math.floor(r() * MATE_IDS.length) % MATE_IDS.length]; clampAdd(o, desk, REL.desk);
-    clampAdd(st.nb, 'n1', NB.teacher); // 林老师 teaches them (only counted once the town is open: the caller checks)
+    if (open) clampAdd(st.nb, 'n1', NB.teacher); // 林老师 teaches them once they go to the school in town
     return desk;
   }
   const visit = (st, kid, mate) => clampAdd(relOf(st, kid), mate, REL.visit);

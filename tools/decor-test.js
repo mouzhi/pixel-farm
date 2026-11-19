@@ -71,7 +71,7 @@ ok('state: junk becomes an empty storehouse; one party area; half-done carries a
 ok('save: the day-59 manor fixture (v10) migrates to v13 with no decorations and the old house where it was', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8'));
   const s = SAVE.migrate(JSON.parse(JSON.stringify(raw)));
-  assert.strictEqual(SAVE.CURRENT, 14); assert.strictEqual(s.saveVersion, 14); assert.deepStrictEqual(s.decor, DC.empty());
+  assert.strictEqual(SAVE.CURRENT, 15); assert.strictEqual(s.saveVersion, 15); assert.deepStrictEqual(s.decor, DC.empty());
   for (const id of DC.SHOP_IDS) assert.strictEqual(s.upgrades[id], 0, id);
   for (const k of Object.keys(raw.upgrades)) assert.strictEqual(s.upgrades[k], raw.upgrades[k], k);
   assert.strictEqual(s.coins, raw.coins); assert.strictEqual(s.clock.day, raw.clock.day);
