@@ -2455,7 +2455,7 @@ function decorClick(w) {
   return null;
 }
 function decorDraw() {
-  if (!DECOR_ON) return; const T = S.t % 1440, carriers = actors().filter(a => a._carry).map(a => { const q = S.decor.orders.find(o => o.u === a._carry); return q ? { x: a.x, y: a.y, id: q.what === 'decor' ? (q.id || decorById(q.ref)) : q.what === 'hive' ? 'hive' : q.what === 'spr' ? 'sprinkler' : null } : null; }).filter(Boolean);
+  if (!DECOR_ON) return; const T = S.t % 1440, carriers = actors().filter(a => a._carry && !schoolWalk(a)).map(a => { const q = S.decor.orders.find(o => o.u === a._carry); return q ? { x: a.x, y: a.y, id: q.what === 'decor' ? (q.id || decorById(q.ref)) : q.what === 'hive' ? 'hive' : q.what === 'spr' ? 'sprinkler' : null } : null; }).filter(Boolean);
   const on = INPUT.mode === 'decor' || INPUT.mode === 'move', mode = { on, hover: on && INPUT.hover && INPUT.hover.dec, pick: INPUT.mode === 'move' ? INPUT.mvPick : null, items: INPUT.mode === 'move' ? movables() : [] };
   DA.draw(ctx, proj, onScreen, realT, T, dayLight(T), mode, carriers);
 }
@@ -2677,7 +2677,7 @@ const FAM_LOOK = {
   townD: { '#4fa3cf': '#358a3c', '#2f6ea0': '#24603a', '#1f3d68': '#1c1626', '#a8432e': '#1c1626', '#7a2c24': '#3e3f4c', '#8a5530': '#666a73', '#5e3524': '#3e3f4c' }, // v5.8.0 林老师
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
 };
-const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 6 (partner, father, two children x child / teen)
+const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 8 (v5.8.1: the children's school look) (partner, father, two children x child / teen)
 function famSheet(look, cut = 0) {
   const key = look + ':' + cut; let sh = FAM_SPR.get(key); if (sh || !SPR.ok) return sh || null;
   const pre = FAM_PRE[look]; if (pre && !(pre.complete && pre.naturalWidth)) return null; // still decoding: skip a frame
@@ -2692,10 +2692,14 @@ function famSheet(look, cut = 0) {
   const flip = mkc(W0, H0), fc = flip.getContext('2d'); fc.translate(W0, 0); fc.scale(-1, 1); fc.drawImage(img, 0, 0);
   sh = { img, flip }; FAM_SPR.set(key, sh); return sh;
 }
-const lookOf = m => m.id === 'partner' ? ['partner', 0] : [m.id, (m.role === 'child' || m.role === 'play' || m.role === 'school') ? 6 : 3];
+const lookOf = m => { if (m.id === 'partner') return ['partner', 0];
+  const cut = (m.role === 'child' || m.role === 'play' || m.role === 'school') ? 6 : 3;
+  return [schoolWalk(m) && FAM_PRE[m.id + '_school'] ? m.id + '_school' : m.id, cut]; }; // v5.8.1: on the school walk no straw hat, a school backpack
 const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
 const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', '.bbbbbbbbb.', 'b.........b']);
+const schoolWalk = a => !!(a && a.task && (a.task.kind === 'school-go' || a.task.kind === 'school-back')); // v5.8.1
 function carryFields(actor) { // hide the hip basket while a giant crop is held overhead
+  if (schoolWalk(actor)) return { basket: null, carry: null }; // v5.8.1: nothing in hand on the walk to and from school
   const last = actor.crops.length ? actor.crops[actor.crops.length - 1] : null;
   const carry = actor.crops.slice().reverse().find(it => SU.itemOf(it).giant) || null;
   return { basket: carry ? null : last, carry };
@@ -2703,7 +2707,7 @@ function carryFields(actor) { // hide the hip basket while a giant crop is held 
 function familyDraw(list, T) { // pushes the family into the depth-sorted list; returns the ones that get a ghost
   const out = [], fam = S.family;
   for (const m of S.members) { if (m.home || m.away) continue; const [look, cut] = lookOf(m), sh = famSheet(look, cut); if (!sh) continue;
-    const d = Object.assign({ bb: 1, x: m.x, y: m.y, sheet: sh, member: m.id }, carryFields(m), farmerPose(m)); list.push(d); out.push(d); }
+    const d = Object.assign({ bb: 1, x: m.x, y: m.y, sheet: sh, member: m.id, cut }, carryFields(m), farmerPose(m)); list.push(d); out.push(d); } // v5.8.1 cut: a child sheet is shorter, the basket sits lower
   for (const g of GUESTS) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.7.0 party guests
   if (TN) townDraw(list); // v5.8.0 classmates and neighbours
   if (HM) homeDraw(list); // v5.9.0 the married children's partners and their hens
@@ -2767,7 +2771,7 @@ function basketFill(it) {
   return CROPS[ty] ? CROPS[ty].top : (FRUIT_COL[ty] || PRODUCT_COL[ty] || FISH_COL[ty] || [Ac[0]])[0];
 }
 function drawBasket(c, fx, fy, o) { // little basket of the last crop, held at the hip (hidden from behind)
-  const b = SPRITES.basket, bx = fx + (o.row === 'walk_front' ? 1 : o.flip ? -9 : 2), by = fy - 12;
+  const b = SPRITES.basket, bx = fx + (o.row === 'walk_front' ? 1 : o.flip ? -9 : 2), by = fy - 12 + (o.cut || 0) + ((o.cut || 0) >= 6 ? 2 : 0); // v5.8.1: a child's hip is lower
   c.fillStyle = basketFill(o.basket); c.fillRect(bx + 2, by - 1, 4, 2); c.fillStyle = Ink[0]; c.fillRect(bx + 1, by - 2, 6, 1);
   c.drawImage(b, bx, by);
 }
@@ -2775,7 +2779,7 @@ function drawCarry(c, fx, fy, o) { // a giant crop held above the head, bouncing
   const img = cropAtlas(); if (!img) return;
   const ty = SU.itemType(o.carry), ci = CROP_IDS.indexOf(ty); if (ci < 0) return;
   const bob = Math.round(Math.abs(Math.sin(realT * 8)) * 3), u = ci * 16;
-  const x = fx - 16, y = fy - 22 - bob;
+  const x = fx - 16, y = fy - 22 - bob + (o.cut || 0); // v5.8.1: held over a child's (shorter) head
   c.imageSmoothingEnabled = false;
   c.drawImage(img, u, 0, 16, 16, x, y, 32, 32);
   if (SU.itemOf(o.carry).glow) { c.fillStyle = '#fff2a8'; c.fillRect(x + 8, y + 2, 3, 1); c.fillRect(x + 9, y + 1, 1, 3); }
@@ -3704,6 +3708,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
 Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id) }); // v5.9.0 test hooks
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
+  carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
