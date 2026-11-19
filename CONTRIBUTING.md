@@ -56,7 +56,7 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
 
 - **截图**：画面有变化就附前后对比图；动画附 GIF（GIF 只放在 PR 里，不提交进仓库）。
 - **冒烟测试**：`node tools/smoke.js` 通过。CI 也会跑一次。
-- **长时间运行**：改到渲染、缓存或模拟时，跑 `tools/soak.js`，至少 10 分钟、`speed=12`。内存和缓存数量要平稳，画面不能变空白。
+- **长时间运行**：改到渲染、缓存或模拟时，跑 `tools/soak.js`，至少 10 分钟、`speed=12`（测试用的流速倍数，只在本机服务器上生效）。内存和缓存数量要平稳，画面不能变空白。
 - **不变量**（下面三条不能破坏）：
   1. **不抖动**：镜头不转时，静止物体逐像素不动。相机偏移每帧取整，物体位置要落在整数像素上。
   2. **不闪烁**：旋转时按 `ASTEP`（2π/256）量化角度，每个角度的堆叠结果都要缓存。新物体也要走同一套缓存，不要每帧现画。
@@ -66,7 +66,7 @@ PR 模板会自动带上这份清单（`.github/pull_request_template.md`）：
 
 ## 存档兼容
 
-存档从 v4.0 开始上线（`saveVersion` 1）；v4.1 升到 2（加了 `upgrades` 商店等级和 `settings.speed`，作物多了 `n` 已采摘次数）；v4.2 升到 3（加了 `yard` 院子杂物列表，缺这个字段的旧档在加载时补种，已清空的空列表保持为空）；v4.3 升到 4（加了区域和斧头的 `upgrades`、`trees` 树列表（`null` 表示用默认森林）、`orders` 砍树种树指令、`inventory.wood` 和 `inventory.saplings`，每格田多了 `f` 所属的地）；v4.3.1 升到 5（家门口田改成三次各 +4 格，旧的 18 格档升到 20 格，已开放的格子不会变少）；v4.5 升到 6（加了牧场、建筑和动物的 `upgrades`、`animals` 动物列表、`trough` 饲料槽和水槽、`inventory.hay` 干草，`prices` 多了 egg / wool / milk）；v4.6 升到 7（加了 `rod` / `searod` / `coast` 的 `upgrades` 和 `catches` 渔获记录，旧档自动拥有竹竿）；v4.7 升到 8（`trough` 改成每个棚子一个的 `troughs`，加了猪圈 / 羊圈 / 猪 / 猫 / 狗的 `upgrades` 和 `prices.truffle`；v6 / v7 的鸡、羊、牛和建筑都保留，有羊的旧档送羊圈和果园坡）。v5.0 升到 9（加了 `house` / `fence` 的 `upgrades`、`family` 和 `members`；旧档有自己的 `trees` 列表时补上 v5.0 新加的野树 `h0`–`h16`，迁移里放的是这份列表的冻结副本）。v5.4.0 升到 10（加了 `codex` 图鉴、`achievements` / `milestones` 解锁记录、`streaks`、`inventory.fishFood` / `inventory.ornament`、`pondFish` 观赏鱼；旧档用已有的渔获记录和篮子里的珍品填图鉴，没见过的格子仍是空的，躺平和心情连胜从 0 记起，不会在读档时直接发奖）。v5.5.0 升到 11（地图外扩一圈，但旧坐标都不动；加了 `plots` 已买的外圈地块和用途 `{ id: { mod, day } }`、`upgrades.graze` 放牧草地；外圈农田的格子 `f` 是地块 id；农夫位置的范围放宽到新地图）。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
+存档从 v4.0 开始上线（`saveVersion` 1）；v4.1 升到 2（加了 `upgrades` 商店等级和 `settings.speed`，作物多了 `n` 已采摘次数）；v4.2 升到 3（加了 `yard` 院子杂物列表，缺这个字段的旧档在加载时补种，已清空的空列表保持为空）；v4.3 升到 4（加了区域和斧头的 `upgrades`、`trees` 树列表（`null` 表示用默认森林）、`orders` 砍树种树指令、`inventory.wood` 和 `inventory.saplings`，每格田多了 `f` 所属的地）；v4.3.1 升到 5（家门口田改成三次各 +4 格，旧的 18 格档升到 20 格，已开放的格子不会变少）；v4.5 升到 6（加了牧场、建筑和动物的 `upgrades`、`animals` 动物列表、`trough` 饲料槽和水槽、`inventory.hay` 干草，`prices` 多了 egg / wool / milk）；v4.6 升到 7（加了 `rod` / `searod` / `coast` 的 `upgrades` 和 `catches` 渔获记录，旧档自动拥有竹竿）；v4.7 升到 8（`trough` 改成每个棚子一个的 `troughs`，加了猪圈 / 羊圈 / 猪 / 猫 / 狗的 `upgrades` 和 `prices.truffle`；v6 / v7 的鸡、羊、牛和建筑都保留，有羊的旧档送羊圈和果园坡）。v5.0 升到 9（加了 `house` / `fence` 的 `upgrades`、`family` 和 `members`；旧档有自己的 `trees` 列表时补上 v5.0 新加的野树 `h0`–`h16`，迁移里放的是这份列表的冻结副本）。v5.4.0 升到 10（加了 `codex` 图鉴、`achievements` / `milestones` 解锁记录、`streaks`、`inventory.fishFood` / `inventory.ornament`、`pondFish` 观赏鱼；旧档用已有的渔获记录和篮子里的珍品填图鉴，没见过的格子仍是空的，躺平和心情连胜从 0 记起，不会在读档时直接发奖）。v5.5.0 升到 11（地图外扩一圈，但旧坐标都不动；加了 `plots` 已买的外圈地块和用途 `{ id: { mod, day } }`、`upgrades.graze` 放牧草地；外圈农田的格子 `f` 是地块 id；农夫位置的范围放宽到新地图）。v5.10.2 起游戏只有一种速度：`settings.speed` 一律写 1，追加 `settings.speedRefund`（买过倍速退回的金币，只退一次），`upgrades.speed` 保留在 `save.js` 里只为读出旧档的等级。代码在 `save.js`，测试在 `tools/save-test.js`（Node）和 `tools/save-smoke.js`（浏览器），两者 CI 都会跑。
 
 - 存档放在 `localStorage` 的 `mouzhi/pixel-farm:save`，上一份能读的存档在 `:bak`。键名都带 `mouzhi/pixel-farm:` 前缀，因为同一个 GitHub Pages 域名下的其他项目共用 localStorage。
 - 存档是一个 JSON 对象，带整数 `saveVersion`。读档时按顺序跑 `MIGRATIONS[v]`，把 v-1 升到 v，一直升到 `CURRENT`；然后 `validate()` 补齐所有缺失字段的默认值、限制范围，所以缺字段不会报错。
