@@ -103,3 +103,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/polish-shots.js
+      - name: Bigger new house browser test (cottage size, build frame, night, a v15 save from v5.9.0)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/cottage-shots.js
