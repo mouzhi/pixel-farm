@@ -98,3 +98,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/home-shots.js
+      - name: v5.9.1 browser test (night light cache, one-row toolbar, welcome-back after 10 minutes, merged surprises, saplings with no room, town at night, day-59 save)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/polish-shots.js

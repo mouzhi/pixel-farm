@@ -451,7 +451,7 @@ cv.width = W; cv.height = H;
 const mk = mkc;
 const shMask = new Uint32Array(W * H);
 const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H);
+const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
@@ -3275,16 +3275,30 @@ function lighting(night, T) {
   if (WORKS_ON) PWA.lights(hz); // v5.6.0: lamps on the wheel's grid, busy workshops
   if (DECOR_ON) DA.lights(hz, T); // v5.7.0
   if (HOME_ON) HA.lights(hz, T); // v5.9.0: the new house's windows once someone lives there
-  const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer);
+  if (TOWN_ON && TA.lights) TA.lights(hz, T); // v5.9.1: the town's street lamps and lit windows
+  // v5.9.1: lights snap to whole pixels, off-screen ones are dropped, and each light only touches its own box (a running max per
+  // pixel instead of testing every light at every lit pixel); the layer is rebuilt only when the lights or the darkness change
+  const vis = [];
+  for (const [lx, ly, r, s] of lights) { const x = Math.round(lx), y = Math.round(ly); if (x + r < 0 || x - r >= W || y + r / 1.25 < 0 || y - r / 1.25 >= H) continue; vis.push([x, y, r, s]); }
+  const nq = Math.round(night * 256) / 256, key = nq + '|' + vis.map(l => l.join(',')).join(';');
+  if (key !== litKey) { litKey = key; litBuild(vis, nq); }
+  ctx.drawImage(litC, 0, 0);
+}
+function litBuild(vis, night) {
+  litBuilds++;
+  const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer), L = litL;
   d32.fill(((Math.round(255 * A) << 24) | (52 << 16) | (18 << 8) | 14) >>> 0); // unlit night tint everywhere, then only the light boxes
-  for (const [lx, ly, r] of lights) { const x0 = Math.max(0, Math.floor(lx - r)), x1 = Math.min(W - 1, Math.ceil(lx + r)), y0 = Math.max(0, Math.floor(ly - r / 1.25)), y1 = Math.min(H - 1, Math.ceil(ly + r / 1.25));
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      let L = 0; for (const [lx2, ly2, r2, s2] of lights) { const dd = Math.hypot(x - lx2, (y - ly2) * 1.25) / r2; if (dd < 1) L = Math.max(L, (1 - dd) * s2); }
-      const q = Math.min(1, Math.floor(L * 4 + BAYER[(y & 3) * 4 + (x & 3)]) / 3);
-      const p = (y * W + x) * 4;
-      d[p] = 14 + (255 - 14) * q; d[p + 1] = 18 + (180 - 18) * q; d[p + 2] = 52 + (90 - 52) * q; d[p + 3] = 255 * (A * (1 - q) + 0.18 * night * q);
-    } }
-  lctx.putImageData(litImg, 0, 0); ctx.drawImage(litC, 0, 0);
+  const box = ([lx, ly, r]) => [Math.max(0, Math.floor(lx - r)), Math.min(W - 1, Math.ceil(lx + r)), Math.max(0, Math.floor(ly - r / 1.25)), Math.min(H - 1, Math.ceil(ly + r / 1.25))];
+  const boxes = vis.map(box);
+  for (const [x0, x1, y0, y1] of boxes) for (let y = y0; y <= y1; y++) L.fill(0, y * W + x0, y * W + x1 + 1);
+  vis.forEach(([lx, ly, r, s], i) => { const [x0, x1, y0, y1] = boxes[i], ir = 1 / r;
+    for (let y = y0; y <= y1; y++) { const dy = (y - ly) * 1.25, dy2 = dy * dy, row = y * W;
+      for (let x = x0; x <= x1; x++) { const dx = x - lx, q2 = dx * dx + dy2; if (q2 >= r * r) continue; const v = (1 - Math.sqrt(q2) * ir) * s; if (v > L[row + x]) L[row + x] = v; } } });
+  for (const [x0, x1, y0, y1] of boxes) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const p = y * W + x, q = Math.min(1, Math.floor(L[p] * 4 + BAYER[(y & 3) * 4 + (x & 3)]) / 3), o = p * 4;
+    d[o] = 14 + (255 - 14) * q; d[o + 1] = 18 + (180 - 18) * q; d[o + 2] = 52 + (90 - 52) * q; d[o + 3] = 255 * (A * (1 - q) + 0.18 * night * q);
+  }
+  lctx.putImageData(litImg, 0, 0);
 }
 function updateFx(dt) {
   if (window.PF_FX) PF_FX.update(dt);
@@ -3372,6 +3386,16 @@ function plantSpot(x, y) { // where a sapling may go: open ground in the farm or
       S.orders.some(o => o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
   return { ok: true };
 }
+// v5.9.1: is there any grass left for a sapling? Scanned at most once per day or when trees / orders / regions change; stops at the first spot
+const PLANT_FULL = '没有能种树的空草地了：树之间要隔开一点，田里、路上、房子和棚子旁边都不能种。砍掉几棵野树或买下新的地块就有地方了';
+let plantRoomC = { key: '', ok: true };
+function plantRoom() {
+  const key = [S.day, S.trees.length, S.orders.length, S.eff.regions.length, tiles.length].join(',');
+  if (key === plantRoomC.key) return plantRoomC.ok;
+  let ok = false;
+  for (let y = WORLD.y0 + 6; y < WORLD.y1 && !ok; y += 6) for (let x = WORLD.x0 + 6; x < WORLD.x1; x += 6) if (plantSpot(x, y).ok) { ok = true; break; }
+  plantRoomC = { key, ok }; return ok;
+}
 // v5.0 hook for logs and stats (e.g. playlog.js): window 'pf:farm' events, detail = { type, who, day, t, ... }.
 // type: 'income' (gold, items), 'purchase' (item, gold, wood), 'task' (kind, done by who), 'family' (event). who: 'farmer' | 'partner' | 'kid0' | 'kid1'
 function emit(type, d) { if (window.PF_NO_EVENTS) return; window.dispatchEvent(new CustomEvent('pf:farm', { detail: Object.assign({ type, who: F === FARMER ? 'farmer' : F.id, day: S.day, t: Math.floor(S.t % 1440) }, d) })); }
@@ -3395,7 +3419,7 @@ function orderRelease(kind) {
 }
 function orderPlant(kind, x, y) {
   if (!WD.FRUIT[kind]) return { ok: false };
-  const sp = plantSpot(x, y); if (!sp.ok) return sp;
+  const sp = plantSpot(x, y); if (!sp.ok) return plantRoom() ? sp : { ok: false, why: PLANT_FULL }; // v5.9.1
   const want = S.orders.filter(o => o.type === 'plant' && o.kind === kind).length;
   if (want >= FARMER.saplings[kind]) return { ok: false, why: `${WD.FRUIT[kind].name}树苗不够（有 ${FARMER.saplings[kind]} 棵）` };
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
@@ -3511,7 +3535,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.9.0';
+const GAME_VERSION = '5.9.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -3545,11 +3569,15 @@ function noteProgress(extra) {
 }
 function noteShopOpened() { S.streaks = BOOK.noteShopOpen(S.streaks, S.day); }
 
+const surpDay = { day: -1, m: {} }; // v5.9.1: today's surprises by kind (not saved): { n, line, ev } so repeats rewrite one log line
 function surpriseNote(ev, x, y) {
   if (!ev) return;
-  say(ev.msg); log(ev.msg);
+  if (surpDay.day !== S.day) { surpDay.day = S.day; surpDay.m = {}; }
+  const was = surpDay.m[ev.kind], n = was ? was.n + 1 : 1, msg = SU.mergedMsg ? SU.mergedMsg(ev, n) : ev.msg;
+  if (was) { const i = S.log.indexOf(was.line); if (i >= 0) S.log.splice(i, 1); const j = S.events.lastIndexOf(was.ev); if (j >= 0) S.events.splice(j, 1); }
+  else { say(ev.msg); emit('surprise', { kind: ev.kind }); } // the bubble and the jingle only for the first of a kind each day; v5.2: audio.js plays a jingle
+  log(msg); surpDay.m[ev.kind] = { n, line: S.log[0], ev: S.events[S.events.length - 1] };
   noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
-  emit('surprise', { kind: ev.kind }); // v5.2: audio.js plays a jingle
   if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
 }
 
@@ -3691,7 +3719,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
