@@ -42,7 +42,7 @@
   const SUNSET = { from: 17 * 60, to: 19 * 60 };
   // the existing 海边 (world.js coast). Layout slots stay on this beach; 东南滩 only has to be zoned 度假村.
   const COAST = { rect: [200, 212, 344, 256], gate: P(220, 212), pier: P(280, 256), water: [200, 248, 352, 288],
-    fish: { stand: P(280, 268), hook: P(280, 278) } };
+    fish: { stand: P(280, 268), hook: P(280, 278) }, center: P(272, 236) };
   const SEA_FISH = ['sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const RESORT_JOBS = /^(hut|stall|pier|deck)$/;
   const INN_JOBS = /^(cabin|diner|kitchen|inn2)$/;

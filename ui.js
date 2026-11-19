@@ -250,7 +250,7 @@
   const shop = $('shop'); let shopKey = '', shopFocus = '', plotView = ''; // plotView: v5.5.0 one plot's page (plots-ui.js)
   const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
   const HALL_TAB = { id: 'hall', name: '镇公所', title: '镇公所的告示板：建设项目、繁荣度、送给镇上的装饰', ids: [] }; // v5.10.0
-  const INN_TAB = { id: 'inn', name: '农家乐', title: '民宿院里的小木屋和农家菜馆。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7
+  const INN_TAB = { id: 'inn', name: '农家乐', title: '民宿院、二层客栈和海边度假村。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7; v5.10.8 resort
   const shopTabs = () => (SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }]).concat(G.hallView ? [HALL_TAB] : []).concat(G.innView ? [INN_TAB] : []);
   const readShopTab = () => { try { const v = localStorage.getItem(SHOP_TAB_KEY); if (shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
   let shopTab = readShopTab();
@@ -279,7 +279,7 @@
     return '';
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
-  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目和农家乐都不会碰。'; // v5.10.1; v5.10.7 inn
+  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目和农家乐、度假村都不会碰。'; // v5.10.1; v5.10.7 inn; v5.10.8 resort
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
   const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'inn' ? !!(G.innView && G.innView() && G.innView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
@@ -336,31 +336,55 @@
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
   // v5.10.0 镇公所的告示板: prosperity, the building projects (one at a time, done the next morning), gifts to the town
-  function innHtml() { // v5.10.7 农家乐 shop tab: cabins, the restaurant, the kitchen, 「我来挑」 the menu
+  function innHtml() { // v5.10.7 农家乐 shop tab; v5.10.8 adds the two-storey inn and the beach resort
     const v = G.innView && G.innView(); if (!v) return '';
     const stars = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
     const starTxt = '★'.repeat(stars) + '☆'.repeat(5 - stars);
     let h = '';
-    h += `<div class="sec">民宿院${v.plotName ? ' · ' + esc(v.plotName) : ''}</div>`;
-    if (!v.plot) h += `<div class="more">先在「地块」里把林间空地、南河湾、河对岸或东坡改建成民宿院。东南滩是以后度假村用的。</div>`;
-    h += `<div class="more">现在 ${v.cabins} / 4 间小木屋，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
+    h += `<div class="sec">民宿院${v.plotName ? ' · ' + esc(v.plotName) : ''}${v.inn2 ? ' · 二层客栈' : ''}</div>`;
+    if (!v.plot) h += `<div class="more">先在「地块」里把林间空地、南河湾、河对岸或东坡改建成民宿院。</div>`;
+    h += `<div class="more">现在 ${v.cabins} / 4 间小木屋${v.inn2 ? '（每间可住两组）' : ''}，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
       (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +
       (v.guests && v.guests.length ? `，今天住着 ${v.guests.length} 组共 ${v.people} 人` : '，今天还没有客人') +
       `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
-    if (v.job) h += `<div class="more">家人正在盖${v.job.id === 'cabin' ? '小木屋' : v.job.id === 'diner' ? '农家菜馆' : '厨房'}，明天一早搭好。</div>`;
-    const label = o => o.id === 'cabin' ? (v.cabins ? '再盖一间小木屋' : '第一间小木屋') : o.id === 'diner' ? '农家菜馆' : (o.name || '厨房升级');
-    const desc = o => o.id === 'cabin' ? (v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。')
-      : o.id === 'diner' ? '院子南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜。'
-      : '厨房升一级，多 2 道菜、多 4 个座位。一共可以升两级。';
-    for (const o of v.offers) {
-      const maxed = o.reason === 'full' || o.reason === 'done';
-      const why = o.why && !maxed ? `<span class="short lock">${esc(o.why)}</span>` : '';
-      const short = !o.ok && (o.shortGold || o.shortWood) && (o.reason !== 'locked' && o.why && (o.shortGold || o.shortWood))
-        ? `<span class="short"><span class="lab">还差</span><span class="price">${o.shortGold ? costChip(o.shortGold, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>` : why;
-      h += `<div class="card${maxed ? ' max' : ''}" data-item="inn:${o.id}"><div class="ct"><div><b>${esc(label(o))}</b> <span class="lv">${o.id === 'cabin' ? v.cabins + '/4' : o.id === 'kitchen' ? v.diner + '/3' : (v.diner ? '已有' : '未盖')}</span></div>` +
-        (maxed ? `<div class="d">${esc(o.why || '已满')}</div></div><div class="cb"><span class="done">✓</span></div>` :
-          `<div class="d">${esc(desc(o))}</div></div><div class="cb"><button class="pbtn" data-inn="start:${o.id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost || 0, o.wood || 0)}</button>${short}</div>`) + '</div>';
-    }
+    const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' };
+    if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
+    const label = o => o.name || o.id;
+    const desc = o => ({
+      cabin: v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。',
+      diner: '院子南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜。',
+      kitchen: '厨房升一级，多 2 道菜、多 4 个座位。一共可以升两级。',
+      inn2: '把整个院子的小木屋加盖成二层客栈，每间多住一组客人。家人一天改好。',
+      hut: '海边的沙滩小屋。度假村的客人只住这里，白天在沙滩上走、在伞下躺。家人一天盖好。',
+      parasol: '一把遮阳伞。家人马上摆到沙滩上固定的位置，最多 8 把。',
+      stall: '用家里钓的海鱼做海鱼烤和海鲜汤，收入算进菜馆。家人一天盖好。',
+      pier: '游客在海上钓鱼，钓到的会放回去，不占家里的鱼。家人一天铺好。',
+      deck: '傍晚 17 点到 19 点，海面和天空会暖起来，游客和家人会来坐着看落日。家人一天修好。',
+    })[o.id] || '';
+    const lvOf = o => o.id === 'cabin' ? v.cabins + '/4' : o.id === 'kitchen' ? v.diner + '/3' : o.id === 'inn2' ? (v.inn2 ? '已有' : '未盖')
+      : o.id === 'diner' ? (v.diner ? '已有' : '未盖') : o.id === 'hut' ? (v.huts || 0) + '/4' : o.id === 'parasol' ? (v.parasols || 0) + '/8'
+      : o.id === 'stall' ? (v.stall ? '已有' : '未盖') : o.id === 'pier' ? (v.pier ? '已有' : '未盖') : o.id === 'deck' ? (v.deck ? '已有' : '未盖') : '';
+    const innIds = ['cabin', 'diner', 'kitchen', 'inn2'], resortIds = ['hut', 'parasol', 'stall', 'pier', 'deck'];
+    const cards = (ids) => {
+      let out = '';
+      for (const o of v.offers.filter(x => ids.includes(x.id))) {
+        const maxed = o.reason === 'full' || o.reason === 'done';
+        const why = o.why && !maxed ? `<span class="short lock">${esc(o.why)}</span>` : '';
+        const short = !o.ok && (o.shortGold || o.shortWood) && (o.reason !== 'locked' && o.why && (o.shortGold || o.shortWood))
+          ? `<span class="short"><span class="lab">还差</span><span class="price">${o.shortGold ? costChip(o.shortGold, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>` : why;
+        out += `<div class="card${maxed ? ' max' : ''}" data-item="inn:${o.id}"><div class="ct"><div><b>${esc(label(o))}</b> <span class="lv">${lvOf(o)}</span></div>` +
+          (maxed ? `<div class="d">${esc(o.why || '已满')}</div></div><div class="cb"><span class="done">✓</span></div>` :
+            `<div class="d">${esc(desc(o))}</div></div><div class="cb"><button class="pbtn" data-inn="start:${o.id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost || 0, o.wood || 0)}</button>${short}</div>`) + '</div>';
+      }
+      return out;
+    };
+    h += cards(innIds);
+    h += `<div class="sec">海边度假村${v.resortName ? ' · ' + esc(v.resortName) : ''}</div>`;
+    if (!v.coast) h += `<div class="more">先在商店「地块」里买下海边。</div>`;
+    if (!v.resort) h += `<div class="more">再把东南滩改建成度假村，才能在沙滩上盖小屋、摆伞。</div>`;
+    h += `<div class="more">现在沙滩小屋 ${v.huts || 0} / 4，遮阳伞 ${v.parasols || 0} / 8` +
+      (v.stall ? '，海鲜摊已开' : '') + (v.pier ? '，栈桥已铺' : '') + (v.deck ? '，观景台已修好' : '') + '。</div>';
+    h += cards(resortIds);
     if (v.diner) {
       h += `<div class="sec">菜馆菜单（「我来挑」只上架仓库里做得出的菜；不够的会自动撤掉）</div>`;
       h += `<div class="card"><div class="ct"><div><b>点菜方式</b> <span class="lv">${v.auto ? '全自动' : '我来挑'}</span></div><div class="d">自动时家人用库存最多的原料做。一天两顿，住客每人两份，集市那天会多来几个散客。</div></div>` +

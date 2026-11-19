@@ -164,3 +164,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/inn-shots.js
+      - name: v5.10.8 browser test (beach huts, umbrellas, guests, sunset deck, seafood stall, pier, two-storey inn, fixtures)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/resort-shots.js

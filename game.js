@@ -26,7 +26,7 @@ const TN = window.PFTown, TA = window.PFTownArt, WORLD55 = WD.WORLD55 || WORLD; 
 if (TN) for (const k in TN.STREETS) if (!WD.ROUTES[k]) WD.ROUTES[k] = TN.STREETS[k]; // the town's streets are routes like the farm lanes
 const HM = window.PFHome, HA = window.PFHomeArt; // v5.9.0 phase 11: closeness, the new house, the married children's little farms (home.js rules, home-art.js art)
 const CR = window.PFCareers; // v5.10.6: 成家后的出路 (careers.js rules; walking here, art in town-art.js)
-const IN = window.PFInn, IA = window.PFInnArt; // v5.10.7: 民宿 + 农家菜馆 (inn.js rules, inn-art.js art)
+const IN = window.PFInn, IA = window.PFInnArt; // v5.10.7: 民宿 + 农家菜馆; v5.10.8: 海边度假村 + 二层客栈
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
 // ?speed= is a test-only clock multiplier for the tools (tools/soak.js, rec2.js); v5.10.2 keeps it to a local server so players have one speed
@@ -899,6 +899,7 @@ function chooseTask() {
   const T = S.t % 1440;
   if (HM) { const wt = weddingTask(); if (wt) return wt; if (F._spouse) return spouseTask(); const ht = homeChoose(); if (ht) return ht; } // v5.9.0: the wedding, the couple's own day
   { const pt = partyTask(); if (pt) return pt; } // v5.7.0: a party evening (runs past bedtime, to 20:30)
+  { const st = sunsetTask(); if (st) return st; } // v5.10.8: sit on the sunset deck 17:00–19:00
   if (CR) { const ft = careerFest(); if (ft && !F._spouse && !(F.id && HM && HM.isMarried(S.home, F.id))) return ft; } // v5.10.6: on a festival the family gathers at the child's shop
   if (T >= BEDTIME || T < WAKE - 30) {
     if (F.crops.length - worksKeepN(F) > 0 && shopOpen(T)) return sellTask(); // v5.0: the stall is shut at night; the basket waits until morning
@@ -2201,6 +2202,15 @@ const GUEST_LOOK = ['guestA', 'guestB'], GUEST_NAME = ['镇上的木匠阿松', 
 const EAST_IN = [{ x: 224, y: 66 }, { x: 216, y: 66 }, { x: 176, y: 66 }, { x: 176, y: 54 }, { x: 158, y: 54 }];
 function partySeat(i) { const s = DC.partySeats(partyArea()), order = [0, 4, 3, 7, 1, 5, 8, 9, 2, 6]; return s[order[i % s.length]]; }
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
+function sunsetTask() { // v5.10.8: once the deck is up, the family sits and watches the sea 17:00–19:00
+  if (!IN || !S.inn || !IN.deckUp(S.inn) || !IN.isSunset(S.t) || F.away || F.sleeping) return null;
+  const T = ((S.t % 1440) + 1440) % 1440;
+  if (partyTonight() && DC.partyOn(T)) return null;
+  const L = IN.resortLayout(); if (!L || !L.deck || !L.deck.sit.length) return null;
+  const i = Math.max(0, actors().indexOf(F));
+  const seat = L.deck.sit[(i + (S.day | 0)) % L.deck.sit.length];
+  return { kind: 'sunset', label: '去观景台看落日', to: { x: seat.x + (i % 2 ? 0.6 : -0.6), y: seat.y }, dur: Math.max(8, Math.min(22, IN.SUNSET.to - T)), rest: true };
+}
 function partyTask() { // chooseTask asks first: on a party evening everyone who is around comes over
   const T = S.t % 1440; if (!partyTonight() || !DC.partyOn(T) || F.away || F.sleeping) return null;
   const seat = partySeat(partyIndex(F));
@@ -2804,8 +2814,9 @@ function innPay(id) { return id === 'fish' ? (priceOfAny('bass') || IN.UNIT.fish
 function innType(it) {
   const ty = typeof it === 'string' ? it : SU.itemType(it);
   if (!ty) return null;
+  if (IN && IN.isSeaFish && IN.isSeaFish(ty)) return ty; // v5.10.8: sea fish feed the seafood stall, not the pond-fish 烤鱼
   if (IN && IN.UNIT[ty]) return ty;
-  if (ty === 'fish' || /^(bass|carp|catfish|koi|sword|goldfish|trout|salmon|tuna|mackerel|sardine|bream)/.test(ty)) return 'fish';
+  if (ty === 'fish' || /^(bass|carp|catfish|koi|goldfish|trout|crucian|grassc)/.test(ty)) return 'fish';
   return null;
 }
 function innCounts() {
@@ -2819,9 +2830,16 @@ function innCounts() {
 }
 function innPullNeed(need) {
   const left = {}; for (const x of need) left[x.id] = (left[x.id] | 0) + x.n;
-  const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) { const ty = innType(arr[i]); if (ty && left[ty] > 0) { arr.splice(i, 1); left[ty]--; } } };
+  const takeTy = ty => {
+    if (!ty) return false;
+    if (left[ty] > 0) { left[ty]--; return true; }
+    if (left.seafish > 0 && IN && IN.isSeaFish && IN.isSeaFish(ty)) { left.seafish--; return true; }
+    return false;
+  };
+  const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) { if (takeTy(innType(arr[i]))) arr.splice(i, 1); } };
   pull(FARMER.crops); for (const a of actors()) if (a !== FARMER) pull(a.crops);
-  if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def) continue; const ty = innType(def.out) || (IN.UNIT[def.out] ? def.out : null); if (!ty || !(left[ty] > 0)) continue; const n = Math.min(w.ready | 0, left[ty]); w.ready -= n; left[ty] -= n; }
+  if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def) continue; const ty = innType(def.out) || (IN.UNIT[def.out] ? def.out : null); if (!ty) continue;
+    let n = 0; while (n < (w.ready | 0) && takeTy(ty)) n++; w.ready -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
   return Object.keys(left).every(k => left[k] <= 0);
 }
@@ -2843,18 +2861,19 @@ function innRateCtx() {
     flowers: (S.homeyard && S.homeyard.put && (S.homeyard.put.flowerbed | 0)) || 0,
     missed, diner: !!(S.inn && IN.dinerUp(S.inn)), servedDish: dishes[0] && dishes[0].id,
     fireflies: !!(WX && WX.isSummer && WX.isSummer(S.day)),
-    sunset: false, furnish: innFurnished(),
+    sunset: !!(S.inn && S.inn.resort && S.inn.resort.deck), furnish: innFurnished(),
   };
 }
 function innBuy(id) {
   if (!IN || !S.inn) return { ok: false, why: '还没有民宿' };
-  const ctx = { plot: innPlot(), lv: townLv(), coins: S.coins, wood: FARMER.wood };
+  const ctx = { plot: innPlot(), lv: townLv(), coins: S.coins, wood: FARMER.wood, coast: !!(S.eff && (S.eff.coast || (S.eff.regions || []).includes('coast'))), resort: IN.resortPlotOf(S.plots) };
   const why = IN.canStart(S.inn, id, ctx); if (why) return { ok: false, why, reason: 'locked' };
   const o = IN.offer(S.inn, id);
   S.coins -= o.cost; FARMER.wood -= o.wood;
   IN.start(S.inn, id, S.day);
   emit('purchase', { item: 'inn:' + id, gold: o.cost, wood: o.wood, who: 'player' });
-  log(`开始盖${o.name}（${o.cost} 金 + ${o.wood} 木材），家人明天一早搭好`);
+  if (id === 'parasol') log(`家人把第 ${S.inn.resort.parasols} 把遮阳伞摆到了沙滩上（${o.cost} 金）`);
+  else log(`开始盖${o.name}（${o.cost} 金${o.wood ? ' + ' + o.wood + ' 木材' : ''}），家人明天一早搭好`);
   popText(FARMER.x, FARMER.y, 22, '-' + o.cost, '#ffd76a');
   if (INN_ON) IA.sync(true); markNavDirty(); if (typeof saveNow === 'function') saveNow();
   return { ok: true, cost: o.cost, wood: o.wood };
@@ -2867,8 +2886,8 @@ function innSetMenu(v) {
 function innView() {
   if (!IN) return null;
   const I = S.inn || IN.empty(), plot = innPlot(), L = plot ? IN.layout(plot) : null;
-  const ctx = { plot, lv: townLv(), coins: S.coins, wood: FARMER.wood };
-  const offers = ['cabin', 'diner', 'kitchen'].map(id => {
+  const ctx = { plot, lv: townLv(), coins: S.coins, wood: FARMER.wood, coast: !!(S.eff && (S.eff.coast || (S.eff.regions || []).includes('coast'))), resort: IN.resortPlotOf(S.plots) };
+  const offers = ['cabin', 'diner', 'kitchen', 'inn2', 'hut', 'parasol', 'stall', 'pier', 'deck'].map(id => {
     const o = IN.offer(I, id), why = IN.canStart(I, id, ctx);
     const short = why && ((ctx.coins | 0) < (o.cost | 0) || (ctx.wood | 0) < (o.wood | 0));
     return Object.assign({}, o, { why: why || null, ok: !why, shortGold: Math.max(0, (o.cost | 0) - (ctx.coins | 0)), shortWood: Math.max(0, (o.wood | 0) - (ctx.wood | 0)), short: !!short });
@@ -2879,8 +2898,11 @@ function innView() {
   const today = IN.todayMenu(I, counts, staffed, innPay);
   const book = IN.book(I);
   return {
-    open: !!(plot || (townLv() >= 2 && S.eff && S.eff.town)),
-    plot, plotName: L ? L.name : null, cabins: I.cabins | 0, diner: I.diner.lv | 0,
+    open: !!(plot || ctx.resort || ctx.coast || (townLv() >= 2 && S.eff && S.eff.town)),
+    plot, plotName: L ? L.name : null, cabins: I.cabins | 0, inn2: I.inn2 | 0, diner: I.diner.lv | 0,
+    coast: !!ctx.coast, resort: ctx.resort, resortName: ctx.resort && PL.plot(ctx.resort) ? PL.plot(ctx.resort).name : null,
+    huts: (I.resort && I.resort.huts) | 0, parasols: (I.resort && I.resort.parasols) | 0,
+    stall: !!(I.resort && I.resort.stall), pier: !!(I.resort && I.resort.pier), deck: !!(I.resort && I.resort.deck),
     job: I.job, stars, starAvg: (I.stars && I.stars.avg) || 3, starBoost: staffed ? IN.STAR_BOOST : 0, furnish: innFurnished() ? IN.FURNISH : 0,
     guests: IN.staying(I, S.day), people: IN.peopleOf(I, S.day),
     seats: IN.seatsOf(I), dishes: IN.dishSlots(I, staffed),
@@ -2905,13 +2927,19 @@ function innMorning() {
   if (done === 'cabin') log(`小木屋盖好了，现在有 ${S.inn.cabins} 间`);
   if (done === 'diner') log('农家菜馆开张了，客人可以在院子里吃饭');
   if (done === 'kitchen') log(`厨房升到了第 ${IN.kitchenLv(S.inn)} 级，能多做两道菜、多摆几张桌子`);
+  if (done === 'inn2') log('小木屋都加盖了二层，每间可以再住一组客人');
+  if (done === 'hut') log(`沙滩小屋盖好了，现在海边有 ${S.inn.resort.huts} 间`);
+  if (done === 'stall') log('海鲜摊开张了，用家里钓的海鱼做海鱼烤和海鲜汤');
+  if (done === 'pier') log('游客栈桥铺好了，客人可以在海上钓鱼，钓到的会放回去');
+  if (done === 'deck') log('日落观景台修好了，傍晚可以坐着看海上的落日');
   if (done && INN_ON) { IA.sync(true); markNavDirty(); }
   const out = IN.checkOut(S.inn, S.day, () => IN.rateStay(innRateCtx()));
   if (out.gold || out.groups.length) innPayRooms(out.gold, out.notes, out.groups);
   if ((S.inn.arrived | 0) !== S.day) {
     const add = IN.checkIn(S.inn, S.day, innStarsNow(), innFest());
     S.inn.arrived = S.day;
-    if (add.length) log(`今天预计来 ${add.length} 组客人住民宿`);
+    const innN = add.filter(g => IN.stayOf(g) !== 'beach').length, beachN = add.length - innN;
+    if (add.length) log(`今天预计来 ${add.length} 组客人` + (beachN && innN ? `（民宿 ${innN} 组，海边 ${beachN} 组）` : (beachN ? '住沙滩小屋' : '住民宿')));
   }
   S.inn.earn.today = 0;
   if (INN_ON) IA.sync();
@@ -2934,6 +2962,21 @@ function innServeMeals() {
   innEarn(r.gold, 'inn-meals', L ? L.diner.door.x : undefined, L ? L.diner.door.y - 8 : undefined);
   if (r.n) log(`菜馆做了 ${r.n} 份农家菜，收入 ${r.gold} 金` + (r.missed ? `，还有 ${r.missed} 份没料做` : ''));
   else if (r.missed) log('菜馆今天仓库里的料不够，有客人没吃上');
+}
+function innServeStall() {
+  if (!IN || !S.inn || !IN.stallUp(S.inn) || (S.inn.resort && S.inn.resort._meal === S.day)) return;
+  const want = IN.stallMealsWanted(S.inn, S.day);
+  if (!want) { if (S.inn.resort) S.inn.resort._meal = S.day; return; }
+  const counts = innCounts();
+  const usedNeed = [];
+  const r = IN.serveStall(S.inn, want, counts, innPay);
+  for (const id of r.used) { const d = IN.DISH[id]; if (d) usedNeed.push(...d.need); }
+  if (usedNeed.length) innPullNeed(usedNeed);
+  if (S.inn.resort) S.inn.resort._meal = S.day;
+  const L = IN.resortLayout();
+  innEarn(r.gold, 'inn-meals', L ? L.stall.stand.x : undefined, L ? L.stall.stand.y - 6 : undefined);
+  if (r.n) log(`海鲜摊做了 ${r.n} 份海味，收入 ${r.gold} 金` + (r.missed ? `，还有 ${r.missed} 份没料做` : ''));
+  else if (r.missed) log('海鲜摊今天海里的鱼不够，有客人没吃上');
 }
 function innEntry() { return IN.entryOf(S.plots, townOpen()); }
 function innRoute(from, to) {
@@ -2966,20 +3009,51 @@ function innSpots(s) {
   for (const pid of Object.keys(S.plots || {})) if (S.plots[pid].mod === 'playground') {
     const r = PL.plot(pid).rect; out.push({ what: 'play', x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2, wait: 28 });
   }
+  if (S.inn && S.inn.resort && S.inn.resort.deck && IN.isSunset(S.t)) {
+    const RL = IN.resortLayout(), seat = RL && RL.deck.sit[(s.room | 0) % RL.deck.sit.length];
+    if (seat) out.push({ what: 'sunset', x: seat.x, y: seat.y, wait: 50, rest: true });
+  }
   return out;
 }
+function innBeachSpots(s) {
+  const L = IN.resortLayout(), out = [], r = S.inn && S.inn.resort;
+  if (!L || !r) return out;
+  if ((r.parasols | 0) > 0) {
+    const u = L.parasols[(s.room | 0) % Math.max(1, r.parasols | 0)];
+    if (u) out.push({ what: 'lie', x: u.x + 2, y: u.y + 2, wait: 42, rest: true });
+  }
+  out.push({ what: 'walk', x: 250 + ((s.room * 13) % 50), y: 240 + ((s.room * 5) % 8), wait: 18 });
+  if (r.pier) out.push({ what: 'fish', x: L.pier.stand.x, y: L.pier.stand.y, wait: 48, hook: L.pier.hook });
+  if (r.stall) out.push({ what: 'eat', x: L.stall.stand.x, y: L.stall.stand.y, wait: 32, rest: true });
+  if (r.deck && IN.isSunset(S.t)) {
+    const seat = L.deck.sit[(s.room | 0) % L.deck.sit.length];
+    if (seat) out.push({ what: 'sunset', x: seat.x, y: seat.y, wait: 50, rest: true });
+  }
+  return out;
+}
+function innDoorOf(g) {
+  if (IN.stayOf(g) === 'beach') {
+    const L = IN.resortLayout(), h = L && L.huts[g.room];
+    return h ? h.door : null;
+  }
+  const L = innLay(); if (!L) return null;
+  const c = L.cabins[IN.cabinOf(g, S.inn)];
+  return c ? c.door : null;
+}
 function innSpawnGroup(g, atDoor) {
-  const L = innLay(); if (!L || !L.cabins[g.room]) return;
-  const door = L.cabins[g.room].door, e = innEntry();
+  const door = innDoorOf(g); if (!door) return;
+  const beach = IN.stayOf(g) === 'beach';
+  const e = beach ? (IN.COAST && IN.COAST.gate) || { x: 220, y: 212 } : innEntry();
+  const looks = beach ? IN.BEACH_LOOKS : IN.LOOKS;
   const shown = Math.min(g.n | 0 || 1, Math.max(0, IN.ON_SCREEN - STAYS.filter(s => !s.leaving).length));
   const T = S.t % 1440, night = T >= 18 * 60 || T < IN.LEAVE_MORNING;
   for (let i = 0; i < shown; i++) {
-    const look = IN.LOOKS[(IN.LOOKS.indexOf(g.look) + i + IN.LOOKS.length) % IN.LOOKS.length];
+    const look = looks[(looks.indexOf(g.look) + i + looks.length) % looks.length];
     const dest = { x: door.x + (i - 1) * 3, y: door.y + 2 };
     const from = atDoor ? dest : { x: e.x + i * 3, y: e.y + (i % 2) };
     STAYS.push({
-      id: g.id + '_' + i, gid: g.id, look, room: g.room, n: g.n, lead: i === 0,
-      x: from.x, y: from.y, fx: atDoor ? 0 : -1, fy: atDoor ? 1 : 0,
+      id: g.id + '_' + i, gid: g.id, look, room: g.room, n: g.n, lead: i === 0, stay: beach ? 'beach' : 'inn',
+      x: from.x, y: from.y, fx: atDoor ? 0 : (beach ? 0 : -1), fy: atDoor ? 1 : (beach ? 1 : 0),
       pts: atDoor ? [] : innRoute(from, dest), moving: !atDoor, leaving: false,
       inside: !!(atDoor && night), wait: 0, what: atDoor ? (night ? 'sleep' : 'idle') : 'arrive',
       until: g.until, fromDay: g.from, at: g.at, task: null,
@@ -2987,7 +3061,8 @@ function innSpawnGroup(g, atDoor) {
   }
 }
 function innEnsure() {
-  if (!IN || !S.inn || !innPlot()) return;
+  if (!IN || !S.inn) return;
+  if (!innPlot() && !IN.hutsUp(S.inn)) return;
   const T = ((S.t % 1440) + 1440) % 1440;
   for (const g of IN.staying(S.inn, S.day)) {
     if (STAYS.some(s => s.gid === g.id)) continue;
@@ -3005,6 +3080,7 @@ function innTick(dm) {
   const T = ((S.t % 1440) + 1440) % 1440;
   innEnsure();
   if (IN.dinerUp(S.inn) && T >= 11 * 60 + 30 && S.inn.diner.last !== S.day) innServeMeals();
+  if (IN.stallUp(S.inn) && T >= 11 * 60 + 30 && !(S.inn.resort && S.inn.resort._meal === S.day)) innServeStall();
   const night = T >= 18 * 60 || T < IN.LEAVE_MORNING;
   const leavingHour = T >= 7 * 60 && T < IN.LEAVE_MORNING + 40;
   for (let i = STAYS.length - 1; i >= 0; i--) {
@@ -3024,11 +3100,12 @@ function innTick(dm) {
     s.moving = false;
     if (s.wait > 0) { s.wait -= dm; continue; }
     if (night) {
-      const L = innLay(), door = L && L.cabins[s.room] && L.cabins[s.room].door;
+      const door = innDoorOf({ stay: s.stay, room: s.room, id: s.gid });
       if (door && Math.hypot(s.x - door.x, s.y - door.y) > 3) { s.pts = innRoute(s, door); s.what = 'sleep'; s.task = null; continue; }
       s.inside = true; s.what = 'sleep'; s.task = null; continue;
     }
-    const spots = innSpots(s);
+    const spots = s.stay === 'beach' ? innBeachSpots(s) : innSpots(s);
+    if (!spots.length) continue;
     const pick = spots[(S.day * 7 + (s.room | 0) * 3 + (s.wait | 0) + Math.floor(T / 20)) % spots.length];
     s.what = pick.what; s.wait = pick.wait; s.task = pick.what === 'fish' && pick.hook ? { kind: 'fish', hook: pick.hook } : (pick.rest ? { rest: 1 } : null);
     s.pts = innRoute(s, pick);
@@ -3483,6 +3560,12 @@ const FAM_LOOK = {
   innD: { '#4fa3cf': '#3a5a8c', '#2f6ea0': '#2a3e68', '#1f3d68': '#1a2848', '#a8432e': '#9a9ea0', '#7a2c24': '#666a73', '#8a5530': '#f6ecd0', '#5e3524': '#3e3f4c' },
   innE: { '#4fa3cf': '#c47a8a', '#2f6ea0': '#a05068', '#1f3d68': '#6e3048', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#ecc27c', '#5e3524': '#8a5530' },
   innF: { '#4fa3cf': '#6a7a3a', '#2f6ea0': '#4a5a28', '#1f3d68': '#2e3a18', '#a8432e': '#5e3524', '#7a2c24': '#3b2219', '#8a5530': '#cf6a3c', '#5e3524': '#a8432e' },
+  beachA: { '#4fa3cf': '#f07a5a', '#2f6ea0': '#c4563a', '#1f3d68': '#8a3020', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#f6ecd0', '#5e3524': '#3e3f4c' }, // v5.10.8 resort guests: bright shirts, dark or pale caps (not a straw hat)
+  beachB: { '#4fa3cf': '#4fa8d8', '#2f6ea0': '#2f7eae', '#1f3d68': '#1a4e78', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#f6ecd0', '#5e3524': '#666a73' },
+  beachC: { '#4fa3cf': '#f6ecd0', '#2f6ea0': '#e8d8b0', '#1f3d68': '#c8b890', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#1c1626', '#5e3524': '#3e3f4c' },
+  beachD: { '#4fa3cf': '#f2cf55', '#2f6ea0': '#d3a83a', '#1f3d68': '#8a6a18', '#a8432e': '#2a3e68', '#7a2c24': '#1a2848', '#8a5530': '#3e3f4c', '#5e3524': '#1c1626' },
+  beachE: { '#4fa3cf': '#5ec8a8', '#2f6ea0': '#3aa888', '#1f3d68': '#1a7a64', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#ecc27c', '#5e3524': '#3e3f4c' },
+  beachF: { '#4fa3cf': '#b08ad0', '#2f6ea0': '#8a62b0', '#1f3d68': '#5a3a80', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#f6ecd0', '#5e3524': '#666a73' },
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
 };
 const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 8 (v5.8.1: the children's school look) (partner, father, two children x child / teen)
@@ -3538,6 +3621,27 @@ function pixText(s, x, y, col, sc = 1) {
       if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); }
 }
 function dayLight(T) { const h = T / 60; if (h >= 6.3 && h < 17.5) return 0; if (h >= 17.5 && h < 20.5) return (h - 17.5) / 3; if (h >= 20.5 || h < 4.5) return 1; return Math.max(0, 1 - (h - 4.5) / 1.8); }
+function drawSunsetWash(ctx, T, realT) { // v5.10.8: one warm gradient on the sky and sea, plus a few glints (deck must be up)
+  const a = Math.max(0, Math.min(1, 1 - Math.abs((T / 60) - 18) / 1.05));
+  if (a <= 0) return;
+  const sky = ctx.createLinearGradient(0, 0, 0, H * 0.45);
+  sky.addColorStop(0, `rgba(255, 150, 70, ${0.18 * a})`);
+  sky.addColorStop(0.55, `rgba(255, 190, 110, ${0.10 * a})`);
+  sky.addColorStop(1, `rgba(255, 220, 160, 0)`);
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H * 0.5);
+  const box = typeof seaBox === 'function' ? seaBox() : null;
+  const x0 = box ? box.x : 0, y0 = box ? box.y : H * 0.55, bw = box ? box.w : W, bh = box ? box.h : H * 0.4;
+  const sea = ctx.createLinearGradient(x0, y0, x0, y0 + bh);
+  sea.addColorStop(0, `rgba(255, 170, 80, ${0.28 * a})`);
+  sea.addColorStop(1, `rgba(255, 120, 50, ${0.08 * a})`);
+  ctx.fillStyle = sea; ctx.fillRect(x0, y0, bw, bh);
+  ctx.fillStyle = `rgba(255, 230, 160, ${0.55 * a})`;
+  for (let i = 0; i < 8; i++) {
+    const px = x0 + ((i * 47 + (realT * 13 | 0)) % Math.max(1, bw));
+    const py = y0 + 4 + ((i * 29) % Math.max(1, bh - 8));
+    if (((realT * 2 + i) % 2) < 1.2) ctx.fillRect(px, py, 2, 1);
+  }
+}
 function warmth(T) { const h = T / 60; const a = Math.max(0, 1 - Math.abs(h - 18.3) / 1.6), b = Math.max(0, 1 - Math.abs(h - 6) / 1.2); return Math.max(a, b * 0.8); }
 
 // ---------- billboards: the farmer and the keeper are flat 2D sprites standing upright at their feet ----------
@@ -3986,6 +4090,7 @@ function render() {
   drawPondFish();
   drawFishing();
   if (warm > 0) { ctx.globalCompositeOperation = 'multiply'; ctx.fillStyle = `rgba(255,${190 + 40 * (1 - warm)},${150 + 80 * (1 - warm)},${0.55 * warm})`; ctx.fillRect(0, 0, W, H); ctx.globalCompositeOperation = 'source-over'; }
+  if (IN && S.inn && IN.deckUp(S.inn) && IN.isSunset(T)) drawSunsetWash(ctx, T, realT);
   if (WX) WX.drawSky(ctx, W, H);
   if (night > 0) lighting(night, T);
   if (INS) INS.draw(ctx, proj, RS);
@@ -4352,7 +4457,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.10.7';
+const GAME_VERSION = '5.10.8';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -4585,7 +4690,7 @@ Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pa
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
   NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
-Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), innLayout: () => innLay(), innPlot: () => innPlot(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow() }); // v5.9.0 test hooks; v5.10.6 careers; v5.10.7 inn
+Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask() }); // v5.9.0 test hooks; v5.10.6 careers; v5.10.7 inn; v5.10.8 resort
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
