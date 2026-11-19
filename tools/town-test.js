@@ -66,9 +66,10 @@ ok('neighbours: each keeps hours, is home outside them, and the party guests (�
   for (const id of ['n2', 'n3']) { const nb = TN.NEIGHBOURS.find(q => q.id === id); assert(nb.plan.every(p => p[1] <= 17 * 60 + 30), id); }
   const lin = TN.NEIGHBOURS.find(q => q.name === '林老师'); assert.strictEqual(TN.neighbourAt(lin, 10 * 60).spot, 'schoolgate');
 });
-ok('town shop: workshop goods, honey and fish only, a fifth more', () => {
+ok('town shop: workshop goods, honey, fish, and (v5.9.1) animal products and orchard fruit, a fifth more, from two in the basket', () => {
   assert(TN.tradeable('jam', false) && TN.tradeable('honey', false) && TN.tradeable('carp', true));
-  assert(!TN.tradeable('carrot', false) && !TN.tradeable('egg', false));
+  for (const k of ['egg', 'wool', 'milk', 'truffle', 'apple', 'orange']) assert(TN.tradeable(k, false), k);
+  assert(!TN.tradeable('carrot', false) && !TN.tradeable('pumpkin', false)); assert.strictEqual(TN.TRADE.min, 2);
   assert.strictEqual(TN.tradePrice(100), 120); assert.strictEqual(TN.tradePrice(37), 44);
 });
 ok('state: empty, valid() repairs junk, keeps good values, counts school days', () => {

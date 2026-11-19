@@ -95,7 +95,8 @@
 
   // ---------- the town shop ----------
   // workshop goods, honey and fish fetch a fifth more there; a grown-up takes them over when the basket holds a few
-  const TRADE = { ids: ['flour', 'jam', 'cheese', 'honey'], fish: true, bonus: 0.2, min: 3, from: 9 * 60, to: 16 * 60 };
+  // v5.9.1: eggs, wool, milk, truffles and orchard fruit too, and the trip goes once two are in the basket (was 3: it hardly ever went)
+  const TRADE = { ids: ['flour', 'jam', 'cheese', 'honey', 'egg', 'wool', 'milk', 'truffle', 'apple', 'orange'], fish: true, bonus: 0.2, min: 2, from: 9 * 60, to: 16 * 60 };
   const tradeable = (type, isFish) => TRADE.ids.includes(type) || (TRADE.fish && !!isFish);
   const tradePrice = base => Math.round(base * (1 + TRADE.bonus));
 
