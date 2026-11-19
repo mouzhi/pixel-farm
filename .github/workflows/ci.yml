@@ -86,3 +86,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/town-shots.js
+      - name: v5.8.1 browser test (nothing in hand on the school walk, day-59 save)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/school-walk-shots.js
