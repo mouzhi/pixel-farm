@@ -52,8 +52,8 @@ fs.mkdirSync(OUT, { recursive: true });
     check('v5102_phone.png', r.speedEl || r.btn ? 'speed buttons' : null, { btn: r.btn }); await p.context().close(); }
   // 5. optional: a real exported save (local only)
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) { const s = readSave(process.env.PF_REAL_SAVE); s.savedAt = Date.now(); const gold = SIM.speedRefund((s.upgrades || {}).speed);
-    const p = await page(s); const r = await p.evaluate(ui); await p.evaluate(() => { __farm.advance(20, 10); }); const day = await p.evaluate(() => __farm.S.day);
-    await p.screenshot({ path: path.join(OUT, process.env.PF_REAL_NAME || 'v5102_real.png') });
+    const p = await page(s); const r = await p.evaluate(ui); await p.evaluate(() => __farm.render()); await p.screenshot({ path: path.join(OUT, process.env.PF_REAL_NAME || 'v5102_real.png') }); // the refund line still in the log
+    await p.evaluate(() => { __farm.advance(20, 10); }); const day = await p.evaluate(() => __farm.S.day);
     check(process.env.PF_REAL_NAME || 'v5102_real.png', gold ? refundOk(r, s, gold) : r.coins !== s.coins || r.refund ? 'touched coins' : null, Object.assign({ gold, day }, r)); await p.context().close(); }
   await b.close(); server.close();
   if (errs.length) { console.log('page errors:', errs.slice(0, 5)); fails.push('page errors'); }
