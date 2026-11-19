@@ -2386,7 +2386,7 @@ function homeNight() { // a little-farm crop grows one day overnight if it was w
 // hens pecking round their little coop
 const HENS_VIEW = [];
 function homeDraw(list) {
-  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(sp.look, 3); if (sh) list.push(Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh }, carryFields(sp), farmerPose(sp))); }
+  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(sp.look, 3); if (sh) list.push(Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp))); }
   const T = S.t % 1440, sp = ANIMAL_SPR.chicken; if (!sp || !sp.r || !(T >= WAKE && T < BEDTIME)) return;
   S.home.houses.forEach((h, hi) => { if (!h.built || !h.hens) return; const L = HM.layout(h);
     for (let i = 0; i < h.hens; i++) { const k = hi * 2 + i; let v = HENS_VIEW[k]; if (!v) v = HENS_VIEW[k] = { x: L.coop.x, y: L.coop.y + 6, tx: L.coop.x, ty: L.coop.y + 6, step: 0, flip: false, cd: 0 };

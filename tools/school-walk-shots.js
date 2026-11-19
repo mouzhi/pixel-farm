@@ -46,10 +46,10 @@ fs.mkdirSync(OUT, { recursive: true });
       : (r.walk ? 'play counted as school walk' : r.basket !== 'pumpkin' ? 'farm basket missing: ' + r.basket : r.look !== 'kid0' || r.cut !== 6 ? 'farm look ' + r.look + ' cut ' + r.cut : null), r);
     await p.context().close();
   }
-  // the day-59 manor save still loads (no save change in 5.8.1)
+  // the day-59 manor save still loads (migrated to the current save version)
   { const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8')), save = raw.save || raw, p = await page();
     await p.evaluate(s => { __farm.SAVE.off = true; localStorage.clear(); localStorage.setItem('mouzhi/pixel-farm:save', JSON.stringify(s)); }, save);
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 30000 });
     const r = await p.evaluate(() => { const f = __farm, s = f.snapshot(); f.advance(60, 10); return { v: f.version, sv: s.saveVersion, day: s.clock.day, animals: s.animals.length }; });
-    check('fixture day 59', r.v !== VERSION ? 'version' : r.sv !== 14 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : r.animals !== save.animals.length ? 'animals' : null, r); await p.context().close(); }
+    check('fixture day 59', r.v !== VERSION ? 'version' : r.sv !== require('../save.js').CURRENT ? 'saveVersion' : r.day !== save.clock.day ? 'day' : r.animals !== save.animals.length ? 'animals' : null, r); await p.context().close(); }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();
