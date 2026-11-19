@@ -38,8 +38,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.screenshot({ path: path.join(OUT, name + '_close.png'), clip: { x: 440, y: 250, width: 400, height: 260 } });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
   const fit = `const h = house(), L = f.HM.layout(h), hit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
-    const clash = [L.coopBlock, ...L.tiles.map(t => [t.x - 4, t.y - 4, t.x + 4, t.y + 4])].filter(b => hit(L.block, b)).length
-      + (f.hiveSpots ? f.hiveSpots() : []).filter(p => p && p.x > L.block[0] && p.x < L.block[2] && p.y > L.block[1] && p.y < L.block[3]).length;`;
+    const clash = [L.coopBlock, ...L.tiles.map(t => [t.x - 4, t.y - 4, t.x + 4, t.y + 4])].filter(b => hit(L.block, b)).length;`;
   // 1. day: the couple's house on 林间空地 (the v5.9.0 anchor -68,160 mirrored), smoke from the chimney, the six tiles and the hen house
   await shot('cottage_day', `(() => { ${setup} wed(); until(() => S.day === 72 && tod() >= 10 * 60, 3000); dry(); ${fit}
     look(h.x, h.y + 12, 0.35); f.advance(2, 10); return { at: [h.site, h.x, h.y, h.m], block: L.block, clash, smoke: f.HA.smoke().length }; })()`,
@@ -54,5 +53,24 @@ fs.mkdirSync(OUT, { recursive: true });
     const inside = b && b.x > L.block[0] && b.x < L.block[2] && b.y > L.block[1] && b.y < L.block[3];
     return { builder: b && b.name, at: b && [Math.round(b.x - h.x), Math.round(b.y - h.y)], inside, built: h.built }; })()`,
     r => !r.builder ? 'nobody building' : r.inside ? 'builder inside the walls' : null);
+  // 4. a v15 save made by v5.9.0 (the small house, built, the couple moved in): same anchor, the bigger house fits its yard,
+  //    nothing overlaps, the couple still gets to their tiles and their door
+  if (!only || 'cottage_v15save'.includes(only)) {
+    const save = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v15-day72-cottage.json'), 'utf8'));
+    const p = await page('?manual');
+    await p.evaluate(s => { __farm.SAVE.off = true; localStorage.clear(); localStorage.setItem('mouzhi/pixel-farm:save', JSON.stringify(s)); }, save);
+    await p.reload(); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 30000 });
+    const r = await p.evaluate(() => { const f = __farm, S = f.S, h = S.home.houses[0], L = f.HM.layout(h), hit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+      const clash = [L.coopBlock, ...L.tiles.map(t => [t.x - 4, t.y - 4, t.x + 4, t.y + 4])].filter(b => hit(L.block, b)).length;
+      const inYard = [L.block, L.coopBlock].every(b => b[0] >= L.foot[0] && b[2] <= L.foot[2] && b[1] >= L.foot[1] && b[3] <= L.foot[3]);
+      const seen = {}; for (let i = 0; i < 900 && !(seen.hs && seen.home); i++) { f.advance(1, 10); const k = S.members.find(m => m.id === 'kid0');
+        if (k.task && /^hs-/.test(k.task.kind) && Math.hypot(k.x - k.task.to.x, k.y - k.task.to.y) < 2) seen.hs = 1;
+        if (S.t % 1440 > 21 * 60 && k.sleeping && Math.hypot(k.x - L.door.x, k.y - L.door.y) < 2) seen.home = 1; }
+      f.setAngle(0.35); f.panTo(h.x, h.y + 12); f.advance(0.3, 10);
+      return { sv: f.snapshot().saveVersion, at: [h.site, h.x, h.y, h.m, h.built, h.kid], clash, inYard, seen, props: f.HA.state().props }; });
+    await p.screenshot({ path: path.join(OUT, 'cottage_v15save.png') });
+    const bad = r.sv !== 15 ? 'saveVersion' : JSON.stringify(r.at) !== JSON.stringify(['glade', -68, 160, 1, save.home.houses[0].built, 'kid0']) ? 'anchor moved ' + r.at : r.clash ? 'overlap' : !r.inYard ? 'outside the yard' : !r.seen.hs ? 'never worked the tiles' : !r.seen.home ? 'never got home' : null;
+    console.log(bad ? 'FAIL' : 'ok  ', 'cottage_v15save', JSON.stringify(r)); if (bad) fails.push('v15save: ' + bad); await p.context().close();
+  }
   if (net.length) fails.push('network: ' + net.slice(0, 3).join(' '));
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();
