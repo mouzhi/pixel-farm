@@ -67,6 +67,13 @@ fs.mkdirSync(OUT, { recursive: true });
       f.setAngle(0.3); f.panTo(528, 84); f.advance(0.2, 10); return { ok, tod: Math.round(S.t % 1440), lights: f.TN.lightsAt(S.t % 1440).length, out: f.NEIGH.filter(n => n.out).map(n => n.name + ':' + n.spot) }; });
     await p.screenshot({ path: path.join(OUT, 'v591_town_evening.png') });
     check('v591_town_evening.png', !r.ok ? 'town' : r.lights < 10 ? 'lights ' + r.lights : r.out.length !== 2 ? 'out ' + r.out : null, r); await p.context().close(); }
+  // 6b. the shop's 新房子 card with its long lock note (no 花甸 / 农田 yet): the name column keeps its width (was one character wide), at 1280 and 390
+  for (const [w, h] of [[1280, 800], [390, 844]]) { const name = 'v591_newhouse_card_' + w + '.png'; const p = await page(FIXTURE, w, h);
+    const r = await p.evaluate(() => { document.getElementById('offline').hidden = true; document.getElementById('shopBtn').click(); const t = document.querySelector('#shop [data-tab="build"]'); if (t) t.click(); __farm.refreshUI();
+      const c = document.querySelector('#shop [data-item="cottage"]'); if (!c) return { none: true }; c.scrollIntoView({ block: 'center' }); const W = e => Math.round(e.getBoundingClientRect().width);
+      const heads = [...document.querySelectorAll('#shop .sec')].map(e => e.textContent); return { card: W(c), ct: W(c.querySelector('.ct')), h: Math.round(c.getBoundingClientRect().height), lock: !!c.querySelector('.short.lock'), dupHead: heads.length !== new Set(heads).size }; });
+    await p.waitForTimeout(200); await p.screenshot({ path: path.join(OUT, name) });
+    check(name, r.none ? 'no card' : !r.lock ? 'no lock note (scene)' : r.ct < r.card * 0.35 ? 'name column ' + r.ct + ' of ' + r.card : r.h > 220 ? 'card tall ' + r.h : r.dupHead ? 'a section header twice' : null, r); await p.context().close(); }
   // 7. (local only) the player's own save at night with the new toolbar
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) { const save = readSave(process.env.PF_REAL_SAVE);
     const p = await page(save); const r = await p.evaluate(night); Object.assign(r, await p.evaluate(layout)); await p.waitForTimeout(200);
