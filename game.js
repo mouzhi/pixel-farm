@@ -3769,7 +3769,7 @@ function snapshot() {
     inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay, fishFood: S.fishFood, ornament: Object.assign({}, S.ornament) },
     farmer: { x: Math.round(FARMER.x * 100) / 100, y: Math.round(FARMER.y * 100) / 100, sleeping: FARMER.sleeping, home: FARMER.home },
     tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && SU.validCropExtras(t.crop, { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot }) })),
-    upgrades: Object.assign({}, S.up), settings: { speed: 1, decorLayout: S.decorLayout ? 1 : 0, speedRefund: S.speedRefund | 0, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
+    upgrades: Object.assign({}, S.up), settings: { speed: 1, ...(S.decorLayout ? { decorLayout: 1 } : {}), speedRefund: S.speedRefund | 0, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
     offline: { win: (S.offlineWin || []).map(w => ({ at: w.at, days: w.days })) },
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
