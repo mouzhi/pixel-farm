@@ -9,7 +9,7 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 90, POLICY = process.argv[3] || 'casual', SEED = process.argv[4] || '7';
-const OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
+const OUT = process.env.PF_SHOTS || '/workspace/pf-shots', AFK = +process.env.AFK_FROM || 0; // AFK_FROM=d: play the policy until day d, then stop clicking (an AFK session)
 const HOOKS = [ // [anchor, code appended after it]; each anchor must occur exactly once
   ['const ty = SU.itemType(it), g = priceOfAny(it), base = basePrice(ty); sum += g;', " window.__econ && __econ('market', ty, g);"],
   ['const g = priceOfAny(o.it), p = TN.tradePrice(g); base += g; sum += p;', " window.__econ && __econ('town', o.ty, p, g);"],
@@ -45,11 +45,11 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
   await p.addInitScript(() => { try { localStorage.clear(); } catch (e) {} });
   await p.goto(`http://127.0.0.1:${server.address().port}/index.html?manual&seed=${SEED}`);
   await p.waitForFunction(() => window.__farm && __farm.spritesReady());
-  await p.evaluate(({ POLICY, PLOT_MOD }) => {
+  await p.evaluate(({ POLICY, PLOT_MOD, AFK }) => {
     const S = __farm.S, SIM = window.PFSim, PL = window.PFPlots, X = window.PFExpand, DC = window.PFDecor; __farm.SAVE.off = true;
     const CAT = t => /^(carrot|cabbage|pumpkin|strawberry|watermelon|wheat)$/.test(t) ? 'crops' : /^(apple|orange)$/.test(t) ? 'fruit' : /^(egg|wool|milk|truffle)$/.test(t) ? 'animals'
       : /^(flour|jam|cheese|honey)$/.test(t) ? 'works' : /^(crucian|carp|grassc|bass|koi|sardine|seabass|snapper|tuna|sword)$/.test(t) ? 'fish' : t === 'woodsell' ? 'wood' : t === 'seeds' ? 'seeds' : 'other';
-    const E = window.__E = { day: null, days: [], unlocks: [], seen: {}, policy: POLICY, lastChop: 0 };
+    const E = window.__E = { afk: AFK, day: null, days: [], unlocks: [], seen: {}, policy: POLICY, lastChop: 0 };
     const fresh = () => ({ crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] });
     E.cur = fresh();
     window.__econ = (where, ty, g, base) => { const c = E.cur;
@@ -77,7 +77,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       if (PL && X) for (const id of Object.keys(PLOT_MOD)) { const o = PL.offer(S.plots, id, PLOT_MOD[id], S.coins, FA.wood, S.family); if (o && o.ok) out.push({ kind: 'plot', id, cost: o.cost }); }
       return out.sort((a, b) => a.cost - b.cost); };
     const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]);
-    E.hour = () => { watch(); if (POLICY === 'idle') return;
+    E.hour = () => { watch(); if (POLICY === 'idle' || (E.afk && S.day > E.afk)) return;
       for (let guard = 0; guard < 40; guard++) { const o = offers()[0]; if (!o) break;
         const r = o.kind === 'shop' ? __farm.buy(o.id) : X.buyPlot(o.id, PLOT_MOD[o.id]); if (!r || !r.ok) break; }
       const FA = __farm.FARMER, wa = __farm.woodAuto();
@@ -86,18 +86,18 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       for (const k of ['apple', 'orange']) while (FA.saplings[k] > S.orders.filter(o => o.type === 'plant' && o.kind === k).length) {
         const sp = PLANT.find(([x, y]) => __farm.orderPlant(k, x, y).ok); if (!sp) break; } };
     E.day = S.day;
-  }, { POLICY, PLOT_MOD });
+  }, { POLICY, PLOT_MOD, AFK });
   const t0 = Date.now();
   for (let d = 1; d <= DAYS; d++) {
     const row = await p.evaluate(() => { const S = __farm.S, E = window.__E; let guard = 0;
       while (S.day === E.day && guard++ < 200) { __farm.advance(20, 3); E.hour(); }
       // S.day just ticked: the finished day is S.dayEarn's last entry
-      const r = E.snap(); r.day = E.day; r.dayEarn = S.dayEarn[S.dayEarn.length - 1]; E.days.push(r); E.cur = (() => { const c = { crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] }; return c; })(); E.day = S.day;
+      const r = E.snap(); r.day = E.day; r.dayEarn = S.dayEarn[S.dayEarn.length - 1]; r.realSec = guard * 20; E.days.push(r); E.cur = (() => { const c = { crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] }; return c; })(); E.day = S.day;
       return r; });
     const sp = Object.entries(row.spend).map(([k, v]) => k + ' ' + v).join(', ');
     console.log(`d${String(row.day).padStart(3)} earn ${String(row.dayEarn).padStart(6)} coins ${String(row.coins).padStart(7)} wood ${row.wood}/${row.woodCap} crops ${row.crops} fruit ${row.fruit} anim ${row.animals} herd ${row.herd} fish ${row.fish} works ${row.works} town ${row.town} home ${row.home} | spend ${sp} | ${row.buys.join(' ')} | ${Math.round((Date.now() - t0) / 1000)}s`);
     if (d % 5 === 0 || d === DAYS) { const all = await p.evaluate(() => ({ days: __E.days, unlocks: __E.unlocks, up: __farm.S.up, plots: __farm.S.plots }));
-      fs.writeFileSync(path.join(OUT, `econ_${POLICY}.json`), JSON.stringify(Object.assign({ policy: POLICY, seed: SEED, errs }, all))); }
+      fs.writeFileSync(path.join(OUT, `econ_${POLICY}${AFK ? '_afk' + AFK : ''}.json`), JSON.stringify(Object.assign({ policy: POLICY, seed: SEED, errs }, all))); }
   }
   if (errs.length) console.log('ERRORS', errs.slice(0, 5));
   await browser.close(); server.close();
