@@ -19,7 +19,7 @@
   // lot: centre, half size, door (where people stand), rot (Math.PI: door to the north, onto the street side), style (art)
   const LOTS = [
     { id: 'L5', x: 466, y: 91, hw: 8, hd: 7, door: P(466, 82), rot: Math.PI, style: 0 },
-    { id: 'bakery', x: 485, y: 91, hw: 8, hd: 7, door: P(485, 82), rot: Math.PI, style: 3 }, // v5.10.4: lot L6, 小桃's shop (coords live in bakery.js too)
+    { id: 'bakery', x: 483, y: 91, hw: 7, hd: 7, door: P(483, 82), rot: Math.PI, style: 3 }, // v5.10.4: lot L6, 小桃's shop (coords live in bakery.js too)
     { id: 'L8', x: 560, y: 87, hw: 8, hd: 7, door: P(560, 78), rot: Math.PI, style: 1 },
     { id: 'L11', x: 546, y: 131, hw: 8, hd: 7, door: P(546, 122), rot: Math.PI, style: 2 },
   ];

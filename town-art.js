@@ -176,30 +176,38 @@
       return null; });
     const stalls = HL && root.PFMarket ? root.PFMarket.STALLS.map(st => marketStall(AWN[st.awn % AWN.length], GOODS[st.who] || GOODS.v, false)) : [];
     const stallFrame = marketStall(AWN[0], GOODS.v, true);
-    // v5.10.4: 小桃's bakery (lot L6) — cream plaster, a terracotta roof, bread in the shop windows, a hanging loaf, a chimney
-    const bakery = B(W2, D2 + 6, 44, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 22, F1 = 11;
+    // v5.10.4: 小桃's bakery — warm plaster, a crust-coloured roof, bread in the windows on both sides, a deep awning, a loaf on the ridge (readable from the usual south camera, not only from the street)
+    const bakery = B(W2, D2 + 6, 48, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 22, F1 = 11, crust = Rf[3] || Rf[2], wall = Wd[4];
       if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
         if (!(front || side || back)) return Wd[3];
         if (z === 0) return St[1];
         if (front && x >= 13 && x <= 17 && z <= 8) return z === 8 ? Wd[2] : (x === 16 && z === 4 ? Ac[1] : Wd[1]);
-        if (front && z >= 2 && z <= 8 && ((x >= 4 && x <= 11) || (x >= 19 && x <= 27))) return z === 2 || z === 8 || x === 4 || x === 11 || x === 19 || x === 27 ? Wd[1] : (z <= 5 && (x + z) % 4 < 2 ? (x % 2 ? Wd[4] : Ac[0]) : Wt[3]); // windows with loaves
+        if ((front || back) && z >= 2 && z <= 8 && ((x >= 4 && x <= 11) || (x >= 19 && x <= 27))) return z === 2 || z === 8 || x === 4 || x === 11 || x === 19 || x === 27 ? Wd[1] : (z <= 5 && (x + z) % 4 < 2 ? (x % 2 ? Wd[4] : crust) : Wt[3]); // windows with loaves, street and south
         if ((front || back) && z >= F1 + 3 && z <= F1 + 8 && ((x >= 5 && x <= 9) || (x >= 13 && x <= 17) || (x >= 21 && x <= 25))) return z === F1 + 3 || z === F1 + 8 ? Wd[2] : Wt[3];
         if (side && y >= 9 && y <= 18 && ((z >= 3 && z <= 8) || (z >= F1 + 3 && z <= F1 + 8)) && (y - 9) % 6 < 4) return Wt[3];
-        if (z === F1 || z === ZW) return Wd[2];
-        return (x === X0 || x === X1 || (front || back) && (x === 11 || x === 19)) ? Wd[2] : Ac[0]; }
-      if (y >= 26 && y <= 30 && x >= 3 && x <= 28 && z === 10 - (y - 26)) return ((x >> 2) & 1) ? Rf[3] : Ac[0]; // awning, cream and crust
-      if (y >= 27 && y <= 30 && x >= 4 && x <= 10 && z <= 2) return z === 2 ? ((x + y) % 3 ? Wd[4] : Ac[0]) : Wd[2]; // baskets of bread
-      if (y >= 26 && y <= 28 && x >= 20 && x <= 24 && z >= 11 && z <= 16) { // hanging loaf sign
-        const cx = 22, cz = 13.5, r = Math.hypot(x - cx, z - cz); if (r < 2.4) return r < 1.2 ? Wd[4] : Rf[3]; }
-      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: Rf[2], line: PAL.dark(Rf[2], 1), ridge: PAL.dark(Rf[2], 1), trim: Wd[4] });
+        if (z === F1 || z === ZW) return Wd[4];
+        return (x === X0 || x === X1 || (front || back) && (x === 11 || x === 19)) ? Wd[2] : (z < F1 ? wall : Ac[0]); }
+      if (y >= 26 && y <= 33 && x >= 2 && x <= 29) { const az = 12 - (y - 26); // deep cream-and-crust awning over the street
+        if (z === az) return ((x >> 2) & 1) ? crust : Ac[0];
+        if (y === 33 && z === az - 1 && !((x >> 2) & 1)) return crust; }
+      if (y >= 27 && y <= 31 && ((x >= 4 && x <= 10) || (x >= 21 && x <= 27)) && z <= 3) return z === 3 ? ((x + y) % 3 ? Wd[4] : crust) : Wd[2];
+      if (y >= 26 && y <= 29 && x >= 14 && x <= 18 && z >= 13 && z <= 18) { const cx = 16, cz = 15.5, rr = Math.hypot(x - cx, z - cz); if (rr < 2.6) return rr < 1.3 ? Wd[4] : crust; }
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: crust, line: PAL.dark(crust, 1), ridge: PAL.dark(crust, 1), trim: Wd[4] });
       if (r === 'fill') return Ac[0];
       if (r) return r;
-      if (x >= 22 && x <= 25 && y >= 8 && y <= 11 && z <= 40) return z >= 38 ? St[1] : Rf[1]; // the oven chimney
+      if (y <= 1 && x >= 11 && x <= 21 && z >= 14 && z <= 25) { // a south-facing shop sign, the usual camera looks this way
+        if (x === 16 && z <= 20) return Wd[1];
+        if (z >= 16 && z <= 25 && x >= 12 && x <= 20) {
+          if (x === 12 || x === 20 || z === 16 || z === 25) return Wd[1];
+          return ((x + z) % 3 === 0) ? crust : Ac[0]; } }
+      if (z >= 32 && z <= 47 && x >= 10 && x <= 22 && y >= 9 && y <= 18) { // a cream loaf on the ridge, so it doesn't disappear into the terracotta
+        const e = ((x - 16) / 5.5) ** 2 + ((y - 13.5) / 3.6) ** 2 + ((z - 40) / 6) ** 2; if (e < 1) return e < 0.28 ? Wd[4] : (e < 0.85 ? Ac[0] : Wd[2]); }
+      if (x >= 22 && x <= 26 && y >= 7 && y <= 11 && z <= 44) return z >= 42 ? St[1] : Rf[1]; // the oven chimney
       return null; });
-    const orderBoard = B(12, 3, 16, (x, y, z) => {
-      if ((x === 1 || x === 10) && y <= 1 && z <= 12) return Wd[1];
-      if (z >= 13 && z <= 14 && y <= 2) return z === 14 ? Rf[3] : Rf[2];
-      if (y === 1 && x >= 1 && x <= 10 && z >= 5 && z <= 12) { if (x === 1 || x === 10 || z === 5 || z === 12) return Wd[1];
+    const orderBoard = B(14, 4, 20, (x, y, z) => {
+      if ((x === 1 || x === 12) && y <= 2 && z <= 16) return Wd[1];
+      if (z >= 17 && z <= 18 && y <= 3) return z === 18 ? Rf[3] : Rf[2];
+      if (y === 2 && x >= 1 && x <= 12 && z >= 6 && z <= 16) { if (x === 1 || x === 12 || z === 6 || z === 16) return Wd[1];
         return ((x + z) % 3 === 0) ? Ink[0] : Ac[0]; }
       return null; });
     return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard };
