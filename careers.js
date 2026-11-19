@@ -1,12 +1,12 @@
 // v5.10.6 成家后的出路: rules only (the wedding prompt and the family panel in ui.js, walking and the shop in game.js, art in town-art.js).
-// On the wedding morning the player picks one path (or the child's default is used): stay and farm, take a job in town, or
-// open a shop on an empty lot (L2 / L3). After that it runs itself. A later change is 2,000 gold, next morning; closing a
+// On the wedding morning the player picks one path (or the child's default is used): stay and farm, take a job in town,
+// open a shop on an empty lot (L2 / L3), or (v5.10.7) run the family's 民宿 / 菜馆. After that it runs itself. A later change is 2,000 gold, next morning; closing a
 // shop refunds half the fit-out. Children already married before this version default to farming, and their first change is free.
 // Save stays at v15: append-only `home.path`, `home.wage`, and `town.lots`. Missing fields mean「留家种地」and no lots.
 (function (root) {
   'use strict';
   const P = (x, y) => ({ x, y });
-  const WAYS = ['farm', 'work', 'shop'];
+  const WAYS = ['farm', 'work', 'shop', 'inn'];
   const JOBS = [
     { at: 'bakery', nb: 'n3', name: '面包房', perk: '订单每天多 1 个' },
     { at: 'wood', nb: 'n2', name: '木工坊', perk: '木材换家具快一倍' },
@@ -82,11 +82,13 @@
       out.kind = KINDS[o.kind] ? o.kind : null;
       out.ready = int(o.ready, 0, 1e6);
     }
+    if (way === 'inn') { out.at = 'inn'; out.kind = null; }
     const p = obj(o.pending);
     if (WAYS.includes(p.way)) {
       const pend = { way: p.way, at: null, kind: null, day: int(p.day, 1, 1e6) };
       if (p.way === 'work' && JOB[p.at]) pend.at = p.at;
       if (p.way === 'shop') { pend.at = LOT[p.at] ? p.at : null; pend.kind = KINDS[p.kind] ? p.kind : null; }
+      if (p.way === 'inn') pend.at = 'inn';
       out.pending = pend;
     }
     return out;
@@ -114,9 +116,9 @@
     if (!p) return { way: 'farm', at: null, kind: null, day: 0, ready: 0, pending: null, free: 1, implied: 1 };
     return p;
   }
-  const isAway = (st, kid, day) => { const p = pathOf(st, kid); return p.way === 'work' || shopReady(p, day == null ? 1e9 : day) || (p.way === 'shop' && !shopReady(p, day == null ? 0 : day) && p.at); };
+  const isAway = (st, kid, day) => { const p = pathOf(st, kid); return p.way === 'work' || p.way === 'inn' || shopReady(p, day == null ? 1e9 : day) || (p.way === 'shop' && !shopReady(p, day == null ? 0 : day) && p.at); };
   // yield and main-farm help: while they work or keep a shop (including the build day) the little farm is halved and help is rarer
-  const awayForFarm = (st, kid) => { const p = pathOf(st, kid); return p.way === 'work' || p.way === 'shop'; };
+  const awayForFarm = (st, kid) => { const p = pathOf(st, kid); return p.way === 'work' || p.way === 'shop' || p.way === 'inn'; };
   const yieldMul = (st, kid) => awayForFarm(st, kid) ? YIELD.away : YIELD.farm;
   const helpDayP = (st, kid) => awayForFarm(st, kid) ? HELP_P.away : HELP_P.farm;
   const earnOf = (g, st, kid) => Math.round((g | 0) * yieldMul(st, kid));
@@ -152,6 +154,11 @@
       if (!jobBuilt(ctx && ctx.hall, at)) return JOB[at].name + '还没盖好';
       return null;
     }
+    if (way === 'inn') {
+      if (!(ctx && ctx.innPlot)) return '先把一块地改建成民宿院，再盖至少一间小木屋或菜馆';
+      if (!((ctx.cabins | 0) > 0 || (ctx.diner | 0) > 0)) return '先盖至少一间小木屋或农家菜馆';
+      return null;
+    }
     // shop
     const hall = ctx && ctx.hall;
     if (prosperity(hall) < SHOP.lv) return '繁荣度到 3 才能开店（先把集市和面包房盖好）';
@@ -182,6 +189,7 @@
         : (cur.way === 'shop' && cur.at) || freeLots(ctx && ctx.lots)[0] || null;
       return { way: 'shop', at, kind };
     }
+    if (way === 'inn') return { way: 'inn', at: 'inn', kind: null };
     return { way: 'farm', at: null, kind: null };
   }
   function optionView(way, ctx, st, kid, selected) {
@@ -191,6 +199,12 @@
       const j = at && JOB[at];
       return { way: 'work', at: at || null, kind: null, title: '去镇上上班',
         desc: j ? `去${j.name}帮工，每天工钱 ${WAGE} 金；${j.perk}` : '在面包房、木工坊或铁匠铺帮工，每天工钱 300 金',
+        cost: 0, wood: 0, ok: !why, why, selected: !!selected };
+    }
+    if (way === 'inn') {
+      const why = canTake(st, kid, { way: 'inn' }, ctx);
+      return { way: 'inn', at: 'inn', kind: null, title: '经营民宿 / 菜馆',
+        desc: '白天守着家里的民宿和菜馆，星级 +0.3，菜单多一道拿手菜；收入算家里的，不另发工钱',
         cost: 0, wood: 0, ok: !why, why, selected: !!selected };
     }
     const kind = kindOfMate(ctx && ctx.mate), k = KINDS[kind];
@@ -236,6 +250,8 @@
       writePath(st, kid, { way: 'shop', at: cur.at, kind: filled.kind || cur.kind, day: day | 0, ready: cur.ready, pending: null, free: 0 });
     } else if (filled.way === 'work') {
       writePath(st, kid, { way: 'work', at: filled.at, kind: null, day: day | 0, ready: 0, pending: null, free: 0 });
+    } else if (filled.way === 'inn') {
+      writePath(st, kid, { way: 'inn', at: 'inn', kind: null, day: day | 0, ready: 0, pending: null, free: 0 });
     } else {
       writePath(st, kid, { way: 'farm', at: null, kind: null, day: day | 0, ready: 0, pending: null, free: 0 });
     }
@@ -272,6 +288,8 @@
   // ---------- daily pay ----------
   const worksToday = (st, kid, fest) => pathOf(st, kid).way === 'work' && !fest;
   const shopsToday = (st, kid, day) => shopReady(pathOf(st, kid), day);
+  const innsToday = (st, kid) => pathOf(st, kid).way === 'inn';
+  const innStaffed = st => KID_IDS.some(k => pathOf(st, k).way === 'inn');
   function payWage(st) { st.wage = (st.wage | 0) + WAGE; return WAGE; }
   // goods: [{ id, n }] or a counts map. fish items use id 'fish' or a fish type; fish food is 'fishFood'.
   function goodsOf(kind) { return (KINDS[kind] && KINDS[kind].goods) || []; }
@@ -349,7 +367,7 @@
     lotIds, kidLot, freeLots, assignLot, releaseLot, shopReady,
     empty, valid, validLots, cleanPath, pathOf, isAway, awayForFarm, yieldMul, helpDayP, earnOf,
     bestJob, prefer, canTake, fillChoice, options, take, planChange, applyPending,
-    worksToday, shopsToday, payWage, goodsOf, matches, marketPrice, shopPrice, sell, payShop,
+    worksToday, shopsToday, innsToday, innStaffed, payWage, goodsOf, matches, marketPrice, shopPrice, sell, payShop,
     workerAt, extraOrders, craftTimes, smithOff,
     workHours, shopHours, shouldLeave, standOf, doorOf, blocks, lightsAt,
   };
