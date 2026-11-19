@@ -211,7 +211,8 @@
     if (mod === 'meadow' || mod === 'playground' || mod === 'pasture') { const n = mod === 'meadow' ? Math.round((x1 - x0) * (y1 - y0) / 45) : 12;
       for (let i = 0; i < n; i++) { const x = x0 + 4 + fr() * (x1 - x0 - 8), y = y0 + 4 + fr() * (y1 - y0 - 8); if (mod === 'playground' && Math.hypot(x - cx, y - cy) < 26) continue;
         const d = { x, y, c: (mod === 'meadow' || fr() < 0.3) ? X.SPRITES.flowers[Math.floor(fr() * 4)] : X.SPRITES.tufts[Math.floor(fr() * 4)] }; X.decals.push(d); o.decals.push(d); } }
-    if (mod === 'meadow') for (let i = 0; i < 3; i++) { X.addTree(X.treeDefs.bush[Math.floor(fr() * 3)], x0 + 10 + fr() * (x1 - x0 - 20), y0 + 8 + fr() * (y1 - y0 - 16)); o.list.push(X.props[X.props.length - 1]); }
+    if (mod === 'meadow') for (let i = 0; i < 3; i++) { const def = X.treeDefs.bush[Math.floor(fr() * 3)], bx = x0 + 10 + fr() * (x1 - x0 - 20), by = y0 + 8 + fr() * (y1 - y0 - 16);
+      if (X.inHomeYard && X.inHomeYard(bx, by)) continue; X.addTree(def, bx, by); o.list.push(X.props[X.props.length - 1]); } // v5.9.0: none in a new house's yard
   }
   // overlay: the padlock over each locked plot's sign (like the old regions)
   function drawLocks(ctx, proj, onScreen, bob) {

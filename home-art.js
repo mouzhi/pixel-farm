@@ -78,6 +78,8 @@
       own.push(X.addProp(MD.cottages[i % MD.cottages.length], h.x, h.y + 1.5, 0, { xp: 1, big: 1, home: i }));
       own.push(X.addProp(MD.coop, L.coop.x, L.coop.y, 0, { xp: 1, home: i }));
       if (MD.bench) own.push(X.addProp(MD.bench, L.bench.x, L.bench.y, 0, { xp: 1, home: i })); });
+    // the yard is cleared: the meadow's wild bushes inside the footprint go (they are scenery, never saved)
+    for (const { L } of FEET) for (let i = X.props.length - 1; i >= 0; i--) { const q = X.props[i]; if (q.tree && q.tree.kind === 'bush' && inYard(q.x, q.y)) X.props.splice(i, 1); }
     if (moved && X.repaint) for (const { L } of FEET) X.repaint([L.foot[0] - 4, L.foot[1] - 4, L.foot[2] + 4, L.foot[3] + 4]);
     X.markNavDirty();
   }
@@ -88,6 +90,7 @@
     if (!(T >= 17 * 60 + 30 || T < 6 * 60 + 30)) return;
     for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) { hz(h.x - 4.5, h.y + HM.HOUSE.hd + 2, 12, 34, 0.9); hz(h.x + 4.5, h.y + HM.HOUSE.hd + 2, 12, 34, 0.9); }
   }
-  const api = { mount, sync, ground, blocks, lights, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };
+  const inYard = (x, y) => feet().some(({ L }) => x > L.foot[0] - 3 && x < L.foot[2] + 3 && y > L.foot[1] - 3 && y < L.foot[3] + 3);
+  const api = { mount, sync, inYard, ground, blocks, lights, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };
   root.PFHomeArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

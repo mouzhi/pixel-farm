@@ -1640,7 +1640,7 @@ const pierDeck = buildModel(14, 16, 4, Object.assign((x, y, z) => {
   for (let y = r.pier.y; y <= r.fish.stand.y + 4; y += 8) { const p = addProp(pierDeck, r.pier.x, y, 0, { pier: 1 }); list.push(p);
     if (y > r.pier.y) { SEA_SOLIDS.push({ x: r.pier.x - 6, y, r: 2 }); SEA_SOLIDS.push({ x: r.pier.x + 6, y, r: 2 }); } } } }
 // v5.5.0: the outer ring's props (expansion.js): cliffs, the bridge, wheels, the town, plot fences and signs, the modules
-const XPM = XP.mount({ S, buildModel, gableY, addProp, addTree, props, billboards, decals, regionProps, models, treeDefs, mulberry32, SIGN, LOCK, SPRITES, pierDeck, barrelModel, crateModel, logsModel,
+const XPM = XP.mount({ S, inHomeYard: (x, y) => !!(HA && HA.inYard(x, y)), buildModel, gableY, addProp, addTree, props, billboards, decals, regionProps, models, treeDefs, mulberry32, SIGN, LOCK, SPRITES, pierDeck, barrelModel, crateModel, logsModel,
   stackCanvas, ASTEP, cam, manual: MANUAL, tiles, FARMER, log: m => log(m), popText: (...a) => popText(...a), burst: (...a) => burst(...a), emit: (...a) => emit(...a), applyUpgrades: () => applyUpgrades(), saveNow: () => saveNow(), woodCap: () => woodCap(),
   plotBusy: id => worksBusy(id), treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
 // ---------- the pasture (v4.5): coop, shed, trough, hay; animals are billboards that wander slowly ----------
@@ -2321,7 +2321,7 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
   const jobs = homeJobs(h);
   if (jobs.length) { let best = null, bd = 1e9; for (const j of jobs) { const p = j.t || j.at, d = Math.hypot(p.x - F.x, p.y - F.y) + (j.k === 'harvest' ? -20 : j.k === 'water' ? -10 : 0); if (d < bd) { bd = d; best = j; } }
     F.idleCount = 0; return homeJobTask(h, best); }
-  if (!sp && HM.helpNow(help, { T, own: 0, backlog: mainBacklog() }, S.day, hr)) { const n = help && help.day === S.day ? help.n + 1 : 1;
+  if (!sp && HM.helpNow(help, { T, own: 0, backlog: mainBacklog(), helpDay: homeDayRng(0x4E1 + kidSalt(kid))() < HM.HELP.dayP }, S.day, hr)) { const n = help && help.day === S.day ? help.n + 1 : 1;
     S.home.help[kid] = { day: S.day, n, last: T, until: Math.min(1440, T + HM.HELP.minutes) }; log(`${F.name}从新房子过来帮一会儿忙`); return null; }
   F.idleCount = (F.idleCount || 0) + 1;
   if (F.idleCount % 3 === 0) { const t = h._tiles && h._tiles[Math.floor(hr() * h._tiles.length)]; if (t) return { kind: 'idle', label: '在自家小田边转转', to: { x: t.x + (hr() - 0.5) * 6, y: t.y + 6 }, dur: 10 }; }

@@ -121,13 +121,15 @@
   function teenVisit(ctx, r) { if (ctx.rain || ctx.party) return false; if ((ctx.last | 0) > 0 && ctx.day - ctx.last < TEEN.gap) return false; return r() < TEEN.p; }
 
   // ---------- their little farm ----------
-  const HELP = { perDay: HS.helpPerDay, minutes: HS.helpMinutes, from: 9 * 60, to: 16 * 60, gap: 120, backlog: 6, p: 0.25 };
-  // ctx: { T, backlog (ripe + dry tiles on the main farm), own (jobs waiting at home), rain }, h: { day, n, last }, day
+  // about every other day (dayP, rolled once a morning) they come over for an hour; a second hour that day only when the main
+  // farm is behind (backlog: ripe + dry tiles there), never while their own tiles need them
+  const HELP = { perDay: HS.helpPerDay, minutes: HS.helpMinutes, from: 9 * 60, to: 16 * 60, gap: 120, backlog: 6, p: 0.25, dayP: 0.5 };
+  // ctx: { T, backlog, own (jobs waiting at home), helpDay (today's roll < dayP) }, h: { day, n, last }, day
   function helpNow(h, ctx, day, r) {
-    if (ctx.own > 0 || ctx.T < HELP.from || ctx.T >= HELP.to) return false;
+    if (!ctx.helpDay || ctx.own > 0 || ctx.T < HELP.from || ctx.T >= HELP.to) return false;
     const n = h && h.day === day ? h.n | 0 : 0; if (n >= HELP.perDay) return false;
-    if (h && h.day === day && ctx.T - (h.last | 0) < HELP.gap) return false;
-    return ctx.backlog >= HELP.backlog || r() < HELP.p;
+    if (n && ctx.T - (h.last | 0) < HELP.gap) return false;
+    return n ? ctx.backlog >= HELP.backlog : ctx.backlog >= HELP.backlog || r() < HELP.p;
   }
 
   // ---------- state ----------
