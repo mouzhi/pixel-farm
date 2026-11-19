@@ -3625,26 +3625,42 @@ function pixText(s, x, y, col, sc = 1) {
       if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); }
 }
 function dayLight(T) { const h = T / 60; if (h >= 6.3 && h < 17.5) return 0; if (h >= 17.5 && h < 20.5) return (h - 17.5) / 3; if (h >= 20.5 || h < 4.5) return 1; return Math.max(0, 1 - (h - 4.5) / 1.8); }
-function drawSunsetWash(ctx, T, realT) { // v5.10.8: one warm gradient on the sky and sea, plus a few glints (deck must be up)
-  const a = Math.max(0, Math.min(1, 1 - Math.abs((T / 60) - 18) / 1.05));
+function sunsetFade(T) { // v5.10.8: 0 at 17:00, full by 17:20, full until 18:40, 0 at 19:00 (smoothstep edges)
+  const t = ((T % 1440) + 1440) % 1440, from = 17 * 60, to = 19 * 60, edge = 20;
+  if (t < from || t >= to) return 0;
+  if (t < from + edge) { const u = (t - from) / edge; return u * u * (3 - 2 * u); }
+  if (t > to - edge) { const u = (to - t) / edge; return u * u * (3 - 2 * u); }
+  return 1;
+}
+function drawSunsetWash(ctx, T, realT) { // v5.10.8: one full-viewport gradient (no box edge) + orange-pink on the sea's own pixels
+  const a = sunsetFade(T);
   if (a <= 0) return;
-  const sky = ctx.createLinearGradient(0, 0, 0, H * 0.45);
-  sky.addColorStop(0, `rgba(255, 140, 60, ${0.28 * a})`);
-  sky.addColorStop(0.55, `rgba(255, 180, 100, ${0.16 * a})`);
-  sky.addColorStop(1, `rgba(255, 220, 160, 0)`);
-  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H * 0.5);
-  const box = typeof seaBox === 'function' ? seaBox() : null; // seaBox returns [x, y, w, h]
-  const x0 = box ? +box[0] : 0, y0 = box ? +box[1] : (H * 0.55), bw = box ? +box[2] : W, bh = box ? +box[3] : (H * 0.4);
-  if ([x0, y0, bw, bh].every(Number.isFinite) && bw > 0 && bh > 0) {
-    const sea = ctx.createLinearGradient(x0, y0, x0, y0 + bh);
-    sea.addColorStop(0, `rgba(255, 160, 70, ${0.42 * a})`);
-    sea.addColorStop(1, `rgba(255, 110, 45, ${0.16 * a})`);
-    ctx.fillStyle = sea; ctx.fillRect(x0, y0, bw, bh);
-    ctx.fillStyle = `rgba(255, 230, 160, ${0.7 * a})`;
-    for (let i = 0; i < 8; i++) {
-      const px = x0 + ((i * 47 + ((realT * 13) | 0)) % bw);
-      const py = y0 + 4 + ((i * 29) % Math.max(1, bh - 8));
-      if (((realT * 2 + i) % 2) < 1.2) ctx.fillRect(px, py, 2, 1);
+  const sky = ctx.createLinearGradient(0, 0, 0, H);
+  sky.addColorStop(0, `rgba(255, 118, 48, ${0.36 * a})`);
+  sky.addColorStop(0.3, `rgba(255, 150, 90, ${0.18 * a})`);
+  sky.addColorStop(0.55, `rgba(255, 170, 130, ${0.08 * a})`);
+  sky.addColorStop(0.78, `rgba(255, 140, 120, ${0.07 * a})`);
+  sky.addColorStop(1, `rgba(255, 110, 105, ${0.05 * a})`);
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
+  const Gm = WG && WG.sea;
+  if (Gm && Gm.n && Gm.mask) {
+    const { bx, by, bw, bh, mask, far, pondH } = Gm, img = ctx.getImageData(bx, by, bw, bh), d = img.data, N = bw * bh, depth = pondH || bh;
+    for (let i = 0; i < N; i++) if (mask[i]) {
+      const x = i % bw, y = (i / bw) | 0, row = far[x] >= 0 ? y - far[x] : 0;
+      const farAmt = Math.max(0, Math.min(1, 1 - row / Math.max(1, depth * 0.55))); // horizon / far water reflects more of the sky
+      const amt = a * (0.38 + 0.44 * farAmt), p = i * 4;
+      const tr = 255, tg = 118 + 78 * farAmt, tb = 138 - 18 * farAmt; // far: peach-orange; near: rose-pink
+      d[p] += (tr - d[p]) * amt; d[p + 1] += (tg - d[p + 1]) * amt; d[p + 2] += (tb - d[p + 2]) * amt;
+    }
+    ctx.putImageData(img, bx, by);
+    const skyPix = Gm.sky || [];
+    if (skyPix.length) {
+      ctx.fillStyle = `rgba(255, 210, 170, ${0.8 * a})`;
+      for (let i = 0; i < 10; i++) {
+        if (((realT * 2 + i) % 2) >= 1.2) continue;
+        const idx = skyPix[(i * 47 + ((realT * 13) | 0)) % skyPix.length];
+        ctx.fillRect(bx + (idx % bw), by + ((idx / bw) | 0), 2, 1);
+      }
     }
   }
 }
@@ -4696,7 +4712,7 @@ Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pa
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
   NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
-Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask() }); // v5.9.0 test hooks; v5.10.6 careers; v5.10.7 inn; v5.10.8 resort
+Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask(), sunsetFade: T => sunsetFade(T) }); // v5.9.0 test hooks; v5.10.6 careers; v5.10.7 inn; v5.10.8 resort
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1

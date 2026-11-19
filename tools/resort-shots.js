@@ -107,12 +107,33 @@ fs.mkdirSync(OUT, { recursive: true });
     }
     f.advance(0.3, 10); look(L.deck.x, L.deck.y, 0); hide();
     const sitting = (f.STAYS || []).filter(g => g.what === 'sunset');
-    return { t: S.t % 1440, deck: S.inn.resort.deck, sunset: f.IN.isSunset(S.t), sitting: sitting.length, stays: (f.STAYS || []).length, props: (f.props || []).filter(q => q.deck).length }; })()`,
+    return { t: S.t % 1440, deck: S.inn.resort.deck, sunset: f.IN.isSunset(S.t), fade: f.sunsetFade(S.t), sitting: sitting.length, stays: (f.STAYS || []).length, props: (f.props || []).filter(q => q.deck).length }; })()`,
     r => r.t < 17 * 60 || r.t >= 19 * 60 ? 'not sunset hour ' + r.t
       : !r.sunset ? 'isSunset false'
       : r.deck !== 1 ? 'no deck'
       : r.props < 1 ? 'no deck prop'
       : r.sitting < 1 ? 'no one on the deck'
+      : (typeof r.fade === 'number' && r.fade < 0.9) ? 'fade not full at 18:00 ' + r.fade
+      : null);
+
+  // 2b. same hour, camera panned west onto the field / sea join — the wash must not show a box edge
+  await shot('v5108_sunset_pan.png', `(() => { ${setup} ${readyTown} ${zoneResort} ${raiseResort}
+    S.inn.arrived = 0; S.inn._morn = 0; f.innMorning();
+    at(13 * 60); dry();
+    until(() => (f.STAYS || []).some(g => g.stay === 'beach' && !g.inside), 700);
+    at(18 * 60);
+    const L = f.innResortLayout();
+    parkFam();
+    for (const s of (f.STAYS || []).filter(g => g.stay === 'beach' && !g.leaving)) {
+      const seat = L.deck.sit[(s.room | 0) % L.deck.sit.length];
+      s.pts = []; s.x = seat.x; s.y = seat.y; s.what = 'sunset'; s.task = { rest: 1 }; s.inside = false; s.moving = false;
+    }
+    f.advance(0.3, 10); look(L.deck.x - 52, L.deck.y + 6, 0.35); hide();
+    return { t: S.t % 1440, sunset: f.IN.isSunset(S.t), fade: f.sunsetFade(S.t), deck: S.inn.resort.deck, angle: 0.35 }; })()`,
+    r => r.t < 17 * 60 || r.t >= 19 * 60 ? 'not sunset hour ' + r.t
+      : !r.sunset ? 'isSunset false'
+      : r.deck !== 1 ? 'no deck'
+      : (typeof r.fade === 'number' && r.fade < 0.9) ? 'fade not full at 18:00 ' + r.fade
       : null);
 
   // 3. seafood stall (day, smoke)
