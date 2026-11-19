@@ -83,6 +83,15 @@ ok('sites: only bought 花甸/农田 on ordinary ground; the yard fits inside th
   const L = HM.layout({ x: 0, y: 0, m: 0 }), M = HM.layout({ x: 0, y: 0, m: 1 });
   assert.strictEqual(L.tiles.length, 6); assert(L.tiles.every((t, i) => t.x === -M.tiles[i].x), 'mirrored');
   assert(!L.tiles.some(t => HM.inBox(t, L.block)), 'tiles off the house');
+  // the house (20 x 14) is clearly bigger than the hen house and keeps clear of it, the tiles, the bench and the door inside the yard
+  for (const Q of [L, M]) { const area = b => (b[2] - b[0]) * (b[3] - b[1]);
+    assert(area(Q.block) >= 3 * area(Q.coopBlock), 'house well bigger than the hen house');
+    assert(!HM.boxHit(Q.block, Q.coopBlock, 2), 'hen house clear of the house');
+    assert(Q.tiles.every(t => !HM.boxHit(Q.block, [t.x - 4, t.y - 4, t.x + 4, t.y + 4], 1.5)), 'tiles clear of the house');
+    assert(!HM.inBox(Q.door, Q.block) && !HM.inBox(Q.bench, Q.block, 1) && Q.door.y > Q.block[3] + 2, 'door and bench out front');
+    for (const b of [Q.block, Q.coopBlock]) assert(b[0] >= Q.foot[0] && b[2] <= Q.foot[2] && b[1] >= Q.foot[1] && b[3] <= Q.foot[3], 'inside the yard');
+    assert(Q.tiles.every(t => t.x - 4 >= Q.foot[0] && t.x + 4 <= Q.foot[2]), 'tiles inside the yard'); }
+  assert.deepStrictEqual([HM.HOUSE.hw * 2, HM.HOUSE.hd * 2], [20, 14]);
 });
 ok('valid: clamps, unique sites, no shared spouse, a married child lives in their house', () => {
   const bad = { houses: [{ site: 'glade', x: -68, y: 160, built: 60, kid: 'kid0', tiles: [{ t: 1, c: { type: 'carrot', age: 2 } }, { c: { type: 'gold' } }] }, { site: 'glade', x: 0, y: 0 }, { site: 'nowhere', x: 0, y: 0 }],
