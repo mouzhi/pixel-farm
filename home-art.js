@@ -30,15 +30,19 @@
       if (r === 'fill') return Wd[4]; if (r) return r;
       if (x >= 4 && x <= 6 && y >= 6 && y <= 8 && z <= 25) return z >= 23 ? St[1] : St[2];                       // chimney
       return null; });
-    // being built: the footing, four corner posts, a top beam and a stack of planks
-    const frame = B(W2 + 4, D2 + 8, 16, (x, y, z) => { const X0 = 2, X1 = W2 + 1, Y0 = 2, Y1 = D2 + 1;
-      if (z === 0 && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) return (x === X0 || x === X1 || y === Y0 || y === Y1) ? St[1] : St[2];
-      const post = (x === X0 || x === X1) && (y === Y0 || y === Y1);
-      if (post && z <= 11) return Wd[1];
-      if (z === 11 && (x === X0 || x === X1) && y >= Y0 && y <= Y1) return Wd[2];
-      if (z === 11 && (y === Y0 || y === Y1) && x >= X0 && x <= X1) return Wd[2];
-      if ((x === X0 || x === X1) && y === Y0 + 4 && z <= 11 && z >= 1 && z % 2) return Wd[2];
-      if (y >= Y1 + 3 && y <= Y1 + 5 && x >= 18 && x <= 26 && z <= 3) return z === 3 ? Wd[4] : Wd[3];             // planks
+    // being built: a stone footing, the first log courses on the back and sides, corner and door posts, the top beams and two
+    // rafters, a stack of logs and planks out front (so it reads as a house going up, not a fence)
+    const frame = B(W2 + 4, D2 + 8, 20, (x, y, z) => { const X0 = 2, X1 = W2 + 1, Y0 = 2, Y1 = D2 + 1, cx = (X0 + X1) / 2;
+      const inside = x >= X0 && x <= X1 && y >= Y0 && y <= Y1, edge = x === X0 || x === X1 || y === Y0 || y === Y1;
+      if (inside && z <= 1) return edge ? (z ? St[2] : St[1]) : (z ? null : St[2]);
+      const post = (x === X0 || x === X1) && (y === Y0 || y === Y1), doorPost = y === Y1 && (x === 12 || x === 17);
+      if ((post || doorPost) && z <= 11) return Wd[1];
+      if (inside && edge && y !== Y1 && z >= 2 && z <= 5) return z % 3 === 0 ? Wd[2] : Wd[3];                  // first log courses
+      if (z === 11 && inside && edge) return Wd[2];                                                         // top beams
+      if ((y === Y0 || y === Y1) && z >= 12 && z <= 17 && Math.abs(x - cx) === (17 - z) * 1.5) return Wd[1];   // rafters
+      if ((y === Y0 || y === Y1) && z >= 12 && z <= 17 && Math.abs(Math.abs(x - cx) - (17 - z) * 1.5) < 0.6) return Wd[1];
+      if (y >= Y1 + 3 && y <= Y1 + 5 && x >= 18 && x <= 26 && z <= 3) return z === 3 ? Wd[4] : Wd[3];          // planks
+      if (y >= Y1 + 3 && y <= Y1 + 5 && x >= 3 && x <= 10 && z <= 2 && !(z === 2 && y === Y1 + 4)) return (x === 3 || x === 10) ? Wd[1] : Wd[2]; // logs
       return null; });
     // a little hen house: plank walls, a sloped roof, a round door and a ramp
     const coop = B(18, 12, 14, (x, y, z) => { const X0 = 1, X1 = 16, Y0 = 1, Y1 = 9;

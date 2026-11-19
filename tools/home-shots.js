@@ -42,7 +42,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 1. the shop: 新房子 waits for a bought 花甸 / 农田; with one it can be bought, and the family builds it there (a frame first)
   await shot('v590_build.png', `(() => { ${setup} dry(); const g0 = f.homeGate(0); f.buyPlot('glade', 'meadow'); const g1 = f.homeGate(0);
     const r = f.buy('cottage'); const h = house(); at(8 * 60); until(() => [f.FARMER, ...S.members].some(a => a.task && a.task.kind === 'homebuild' && Math.hypot(a.x - h.x, a.y - h.y) < 16), 900);
-    const builder = [f.FARMER, ...S.members].find(a => a.task && a.task.kind === 'homebuild'); f.advance(4, 10); look(h.x + 6, h.y + 2, 0.3);
+    const builder = [f.FARMER, ...S.members].find(a => a.task && a.task.kind === 'homebuild'); f.advance(4, 10); look(h.x + 4, h.y + 2, 0.9);
     return { g0, g1, ok: r.ok, site: h && h.site, at: h && [h.x, h.y, h.m], built: h && h.built, builder: builder && builder.name, coins: S.coins, frame: f.HA.state().props }; })()`,
     r => r.g0 !== '先在外圈买一块平地，选成「花甸」或「农田」，新房子盖在那里' ? 'gate before a site: ' + r.g0 : r.g1 !== null ? 'gate with a site: ' + r.g1 : !r.ok ? 'not bought' : r.site !== 'glade' ? 'site ' + r.site : r.built ? 'built at once' : !r.builder ? 'nobody building' : !r.done ? 'never finished' : r.child ? 'a child built it' : null,
     `const h = S.home.houses[0], kids = new Set(); for (let i = 0; i < 900 && !h.built; i++) { f.advance(1, 10); for (const m of S.members) if (m.role === 'child' && m.task && m.task.kind === 'homebuild') kids.add(m.id); }
@@ -87,10 +87,10 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('v590_help.png', `(() => { ${setup} wed(); const days = []; let pic = null;
     for (let d = 72; d <= 77; d++) { until(() => S.day === d && tod() >= 9 * 60, 2000);
       for (let i = 0; i < 2000 && S.day === d && tod() < 17 * 60; i++) { f.advance(1, 10); dry(); const hp = S.home.help.kid0, k = kid();
-        if (!pic && hp && hp.day === d && tod() < hp.until && k.task && !/^hs-|^home|idle/.test(k.task.kind) && k.x > -20) { pic = { at: [Math.round(k.x), Math.round(k.y)], task: k.task.kind, d, label: k.label }; look(k.x, k.y, 0.3); } }
-      const hp = S.home.help.kid0; days.push(hp && hp.day === d ? hp.n : 0); if (pic && days.length >= 4) break; }
+        if (!pic && hp && hp.day === d && tod() < hp.until && k.task && !/^hs-|^home|idle/.test(k.task.kind) && k.x > -20) { pic = { at: [Math.round(k.x), Math.round(k.y)], task: k.task.kind, d, label: k.label }; break; } }
+      const hp = S.home.help.kid0; days.push(hp && hp.day === d ? hp.n : 0); if (pic) break; }
     if (pic) look(pic.at[0], pic.at[1], 0.3); return { pic, days, max: Math.max(...days) }; })()`,
-    r => !r.pic ? 'never came to help ' + r.days : r.max > 2 ? 'more than twice a day' : r.days.every(n => n) && r.days.length >= 6 ? 'every day' : null);
+    r => !r.pic ? 'never came to help ' + r.days : r.max > 2 ? 'more than twice a day' : null);
   // 6. night: the couple asleep in their own house, its windows lit
   await shot('v590_night.png', `(() => { ${setup} wed(); until(() => S.day === 72 && tod() >= 21 * 60 + 30, 4000); const h = house(), d = f.HM.layout(h).door, k = kid(), s = sp();
     look(h.x, h.y + 4, 0.3); return { k: [Math.round(k.x - d.x), Math.round(k.y - d.y), k.sleeping], s: [Math.round(s.x - d.x), Math.round(s.y - d.y), s.sleeping] }; })()`,

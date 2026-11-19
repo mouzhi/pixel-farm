@@ -2241,10 +2241,10 @@ const homeBusy = id => S.home.houses.some(h => h.site === id) ? '这块地上有
 // ---- building it: a grown-up goes over and puts it up (about 40 game minutes) ----
 function homeBoard(post) {
   S.home.houses.forEach((h, i) => { if (h.built) return; const L = HM.layout(h);
-    post('homebuild', 62, { x: L.door.x + 3, y: L.door.y + 1 }, () => homeBuildTask(i), 'home:build:' + i); });
+    post('homebuild', 62, { x: h.x + (h.m ? -10 : 10), y: h.y + 3 }, () => homeBuildTask(i), 'home:build:' + i); });
 }
 function homeBuildTask(i) { const h = S.home.houses[i], L = HM.layout(h);
-  return { kind: 'homebuild', label: '正在盖新房子', to: { x: L.door.x + 3, y: L.door.y + 1 }, dur: HM.HOUSE.build, fx: 'wood', pose: 'hoe', done: () => {
+  return { kind: 'homebuild', label: '正在盖新房子', to: { x: h.x + (h.m ? -10 : 10), y: h.y + 3 }, dur: HM.HOUSE.build, fx: 'wood', pose: 'hoe', done: () => {
     if (!h || h.built) return; h.built = S.day; homeTilesSync(); if (HOME_ON) HA.sync(true); markNavDirty();
     burst(h.x, h.y, 26, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); log(`${PL.plot(h.site).name}的新房子盖好了，旁边留了 6 格小田和一个小鸡舍`); noteProgress(); } };
 }
