@@ -93,4 +93,12 @@ ok('locked and hidden steps wait; chickens need the coop', () => {
   const noCoop = Object.assign({}, u, { coop: 0 }); // what if the list ever reached a chicken without a coop
   const p = SIM.autoPick(Object.assign(noCoop, { coop: 0 }), 5000, 0, earn); assert.strictEqual(p.id, 'coop');
 });
+ok('only basics: never decor, plots, buildings, or the town hall (projects, gifts)', () => {
+  const BASIC = new Set(['field', 'can', 'shoe', 'hoe', 'basket', 'coop', 'chicken', 'strawberry']);
+  for (const id of SIM.AUTO_BUY) { assert.ok(BASIC.has(id), id); assert.ok(SIM.SHOP_IDS.includes(id), id + ' is a shop item'); }
+  // walk the whole list with endless money: every pick is a list step, and after the list nothing more
+  const u = up0(); let k = 0;
+  for (let p; (p = SIM.autoPick(u, 1e9, 1e6, [])).id; k++) { assert.ok(BASIC.has(p.id)); assert.ok(!/^(hall|plot|town)/.test(p.id)); u[p.id] = (u[p.id] | 0) + 1; assert.ok(k < 30); }
+  assert.strictEqual(k, SIM.AUTO_BUY.length); assert.strictEqual(SIM.autoPick(u, 1e9, 1e6, []).why, 'done');
+});
 console.log(`\n${n} passed`);
