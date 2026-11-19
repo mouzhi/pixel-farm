@@ -174,7 +174,7 @@ ok('index.html scripts are cache-busted with the current version', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
   assert(scripts.length >= 20, 'scripts ' + scripts.length);
-  for (const s of scripts) assert(/\?v=5\.9\.1$/.test(s), 'missing cache bust: ' + s);
+  for (const s of scripts) assert(/\?v=5\.9\.2$/.test(s), 'missing cache bust: ' + s);
   assert(html.indexOf('v5.9.2') >= 0);
 });
 

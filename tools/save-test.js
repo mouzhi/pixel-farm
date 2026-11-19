@@ -49,7 +49,7 @@ ok('reset keeps one copy of the old save', () => {
 ok('v1 -> current: nothing bought, 1x speed, farm and gold kept, yard left to seed', () => {
   const v1 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), s = SAVE.migrate(v1);
   assert.strictEqual(v1.saveVersion, 1); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
-  assert.deepStrictEqual(s.upgrades, SIM.emptyUpgrades()); assert.deepStrictEqual(s.settings, { speed: 1 });
+  assert.deepStrictEqual(s.upgrades, SIM.emptyUpgrades()); assert.deepStrictEqual(s.settings, { speed: 1, autoBuy: false, autoDay: 0, autoN: 0 }); assert.deepStrictEqual(s.offline, { win: [] });
   assert.strictEqual(s.coins, v1.coins); assert.strictEqual(s.clock.day, v1.clock.day); assert.strictEqual(s.tiles.length, v1.tiles.length);
   assert.deepStrictEqual(s.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]), v1.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]));
   assert.strictEqual(s.inventory.store.carrot, v1.inventory.store.carrot); assert.strictEqual(s.inventory.store.watermelon, 0);
