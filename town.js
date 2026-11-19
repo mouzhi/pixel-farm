@@ -12,7 +12,7 @@
   const STRIP = [448, -208, 640, 384];                     // the strip the map grew by
   const GATE = P(440, 66);                                 // the gate at the end of 东大道 (the old one, now with a town behind it)
   // streets are routes: painted as dirt and walked like the farm lanes
-  const STREETS = { t_main: [P(436, 66), P(626, 66)], t_north: [P(540, 66), P(540, 52)], t_south: [P(524, 66), P(524, 132)], t_school: [P(590, 66), P(590, 46)], t_shop: [P(492, 66), P(492, 52)] };
+  const STREETS = { t_main: [P(436, 66), P(626, 66)], t_north: [P(540, 66), P(540, 52)], t_south: [P(524, 66), P(524, 132)], t_school: [P(590, 66), P(590, 46)], t_shop: [P(492, 66), P(492, 52)], t_hall: [P(518, 66), P(518, 44)] }; // t_hall: v5.10.0
   // buildings: centre, half size (world units, 8 = one farm tile), door (where people stand), rot (0: door to the south)
   const BUILDINGS = [
     { id: 'shop', name: '镇上小店', kind: 'shop', x: 492, y: 36, hw: 13, hd: 8, door: P(492, 50), rot: 0 },
@@ -21,7 +21,8 @@
     { id: 'h2', name: '周婶家', kind: 'house', x: 486, y: 106, hw: 6, hd: 5, door: P(486, 96), rot: Math.PI, roof: 0 },
     { id: 'h3', name: '阿松家', kind: 'house', x: 568, y: 108, hw: 6, hd: 5, door: P(568, 98), rot: Math.PI, roof: 2 },
     { id: 'h4', name: '小桃家', kind: 'house', x: 606, y: 112, hw: 6, hd: 5, door: P(606, 102), rot: Math.PI, roof: 0 },
-    { id: 'h5', name: '民居', kind: 'house', x: 460, y: 20, hw: 6, hd: 5, door: P(460, 30), rot: 0, roof: 2 },
+    { id: 'h5', name: '镇长家', kind: 'house', x: 460, y: 20, hw: 6, hd: 5, door: P(460, 30), rot: 0, roof: 2 },
+    { id: 'hall', name: '镇公所', kind: 'hall', x: 518, y: 28, hw: 10, hd: 8, door: P(518, 40), rot: 0 }, // v5.10.0: the notice board is by its door (hall.js)
   ];
   const BY_ID = Object.fromEntries(BUILDINGS.map(b => [b.id, b]));
   const PLAZA = { x: 524, y: 98, r: 15 };                  // a cobbled square with a fountain where the south street meets

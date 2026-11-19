@@ -16,6 +16,7 @@ const WX = window.PFWeather, INS = window.PFInsects; // v5.4.3: light rain and i
 const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
 const PL = window.PFPlots, XP = window.PFExpand; // v5.5.0: the outer ring (plots.js rules, expansion.js art)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
+const HL = window.PFHall; // v5.10.0: 镇公所, the board's projects, gifts to the town (hall.js rules; art in town-art.js)
 const TN = window.PFTown, TA = window.PFTownArt, WORLD55 = WD.WORLD55 || WORLD; // v5.8.0 phase 10: the town east of 东大道 (town.js rules, town-art.js art)
 if (TN) for (const k in TN.STREETS) if (!WD.ROUTES[k]) WD.ROUTES[k] = TN.STREETS[k]; // the town's streets are routes like the farm lanes
 const HM = window.PFHome, HA = window.PFHomeArt; // v5.9.0 phase 11: closeness, the new house, the married children's little farms (home.js rules, home-art.js art)
@@ -612,7 +613,7 @@ const S = {
   plots: {}, // v5.5.0: bought plots of the outer ring: id -> { mod, day }
   decor: DC.empty(), // v5.7.0: decorations, carrying orders, the party (saved as `decor`)
   home: HM ? HM.empty() : null, // v5.9.0: the new houses, who is close to whom, the weddings (saved as `home`)
-  town: TN.empty(), // v5.8.0: school days, days off, classmates' visits, what the town shop paid extra (saved as `town`)
+  town: Object.assign(TN.empty(), { hall: HL.empty() }), // v5.8.0; v5.10.0: + hall: school days, days off, classmates' visits, what the town shop paid extra (saved as `town`)
   works: PW.empty(), // v5.6.0: sprinklers, workshops, hives, the second pens' plot (saved as `works`)
 };
 Object.assign(S.prices, { egg: 1, wool: 1, milk: 1, truffle: 1 }); // animal products drift like crops
@@ -636,7 +637,7 @@ function navState() {
   return {
     houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
-    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : [], DECOR_ON ? DA.blocks() : [], TN ? TN.blocks(!!(S.eff && S.eff.town)) : [], HOME_ON ? HA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops
+    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : [], DECOR_ON ? DA.blocks() : [], TN ? TN.blocks(!!(S.eff && S.eff.town)) : [], TN && HL && S.eff && S.eff.town ? HL.blocks(S.town.hall) : [], HOME_ON ? HA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops
     rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze)
   };
 }
@@ -2156,13 +2157,54 @@ function visitorTick(dm) {
 const NEIGH = [];
 function neighbourTick(dm) {
   if (!townOpen()) { NEIGH.length = 0; return; }
-  if (!NEIGH.length) for (const n of TN.NEIGHBOURS) { const h = TN.BY_ID[n.home].door; NEIGH.push({ id: n.id, name: n.name, def: n, look: n.look, x: h.x, y: h.y, fx: 0, fy: 1, pts: [], spot: 'home', out: false, moving: false }); }
+  const defs = HL ? TN.NEIGHBOURS.concat(HL.residents(S.town.hall)) : TN.NEIGHBOURS; // v5.10.0: 镇长, and a family for every new house
+  if (NEIGH.length !== defs.length) for (const n of defs) if (!NEIGH.some(g => g.id === n.id)) { const h = HL ? HL.doorOf(n) : TN.BY_ID[n.home].door; NEIGH.push({ id: n.id, name: n.name, def: n, look: n.look, x: h.x, y: h.y, fx: 0, fy: 1, pts: [], spot: 'home', out: false, moving: false }); }
   const T = S.t % 1440;
-  for (const g of NEIGH) { if (GUESTS.some(q => q.look === g.look)) { if (g.out) { g.out = false; g.spot = 'party'; g.pts.length = 0; const h = TN.BY_ID[g.def.home].door; g.x = h.x; g.y = h.y; } continue; } // tonight they are the party guests
-    const w = TN.neighbourAt(g.def, T);
+  for (const g of NEIGH) { if (GUESTS.some(q => q.look === g.look)) { if (g.out) { g.out = false; g.spot = 'party'; g.pts.length = 0; const h = HL ? HL.doorOf(g.def) : TN.BY_ID[g.def.home].door; g.x = h.x; g.y = h.y; } continue; } // tonight they are the party guests
+    const w = hallSite(g, T) || (HL ? HL.neighbourAt(g.def, T) : TN.neighbourAt(g.def, T));
     if (w.spot !== g.spot) { g.spot = w.spot; g.out = true; g.pts = routeVia(g, w.at).concat([{ x: w.at.x, y: w.at.y }]); }
     if (g.pts.length) guestStep(g, dm); else { g.moving = false; if (g.spot === 'home') g.out = false; } }
 }
+// ---- v5.10.0 镇公所: the board's projects (a house a night), gifts to the town, the weekly paper ----
+function hallSite(g, T) { // 木匠阿松 is on the building site while a house goes up
+  const J = HL && S.town.hall.job; if (!J || g.id !== 'n2' || T < HL.BUILD_HOURS[0] || T >= HL.BUILD_HOURS[1]) return null;
+  return { at: HL.siteSpot(J.id), out: true, spot: 'site:' + J.id }; }
+const hallCtx = () => ({ open: townOpen(), coins: S.coins, wood: FARMER.wood });
+function hallStart(id) {
+  const H = S.town.hall, why = HL.canStart(H, id, hallCtx()); if (why) return { ok: false, why };
+  const p = HL.PROJ[id]; S.coins -= p.cost; FARMER.wood -= p.wood; HL.start(H, id, S.day); emit('purchase', { item: 'hall:' + id, level: 1, gold: p.cost, wood: p.wood, who: 'player' });
+  const l = HL.LOT[id]; burst(l.x, l.y, 14, [Wd[3], Wd[4], '#fff2a8'], 8); markNavDirty(); if (TOWN_ON) TA.sync(true);
+  log(`镇公所的告示板：${p.name}开工了，木匠阿松搭起脚手架，明天一早就能盖好`); return { ok: true }; }
+function hallGive(id, u) { // 送给镇上: from the storehouse (u undefined) or from the yard (u: the placed one)
+  const H = S.town.hall; if (!townOpen()) return { ok: false, why: '先把镇子买下来' }; if (!HL.GIFT_OK(id)) return { ok: false, why: '派对区留在家里' };
+  if (!HL.giftSpot(H)) return { ok: false, why: '主街上已经摆满了' };
+  if (u === undefined) { if (!((S.decor.inv[id] | 0) > 0)) return { ok: false, why: '仓库里没有' }; S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id]; }
+  else { const i = S.decor.placed.findIndex(p => p.u === u && p.id === id); if (i < 0) return { ok: false, why: '找不到它' }; S.decor.placed.splice(i, 1); S.decor.orders = S.decor.orders.filter(q => q.ref !== u); }
+  HL.give(H, id); H.week.gifts++; markNavDirty(); if (TOWN_ON) TA.sync(true);
+  log(`把一件${DC.CATALOG[id].name}送给了镇上，摆在主街边`); return { ok: true }; }
+function hallTick() {
+  if (!HL || !townOpen()) return; const H = S.town.hall;
+  if (!H.paper) H.paper = S.day; // the paper starts counting the week the town opens
+  const lv0 = HL.prosperity(H), done = HL.finish(H, S.day);
+  if (done) { const p = HL.PROJ[done], l = HL.LOT[done], who = HL.NEIGHBOURS.find(n => n.id === p.who); H.week.built.push(done); markNavDirty(); if (TOWN_ON) TA.sync(true);
+    burst(l.x, l.y - 6, 20, ['#fff2a8', '#ffd76a', Wd[4]], 14); log(`镇上的${p.name}盖好了${who ? '，' + who.name + '一家搬了进来' : ''}`);
+    const lv = HL.prosperity(H); if (lv > lv0) log(`镇子的繁荣度升到 ${lv}（${HL.LV_NAME[lv]}）`); }
+  if (S.day - H.paper >= HL.PAPER_EVERY && S.t % 1440 >= WAKE + 60) {
+    log(HL.paperText({ day: S.day, built: H.week.built, gifts: H.week.gifts, trade: H.week.trade, lv: HL.prosperity(H), people: TN.NEIGHBOURS.length + HL.residents(H).length }));
+    H.paper = S.day; H.week = { built: [], gifts: 0, trade: 0 }; }
+}
+function hallTap(w) { // v5.10.0: a click on the notice board (or the hall's door) opens the board
+  if (!HL || !townOpen()) return false; setCam();
+  for (const [x, y, r] of [[HL.BOARD.x, HL.BOARD.y, 12], [HL.HALL.door.x, HL.HALL.door.y - 6, 14]]) { const [sx, sy] = proj(x, y); if (Math.hypot(sx - w.px, sy - (w.py + 6)) < r) return true; }
+  return false; }
+function hallView() { // what the board shows (ui.js)
+  const H = S.town.hall, ctx = hallCtx(), placed = {};
+  for (const p of S.decor.placed) if (HL.GIFT_OK(p.id)) (placed[p.id] = placed[p.id] || []).push(p.u);
+  return { open: ctx.open, lv: HL.prosperity(H), lvName: HL.LV_NAME[HL.prosperity(H)], next: HL.nextLevelAt(H), job: H.job, people: TN.NEIGHBOURS.length + HL.residents(H).length,
+    projects: HL.PROJECTS.map(p => ({ id: p.id, name: p.name, desc: p.desc, cost: p.cost, wood: p.wood, built: H.built[p.id] || 0, building: !!(H.job && H.job.id === p.id), why: HL.canStart(H, p.id, ctx) })),
+    gifts: H.gifts.slice(), room: HL.GIFT_SPOTS.length - H.gifts.length,
+    inv: Object.keys(S.decor.inv).filter(id => HL.GIFT_OK(id) && S.decor.inv[id] > 0).map(id => ({ id, name: DC.CATALOG[id].name, n: S.decor.inv[id] })),
+    placed: Object.keys(placed).map(id => ({ id, name: DC.CATALOG[id].name, n: placed[id].length, u: placed[id][placed[id].length - 1] })) }; }
 // ---- the town shop: a grown-up takes workshop goods, honey and fish over at a fifth more ----
 const tradeOk = a => townOpen() && (!a.role || FAM.canDo(a.role, 'towntrade')) && a.role !== 'child';
 const tradeList = a => a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && TN.tradeable(o.ty, FS.isFish(o.ty)));
@@ -2179,12 +2221,12 @@ function tradeTask() {
     const list = tradeList(F); if (!list.length) return; let sum = 0, base = 0; const by = { crops: 0, fruit: 0, animals: 0, fish: 0, wood: 0 };
     for (const o of list) { const g = priceOfAny(o.it), p = TN.tradePrice(g); base += g; sum += p; if (FS.isFish(o.ty)) { by.fish += p; S.fishGold = (S.fishGold || 0) + p; } else if (AN.PRODUCTS[o.ty]) by.animals += p; else by.crops += p; }
     const gone = new Set(list.map(o => o.i)), left = F.crops.filter((_, i) => !gone.has(i)); F.crops.length = 0; F.crops.push(...left);
-    const n = list.length, extra = sum - base; S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; S.town.trade += extra; if (HM) homeTrade(); // v5.9.0: 周婶 gets to know the family
+    const n = list.length, extra = sum - base; S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; S.town.trade += extra; if (HL) S.town.hall.week.trade += extra; if (HM) homeTrade(); // v5.9.0: 周婶 gets to know the family
     emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]);
     popText(TN.SHOP_DOOR.x, TN.SHOP_DOOR.y - 8, 26, '+' + sum, '#ffd76a'); burst(TN.SHOP_DOOR.x, TN.SHOP_DOOR.y - 4, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
     log(`${F === FARMER ? '' : F.name}在镇上小店卖了 ${n} 件，得 ${sum} 金（比集市多 ${extra} 金）`); } };
 }
-function townTick(dm) { if (!TN) return; visitorTick(dm); neighbourTick(dm); if (TOWN_ON) TA.sync(); }
+function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); if (TOWN_ON) TA.sync(); }
 function townDraw(list) {
   for (const g of VISITORS) { const sh = famSheet(g.look, 6); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of NEIGH) if (g.out) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
@@ -2700,6 +2742,10 @@ const FAM_LOOK = {
   mateC: { '#4fa3cf': '#9a9ea0', '#2f6ea0': '#666a73', '#1f3d68': '#3e3f4c', '#a8432e': '#cf6a3c', '#7a2c24': '#a8432e' },
   townC: { '#4fa3cf': '#ecc27c', '#2f6ea0': '#d3984c', '#1f3d68': '#8a5530', '#a8432e': '#666a73', '#7a2c24': '#3e3f4c', '#8a5530': '#a8432e', '#5e3524': '#7a2c24' }, // v5.8.0 周婶
   townD: { '#4fa3cf': '#358a3c', '#2f6ea0': '#24603a', '#1f3d68': '#1c1626', '#a8432e': '#1c1626', '#7a2c24': '#3e3f4c', '#8a5530': '#666a73', '#5e3524': '#3e3f4c' }, // v5.8.0 林老师
+  townE: { '#4fa3cf': '#3e3f4c', '#2f6ea0': '#1c1626', '#1f3d68': '#1c1626', '#a8432e': '#9a9ea0', '#7a2c24': '#666a73', '#8a5530': '#3e3f4c', '#5e3524': '#1c1626' }, // v5.10.0 镇长老顾: dark coat, grey hair
+  townF: { '#4fa3cf': '#cf6a3c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#1c1626', '#7a2c24': '#1c1626', '#8a5530': '#e57fa0', '#5e3524': '#a8432e' }, // 裁缝阿梅
+  townG: { '#4fa3cf': '#2f6ea0', '#2f6ea0': '#1f3d68', '#1f3d68': '#1c1626', '#a8432e': '#5e3524', '#7a2c24': '#3b2219', '#8a5530': '#358a3c', '#5e3524': '#24603a' }, // 邮差阿川: postman's blue, green bag
+  townH: { '#4fa3cf': '#f6ecd0', '#2f6ea0': '#ecc27c', '#1f3d68': '#d3984c', '#a8432e': '#666a73', '#7a2c24': '#3e3f4c', '#8a5530': '#52af3a', '#5e3524': '#358a3c' }, // 花匠秋姨: cream smock, green apron
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
 };
 const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 8 (v5.8.1: the children's school look) (partner, father, two children x child / teen)
@@ -3491,7 +3537,7 @@ function takeDoorGift() {
   else log('把门口的树枝收起来了');
   S.doorGift = null;
 }
-const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (S.doorGift) { const [sx, sy] = (setCam(), proj(DOOR.x + 7, DOOR.y + 5)); if (Math.hypot(sx - w.px, sy - w.py) < 12) takeDoorGift(); } } } drag = null; document.body.classList.remove('grab'); };
+const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift) { const [sx, sy] = (setCam(), proj(DOOR.x + 7, DOOR.y + 5)); if (Math.hypot(sx - w.px, sy - w.py) < 12) takeDoorGift(); } } } drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
@@ -3560,7 +3606,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.9.1';
+const GAME_VERSION = '5.10.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -3631,7 +3677,7 @@ function snapshot() {
     log: S.log.slice(),
     plots: JSON.parse(JSON.stringify(S.plots || {})), // v5.5.0
     works: PW.valid(JSON.parse(JSON.stringify(S.works)), S.plots), // v5.6.0
-    town: TN.valid(S.town), // v5.8.0
+    town: Object.assign(TN.valid(S.town), { hall: HL ? HL.valid(S.town.hall) : undefined }), // v5.8.0; v5.10.0: + hall
     home: HM ? homeSave() : undefined, // v5.9.0
     decor: DC.valid(JSON.parse(JSON.stringify(S.decor))), // v5.7.0 (a carry half-way is not saved: the thing stays where it was)
   };
@@ -3664,7 +3710,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.family = Object.assign(FAM.empty(), JSON.parse(JSON.stringify(s.family || {}))); if (window.PFKids) PFKids.migrateFamily(S.family, S.day, s.members || []); S.members.length = 0; syncFamily(); // v5.0: everyone wakes at the door
   for (const m of S.members) { const o = (s.members || []).find(q => q.id === m.id); m.sleeping = FARMER.sleeping;
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
-  S.town = TN.valid(s.town); VISITORS.length = 0; NEIGH.length = 0; guestsOut = 0; // v5.8.0
+  S.town = Object.assign(TN.valid(s.town), { hall: HL ? HL.valid(s.town && s.town.hall) : undefined }); VISITORS.length = 0; NEIGH.length = 0; guestsOut = 0; // v5.8.0
   S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; if (DECOR_ON) DA.sync(true); markNavDirty(); // v5.7.0
   if (HM) homeRestore(s); // v5.9.0 (after the family: a married child wakes at the new house)
   S.log = s.log.slice(); S.label = FARMER.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
@@ -3744,7 +3790,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { shopDepth, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },

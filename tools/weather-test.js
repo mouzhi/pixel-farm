@@ -174,8 +174,9 @@ ok('index.html scripts are cache-busted with the current version', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
   assert(scripts.length >= 20, 'scripts ' + scripts.length);
-  for (const s of scripts) assert(/\?v=5\.9\.1$/.test(s), 'missing cache bust: ' + s);
-  assert(html.indexOf('v5.9.1') >= 0);
+  const V = fs.readFileSync(path.join(__dirname, '..', 'game.js'), 'utf8').match(/GAME_VERSION = '([^']+)'/)[1]; // v5.10.0: read it, do not repeat it
+  for (const s of scripts) assert(s.endsWith('?v=' + V), 'missing cache bust: ' + s);
+  assert(html.indexOf('v' + V) >= 0);
 });
 
 ok('forceCatch can attach the catching kid so the popup can sit above their head', () => {
