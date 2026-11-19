@@ -307,7 +307,7 @@ ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
   assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ can: 4 }, 1e9, 'can').maxed, true);
   assert(!SIM.SHOP_IDS.includes('speed'), 'v5.10.2: no game speed in the shop'); assert(!SIM.SHOP_TABS.some(t => t.ids.includes('speed')));
-  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = (SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive')) || SIM.shopItem(id).flat; for (let i = 1; i < L.length; i++) assert(flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
+  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = (SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive')) || SIM.shopItem(id).flat; for (let i = 1; i < L.length; i++) assert(id === 'roof' ? L[i].cost <= L[i - 1].cost /* v5.10.3: a later roof colour is cheaper */ : flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
 });
 ok('v5.10.2: a bought 2x / 4x is refunded once (600 / 3600), settings keep only speed 1 and the refund', () => {
   assert.deepStrictEqual([0, 1, 2, 3, -1, 'x'].map(SIM.speedRefund), [0, 600, 3600, 3600, 0, 0]);

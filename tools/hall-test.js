@@ -29,7 +29,7 @@ ok('projects: town first, one at a time, money and wood, done the morning after;
   assert.strictEqual(HL.canStart(st, 'L5', rich), '已经盖好了');
   assert.deepStrictEqual(HL.residents(st).map(r => r.id), ['n4', 'n5'], 'the mayor, and 阿梅 in the new house');
   HL.start(st, 'L8', 41); HL.finish(st, 44); assert.strictEqual(HL.prosperity(st), 1, 'away for days: done all the same');
-  HL.start(st, 'L11', 44); HL.finish(st, 45); assert.strictEqual(HL.prosperity(st), 2); assert.strictEqual(HL.nextLevelAt(st), null);
+  HL.start(st, 'L11', 44); HL.finish(st, 45); assert.strictEqual(HL.prosperity(st), 2); assert.deepStrictEqual(HL.nextLevelAt(st), { need: 2 }, 'v5.10.3: the market and the next project make 3');
   assert.strictEqual(HL.residents(st).length, 4); assert.strictEqual(HL.blocks(st).length, 4);
 });
 ok('the new neighbours keep their hours; doors and spots are in town; 阿松 has a site spot by each lot', () => {
@@ -41,13 +41,15 @@ ok('the new neighbours keep their hours; doors and spots are in town; 阿松 has
 });
 ok('gifts: any decoration but the party table, until the street is full; lamps light at night, new windows in the evening', () => {
   const st = HL.empty(); assert(!HL.give(st, 'party'));
-  for (let i = 0; i < HL.GIFT_SPOTS.length; i++) assert(HL.give(st, i % 2 ? 'lamppost' : 'bench'));
-  assert(!HL.give(st, 'bench'), 'full'); assert.strictEqual(HL.giftSpot(st), null);
+  const SL = require('../slots.js'), NL = SL.TOWN.lamp.length, NN = SL.TOWN.nook.length;
+  for (let i = 0; i < NL; i++) assert(HL.give(st, 'lamppost')); assert(!HL.give(st, 'stonelamp'), 'v5.10.3: the lamp spots are full'); assert(HL.give(st, 'bench'), 'a bench still has a nook');
+  for (let i = 1; i < NN; i++) assert(HL.give(st, i % 2 ? 'bench' : 'shell')); assert(!HL.give(st, 'bench'), 'nooks full'); assert.strictEqual(HL.giftSpot(st, 'bench'), null);
+  const gp = HL.giftPos(st); assert.deepStrictEqual(gp.slice(0, NL), SL.TOWN.lamp, 'lamps in their spots, in order'); assert(gp.every(Boolean));
   const CAT = { lamppost: { light: 26 }, bench: {} };
   assert.strictEqual(HL.lightsAt(st, 12 * 60, CAT).length, 0, 'not at noon');
-  assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, HL.GIFT_SPOTS.length / 2 + 1, 'six lamps and the hall');
-  st.built.L5 = 3; assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, HL.GIFT_SPOTS.length / 2 + 2);
-  assert.strictEqual(HL.lightsAt(st, 23 * 60, CAT).length, HL.GIFT_SPOTS.length / 2, 'windows go dark, lamps stay');
+  assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, NL + 1, 'the lamps and the hall');
+  st.built.L5 = 3; assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, NL + 2);
+  assert.strictEqual(HL.lightsAt(st, 23 * 60, CAT).length, NL, 'windows go dark, lamps stay');
 });
 ok('the weekly paper reads like a few lines of news', () => {
   const t = HL.paperText({ day: 70, built: ['L5'], gifts: 2, trade: 340, lv: 1, people: 6 });
@@ -57,7 +59,7 @@ ok('the weekly paper reads like a few lines of news', () => {
 ok('valid(): junk in, a clean hall out; unknown projects and the party table dropped; a job on a built lot dropped', () => {
   assert.deepStrictEqual(HL.valid(undefined), HL.empty()); assert.deepStrictEqual(HL.valid([1, 2]), HL.empty());
   const v = HL.valid({ built: { L5: 12, X9: 3 }, job: { id: 'L5', day: 12 }, gifts: ['bench', 'party', 7, 'lamppost'], paper: 63, week: { built: ['L5', 'zz'], gifts: 2, trade: 50 } });
-  assert.deepStrictEqual(v, { built: { L5: 12 }, job: null, gifts: ['bench', 'lamppost'], paper: 63, week: { built: ['L5'], gifts: 2, trade: 50 } });
+  assert.deepStrictEqual(v, { built: { L5: 12 }, job: null, gifts: ['bench', 'lamppost'], paper: 63, week: { built: ['L5'], gifts: 2, trade: 50 }, market: require('../market.js').empty() });
   assert.deepStrictEqual(HL.valid({ job: { id: 'L8', day: 5 } }).job, { id: 'L8', day: 5 });
 });
 ok('save: no version bump; every fixture gains an empty hall inside `town`, nothing else changes; a hall round-trips', () => {
@@ -65,7 +67,7 @@ ok('save: no version bump; every fixture gains an empty hall inside `town`, noth
     const s = SAVE.migrate(JSON.parse(JSON.stringify(FIX(f)))); const v = SAVE.validate(s);
     assert.strictEqual(v.saveVersion, SAVE.CURRENT, f); assert.deepStrictEqual(v.town.hall, HL.empty(), f);
     const t = Object.assign({}, v.town); delete t.hall; assert.deepStrictEqual(t, TN.valid(s.town), f + ': the rest of town as before');
-    v.town.hall = { built: { L5: 60, L8: 61 }, job: { id: 'L11', day: 62 }, gifts: ['lamppost', 'bench'], paper: 58, week: { built: ['L5', 'L8'], gifts: 2, trade: 120 } };
+    v.town.hall = { built: { L5: 60, L8: 61 }, job: { id: 'L11', day: 62 }, gifts: ['lamppost', 'bench'], paper: 58, week: { built: ['L5', 'L8'], gifts: 2, trade: 120 }, market: { pick: 1, take: { crops: 1, fruit: 0, animals: 1, fish: 1, goods: 0 }, days: 3, gold: 4000, extra: 700, last: 56 } };
     const back = SAVE.validate(JSON.parse(JSON.stringify(v))); assert.deepStrictEqual(back.town.hall, v.town.hall, f + ' round trip');
   }
 });

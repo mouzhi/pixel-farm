@@ -8,7 +8,7 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,6 +55,8 @@ jobs:
         run: node tools/home-test.js
       - name: v5.10.0 (town hall, projects, prosperity, gifts) unit tests
         run: node tools/hall-test.js
+      - name: v5.10.3 (market, decoration spots, yard things) unit tests
+        run: node tools/market-test.js && node tools/slots-test.js && node tools/yard-test.js
       - name: v5.10.1 / v5.10.2 economy unit tests (24-hour offline window, short absences, clock turned back, family buys basics only, speed refund)
         run: node tools/econ-test.js
       - name: Surprise browser test
@@ -127,3 +129,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/nospeed-shots.js
+      - name: v5.10.3 browser test (the market square, market day, 我来挑, tidy decoration spots, yard things, fixtures)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/market-shots.js

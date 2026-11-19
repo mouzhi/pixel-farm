@@ -7,11 +7,13 @@
 'use strict';
 (function (root) {
   const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown;
+  const SL = (typeof require === 'function' && typeof document === 'undefined') ? require('./slots.js') : root.PFSlots; // v5.10.3: gifts by kind
+  const MK = (typeof require === 'function' && typeof document === 'undefined') ? require('./market.js') : root.PFMarket; // v5.10.3
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
   const BOARD = P(HALL.x - 9, HALL.y + HALL.hd + 12);       // the notice board: in front of the hall, beside its path
   // street things, first batch (model, x, y, rot): a post box by the hall, a hand cart by the shop, crates, a sun shade on the square
-  const PROPS = [['mailbox', 529, 45, 0], ['cart', 480, 56, 0], ['crates', 506, 58, 0], ['parasol', 542, 104, 0]];
+  const PROPS = [['mailbox', 529, 45, 0], ['cart', 480, 56, 0], ['crates', 506, 58, 0], ['parasol', 568, 126, 0]] /* v5.10.3: the sun shade moved for the market stalls */;
   // ---------- the first batch of projects: three two-storey houses on lots that stood empty ----------
   // lot: centre, half size, door (where people stand), rot (Math.PI: door to the north, onto the street side), style (art)
   const LOTS = [
@@ -24,9 +26,11 @@
     { id: 'L5', name: '木构二层小楼', desc: '带阳台和晾衣绳，裁缝阿梅一家搬进来', cost: 8000, wood: 120, who: 'n5' },
     { id: 'L8', name: '砖石二层房', desc: '有阁楼窗和烟囱，邮差阿川一家搬进来', cost: 8000, wood: 120, who: 'n6' },
     { id: 'L11', name: '下店上住的街边铺子', desc: '一楼是花店的橱窗，二楼住人，花匠秋姨开张', cost: 8000, wood: 120, who: 'n7' },
+    // v5.10.3: the market square (market.js): the square grows, six stalls go up, every 7th day is market day
+    { id: 'market', name: '集市广场', desc: '广场铺大一圈，搭起 6 个摊位；每 7 天一次集市日，家里的东西在集市上多卖两成', cost: 30000, wood: 200, lv: 2, kind: 'market' },
   ];
   const PROJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
-  const LEVELS = [0, 3];                                    // projects built to reach 繁荣度 1, 2, …
+  const LEVELS = [0, 3, 5];                                 // projects built to reach 繁荣度 1, 2, 3 (v5.10.3: the market is the 4th; the bakery next makes 5)
   const LV_NAME = ['', '小镇', '热闹的小镇', '繁华的小镇', '大镇子', '远近闻名'];
   const prosperity = st => { const n = Object.keys((st && st.built) || {}).length; let lv = 1; for (let i = 1; i < LEVELS.length; i++) if (n >= LEVELS[i]) lv = i + 1; return lv; };
   const nextLevelAt = st => { const n = Object.keys((st && st.built) || {}).length; const nx = LEVELS.find(t => t > n); return nx === undefined ? null : { need: nx - n }; };
@@ -44,6 +48,11 @@
   // who lives in town now (the mayor always; a family once its house is built)
   const residents = st => NEIGHBOURS.filter(n => !n.lot || !!((st && st.built) || {})[n.lot]);
   const spotAt = s => SPOTS[s] || TN.SPOTS[s];
+  // v5.10.3: on market day the neighbours who keep a stall stand at it 8:00–15:30
+  const MARKET_HOURS = [8 * 60, 15 * 60 + 30];
+  function marketAt(st, n, day, T) {
+    if (!MK || !MK.isDay(st, day)) return null; const t = ((T % 1440) + 1440) % 1440; if (t < MARKET_HOURS[0] || t >= MARKET_HOURS[1]) return null;
+    const s = MK.STALLS.find(q => q.who === n.id); return s ? { at: MK.standAt(s), out: true, spot: 'stall:' + s.id } : null; }
   function neighbourAt(n, T) {
     const t = ((T % 1440) + 1440) % 1440;
     for (const [a, b, s] of n.plan) if (t >= a && t < b) return { at: spotAt(s), out: true, spot: s };
@@ -51,7 +60,7 @@
   }
   // 木匠阿松 works on the site while a house is going up (8:00–17:00)
   const BUILD_HOURS = [8 * 60, 17 * 60];
-  const siteSpot = id => { const l = LOT[id]; return l ? P(l.x + l.hw + 3, l.y - l.hd + 2) : null; };
+  const siteSpot = id => { const l = LOT[id]; return l ? P(l.x + l.hw + 3, l.y - l.hd + 2) : id === 'market' ? P(TN.PLAZA.x - 20, TN.PLAZA.y + 4) : null; };
 
   // ---------- the board: start a project, finish it the next morning ----------
   // ctx: { open (town bought), coins, wood } -> null or why not
@@ -60,6 +69,7 @@
     if (!(ctx && ctx.open)) return '先把镇子买下来';
     if (st.built[id]) return '已经盖好了';
     if (st.job) return st.job.id === id ? '正在盖' : '一次只盖一座，等' + PROJ[st.job.id].name + '盖好';
+    if (p.lv && prosperity(st) < p.lv) return `繁荣度到 ${p.lv} 才能盖（先把三座二层房盖好）`;
     if ((ctx.coins | 0) < p.cost) return '金币不够';
     if ((ctx.wood | 0) < p.wood) return '木材不够';
     return null;
@@ -72,10 +82,13 @@
   }
 
   // ---------- 送给镇上: decorations along the main street ----------
-  const GIFT_SPOTS = [P(480, 76), P(504, 76), P(530, 77), P(580, 76), P(596, 77), P(622, 76), P(466, 56), P(530, 56), P(552, 54), P(624, 52), P(500, 88), P(498, 120)];
+  // v5.10.3: laid out by kind (slots.js): lamps along the street at even spacing, flower pots by the doors, the rest in nooks
+  const GIFT_SPOTS = [].concat(SL.TOWN.lamp, SL.TOWN.pot, SL.TOWN.nook);
   const GIFT_OK = id => id !== 'party';                     // the party table stays at home: it is where the family meets
-  const giftSpot = st => (st.gifts.length < GIFT_SPOTS.length ? GIFT_SPOTS[st.gifts.length] : null);
-  function give(st, id) { if (!GIFT_OK(id) || !giftSpot(st)) return false; st.gifts.push(id); return true; }
+  const giftPos = st => SL.townLayout(st.gifts);            // where each gift stands (by index)
+  const giftRoom = (st, id) => SL.townRoom(st.gifts, id);
+  const giftSpot = (st, id) => (id ? (giftRoom(st, id) ? giftPos({ gifts: st.gifts.concat([id]) }).pop() : null) : (st.gifts.length < SL.TOWN_MAX ? true : null));
+  function give(st, id) { if (!GIFT_OK(id) || !giftRoom(st, id)) return false; st.gifts.push(id); return true; }
 
   // ---------- 镇子小报: once a week a few lines in the log ----------
   const PAPER_EVERY = 7;
@@ -95,7 +108,7 @@
     const t = ((T % 1440) + 1440) % 1440, out = [], homes = t >= TN.LIT.homes[0] && t < TN.LIT.homes[1], lamps = t >= TN.LIT.lamps[0] || t < TN.LIT.lamps[1];
     if (homes) for (const l of LOTS) if (st.built[l.id]) out.push({ x: l.door.x, y: l.door.y + 1, z: 6, r: 16, s: 0.6 });
     if (homes) out.push({ x: HALL.door.x, y: HALL.door.y - 1, z: 7, r: 16, s: 0.5 });
-    if (lamps && CAT) st.gifts.forEach((id, i) => { const c = CAT[id]; if (c && c.light) out.push({ x: GIFT_SPOTS[i].x, y: GIFT_SPOTS[i].y, z: 12, r: c.light, s: 0.85 }); });
+    if (lamps && CAT) { const gp = giftPos(st); st.gifts.forEach((id, i) => { const c = CAT[id]; if (c && c.light && gp[i]) out.push({ x: gp[i].x, y: gp[i].y, z: 12, r: c.light, s: 0.85 }); }); }
     return out;
   }
 
@@ -104,25 +117,27 @@
     const out = [];
     for (const l of LOTS) if (st.built[l.id] || (st.job && st.job.id === l.id)) out.push([l.x - l.hw, l.y - l.hd, l.x + l.hw, l.y + l.hd]);
     out.push([BOARD.x - 3, BOARD.y - 1, BOARD.x + 3, BOARD.y + 1]);
+    if (MK) out.push(...MK.blocks(st)); // v5.10.3: the market stalls
     return out;
   }
 
   // ---------- state (saved inside `town` as `hall`; append-only, old saves start with nothing built) ----------
-  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 } });
+  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {} }); // v5.10.3: + market
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
   const DECOR_ID = /^[a-z_]{2,24}$/;
   function valid(v) {
     const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {}, out = empty();
     const b = o.built && typeof o.built === 'object' ? o.built : {}; for (const id of Object.keys(b)) if (PROJ[id]) out.built[id] = int(b[id], 1, 1e6) || 1;
     if (o.job && typeof o.job === 'object' && PROJ[o.job.id] && !out.built[o.job.id]) out.job = { id: o.job.id, day: int(o.job.day, 0, 1e6) };
-    if (Array.isArray(o.gifts)) out.gifts = o.gifts.filter(id => typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id)).slice(0, GIFT_SPOTS.length);
+    if (Array.isArray(o.gifts)) { const g = []; for (const id of o.gifts) if (typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id) && SL.townRoom(g, id)) g.push(id); out.gifts = g; }
     out.paper = int(o.paper, 0, 1e6);
+    if (MK) out.market = MK.valid(o.market);
     const w = o.week && typeof o.week === 'object' ? o.week : {};
     out.week = { built: Array.isArray(w.built) ? w.built.filter(id => PROJ[id]).slice(0, PROJECTS.length) : [], gifts: int(w.gifts, 0, 99), trade: int(w.trade, 0, 1e9) };
     return out;
   }
 
-  const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, BUILD_HOURS, siteSpot,
-    canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, give, PAPER_EVERY, paperText, blocks, empty, valid };
+  const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, MARKET_HOURS, BUILD_HOURS, siteSpot,
+    canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, giftPos, giftRoom, give, PAPER_EVERY, paperText, blocks, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHall = api;
 })(typeof window !== 'undefined' ? window : globalThis);

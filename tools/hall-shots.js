@@ -41,7 +41,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('v5100_board.png', `(() => { ${setup} openTown(); S.decor.inv.lamppost = 2; S.decor.inv.bench = 1; f.refreshUI(); f.openHall(); f.refreshUI();
     const sh = document.getElementById('shop'), tab = sh.querySelector('[data-tab="hall"].on');
     return { tab: !!tab, cards: sh.querySelectorAll('[data-hall^="start:"]').length, enabled: sh.querySelectorAll('[data-hall^="start:"]:not([disabled])').length, give: sh.querySelectorAll('[data-hall^="give:"]').length, txt: sh.textContent.replace(/\\s+/g, ' ').slice(0, 200) }; })()`,
-    r => !r.tab ? 'no hall tab' : r.cards !== 3 || r.enabled !== 3 ? 'cards ' + r.cards + '/' + r.enabled : r.give !== 2 ? 'gift rows ' + r.give : !/繁荣度/.test(r.txt) ? 'no prosperity' : null);
+    r => !r.tab ? 'no hall tab' : r.cards !== 4 || r.enabled !== 3 ? 'cards ' + r.cards + '/' + r.enabled : r.give !== 2 ? 'gift rows ' + r.give : !/繁荣度/.test(r.txt) ? 'no prosperity' : null);
   // 2b. before the town is open there is no hall tab
   await shot('v5100_board_locked.png', `(() => { ${setup} f.refreshUI(); document.getElementById('shopBtn').click(); f.refreshUI(); return { tab: !!document.querySelector('#shop [data-tab="hall"]'), start: f.hallStart('L5') }; })()`,
     r => r.tab ? 'hall tab before the town' : r.start.ok ? 'started before the town' : null);

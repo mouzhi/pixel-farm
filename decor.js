@@ -27,7 +27,7 @@
   const IDS = Object.keys(CATALOG);
   const SHOP_IDS = IDS.filter(id => CATALOG[id].shop);
   const LAMP_IDS = IDS.filter(id => CATALOG[id].light);
-  const INV_MAX = 20, PLACED_MAX = 80, ORDERS_MAX = 8;
+  const INV_MAX = 80, PLACED_MAX = 80, ORDERS_MAX = 8; // v5.10.3: the storehouse holds whatever the tidy yard has no spot for (was 20)
 
   // ---------- where things come from (each roll on its own random stream, so the farm's other events stay put) ----------
   const DROPS = { chop: [['carving', 0.04], ['stonelamp', 0.015]], sea: [['shell', 0.06], ['bottle', 0.025]], pond: [['bottle', 0.015]] };

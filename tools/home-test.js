@@ -110,7 +110,7 @@ ok('save: the day-59 manor fixture (v10) migrates to v15 with nobody married and
   for (const k of Object.keys(raw.upgrades)) assert.strictEqual(s.upgrades[k], raw.upgrades[k], k);
   assert.strictEqual(s.coins, raw.coins); assert.strictEqual(s.clock.day, raw.clock.day);
   const v = SAVE.validate(s); assert.deepStrictEqual(v.home, HM.empty()); assert.strictEqual(v.upgrades.cottage, 0);
-  assert(SAVE.UPGRADE_IDS.indexOf('cottage') === SAVE.UPGRADE_IDS.length - 1, 'append-only: cottage last');
+  assert(SAVE.UPGRADE_IDS.indexOf('cottage') === SAVE.UPGRADE_IDS.length - 1 - require('../yard.js').IDS.length, 'append-only: cottage last before the v5.10.3 yard things');
 });
 ok('save: a v14 save gains only the homestead (and cottage 0); a v15 homestead round-trips', () => {
   const v14 = SAVE.migrate(FIX()); delete v14.home; delete v14.upgrades.cottage; v14.saveVersion = 14;

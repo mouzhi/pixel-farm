@@ -12,9 +12,9 @@
   // ---------- ground (called for every ground pixel inside the strip; null: not ours) ----------
   function ground(x, y) {
     if (!TN.inTown(x, y)) return null;
-    const P = TN.PLAZA, d = Math.hypot(x - P.x, y - P.y);
-    if (d < P.r) { const cx = Math.floor((x + 400) / 3), cy = Math.floor((y + 400) / 3), k = hash(cx, cy, 5); // cobbles, a ring of darker stones at the edge
-      if (d > P.r - 1.4) return [St[1], 'dirt']; return [(cx + cy) % 2 ? (k > 0.5 ? St[3] : St[2]) : (k > 0.7 ? St[2] : St[3]), 'dirt']; }
+    const P = TN.PLAZA, d = Math.hypot(x - P.x, y - P.y), H = S && S.town && S.town.hall, r = root.PFMarket && root.PFMarket.built(H) ? root.PFMarket.PLAZA_R : P.r; // v5.10.3: the market square is bigger
+    if (d < r) { const cx = Math.floor((x + 400) / 3), cy = Math.floor((y + 400) / 3), k = hash(cx, cy, 5); // cobbles, a ring of darker stones at the edge
+      if (d > r - 1.4) return [St[1], 'dirt']; return [(cx + cy) % 2 ? (k > 0.5 ? St[3] : St[2]) : (k > 0.7 ? St[2] : St[3]), 'dirt']; }
     if (TN.inRect(x, y, TN.SCHOOLYARD)) { const k = hash(Math.floor(x), Math.floor(y), 9); return [k > 0.8 ? Wd[3] : Wd[4], 'dirt']; }
     const k = hash(Math.floor(x / 5), Math.floor(y / 5), 3); return [k > 0.82 ? G[3] : G[2], 'grass'];
   }
@@ -159,7 +159,24 @@
     const parasol = B(18, 18, 22, (x, y, z) => { const c = Math.hypot(x + 0.5 - 9, y + 0.5 - 9);
       if (c < 1 && z <= 18) return Wd[1]; if (z >= 16 && z <= 19 && c < 9 - (z - 16) * 2.4) return (Math.floor(Math.atan2(y - 9, x - 9) / (Math.PI / 4)) & 1) ? Ac[0] : Rf[2];
       if (z <= 3 && c >= 3 && c <= 5 && ((x + y) % 5 === 0)) return Wd[2]; return null; });
-    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2)], scaffold, mailbox, cart, crates, parasol };
+    // v5.10.3 集市: a market stall (posts, a counter of goods, a back shelf, a striped awning); bare frames while it is going up
+    const AWN = [[Rf[2], Ac[0]], [G[3], Ac[0]], [Wt[3], Ac[0]], [Ac[2], Rf[3]], [Rf[3], Ac[0]]];
+    const GOODS = { farm: [G[3], Ac[2], Rf[2], G[4] || G[3]], n0: [Wd[3], Ac[2], St[2]], n3: [Wd[4], Wd[3], Ac[0]], n7: [Rf[2], Ac[2], Ac[0], G[3]], n5: [Wt[3], Rf[3], Ac[0], G[2]], v: [St[2], St[1], Wd[2]] };
+    const marketStall = (awn, goods, bare) => B(22, 16, 20, (x, y, z) => {
+      const post = (x === 2 || x === 19) && (y === 3 || y === 13);
+      if (post && z <= 15) return Wd[1];
+      if (bare) { if ((z === 15) && (y === 3 || y === 13) && x >= 2 && x <= 19) return Wd[3]; if (z <= 1 && y >= 10 && y <= 13 && x >= 3 && x <= 18 && (x % 3)) return Wd[3]; return null; }
+      if (y >= 10 && y <= 13 && x >= 2 && x <= 19 && z <= 6) { if (z === 6) return Wd[3]; return y === 13 ? (x % 5 === 2 ? Wd[1] : Wd[2]) : Wd[1]; }          // the counter
+      if (y >= 10 && y <= 12 && x >= 3 && x <= 18 && (z === 7 || (z === 8 && hash(x, y, 31) > 0.45)) && x % 4 !== 2) return goods[((x >> 2) + y) % goods.length]; // goods in heaps
+      if (y >= 3 && y <= 4 && x >= 3 && x <= 18 && z <= 9) return z === 9 ? Wd[3] : (z % 3 ? null : Wd[2]);                                            // the back shelf
+      if (y >= 3 && y <= 4 && x >= 4 && x <= 17 && (z === 4 || z === 7 || z === 10) && x % 3 !== 0) return goods[(x + z) % goods.length];
+      const az = y < 8 ? 17 : 16; // the awning, tipped to the front, scalloped at its edge
+      if (x >= 1 && x <= 20 && y >= 1 && y <= 15 && z === az) return ((x >> 1) & 1) ? awn[0] : awn[1];
+      if (y === 15 && x >= 1 && x <= 20 && z === 15 && !((x >> 1) & 1)) return awn[0];
+      return null; });
+    const stalls = HL && root.PFMarket ? root.PFMarket.STALLS.map(st => marketStall(AWN[st.awn % AWN.length], GOODS[st.who] || GOODS.v, false)) : [];
+    const stallFrame = marketStall(AWN[0], GOODS.v, true);
+    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2)], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame };
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -184,7 +201,7 @@
     for (let fy = R0[1]; fy < R0[3]; fy += 8) for (const fx of [R0[0], R0[2]]) { if (fx === R0[0] && Math.abs(fy + 4 - TN.GATE.y) < 10) continue; own.always.push(add(fence, fx, fy + 4, Math.PI / 2, { xp: 1, town: 'fence' })); }
     // trees on the town's grass, kept off streets, buildings and the square
     { let s = 4242; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [506, 132], [588, 132], [622, 132], [622, 4], [562, 2], [516, 4], [478, 2], [624, 96]]) {
+      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [492, 135], [588, 132], [622, 132], [622, 4], [562, 2], [516, 4], [478, 2], [624, 96]]) {
         const defs = rnd() < 0.5 ? x.treeDefs.oak : x.treeDefs.small; x.addTree(defs[Math.floor(rnd() * defs.length)], tx + (rnd() - 0.5) * 3, ty + (rnd() - 0.5) * 3); } }
     // the strip east of the old map edge: cliff slabs where the ridge runs on
     const xmod = xm && xm.ledges; if (xmod) for (let gx = 448; gx <= 640; gx += 8) { const ry = PL.ridgeY(gx); own.always.push(add(xmod[((gx / 8) | 0) % 3], gx, ry - 1.5, 0, { xp: 1 })); }
@@ -210,8 +227,10 @@
     for (const l of HL.LOTS) { const built = !!H.built[l.id], up = H.job && H.job.id === l.id; if (!built && !up) continue;
       own.hall.push(X.addProp(built ? MD.two[l.style] : MD.scaffold, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id }));
       if (built) { const fy = l.y - l.hd - 3; own.hall.push(X.addProp(MD.flowers, l.x - 10, fy, 0, { xp: 1, town: 'flowers' })); } }
+    const MKS = root.PFMarket; // v5.10.3: the market stalls (bare frames while 阿松 is putting them up)
+    if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
-    if (DM) H.gifts.forEach((id, i) => { const at = HL.GIFT_SPOTS[i], m = DM[id]; if (m) own.hall.push(X.addProp(m, at.x, at.y, 0, { xp: 1, town: 'gift' })); });
+    if (DM) { const gp = HL.giftPos(H); H.gifts.forEach((id, i) => { const at = gp[i], m = DM[id]; if (m && at) own.hall.push(X.addProp(m, at.x, at.y, 0, { xp: 1, town: 'gift' })); }); } // v5.10.3: by kind (slots.js)
     X.markNavDirty();
   }
   // a little sign over the shut gate while the town is locked (drawn by game.js with the plot locks)

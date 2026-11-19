@@ -93,8 +93,9 @@
     return `<i style="background:url(${atlas || (window.PF_CROPS && window.PF_CROPS.src)}) no-repeat;background-size:${32 * SIM.IDS.length}px 32px;background-position:${-32 * SIM.IDS.indexOf(k)}px 0"></i>`; };
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   const DART = () => window.PFDecorArt; // v5.7.0: decorations draw their own icons from their models
-  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || BLANK;
-  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)));
+  const YART = id => window.PFYardArt && PFYardArt.iconURL(id); // v5.10.3: the yard things
+  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || BLANK;
+  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)) || YART(id));
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${iconURL(id)});background-size:32px;image-rendering:pixelated"></i>`);
   const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
   const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
@@ -269,6 +270,8 @@
     if (tabId === 'works' && it.id === 'hive') return '养蜂（花甸或果园坡）';
     if (tabId === 'decor' && PFDecor.CATALOG[it.id] && PFDecor.CATALOG[it.id].light && it.id !== 'party') return '夜灯（接上水车的电，天一黑自己亮；没电时也能先摆着）';
     if (tabId === 'decor' && it.id === 'party') return '派对区（不定期的晚上一家人聚在这里，有时镇上的人来做客）';
+    if (tabId === 'yard' && it.yard) { const k = window.PFYard && PFYard.ITEM[it.id] && PFYard.ITEM[it.id].kind; // v5.10.3
+      return k === 'stall' ? '阿禾的小摊（摊子上的小改动，卖东西多一点、阿禾更开心）' : k === 'care' ? '动物照护（窝、刷子和盐砖，动物每晚更开心）' : '院子（家人自己铺路、装好，每样都有固定的地方）'; }
     if (tabId === 'decor') return '装饰（买了放进仓库，家人会找空地摆上；用「挪东西」可以换地方）';
     if (tabId === 'animals' && it.pet) return '小伙伴（猫猫狗狗，不吃干草）';
     if (tabId === 'animals' && it.farm) return '养殖（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）';
@@ -297,7 +300,7 @@
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
       const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
       const short = o.lockText ? `<span class="short lock">${esc(o.lockText)}</span>` : o.locked ? `<span class="short lock">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${o.short ? costChip(o.short, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>`;
-      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
+      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(it.yard ? it.icon : id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
@@ -342,6 +345,14 @@
       h += `<div class="card${p.built ? ' max' : ''}" data-item="hall:${p.id}">${icon('town')}<div class="ct"><div><b>${esc(p.name)}</b> <span class="lv">${st}</span></div><div class="d">${esc(p.desc)}</div></div><div class="cb">` +
         (p.built ? '<span class="done">✓</span>' : p.building ? '<span class="short">明天一早盖好</span>' : `<button class="pbtn" data-hall="start:${p.id}"${can ? '' : ' disabled'}>${priceChips(p.cost, p.wood)}</button>${short}`) + '</div></div>';
     }
+    const m = G.marketView && G.marketView(); // v5.10.3 集市
+    if (m) {
+      h += `<div class="sec">集市（每 7 天一次：大人推车去广场摆摊，比自家摊子多卖一成半，抢手货多卖三成；离线的日子不算集市日）</div>`;
+      h += `<div class="card" data-item="market">${icon('town')}<div class="ct"><div><b>${m.today ? '今天是集市日' : `下一次集市：第 ${m.next} 天`}</b> <span class="lv">抢手货：${esc(m.hot)}</span></div><div class="d">已经赶了 ${m.days} 次集，卖了 ${m.gold} 金，比自家摊子多赚 ${m.extra} 金</div></div><div class="cb">` +
+        `<button class="pbtn" data-mk="mode">${m.pick ? '我来挑' : '全自动'}</button></div></div>`;
+      if (m.pick) h += `<div class="mkpick">带去集市：` + m.kinds.map(k => `<button class="pbtn${m.take[k.id] ? ' on' : ' off'}" data-mk="take:${k.id}">${m.take[k.id] ? '✓ ' : ''}${esc(k.name)}${k.id === m.hotId ? '（抢手）' : ''}</button>`).join('') + `<div class="more">没勾的东西留在家里的摊子卖</div></div>`;
+      else h += `<div class="more">全自动：篮子里能卖的都带去（加工坊要用的除外）。点「全自动」换成「我来挑」，自己选带哪几样。</div>`;
+    }
     h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
     const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));
     if (!rows.length) h += `<div class="more">仓库和院子里还没有能送的装饰（派对区留在家里）</div>`;
@@ -351,7 +362,7 @@
   }
   const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; plotView = (opt && opt.plot) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
-    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall]'); if (!el || !shop.contains(el)) return;
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall],[data-mk]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
     if (d.a === 'autobuy') { G.setAutoBuy(!G.S.autoBuy); drawShop(true); return; } // v5.10.1
@@ -362,6 +373,7 @@
     if (d.pbuy || d.pzone) { const [pid, mod] = (d.pbuy || d.pzone).split(':'), r = d.pbuy ? G.buyPlot(pid, mod) : G.rezonePlot(pid, mod); drawShop(true); if (!r.ok) el.classList.add('shake'); }
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); if (!r.ok) el.classList.add('shake'); }
+    if (d.mk) { const [a, k] = d.mk.split(':'); if (a === 'mode') G.setMarketPick(!G.marketView().pick); else G.setMarketPick(null, k); drawShop(true); return; } // v5.10.3
     if (d.hall) { const [a, id, u] = d.hall.split(':'), r = a === 'start' ? G.hallStart(id) : G.hallGive(id, u === '' || u === undefined ? undefined : +u); drawShop(true); if (!r.ok) el.classList.add('shake'); } // v5.10.0
   });
   $('shopBtn').addEventListener('click', () => toggleShop());

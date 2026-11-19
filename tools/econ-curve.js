@@ -3,7 +3,7 @@
 // the file on disk is untouched) so each sale can be split into crops / fruit / animals / fish / workshop goods / town.
 //   node tools/econ-curve.js [days=90] [casual|growth|idle|idle-auto] [seed=7]   → prints a table, writes $PF_SHOTS/econ_<policy>.json
 // casual: every game hour, buy the cheapest thing that can be bought right now (shop items and new plots, decorations
-//   only once the purse is 5× their price), mark up to 3 trees a day while wood is short, plant saplings on fixed spots.
+//   and (v5.10.3) the 院子 things only once the purse is 5× their price), mark up to 3 trees a day while wood is short, plant saplings on fixed spots.
 // growth: like casual, but never buys decorations or pets (an upper bound on how fast the farm can grow).
 // idle: never clicks anything; the farmer (and later the family) just works on his own.
 // idle-auto: idle, with 「家人帮忙添置」 turned on (v5.10.1): the family buys one basic thing a day at the stall when there is money to spare.
@@ -12,7 +12,7 @@ const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 90, POLICY = process.argv[3] || 'casual', SEED = process.argv[4] || '7';
 const OUT = process.env.PF_SHOTS || '/workspace/pf-shots', AFK = +process.env.AFK_FROM || 0; // AFK_FROM=d: play the policy until day d, then stop clicking (an AFK session)
 const HOOKS = [ // [anchor, code appended after it]; each anchor must occur exactly once
-  ['const ty = SU.itemType(it), g = priceOfAny(it), base = basePrice(ty); sum += g;', " window.__econ && __econ('market', ty, g);"],
+  ['const ty = SU.itemType(it), g = Math.round(priceOfAny(it) * sm), base = basePrice(ty); sum += g;', " window.__econ && __econ('market', ty, g);"],
   ['const g = priceOfAny(o.it), p = TN.tradePrice(g); base += g; sum += p;', " window.__econ && __econ('town', o.ty, p, g);"],
   ['const g = spare * WD.WOOD.price; sum += g;', " window.__econ && __econ('market', 'woodsell', g);"],
   ['if (sp.gold) {', " window.__econ && __econ('market', 'seeds', sp.gold);"],
@@ -75,7 +75,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       if (S.home) { ev('wedding', (S.home.wed && Object.keys(S.home.wed).length) || (S.home.houses || []).some(h => h.kid)); (S.home.houses || []).forEach((h, i) => ev('cottage' + i + ' lived in', h.kid)); } };
     const offers = () => { const out = [], FA = __farm.FARMER;
       for (const id of SIM.SHOP_IDS) { const o = SIM.offer(S.up, S.coins, id, FA.wood); if (!o || o.maxed || !o.ok) continue;
-        const deco = DC && DC.CATALOG[id]; if (deco && (POLICY === 'growth' || S.coins < o.cost * 5)) continue; if (POLICY === 'growth' && /^(cat|dog)$/.test(id)) continue; out.push({ kind: 'shop', id, cost: o.cost }); }
+        const deco = (DC && DC.CATALOG[id]) || SIM.shopItem(id).yard; if (deco && (POLICY === 'growth' || S.coins < o.cost * 5)) continue; if (POLICY === 'growth' && /^(cat|dog)$/.test(id)) continue; out.push({ kind: 'shop', id, cost: o.cost }); }
       if (PL && X) for (const id of Object.keys(PLOT_MOD)) { const o = PL.offer(S.plots, id, PLOT_MOD[id], S.coins, FA.wood, S.family); if (o && o.ok) out.push({ kind: 'plot', id, cost: o.cost }); }
       return out.sort((a, b) => a.cost - b.cost); };
     const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]);

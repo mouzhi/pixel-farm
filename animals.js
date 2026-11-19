@@ -67,11 +67,12 @@
   const PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
   // v5.6.0: an animal past the first building's room lives in the second one (a.pen, set by works.js assignPens)
   const homeOf = a => a.pen || KINDS[a.kind].home;
-  function overnightPens(animals, troughs, bonus = 0) {
+  function overnightPens(animals, troughs, bonus = 0, penBonus = null) { // penBonus (v5.10.3): { coop: 3, sty: 2 } from the straw and salt licks
+
     const out = { troughs: {}, report: { fed: 0, hungry: 0, made: {} } };
     for (const pen of PEN_IDS) { const t = (troughs && troughs[pen]) || { feed: 0, water: 0 }, list = animals.filter(a => homeOf(a) === pen);
       if (!list.length) { out.troughs[pen] = { feed: t.feed | 0, water: t.water ? 1 : 0 }; continue; }
-      const r = overnight(list, t, bonus); out.troughs[pen] = r.trough; out.report.fed += r.report.fed; out.report.hungry += r.report.hungry;
+      const r = overnight(list, t, bonus + ((penBonus && penBonus[pen]) | 0)); out.troughs[pen] = r.trough; out.report.fed += r.report.fed; out.report.hungry += r.report.hungry;
       for (const k in r.report.made) out.report.made[k] = (out.report.made[k] || 0) + r.report.made[k]; }
     return out;
   }

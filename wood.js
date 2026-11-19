@@ -29,7 +29,7 @@
   // whole storehouse (it used to be a 40-wood reserve, so after the manor he never went to 林场 again)
   function need(shop, up) {
     let n = 0;
-    for (const it of shop) { const have = (up && up[it.id]) | 0, L = it.levels[have]; if (!L || !L.wood || it.p8 || it.p9 || it.p10 || it.p11) continue; // v5.6.0: the phase-8 builds (≤120 wood) don't steer chopping; the storehouse fill covers them (v5.9.0: the new house too)
+    for (const it of shop) { const have = (up && up[it.id]) | 0, L = it.levels[have]; if (!L || !L.wood || it.p8 || it.p9 || it.p10 || it.p11 || it.yard) continue; // v5.6.0: the phase-8 builds (≤120 wood) don't steer chopping; the storehouse fill covers them (v5.9.0: the new house too)
       if (it.needs && !((up && up[it.needs]) > 0)) continue; n = Math.max(n, L.wood); }
     return n;
   }
