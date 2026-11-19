@@ -3383,6 +3383,16 @@ function plantSpot(x, y) { // where a sapling may go: open ground in the farm or
       S.orders.some(o => o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
   return { ok: true };
 }
+// v5.9.1: is there any grass left for a sapling? Scanned at most once per day or when trees / orders / regions change; stops at the first spot
+const PLANT_FULL = '没有能种树的空草地了：树之间要隔开一点，田里、路上、房子和棚子旁边都不能种。砍掉几棵野树或买下新的地块就有地方了';
+let plantRoomC = { key: '', ok: true };
+function plantRoom() {
+  const key = [S.day, S.trees.length, S.orders.length, S.eff.regions.length, tiles.length].join(',');
+  if (key === plantRoomC.key) return plantRoomC.ok;
+  let ok = false;
+  for (let y = WORLD.y0 + 6; y < WORLD.y1 && !ok; y += 6) for (let x = WORLD.x0 + 6; x < WORLD.x1; x += 6) if (plantSpot(x, y).ok) { ok = true; break; }
+  plantRoomC = { key, ok }; return ok;
+}
 // v5.0 hook for logs and stats (e.g. playlog.js): window 'pf:farm' events, detail = { type, who, day, t, ... }.
 // type: 'income' (gold, items), 'purchase' (item, gold, wood), 'task' (kind, done by who), 'family' (event). who: 'farmer' | 'partner' | 'kid0' | 'kid1'
 function emit(type, d) { if (window.PF_NO_EVENTS) return; window.dispatchEvent(new CustomEvent('pf:farm', { detail: Object.assign({ type, who: F === FARMER ? 'farmer' : F.id, day: S.day, t: Math.floor(S.t % 1440) }, d) })); }
@@ -3406,7 +3416,7 @@ function orderRelease(kind) {
 }
 function orderPlant(kind, x, y) {
   if (!WD.FRUIT[kind]) return { ok: false };
-  const sp = plantSpot(x, y); if (!sp.ok) return sp;
+  const sp = plantSpot(x, y); if (!sp.ok) return plantRoom() ? sp : { ok: false, why: PLANT_FULL }; // v5.9.1
   const want = S.orders.filter(o => o.type === 'plant' && o.kind === kind).length;
   if (want >= FARMER.saplings[kind]) return { ok: false, why: `${WD.FRUIT[kind].name}树苗不够（有 ${FARMER.saplings[kind]} 棵）` };
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
@@ -3706,7 +3716,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },

@@ -500,11 +500,12 @@
     const sprN = S.works ? S.works.sprinklers.length : 0; // v5.6.0
     const DCm = window.PFDecor, D = S.decor, free = id => (D.inv[id] | 0) - D.orders.filter(q => q.op === 'place' && q.id === id).length; // v5.7.0
     const deco = DCm && D ? DCm.IDS.filter(id => free(id) > 0) : [], movN = G.movables ? G.movables().length : 0, ordN = D ? D.orders.filter(q => q.mine).length : 0;
-    const key = [chop, F.saplings.apple, F.saplings.orange, koiN, gfN, m.mode, m.kind, S.orders.length, sprN, deco.map(id => id + free(id)).join(';'), movN, ordN].join(',');
+    const key = [chop, F.saplings.apple, F.saplings.orange, (F.saplings.apple || F.saplings.orange) && G.plantRoom ? G.plantRoom() : 1, koiN, gfN, m.mode, m.kind, S.orders.length, sprN, deco.map(id => id + free(id)).join(';'), movN, ordN].join(',');
     if (key === toolKey) return; toolKey = key;
     let h = '';
     if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
-    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}" data-m="plant" data-k="${k}" title="点一块空草地，农夫会去种（Esc 退出）">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}</button>`;
+    const room = !(F.saplings.apple || F.saplings.orange) || !G.plantRoom || G.plantRoom(); // v5.9.1: say so when there is no grass left for a sapling
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}${room ? '' : ' full'}" data-m="plant" data-k="${k}" title="${room ? '点一块空草地，农夫会去种（Esc 退出）' : G.PLANT_FULL}">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}${room ? '' : '（没地方了）'}</button>`;
     if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="点家门口的池塘，把篮子里的锦鲤放进去养着（Esc 退出）。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
     if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="点家门口的池塘，把买来的金鱼放进去养着（Esc 退出）">放养金鱼 ${gfN}</button>`;
     for (const id of deco) h += `<button class="pbtn${m.mode === 'decor' && m.kind === id ? ' on' : ''}" data-m="decor" data-k="${id}" title="点一块草地（亮绿色就能放），家人会从仓库搬过去（Esc 退出）。不放也没关系，家人会自己找地方摆上">摆${DCm.CATALOG[id].name} ${free(id)}</button>`;
@@ -516,6 +517,7 @@
   $('tools').addEventListener('click', e => { const d = e.target.dataset; if (!d || !d.m) return;
     if (d.m === 'clear') { G.S.orders.length = 0; G.setMode(null); G.saveNow(); }
     else if (d.m === 'clearmove') { G.clearMoves(); G.setMode(null); G.saveNow(); } // v5.7.0
+    else if (d.m === 'plant' && G.plantRoom && !G.plantRoom()) { G.setMode(null); dispatchEvent(new CustomEvent('pf:say', { detail: G.PLANT_FULL })); } // v5.9.1
     else if (G.input.mode === d.m && (!d.k || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });
   let sayT = 0; addEventListener('pf:say', e => { const b = $('say'); b.textContent = e.detail; b.hidden = false; clearTimeout(sayT); sayT = setTimeout(() => { b.hidden = true; }, 2200); });
   addEventListener('pf:mode', () => tools());
