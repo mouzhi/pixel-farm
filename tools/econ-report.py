@@ -14,9 +14,11 @@ NAMES = {'field': '扩田', 'can': '水壶', 'shoe': '鞋', 'hoe': '锄头', 'ba
   'lumber': '伐木小屋', 'sprinkler': '浇水器', 'mill': '磨坊', 'jam': '果酱铺', 'cheese': '奶酪坊', 'wheel': '水车', 'hive': '蜂箱', 'coop2': '二鸡舍', 'sty2': '二猪圈',
   'fold2': '二羊圈', 'shed2': '二牛棚', 'town': '镇门', 'cottage': '新房子', 'bench': '长椅', 'flowerpot': '花盆', 'scarecrow': '稻草人', 'birdbath': '石盆', 'lamppost': '路灯',
   'stonelamp': '石灯', 'stringlights': '串灯', 'party': '派对区'}
+PLOTN = {'play': '屋西空地', 'glade': '林间空地', 'swbank': '西南河湾', 'wbank': '西河湾', 'sbank': '南河湾', 'bridge': '石桥', 'swacross': '河对岸西', 'seacross': '河对岸东',
+  'eslope': '东坡', 'eroad': '东大道', 'eshore': '东南滩', 'nwslope': '北坡西', 'neslope': '北坡东', 'trail': '山道', 'summit': '山顶', 'alp': '高山牧场'}
 def label(u):
     w = u['what']
-    if w.startswith('plot:'): return '地块' + w[5:]
+    if w.startswith('plot:'): return PLOTN.get(w[5:], w[5:])
     if w == '阿禾 moved in': return '阿禾搬来'
     if w == '阿禾 love 100': return '好感满'
     m = w.split(' ')
@@ -70,7 +72,7 @@ rs = [r['realSec'] for r in runs['idle']['days'] if r.get('realSec')]
 if rs: out.append(f'\n1× 每个游戏日的实时秒数（测得，20 秒一步）：平均 {sum(rs) / len(rs):.0f} 秒，最少 {min(rs)}，最多 {max(rs)}')
 # 30-minute AFK: the casual player stops clicking on day X; gold over the next 30 real minutes at 1x / 2x / 4x
 DAY_SEC = 313
-out.append('\n### 30 分钟挂机（第 X 天起不再点任何东西）\n| 起始天 | 手里 | 当天日入 | 1×（5.75 天） | 2×（11.5 天） | 4×（23 天） |\n|---:|---:|---:|---:|---:|---:|')
+out.append('\n### 30 分钟挂机（第 X 天起不再点任何东西）\n| 起始天 | 手里 | 当天日入 | 1×（5.75 天） | 2×（11.5 天） | 4×（23 天） | 切走 / 关掉 30 分钟（离线结算） |\n|---:|---:|---:|---:|---:|---:|---:|')
 for x in (3, 10, 30, 60):
     try: a = load(f'econ_casual_afk{x}.json')
     except Exception: continue
@@ -80,7 +82,8 @@ for x in (3, 10, 30, 60):
         while left > 0 and d in rows: g += rows[d]['dayEarn'] * min(1, left); left -= 1; d += 1
         return round(g)
     n1 = 1800 / DAY_SEC
-    out.append(f"| {x} | {rows[x]['coins']:,} | {rows[x]['dayEarn']:,} | {gold(n1):,} | {gold(2 * n1):,} | {gold(4 * n1):,} |")
+    avg3 = sum(rows[k]['dayEarn'] for k in range(x - 2, x + 1) if k in rows) / 3
+    out.append(f"| {x} | {rows[x]['coins']:,} | {rows[x]['dayEarn']:,} | {gold(n1):,} | {gold(2 * n1):,} | {gold(4 * n1):,} | {math.floor(avg3 * min(3, n1 * 0.5)):,} |")
 open(os.path.join(D, 'econ_report.md'), 'w').write('\n'.join(out)); print('\n'.join(out))
 
 # ---- chart ----
