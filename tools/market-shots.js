@@ -111,4 +111,10 @@ fs.mkdirSync(OUT, { recursive: true });
   for (const REAL of [process.env.PF_REAL_SAVE, process.env.PF_FRIEND_SAVE].filter(Boolean)) if (fs.existsSync(REAL)) { const save = readSave(REAL), tag = REAL === process.env.PF_REAL_SAVE ? 'realsave' : 'friendsave';
     await shot(`v5103_${tag}.png`, `(() => { const f = __farm, S = f.S; const s = f.snapshot(); f.advance(2, 10); f.setAngle(0); f.panTo(540, 90); f.advance(0.3, 10);
       return { day: s.clock.day, town: !!(S.eff && S.eff.town), market: s.town.hall.market, view: f.hallView() && f.hallView().projects.map(p => p.id + ':' + (p.why || 'ok')), decor: S.decor.placed.length }; })()`, r => r.day !== save.clock.day ? 'day' : null, save); }
+  // 10. (local only) the real save with every yard thing bought: set up beside the laid-out decorations, nothing moved
+  if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) { const save = readSave(process.env.PF_REAL_SAVE);
+    for (const [when, T] of [['', 11 * 60], ['_night', 21 * 60 + 30]]) await shot(`v5103_yard_realsave${when}.png`, `(() => { ${helpers} f.advance(1, 10); const before = JSON.stringify(S.decor.placed.map(p => [p.id, p.x, p.y]));
+      S.coins += 30000; f.FARMER.wood = Math.max(f.FARMER.wood, 200); const n = {}; for (const id of f.YD.IDS) { let k = 0; while ((id !== 'roof' || k < 1) && f.buy(id).ok) k++; n[id] = k; }
+      let g = 0; while (f.yardTodo() && g++ < 200) f.yardSetup(f.yardTodo()); at(${T}); dry(); f.advance(1, 10); look(96, 60, 0); document.getElementById('leftBottom').style.visibility = 'hidden';
+      return { bought: n, put: S.homeyard.put, same: before === JSON.stringify(S.decor.placed.map(p => [p.id, p.x, p.y])), mult: +f.priceMult().toFixed(3) }; })()`, r => !r.same ? 'decor moved' : null, save); }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();
