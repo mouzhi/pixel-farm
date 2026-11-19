@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.9.1</title>
+<title>像素堆叠 · 放置农场 v5.9.2</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -64,6 +64,7 @@
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
   #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
+  #shop .shead .auto{font-size:11px;padding:1px 6px;margin-left:auto;opacity:.85}#shop .shead .auto.on{opacity:1}#shop .shead .auto + .x{margin-left:0}
   #shop .shead .wallet{display:inline-flex;align-items:center;gap:10px;color:#ffd76a;font-weight:600;line-height:16px}
   #shop .shead .wallet .cost:last-child{color:#e0b880}
   #shop .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
@@ -180,7 +181,7 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.9.1 · 成家、新房子和好感（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.9.2 · 成家、新房子和好感（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
@@ -204,38 +205,38 @@
 </div>
 <div id="offline" class="panel" hidden></div>
 <div id="say" class="panel" hidden></div>
-<script src="assets/palette.js?v=5.9.1"></script>
-<script src="assets/sprites.js?v=5.9.1"></script>
-<script src="assets/family_sprites.js?v=5.9.1"></script>
-<script src="decor.js?v=5.9.1"></script>
-<script src="town.js?v=5.9.1"></script>
-<script src="home.js?v=5.9.1"></script>
-<script src="sim.js?v=5.9.1"></script>
-<script src="world.js?v=5.9.1"></script>
-<script src="plots.js?v=5.9.1"></script>
-<script src="wood.js?v=5.9.1"></script>
-<script src="path.js?v=5.9.1"></script>
-<script src="animals.js?v=5.9.1"></script>
-<script src="works.js?v=5.9.1"></script>
-<script src="fish.js?v=5.9.1"></script>
-<script src="kids.js?v=5.9.1"></script>
-<script src="family.js?v=5.9.1"></script>
-<script src="surprise.js?v=5.9.1"></script>
-<script src="weather.js?v=5.9.1"></script>
-<script src="insects.js?v=5.9.1"></script>
-<script src="codex.js?v=5.9.1"></script>
-  <script src="codex_icons.js?v=5.9.1"></script>
-<script src="save.js?v=5.9.1"></script>
-<script src="playlog.js?v=5.9.1"></script>
-<script src="fx.js?v=5.9.1"></script>
-<script src="expansion.js?v=5.9.1"></script>
-<script src="works-art.js?v=5.9.1"></script>
-<script src="decor-art.js?v=5.9.1"></script>
-<script src="home-art.js?v=5.9.1"></script>
-<script src="town-art.js?v=5.9.1"></script>
-<script src="game.js?v=5.9.1"></script>
-<script src="ui.js?v=5.9.1"></script>
-<script src="plots-ui.js?v=5.9.1"></script>
-<script src="audio.js?v=5.9.1"></script>
+<script src="assets/palette.js?v=5.9.2"></script>
+<script src="assets/sprites.js?v=5.9.2"></script>
+<script src="assets/family_sprites.js?v=5.9.2"></script>
+<script src="decor.js?v=5.9.2"></script>
+<script src="town.js?v=5.9.2"></script>
+<script src="home.js?v=5.9.2"></script>
+<script src="sim.js?v=5.9.2"></script>
+<script src="world.js?v=5.9.2"></script>
+<script src="plots.js?v=5.9.2"></script>
+<script src="wood.js?v=5.9.2"></script>
+<script src="path.js?v=5.9.2"></script>
+<script src="animals.js?v=5.9.2"></script>
+<script src="works.js?v=5.9.2"></script>
+<script src="fish.js?v=5.9.2"></script>
+<script src="kids.js?v=5.9.2"></script>
+<script src="family.js?v=5.9.2"></script>
+<script src="surprise.js?v=5.9.2"></script>
+<script src="weather.js?v=5.9.2"></script>
+<script src="insects.js?v=5.9.2"></script>
+<script src="codex.js?v=5.9.2"></script>
+  <script src="codex_icons.js?v=5.9.2"></script>
+<script src="save.js?v=5.9.2"></script>
+<script src="playlog.js?v=5.9.2"></script>
+<script src="fx.js?v=5.9.2"></script>
+<script src="expansion.js?v=5.9.2"></script>
+<script src="works-art.js?v=5.9.2"></script>
+<script src="decor-art.js?v=5.9.2"></script>
+<script src="home-art.js?v=5.9.2"></script>
+<script src="town-art.js?v=5.9.2"></script>
+<script src="game.js?v=5.9.2"></script>
+<script src="ui.js?v=5.9.2"></script>
+<script src="plots-ui.js?v=5.9.2"></script>
+<script src="audio.js?v=5.9.2"></script>
 </body>
 </html>

@@ -595,6 +595,7 @@ const FAM = window.PFFamily;
 const PW = window.PFWorks, PWA = window.PFWorksArt; // v5.6.0 phase 8
 const DC = window.PFDecor, DA = window.PFDecorArt; // v5.7.0 phase 9
 const S = {
+  autoBuy: false, autoDay: 0, autoN: 0, offlineWin: [], // v5.9.2: 家人帮忙添置 (off by default) and the 24-hour offline window
   day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [], surpriseGold: 0,
   store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
   up: SIM.emptyUpgrades(), eff: SIM.effects({}), speed: 1, // shop levels, what they add up to, chosen game speed (1 / 2 / 4)
@@ -704,7 +705,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, speed, open tiles
   XP.sync(); if (WORKS_ON) PWA.sync(); SPR_COVER = null;
   markNavDirty();
 }
-function buy(id) { // the player's one action: spend gold on the next level of a shop item, or a stall consumable (v5.4.0 fish food / goldfish)
+function buy(id, who = 'player') { // the player's one action: spend gold on the next level of a shop item, or a stall consumable (v5.4.0 fish food / goldfish)
   if (id === 'fishfood') {
     if (S.fishFood >= FS.FOOD.stock) return { ok: false, reason: 'maxed' };
     if (S.coins < FS.FOOD.price) return { ok: false, reason: 'short', short: FS.FOOD.price - S.coins };
@@ -733,8 +734,8 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   if (!o || o.maxed) return { ok: false, reason: 'maxed' };
   if (o.locked) return Object.assign({ ok: false, reason: 'locked', needs: o.locked }, o.lockText ? { why: o.lockText } : {});
   if (!o.ok) return Object.assign({ ok: false, reason: 'short', short: o.short }, o.shortWood ? { shortWood: o.shortWood } : {});
-  S.coins -= o.cost; FARMER.wood -= o.wood; S.up[id] = o.have + 1; worksBought(id); if (id === 'cottage' && HM) homeBought(); if (DC.CATALOG[id]) decorGain(id); applyUpgrades(); emit('purchase', { item: id, level: o.have + 1, gold: o.cost, wood: o.wood, who: 'player' });
-  log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金` + (o.wood ? ` + 木材 ${o.wood} 份` : '') + '）'); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'coin');
+  S.coins -= o.cost; FARMER.wood -= o.wood; S.up[id] = o.have + 1; worksBought(id); if (id === 'cottage' && HM) homeBought(); if (DC.CATALOG[id]) decorGain(id); applyUpgrades(); emit('purchase', { item: id, level: o.have + 1, gold: o.cost, wood: o.wood, who });
+  if (who !== 'auto') log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金` + (o.wood ? ` + 木材 ${o.wood} 份` : '') + '）'); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'coin');
   if (id === 'field') log('新的田地开放了，农夫会去清理');
   if (o.item.region) log(`${o.item.name}的篱笆门打开了`);
   if (id === 'coop' || id === 'shed') log(`${o.item.name}盖好了`);
@@ -747,7 +748,7 @@ function buy(id) { // the player's one action: spend gold on the next level of a
   if (DC.CATALOG[id]) log(id === 'party' ? '派对区的桌椅和串灯买好了，家人会找一块空地搭起来' : `${o.item.name}放进了仓库，家人会找地方摆上（也可以用「摆${o.item.name}」自己选地方）`); // v5.7.0
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
   if (PENS[id]) for (let i = yard.length - 1; i >= 0; i--) { const c = yard[i], P = PENS[id]; if (Math.hypot(c.x - P.bld.x, c.y - P.bld.y) < 16 || Math.hypot(c.x - P.trough.x, c.y - P.trough.y) < 10) yard.splice(i, 1); } // builders tidy the spot
-  noteLog('purchase', { id, name: o.item.name, label: o.level.label, cost: o.cost, region: !!o.item.region, day: S.day, t: S.t, createdAt: S.createdAt, now: Date.now() });
+  noteLog('purchase', { id, who, name: o.item.name, label: o.level.label, cost: o.cost, region: !!o.item.region, day: S.day, t: S.t, createdAt: S.createdAt, now: Date.now() });
   noteProgress();
   return { ok: true, offer: o };
 }
@@ -1198,6 +1199,7 @@ function sellTask() {
     if (sum) { earn();
       popText(STALL.x + VR(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
       if (n) log((F === FARMER ? '' : F.name) + `卖出 ${n} 件收获` + (nFish ? `（其中 ${nFish} 条鱼）` : '')); }
+    autoBuyAtStall(); // v5.9.2
     if (S.animals.length) { const need = AN.need(S.animals), want = Math.min(AN.HAY.stock, need * 4) - S.hay, can = Math.floor(S.coins * 0.5 / AN.HAY.price), n = Math.max(0, Math.min(want, can));
       if (n > 0 && S.hay < need * 3) { emit('purchase', { item: 'hay', n, gold: n * AN.HAY.price }); S.coins -= n * AN.HAY.price; S.hay += n; S.hayGold = (S.hayGold || 0) + n * AN.HAY.price; noteLog('spend', 'hay', n * AN.HAY.price); log(`买了 ${n} 捆干草（${n * AN.HAY.price} 金），放进仓库`); } }
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
@@ -1209,6 +1211,17 @@ function sellTask() {
   } };
 }
 
+// v5.9.2 「家人帮忙添置」: off by default. At most one thing a game day, bought at the stall by the farmer or 阿禾 (never a child)
+// right after a sale, only from SIM.AUTO_BUY, only with 3x its price in hand and enough left for seeds, and only what the shop shows.
+function autoBuyAtStall() {
+  if (!S.autoBuy || S.autoDay === S.day || !(F === FARMER || F.id === 'partner')) return null;
+  const p = SIM.autoPick(S.up, S.coins, FARMER.wood, S.dayEarn, id => shopDepth(id) <= REVEAL_MAX); if (!p.id) return p;
+  const o = SIM.offer(S.up, S.coins, p.id, FARMER.wood), r = buy(p.id, 'auto'); if (!r.ok) return r;
+  const who = F === FARMER ? '农夫' : F.name, first = !(S.autoN > 0); S.autoDay = S.day; S.autoN = (S.autoN | 0) + 1;
+  log(`${who}帮家里添置了${o.item.name}：${o.level.label}（${o.cost} 金）` + (first ? '。不想让家人代买，可以在商店顶上关掉「家人帮忙添置」' : ''));
+  popText(STALL.x, STALL.y - 6, 26, '-' + o.cost, '#ffd76a'); saveNow(); return Object.assign({ ok: true, id: p.id, cost: o.cost }, r);
+}
+function setAutoBuy(v) { S.autoBuy = !!v; noteLog('event', { type: 'autobuy', on: S.autoBuy, day: S.day }); log(S.autoBuy ? '打开了「家人帮忙添置」：钱多的时候，家人每天最多替你买一样基础的东西（扩田、工具、鸡）' : '关掉了「家人帮忙添置」'); saveNow(); return S.autoBuy; }
 // v5.4.0: fish food, ornamental fish, a truffle a dog found
 function ornamentHeld(kind) {
   if (kind === 'goldfish') return (S.ornament && S.ornament.goldfish) || 0;
@@ -3562,7 +3575,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.9.1';
+const GAME_VERSION = '5.9.2';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -3617,7 +3630,8 @@ function snapshot() {
     inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay, fishFood: S.fishFood, ornament: Object.assign({}, S.ornament) },
     farmer: { x: Math.round(FARMER.x * 100) / 100, y: Math.round(FARMER.y * 100) / 100, sleeping: FARMER.sleeping, home: FARMER.home },
     tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && SU.validCropExtras(t.crop, { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot }) })),
-    upgrades: Object.assign({}, S.up), settings: { speed: S.speed },
+    upgrades: Object.assign({}, S.up), settings: { speed: S.speed, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
+    offline: { win: (S.offlineWin || []).map(w => ({ at: w.at, days: w.days })) },
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
     animals: S.animals.map(a => Object.assign({}, a)), troughs: Object.fromEntries(AN.PEN_IDS.map(k => [k, Object.assign({}, S.troughs[k])])),
@@ -3654,7 +3668,9 @@ function restore(s) { // s has been migrated and validated by PFSave
   resetTreeViews(); S.trees = s.trees ? s.trees.map(t => Object.assign({}, t)) : WD.defaultTrees(); S.orders = (s.orders || []).map(o => Object.assign({}, o)); // a v2 save gets the default forest
   S.plots = PL.validPlots(s.plots); // v5.5.0 (before applyUpgrades: it opens plot fields and puts their modules down)
   S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
-  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; applyUpgrades(); // opens tiles a v1 save did not know about
+  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; // v5.9.2
+  S.offlineWin = (s.offline && Array.isArray(s.offline.win) ? s.offline.win : []).map(w => ({ at: w.at, days: w.days }));
+  applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
   if (Array.isArray(s.yard)) s.yard.forEach(c => yard.push(Object.assign({}, c)));
   else fillYard(mulberry32((s.rng || 1) ^ 0xC0FFEE), YARD_START); // old saves get a yard to tidy, without touching the sim RNG
@@ -3711,9 +3727,23 @@ function tickWeather(dt) {
   }
 }
 
+// v5.9.2: 「明天 07:40」 for the time the 24-hour offline window is full again (the player's own clock)
+function clockText(at, now) {
+  const d = new Date(at), n = new Date(now), hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+  const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), diff = Math.round((day(d) - day(n)) / 86400000);
+  return (diff <= 0 ? '今天 ' : diff === 1 ? '明天 ' : '') + hm;
+}
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; gold, plus a little wood (v5.3.1)
-  const r = SIM.offlineSettle(sec, S.dayEarn); if (!r) return null;
-  S.coins += r.gold; S.earned += r.gold; if (r.gold > 0) log(`离线期间赚了 ${r.gold} 金`);
+  // v5.9.2: and at most 3 days in any 24 real hours (S.offlineWin); a clock turned back pays nothing and keeps the window
+  if (sec < -60) { log('电脑的时钟好像往回调过，这次不算离线收益'); noteLog('event', { type: 'clockBack', sec: Math.round(sec), day: S.day }); return null; }
+  const now = Date.now(), r = SIM.offlineSettle(sec, S.dayEarn, S.offlineWin, now); if (!r) return null;
+  S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now);
+  if (r.limited && r.days <= 0) { // the window is used up: a log line only, no box
+    log(`离开了 ${Math.round(sec / 60)} 分钟；过去 24 小时的 3 天离线收益已经领过，${r.nextText} 以后再算`);
+    noteLog('offline', r, logSnap()); SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
+  }
+  S.coins += r.gold; S.earned += r.gold;
+  if (r.gold > 0) log(`离线期间赚了 ${r.gold} 金` + (r.limited ? `（过去 24 小时已经结算过 ${r.used} 天，这次按 ${r.days} 天算）` : ''));
   offlineWood(r); // v5.3.1: the family also chopped a little in 林场
   if (WX && r.days > 0) {
     const off = WX.advanceDays(S.weather || WX.emptyWeather(), S.day, r.days, (S.createdAt | 0) || 1);
@@ -3746,7 +3776,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { autoBuyAtStall, setAutoBuy, clockText, shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },

@@ -156,9 +156,17 @@
     c = obj(c); if (!FISH_IDS.includes(c.id)) return null;
     return { id: c.id, name: typeof c.name === 'string' ? c.name.slice(0, 12) : c.id, gold: int(c.gold, 0, 0, 999), water: c.water === 'sea' ? 'sea' : 'pond', day: int(c.day, 1, 1, 1e6) };
   }
+  function validSettings(st) {
+    const sp = st.speed;
+    return { speed: [1, 2, 4].includes(sp) ? sp : 1, autoBuy: st.autoBuy === true, autoDay: int(st.autoDay, 0, 0, 1e6), autoN: int(st.autoN, 0, 0, 1e6) };
+  }
+  function validOfflineWin(w) { // [{ at: ms, days: 0..3 }], at most 12; the 24-hour cut happens in sim.js at settlement time
+    return (Array.isArray(w) ? w : []).map(obj).filter(x => typeof x.at === 'number' && isFinite(x.at) && x.at > 0)
+      .map(x => ({ at: Math.round(x.at), days: num(x.days, 0, 0, 3) })).filter(x => x.days > 0).slice(-12);
+  }
   // fills defaults for everything, so a v1 save written before a field existed still loads
   function validate(s) {
-    const up = obj(s.upgrades), sp = obj(s.settings).speed;
+    const up = obj(s.upgrades);
     const clock = obj(s.clock), stats = obj(s.stats), inv = obj(s.inventory), f = obj(s.farmer), prices = obj(s.prices);
     if (!Array.isArray(s.tiles) || !s.tiles.length) throw new Error('save has no tiles');
     return {
@@ -183,7 +191,8 @@
       farmer: { x: num(f.x, 36, -260, 452), y: num(f.y, 40, -212, 388), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
       upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 16)])), // v5.6.0: 16 sprinklers, 12 chickens
-      settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
+      settings: validSettings(obj(s.settings)), // v5.9.2 append-only: autoBuy (off by default), the day and count of the family's purchases
+      offline: { win: validOfflineWin(obj(s.offline).win) }, // v5.9.2 append-only: settlements in the last 24 real hours
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
       trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
       orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),
