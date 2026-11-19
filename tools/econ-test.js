@@ -1,4 +1,4 @@
-// Unit tests for v5.9.2 (sim.js + save.js): the 24-hour offline window and 「家人帮忙添置」.   node tools/econ-test.js
+// Unit tests for v5.10.1 (sim.js + save.js): the 24-hour offline window and 「家人帮忙添置」.   node tools/econ-test.js
 // PF_REAL_SAVE=/path/to/export.txt also loads a real exported save (===SAVE=== ... ===LOG===); it is only read, never written.
 const assert = require('assert'), fs = require('fs'), path = require('path');
 const WD = require('../world.js'); globalThis.PFWorld = WD;

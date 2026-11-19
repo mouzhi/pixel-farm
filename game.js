@@ -596,7 +596,7 @@ const FAM = window.PFFamily;
 const PW = window.PFWorks, PWA = window.PFWorksArt; // v5.6.0 phase 8
 const DC = window.PFDecor, DA = window.PFDecorArt; // v5.7.0 phase 9
 const S = {
-  autoBuy: false, autoDay: 0, autoN: 0, offlineWin: [], // v5.9.2: 家人帮忙添置 (off by default) and the 24-hour offline window
+  autoBuy: false, autoDay: 0, autoN: 0, offlineWin: [], // v5.10.1: 家人帮忙添置 (off by default) and the 24-hour offline window
   day: 1, t: WAKE, coins: 0, soldToday: 0, totalSold: 0, cleared: 0, earned: 0, todayEarn: 0, dayEarn: [], surpriseGold: 0,
   store: Object.assign(SIM.emptySeeds(), { carrot: 2 }), prices: SIM.startPrices(), waterMax: SIM.WATER_MAX0, createdAt: Date.now(),
   up: SIM.emptyUpgrades(), eff: SIM.effects({}), speed: 1, // shop levels, what they add up to, chosen game speed (1 / 2 / 4)
@@ -1200,7 +1200,7 @@ function sellTask() {
     if (sum) { earn();
       popText(STALL.x + VR(-4, 4), STALL.y - 3, 26, '+' + sum, '#ffd76a'); burst(STALL_SPOT.x, STALL_SPOT.y - 6, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
       if (n) log((F === FARMER ? '' : F.name) + `卖出 ${n} 件收获` + (nFish ? `（其中 ${nFish} 条鱼）` : '')); }
-    autoBuyAtStall(); // v5.9.2
+    autoBuyAtStall(); // v5.10.1
     if (S.animals.length) { const need = AN.need(S.animals), want = Math.min(AN.HAY.stock, need * 4) - S.hay, can = Math.floor(S.coins * 0.5 / AN.HAY.price), n = Math.max(0, Math.min(want, can));
       if (n > 0 && S.hay < need * 3) { emit('purchase', { item: 'hay', n, gold: n * AN.HAY.price }); S.coins -= n * AN.HAY.price; S.hay += n; S.hayGold = (S.hayGold || 0) + n * AN.HAY.price; noteLog('spend', 'hay', n * AN.HAY.price); log(`买了 ${n} 捆干草（${n * AN.HAY.price} 金），放进仓库`); } }
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
@@ -1212,7 +1212,7 @@ function sellTask() {
   } };
 }
 
-// v5.9.2 「家人帮忙添置」: off by default. At most one thing a game day, bought at the stall by the farmer or 阿禾 (never a child)
+// v5.10.1 「家人帮忙添置」: off by default. At most one thing a game day, bought at the stall by the farmer or 阿禾 (never a child)
 // right after a sale, only from SIM.AUTO_BUY, only with 3x its price in hand and enough left for seeds, and only what the shop shows.
 function autoBuyAtStall() {
   if (!S.autoBuy || S.autoDay === S.day || !(F === FARMER || F.id === 'partner')) return null;
@@ -3622,7 +3622,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.10.0';
+const GAME_VERSION = '5.10.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -3715,7 +3715,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   resetTreeViews(); S.trees = s.trees ? s.trees.map(t => Object.assign({}, t)) : WD.defaultTrees(); S.orders = (s.orders || []).map(o => Object.assign({}, o)); // a v2 save gets the default forest
   S.plots = PL.validPlots(s.plots); // v5.5.0 (before applyUpgrades: it opens plot fields and puts their modules down)
   S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
-  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; // v5.9.2
+  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speed = s.settings.speed; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; // v5.10.1
   S.offlineWin = (s.offline && Array.isArray(s.offline.win) ? s.offline.win : []).map(w => ({ at: w.at, days: w.days }));
   applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
@@ -3774,14 +3774,14 @@ function tickWeather(dt) {
   }
 }
 
-// v5.9.2: 「明天 07:40」 for the time the 24-hour offline window is full again (the player's own clock)
+// v5.10.1: 「明天 07:40」 for the time the 24-hour offline window is full again (the player's own clock)
 function clockText(at, now) {
   const d = new Date(at), n = new Date(now), hm = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
   const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), diff = Math.round((day(d) - day(n)) / 86400000);
   return (diff <= 0 ? '今天 ' : diff === 1 ? '明天 ' : '') + hm;
 }
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; gold, plus a little wood (v5.3.1)
-  // v5.9.2: and at most 3 days in any 24 real hours (S.offlineWin); a clock turned back pays nothing and keeps the window
+  // v5.10.1: and at most 3 days in any 24 real hours (S.offlineWin); a clock turned back pays nothing and keeps the window
   if (sec < -60) { log('电脑的时钟好像往回调过，这次不算离线收益'); noteLog('event', { type: 'clockBack', sec: Math.round(sec), day: S.day }); return null; }
   const now = Date.now(), r = SIM.offlineSettle(sec, S.dayEarn, S.offlineWin, now); if (!r) return null;
   S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now);

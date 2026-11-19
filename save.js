@@ -192,8 +192,8 @@
       farmer: { x: num(f.x, 36, -260, 452), y: num(f.y, 40, -212, 388), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
       upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 16)])), // v5.6.0: 16 sprinklers, 12 chickens
-      settings: validSettings(obj(s.settings)), // v5.9.2 append-only: autoBuy (off by default), the day and count of the family's purchases
-      offline: { win: validOfflineWin(obj(s.offline).win) }, // v5.9.2 append-only: settlements in the last 24 real hours
+      settings: validSettings(obj(s.settings)), // v5.10.1 append-only: autoBuy (off by default), the day and count of the family's purchases
+      offline: { win: validOfflineWin(obj(s.offline).win) }, // v5.10.1 append-only: settlements in the last 24 real hours
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
       trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
       orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),

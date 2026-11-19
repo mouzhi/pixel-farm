@@ -231,7 +231,7 @@
     return out;
   }
   // offline: away time -> game days at 50% of the online rate (always 1x speed), at most 3 days, times the recent daily income.
-  // v5.9.2: and at most 3 days in any 24 real hours. `win` is the save's list of past settlements [{ at: ms, days }]; without it
+  // v5.10.1: and at most 3 days in any 24 real hours. `win` is the save's list of past settlements [{ at: ms, days }]; without it
   // (old callers, unit tests of the per-visit rule) there is no 24-hour window.
   const OFFLINE_WIN_MS = 24 * 3600 * 1000, OFFLINE_WIN_MAX = 12;
   // the settlements still inside the 24-hour window. A time in the future (the clock was set forward, then back) counts as
@@ -257,7 +257,7 @@
     out.gold = Math.floor(avg * out.days);
     return out;
   }
-  // v5.9.2 「家人帮忙添置」 (off by default): the only things the family ever buys for the player, in this order. No wood, no
+  // v5.10.1 「家人帮忙添置」 (off by default): the only things the family ever buys for the player, in this order. No wood, no
   // decorations, pets, speed, land, buildings, workshops or town things: those are the player's own choices.
   const AUTO_BUY = ['field', 'field', 'field', 'can', 'shoe', 'hoe', 'basket', 'coop', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken',
     'can', 'shoe', 'strawberry', 'basket'];

@@ -55,6 +55,8 @@ jobs:
         run: node tools/home-test.js
       - name: v5.10.0 (town hall, projects, prosperity, gifts) unit tests
         run: node tools/hall-test.js
+      - name: v5.10.1 economy unit tests (24-hour offline window, clock turned back, family buys basics only)
+        run: node tools/econ-test.js
       - name: Surprise browser test
         env:
           CHROME: /usr/bin/google-chrome
@@ -115,3 +117,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/hall-shots.js
+      - name: v5.10.1 economy browser test (offline window full / partial / used up, clock turned back, family buys toggle and one-a-day, day-59 and v15 saves)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/econ-shots.js
