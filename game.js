@@ -2053,6 +2053,7 @@ function entrySpots() { const L = NAV.LAYOUT, out = [L.DOOR, L.BARN_DOOR, L.WELL
 // skip: { what, ref } of the thing being moved (it does not collide with itself)
 function placeOk(x, y, what, id, skip, self, slot) { // self: the order being carried out (it does not collide with itself); slot (v5.10.3): a planned spot (slots.js) may stand on the yard's packed dirt and close to the house, never on a walk path or in a pen
   x = Math.round(x * 2) / 2; y = Math.round(y * 2) / 2; const box = thingBox(what, id, x, y), res = (ok, why) => ({ ok, why, box, x, y });
+  if (!slot && what === 'decor' && SLT && id && SLT.spotsFor(id, slotHomes()).some(s => Math.abs(s.x - x) < 0.6 && Math.abs(s.y - y) < 0.6)) slot = true; // v5.10.3: a planned spot follows its own rules wherever it is checked (the player's click, the hover, the move tool)
   const pts = [{ x, y }, { x: box[0], y: box[1] }, { x: box[2], y: box[1] }, { x: box[0], y: box[3] }, { x: box[2], y: box[3] }];
   if (!pts.every(p => ownGround(p.x, p.y))) return res(false, '这里还没解锁');
   if (HM && S.home.houses.some(h => { const L = HM.layout(h); return slot ? boxHit(box, L.block, 1.5) || boxHit(box, L.coopBlock, 1.5) || L.tiles.some(t => boxHit(box, [t.x - 1, t.y - 1, t.x + 9, t.y + 9])) : boxHit(box, L.foot); })) return res(false, '这里是新房子的院子和小田'); // v5.9.0
