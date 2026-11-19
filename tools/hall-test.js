@@ -41,13 +41,15 @@ ok('the new neighbours keep their hours; doors and spots are in town; 阿松 has
 });
 ok('gifts: any decoration but the party table, until the street is full; lamps light at night, new windows in the evening', () => {
   const st = HL.empty(); assert(!HL.give(st, 'party'));
-  for (let i = 0; i < HL.GIFT_SPOTS.length; i++) assert(HL.give(st, i % 2 ? 'lamppost' : 'bench'));
-  assert(!HL.give(st, 'bench'), 'full'); assert.strictEqual(HL.giftSpot(st), null);
+  const SL = require('../slots.js'), NL = SL.TOWN.lamp.length, NN = SL.TOWN.nook.length;
+  for (let i = 0; i < NL; i++) assert(HL.give(st, 'lamppost')); assert(!HL.give(st, 'stonelamp'), 'v5.10.3: the lamp spots are full'); assert(HL.give(st, 'bench'), 'a bench still has a nook');
+  for (let i = 1; i < NN; i++) assert(HL.give(st, i % 2 ? 'bench' : 'shell')); assert(!HL.give(st, 'bench'), 'nooks full'); assert.strictEqual(HL.giftSpot(st, 'bench'), null);
+  const gp = HL.giftPos(st); assert.deepStrictEqual(gp.slice(0, NL), SL.TOWN.lamp, 'lamps in their spots, in order'); assert(gp.every(Boolean));
   const CAT = { lamppost: { light: 26 }, bench: {} };
   assert.strictEqual(HL.lightsAt(st, 12 * 60, CAT).length, 0, 'not at noon');
-  assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, HL.GIFT_SPOTS.length / 2 + 1, 'six lamps and the hall');
-  st.built.L5 = 3; assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, HL.GIFT_SPOTS.length / 2 + 2);
-  assert.strictEqual(HL.lightsAt(st, 23 * 60, CAT).length, HL.GIFT_SPOTS.length / 2, 'windows go dark, lamps stay');
+  assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, NL + 1, 'the lamps and the hall');
+  st.built.L5 = 3; assert.strictEqual(HL.lightsAt(st, 21 * 60, CAT).length, NL + 2);
+  assert.strictEqual(HL.lightsAt(st, 23 * 60, CAT).length, NL, 'windows go dark, lamps stay');
 });
 ok('the weekly paper reads like a few lines of news', () => {
   const t = HL.paperText({ day: 70, built: ['L5'], gifts: 2, trade: 340, lv: 1, people: 6 });

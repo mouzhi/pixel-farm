@@ -7,6 +7,7 @@
 'use strict';
 (function (root) {
   const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown;
+  const SL = (typeof require === 'function' && typeof document === 'undefined') ? require('./slots.js') : root.PFSlots; // v5.10.3: gifts by kind
   const MK = (typeof require === 'function' && typeof document === 'undefined') ? require('./market.js') : root.PFMarket; // v5.10.3
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
@@ -81,10 +82,13 @@
   }
 
   // ---------- 送给镇上: decorations along the main street ----------
-  const GIFT_SPOTS = [P(480, 76), P(504, 76), P(530, 77), P(580, 76), P(596, 77), P(622, 76), P(466, 56), P(530, 56), P(552, 54), P(624, 52), P(612, 92), P(586, 120)]; // v5.10.3: the last two moved off the market stalls
+  // v5.10.3: laid out by kind (slots.js): lamps along the street at even spacing, flower pots by the doors, the rest in nooks
+  const GIFT_SPOTS = [].concat(SL.TOWN.lamp, SL.TOWN.pot, SL.TOWN.nook);
   const GIFT_OK = id => id !== 'party';                     // the party table stays at home: it is where the family meets
-  const giftSpot = st => (st.gifts.length < GIFT_SPOTS.length ? GIFT_SPOTS[st.gifts.length] : null);
-  function give(st, id) { if (!GIFT_OK(id) || !giftSpot(st)) return false; st.gifts.push(id); return true; }
+  const giftPos = st => SL.townLayout(st.gifts);            // where each gift stands (by index)
+  const giftRoom = (st, id) => SL.townRoom(st.gifts, id);
+  const giftSpot = (st, id) => (id ? (giftRoom(st, id) ? giftPos({ gifts: st.gifts.concat([id]) }).pop() : null) : (st.gifts.length < SL.TOWN_MAX ? true : null));
+  function give(st, id) { if (!GIFT_OK(id) || !giftRoom(st, id)) return false; st.gifts.push(id); return true; }
 
   // ---------- 镇子小报: once a week a few lines in the log ----------
   const PAPER_EVERY = 7;
@@ -104,7 +108,7 @@
     const t = ((T % 1440) + 1440) % 1440, out = [], homes = t >= TN.LIT.homes[0] && t < TN.LIT.homes[1], lamps = t >= TN.LIT.lamps[0] || t < TN.LIT.lamps[1];
     if (homes) for (const l of LOTS) if (st.built[l.id]) out.push({ x: l.door.x, y: l.door.y + 1, z: 6, r: 16, s: 0.6 });
     if (homes) out.push({ x: HALL.door.x, y: HALL.door.y - 1, z: 7, r: 16, s: 0.5 });
-    if (lamps && CAT) st.gifts.forEach((id, i) => { const c = CAT[id]; if (c && c.light) out.push({ x: GIFT_SPOTS[i].x, y: GIFT_SPOTS[i].y, z: 12, r: c.light, s: 0.85 }); });
+    if (lamps && CAT) { const gp = giftPos(st); st.gifts.forEach((id, i) => { const c = CAT[id]; if (c && c.light && gp[i]) out.push({ x: gp[i].x, y: gp[i].y, z: 12, r: c.light, s: 0.85 }); }); }
     return out;
   }
 
@@ -125,7 +129,7 @@
     const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {}, out = empty();
     const b = o.built && typeof o.built === 'object' ? o.built : {}; for (const id of Object.keys(b)) if (PROJ[id]) out.built[id] = int(b[id], 1, 1e6) || 1;
     if (o.job && typeof o.job === 'object' && PROJ[o.job.id] && !out.built[o.job.id]) out.job = { id: o.job.id, day: int(o.job.day, 0, 1e6) };
-    if (Array.isArray(o.gifts)) out.gifts = o.gifts.filter(id => typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id)).slice(0, GIFT_SPOTS.length);
+    if (Array.isArray(o.gifts)) { const g = []; for (const id of o.gifts) if (typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id) && SL.townRoom(g, id)) g.push(id); out.gifts = g; }
     out.paper = int(o.paper, 0, 1e6);
     if (MK) out.market = MK.valid(o.market);
     const w = o.week && typeof o.week === 'object' ? o.week : {};
@@ -134,6 +138,6 @@
   }
 
   const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, MARKET_HOURS, BUILD_HOURS, siteSpot,
-    canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, give, PAPER_EVERY, paperText, blocks, empty, valid };
+    canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, giftPos, giftRoom, give, PAPER_EVERY, paperText, blocks, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHall = api;
 })(typeof window !== 'undefined' ? window : globalThis);

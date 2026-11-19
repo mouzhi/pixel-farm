@@ -230,7 +230,7 @@
     const MKS = root.PFMarket; // v5.10.3: the market stalls (bare frames while 阿松 is putting them up)
     if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
-    if (DM) H.gifts.forEach((id, i) => { const at = HL.GIFT_SPOTS[i], m = DM[id]; if (m) own.hall.push(X.addProp(m, at.x, at.y, 0, { xp: 1, town: 'gift' })); });
+    if (DM) { const gp = HL.giftPos(H); H.gifts.forEach((id, i) => { const at = gp[i], m = DM[id]; if (m && at) own.hall.push(X.addProp(m, at.x, at.y, 0, { xp: 1, town: 'gift' })); }); } // v5.10.3: by kind (slots.js)
     X.markNavDirty();
   }
   // a little sign over the shut gate while the town is locked (drawn by game.js with the plot locks)

@@ -16,6 +16,7 @@ const WX = window.PFWeather, INS = window.PFInsects; // v5.4.3: light rain and i
 const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
 const PL = window.PFPlots, XP = window.PFExpand; // v5.5.0: the outer ring (plots.js rules, expansion.js art)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
+const SLT = window.PFSlots; // v5.10.3: tidy decoration spots (slots.js)
 const MK = window.PFMarket; // v5.10.3: 集市 (market.js rules; art in town-art.js)
 const HL = window.PFHall; // v5.10.0: 镇公所, the board's projects, gifts to the town (hall.js rules; art in town-art.js)
 const TN = window.PFTown, TA = window.PFTownArt, WORLD55 = WD.WORLD55 || WORLD; // v5.8.0 phase 10: the town east of 东大道 (town.js rules, town-art.js art)
@@ -1974,22 +1975,26 @@ function entrySpots() { const L = NAV.LAYOUT, out = [L.DOOR, L.BARN_DOOR, L.WELL
   for (const id of PW.WORK_IDS) if (S.works.works[id] && S.works.works[id].at) out.push(PWA.doorOf(id));
   return out; }
 // skip: { what, ref } of the thing being moved (it does not collide with itself)
-function placeOk(x, y, what, id, skip, self) { // self: the order being carried out (it does not collide with itself)
+function placeOk(x, y, what, id, skip, self, slot) { // self: the order being carried out (it does not collide with itself); slot (v5.10.3): a planned spot (slots.js) may stand on the yard's packed dirt and close to the house, never on a walk path or in a pen
   x = Math.round(x * 2) / 2; y = Math.round(y * 2) / 2; const box = thingBox(what, id, x, y), res = (ok, why) => ({ ok, why, box, x, y });
   const pts = [{ x, y }, { x: box[0], y: box[1] }, { x: box[2], y: box[1] }, { x: box[0], y: box[3] }, { x: box[2], y: box[3] }];
   if (!pts.every(p => ownGround(p.x, p.y))) return res(false, '这里还没解锁');
-  if (HM && S.home.houses.some(h => boxHit(box, HM.layout(h).foot))) return res(false, '这里是新房子的院子和小田'); // v5.9.0
+  if (HM && S.home.houses.some(h => { const L = HM.layout(h); return slot ? boxHit(box, L.block, 1.5) || boxHit(box, L.coopBlock, 1.5) || L.tiles.some(t => boxHit(box, [t.x - 1, t.y - 1, t.x + 9, t.y + 9])) : boxHit(box, L.foot); })) return res(false, '这里是新房子的院子和小田'); // v5.9.0
   const zone = thingZone(what, skip); if (zone && !pts.every(p => zone.ok(p.x, p.y))) return res(false, zone.why);
-  if (!zone && !pts.every(p => groundAt(p.x, p.y)[1] === 'grass')) return res(false, '只能放在草地上，不能压在路、水边或桥上');
+  if (slot) { if (!pts.every(p => groundAt(p.x, p.y)[1] !== 'water' && pathD(p.x, p.y) > 4.3)) return res(false, '不能压在路上或水里');
+    if (AN.PEN_IDS.some(k => S.eff[k] && PENS[k].roam && boxHit(box, PENS[k].roam, 2))) return res(false, '这里是动物的圈'); }
+  else if (!zone && !pts.every(p => groundAt(p.x, p.y)[1] === 'grass')) return res(false, '只能放在草地上，不能压在路、水边或桥上');
   const g = ensureNav(), cur = skip && skip.what !== 'spr' ? thingNow({ op: 'move', what: skip.what, ref: skip.ref }) : null;
   const own = cur ? thingBlock(skip.what, skip.what === 'decor' ? decorById(skip.ref) : id, cur.x, cur.y) : null;
   if (zone) { // inside its own plot the yard's packed dirt is fine; only fences, water, buildings and the plot's gate are out
     const mine = new Set(own ? DC.cellsOf(g, own).map(([i, j]) => j * g.w + i) : []), pl = PL.plotAt(x, y);
     if (DC.cellsOf(g, box).some(([i, j]) => i < 0 || j < 0 || i >= g.w || j >= g.h || (!g.cost[j * g.w + i] && !mine.has(j * g.w + i))) || (pl && pl.gate && ptIn(pl.gate, box, 4))) return res(false, '这里挡路了（篱笆、门口或别的东西）');
+  } else if (slot) { const mine = new Set(own ? DC.cellsOf(g, own).map(([i, j]) => j * g.w + i) : []);
+    if (DC.cellsOf(g, box).some(([i, j]) => i < 0 || j < 0 || i >= g.w || j >= g.h || (!g.cost[j * g.w + i] && !mine.has(j * g.w + i)))) return res(false, '这里挡路了（篱笆、门口或别的东西）');
   } else if (!DC.onGrass(g, box, NAV.GRASS, own)) return res(false, '这里挡路了（路、门口、篱笆或别的东西）');
   if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && ptIn(t, box, 5))) return res(false, '不能放在田里');
-  if (yard.some(c => ptIn(c, box, 3))) return res(false, '这里有杂物，等家人收拾完再放');
-  const hb = NAV.houseBox(S.eff.house || 0); if (boxHit(box, [hb.x0, hb.y0, hb.x1, hb.y1], 8)) return res(false, '离房子太近');
+  if (!slot && yard.some(c => ptIn(c, box, 3))) return res(false, '这里有杂物，等家人收拾完再放'); // v5.10.3: a planned spot does not wait for the weeds
+  const hb = NAV.houseBox(S.eff.house || 0); if (boxHit(box, [hb.x0, hb.y0, hb.x1, hb.y1], slot ? 1.5 : 8)) return res(false, '离房子太近');
   if ([[BARN, 22], [STALL, 18], [WELL, 10]].some(([b, d]) => ptIn(b, box, d))) return res(false, '离房子太近');
   if (AN.PEN_IDS.some(k => (!PENS[k].second || S.eff[k]) && (ptIn(PENS[k].bld, box, 16) || ptIn(PENS[k].trough, box, 8)))) return res(false, '这里留给动物的棚子');
   if (S.trees.some(t => ptIn(t, box, 6)) || S.orders.some(o => o.type === 'plant' && ptIn(o, box, 8))) return res(false, '离树太近');
@@ -2016,8 +2021,16 @@ function thingZone(what, skip) {
 const decorById = u => { const p = S.decor.placed.find(q => q.u === u); return p ? p.id : null; };
 // the family's own choice: free grass near the house (the party area prefers a playground plot), spaced out a little
 let autoCache = { key: '', spot: null };
+// v5.10.3: everything but the party area goes to the first free spot of its kind (slots.js); none free: it waits in the storehouse
+const slotHomes = () => (HM ? S.home.houses.map(h => ({ L: HM.layout(h), m: h.m })) : []);
+function slotSpot(id, skipU) {
+  for (const s of SLT.spotsFor(id, slotHomes())) { if (!ownGround(s.x, s.y)) continue;
+    const r = placeOk(s.x, s.y, 'decor', id, skipU ? { what: 'decor', ref: skipU } : null, null, true); if (r.ok) return { x: r.x, y: r.y, area: s.area }; }
+  return null;
+}
 function autoSpot(id) {
   const key = [navVer, S.decor.placed.length, S.decor.orders.length, S.day, id, Math.floor(S.t % 1440 / 120)].join('|'); if (autoCache.key === key) return autoCache.spot;
+  if (SLT && id !== 'party') { const spot = slotSpot(id); autoCache = { key, spot }; return spot; }
   const anchors = [];
   if (id === 'party') for (const pid of Object.keys(S.plots)) if (S.plots[pid].mod === 'playground') { const r = PL.plot(pid).rect; anchors.push({ c: { x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2 }, r: 40 }); }
   anchors.push({ c: { x: DOOR.x + 24, y: DOOR.y + 30 }, r: 120 });
@@ -2049,7 +2062,7 @@ function dropOrder(q) { S.decor.orders = S.decor.orders.filter(o => o !== q); se
 function settle(q) { // put it down at q.x, q.y (checked again: the ground may have changed since the click)
   const id = q.id || (q.what === 'decor' ? decorById(q.ref) : null), skip = q.op === 'move' ? { what: q.what, ref: q.ref } : null;
   if (q.what === 'home') return homeMoveDone(q);
-  let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q);
+  let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q, !q.mine && q.what === 'decor' && SLT && id !== 'party');
   if (!r.ok) { dropOrder(q); log(`${thingName(q)}没法放到那里（${r.why}），留在原处`); return false; }
   const x = q.what === 'spr' ? Math.round(q.x * 10) / 10 : r.x, y = q.what === 'spr' ? Math.round(q.y * 10) / 10 : r.y;
   if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
@@ -2111,7 +2124,22 @@ function guestStep(g, dm) {
 }
 let guestsOut = 0; // v5.8.0: the day the town guests set out (they walk over from their houses, so they leave before the party starts)
 const GUEST_WALK = 90;
+// v5.10.3: an old save's pieces were set down anywhere; once, on load, they are put on their kinds' spots (counts kept: what does not fit goes to the storehouse)
+function decorRelayout() {
+  if (S.decorLayout || !SLT) return null; S.decorLayout = 1; ensureNav();
+  const D = S.decor, keep = [], move = [], before = D.placed.length + Object.values(D.inv).reduce((a, b) => a + b, 0);
+  D.orders = D.orders.filter(q => q.what !== 'decor' || q.op !== 'move'); for (const a of actors()) a._carry = null;
+  for (const p of D.placed) (p.id === 'party' ? keep : move).push(p);
+  D.placed = keep.slice(); markNavDirty(); ensureNav(); let put = 0, stored = 0;
+  for (const p of SLT.relayoutOrder(move)) { const sp = slotSpot(p.id);
+    if (sp) { D.placed.push(Object.assign({}, p, { x: sp.x, y: sp.y })); put++; } else { D.inv[p.id] = (D.inv[p.id] | 0) + 1; stored++; } }
+  const after = D.placed.length + Object.values(D.inv).reduce((a, b) => a + b, 0);
+  markNavDirty(); autoCache.key = ''; if (DECOR_ON) DA.sync(true);
+  if (move.length) log(`家里把院子里的装饰重新摆了一遍：灯沿着路和房前排开，花盆放到门口、窗下和池塘边${stored ? `，放不下的 ${stored} 件先收进仓库` : ''}`);
+  return { before, after, put, stored };
+}
 function decorTick(dm) {
+  if (!S.decorLayout) decorRelayout();
   const T = S.t % 1440, early = townOpen() ? GUEST_WALK : 0;
   if (early && partyTonight() && T >= DC.PARTY.from - early && T < DC.PARTY.from && guestsOut !== S.day && !(WX && WX.isRaining(S.weather, S.day, S.t))) { guestsOut = S.day;
     for (let i = 0; i < S.decor.party.guests; i++) { const seat = partySeat(actors().length + i), h = TN.BY_ID[i ? 'h4' : 'h3'].door;
@@ -2195,7 +2223,7 @@ function hallStart(id) {
   log(`镇公所的告示板：${p.name}开工了，木匠阿松${p.kind === 'market' ? '在广场上搭摊位' : '搭起脚手架'}，明天一早就能盖好`); return { ok: true }; }
 function hallGive(id, u) { // 送给镇上: from the storehouse (u undefined) or from the yard (u: the placed one)
   const H = S.town.hall; if (!townOpen()) return { ok: false, why: '先把镇子买下来' }; if (!HL.GIFT_OK(id)) return { ok: false, why: '派对区留在家里' };
-  if (!HL.giftSpot(H)) return { ok: false, why: '主街上已经摆满了' };
+  if (!HL.giftRoom(H, id)) return { ok: false, why: '主街上放这类东西的地方已经满了' }; // v5.10.3: by kind
   if (u === undefined) { if (!((S.decor.inv[id] | 0) > 0)) return { ok: false, why: '仓库里没有' }; S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id]; }
   else { const i = S.decor.placed.findIndex(p => p.u === u && p.id === id); if (i < 0) return { ok: false, why: '找不到它' }; S.decor.placed.splice(i, 1); S.decor.orders = S.decor.orders.filter(q => q.ref !== u); }
   HL.give(H, id); H.week.gifts++; markNavDirty(); if (TOWN_ON) TA.sync(true);
@@ -2220,7 +2248,7 @@ function hallView() { // what the board shows (ui.js)
   for (const p of S.decor.placed) if (HL.GIFT_OK(p.id)) (placed[p.id] = placed[p.id] || []).push(p.u);
   return { open: ctx.open, lv: HL.prosperity(H), lvName: HL.LV_NAME[HL.prosperity(H)], next: HL.nextLevelAt(H), job: H.job, people: TN.NEIGHBOURS.length + HL.residents(H).length,
     projects: HL.PROJECTS.map(p => ({ id: p.id, name: p.name, desc: p.desc, cost: p.cost, wood: p.wood, built: H.built[p.id] || 0, building: !!(H.job && H.job.id === p.id), why: HL.canStart(H, p.id, ctx) })),
-    gifts: H.gifts.slice(), room: HL.GIFT_SPOTS.length - H.gifts.length,
+    gifts: H.gifts.slice(), room: HL.GIFT_SPOTS.length - H.gifts.length, roomOf: id => HL.giftRoom(H, id),
     inv: Object.keys(S.decor.inv).filter(id => HL.GIFT_OK(id) && S.decor.inv[id] > 0).map(id => ({ id, name: DC.CATALOG[id].name, n: S.decor.inv[id] })),
     placed: Object.keys(placed).map(id => ({ id, name: DC.CATALOG[id].name, n: placed[id].length, u: placed[id][placed[id].length - 1] })) }; }
 // ---- the town shop: a grown-up takes workshop goods, honey and fish over at a fifth more ----
@@ -3741,7 +3769,7 @@ function snapshot() {
     inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay, fishFood: S.fishFood, ornament: Object.assign({}, S.ornament) },
     farmer: { x: Math.round(FARMER.x * 100) / 100, y: Math.round(FARMER.y * 100) / 100, sleeping: FARMER.sleeping, home: FARMER.home },
     tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && SU.validCropExtras(t.crop, { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot }) })),
-    upgrades: Object.assign({}, S.up), settings: { speed: 1, speedRefund: S.speedRefund | 0, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
+    upgrades: Object.assign({}, S.up), settings: { speed: 1, decorLayout: S.decorLayout ? 1 : 0, speedRefund: S.speedRefund | 0, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
     offline: { win: (S.offlineWin || []).map(w => ({ at: w.at, days: w.days })) },
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
@@ -3779,7 +3807,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   resetTreeViews(); S.trees = s.trees ? s.trees.map(t => Object.assign({}, t)) : WD.defaultTrees(); S.orders = (s.orders || []).map(o => Object.assign({}, o)); // a v2 save gets the default forest
   S.plots = PL.validPlots(s.plots); // v5.5.0 (before applyUpgrades: it opens plot fields and puts their modules down)
   S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
-  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speedRefund = s.settings.speedRefund | 0; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; // v5.10.1
+  S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speedRefund = s.settings.speedRefund | 0; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; S.decorLayout = s.settings.decorLayout ? 1 : 0; // v5.10.1; v5.10.3 decorLayout
   S.offlineWin = (s.offline && Array.isArray(s.offline.win) ? s.offline.win : []).map(w => ({ at: w.at, days: w.days }));
   applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
@@ -3899,7 +3927,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },

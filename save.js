@@ -159,7 +159,7 @@
   }
   function validSettings(st) {
     // v5.10.2: one game speed for everyone; `speed` stays in the save as 1 for older readers. speedRefund: gold given back for a bought 2x / 4x (once)
-    return { speed: 1, speedRefund: int(st.speedRefund, 0, 0, 1e6), autoBuy: st.autoBuy === true, autoDay: int(st.autoDay, 0, 0, 1e6), autoN: int(st.autoN, 0, 0, 1e6) };
+    return { speed: 1, speedRefund: int(st.speedRefund, 0, 0, 1e6), autoBuy: st.autoBuy === true, autoDay: int(st.autoDay, 0, 0, 1e6), autoN: int(st.autoN, 0, 0, 1e6), decorLayout: st.decorLayout ? 1 : 0 }; // v5.10.3: decorLayout (the one-time tidy-up of placed decorations)
   }
   function validOfflineWin(w) { // [{ at: ms, days: 0..3 }], at most 12; the 24-hour cut happens in sim.js at settlement time
     return (Array.isArray(w) ? w : []).map(obj).filter(x => typeof x.at === 'number' && isFinite(x.at) && x.at > 0)
