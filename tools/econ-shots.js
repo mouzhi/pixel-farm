@@ -69,6 +69,15 @@ fs.mkdirSync(OUT, { recursive: true });
       const v = PFSave.validate(fx), base = { auto: S.autoBuy, win: v.offline.win.length, settings: v.settings, sv: s0.saveVersion, settled: s0.offline.win.length }; f.setAutoBuy(true); S.coins = 999999; const u = JSON.stringify(S.up), hall0 = JSON.stringify(S.town && S.town.hall || null), deco0 = JSON.stringify(S.decor.inv), day = S.day; let g = 0; while (S.day === day && g++ < 400) f.advance(5, 4);
       return Object.assign(base, { pick: PFSim.autoPick(S.up, S.coins, f.FARMER.wood, S.dayEarn).why, same: JSON.stringify(S.up) === u, upDiff: (o => Object.keys(S.up).reduce((a, k) => a + (S.up[k] - (o[k] | 0)), 0))(JSON.parse(u)), hallSame: JSON.stringify(S.town && S.town.hall || null) === hall0, decoSame: JSON.stringify(S.decor.inv) === deco0, autoN: S.autoN }); }, FX);
     check(fname, r.auto !== false || r.win !== 0 || r.settings.autoBuy !== false || r.sv !== 15 ? 'defaults' : !r.hallSame || !r.decoSame ? 'touched the town hall or decor' : r.autoN > 1 || r.upDiff !== r.autoN ? 'bought more than one basic thing' : null, r); await p.context().close(); }
+  // 6b. the title: one line at 1280 (the full one) and on phones (the short one in the right dock), never over the HUD
+  for (const [vw, vh] of [[1280, 800], [1024, 700], [800, 600], [390, 844], [360, 780]]) {
+    const p = await page(null, vw, vh); await p.evaluate(() => { document.getElementById('offline').hidden = true; });
+    const r = await p.evaluate(() => { const ids = ['title', 'titleS'], t = ids.map(id => document.getElementById(id)).find(e => getComputedStyle(e).display !== 'none'); if (!t) return { none: true };
+      const first = t.id === 'title' ? t.firstChild : t, rg = document.createRange(); rg.selectNodeContents(first); const lines = new Set([...rg.getClientRects()].filter(q => q.width).map(q => Math.round(q.top))).size;
+      const R = t.getBoundingClientRect(), H = document.getElementById('hud').getBoundingClientRect(), over = R.left < H.right && H.left < R.right && R.top < H.bottom && H.top < R.bottom;
+      return { id: t.id, text: first.textContent.trim(), lines, over, inView: R.left >= 0 && R.right <= innerWidth }; });
+    await p.screenshot({ path: path.join(OUT, `v5101_title_${vw}.png`), clip: { x: 0, y: 0, width: vw, height: Math.min(vh, 200) } });
+    check(`v5101_title_${vw}.png`, r.none ? 'no title' : r.lines !== 1 ? r.lines + ' lines' : r.over ? 'over the HUD' : !r.inView ? 'off screen' : !r.text.includes('v' + VERSION) ? 'version' : null, r); await p.context().close(); }
   // 7. optional: a real exported save (local only)
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) {
     const real = readSave(process.env.PF_REAL_SAVE); real.savedAt = Date.now() - 2 * H; const p = await page(real);
@@ -77,5 +86,5 @@ fs.mkdirSync(OUT, { recursive: true });
     check('v5101_real_save.png', r.auto !== false ? 'toggle on' : r.off !== 3 || r.win !== 1 || !r.shown ? 'offline' : null, r); await p.context().close(); }
   await b.close(); server.close();
   if (errs.length) { console.log('page errors:', errs.slice(0, 5)); fails.push('page errors'); }
-  if (fails.length) { console.log('\nFAILED:', fails); process.exit(1); } console.log('\nall v5.10.1 checks ok');
+  if (fails.length) { console.log('\nFAILED:', fails); process.exit(1); } console.log('\nall v' + VERSION + ' economy checks ok');
 })().catch(e => { console.error(e); process.exit(1); });
