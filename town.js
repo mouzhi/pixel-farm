@@ -12,7 +12,7 @@
   const STRIP = [448, -208, 640, 384];                     // the strip the map grew by
   const GATE = P(440, 66);                                 // the gate at the end of 东大道 (the old one, now with a town behind it)
   // streets are routes: painted as dirt and walked like the farm lanes
-  const STREETS = { t_main: [P(436, 66), P(626, 66)], t_north: [P(540, 66), P(540, 52)], t_south: [P(524, 66), P(524, 132)], t_school: [P(590, 66), P(590, 46)], t_shop: [P(492, 66), P(492, 52)], t_hall: [P(518, 66), P(518, 44)], t_bake: [P(483, 66), P(483, 82)] }; // t_hall: v5.10.0; t_bake: v5.10.4 面包房
+  const STREETS = { t_main: [P(436, 66), P(626, 66)], t_north: [P(540, 66), P(540, 52)], t_south: [P(524, 66), P(524, 132)], t_school: [P(590, 66), P(590, 46)], t_shop: [P(492, 66), P(492, 52)], t_hall: [P(518, 66), P(518, 44)], t_bake: [P(483, 66), P(483, 82)], t_wood: [P(524, 132), P(568, 132), P(568, 123)], t_smith: [P(524, 132), P(606, 132), P(606, 127)] }; // t_hall: v5.10.0; t_bake: v5.10.4; t_wood / t_smith: v5.10.5
   // buildings: centre, half size (world units, 8 = one farm tile), door (where people stand), rot (0: door to the south)
   const BUILDINGS = [
     { id: 'shop', name: '镇上小店', kind: 'shop', x: 492, y: 36, hw: 13, hd: 8, door: P(492, 50), rot: 0 },

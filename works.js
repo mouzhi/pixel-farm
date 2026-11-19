@@ -16,7 +16,8 @@
   // A sprinkler stands just outside a field and waters every tile whose centre is within `reach` (both axes): on a field
   // edge between two columns that is 4 columns x 2 rows, "一排 8 格". It needs no power, no winding and never breaks.
   const SPRINKLER = { max: 16, reach: 16, off: 3, cost: 800, wood: 20 };
-  const covers = (s, t) => Math.abs(t.x - s.x) <= SPRINKLER.reach && Math.abs(t.y - s.y) <= SPRINKLER.reach;
+  const reachOf = r => (r > 0 ? r : SPRINKLER.reach);
+  const covers = (s, t, reach) => { const d = reachOf(reach); return Math.abs(t.x - s.x) <= d && Math.abs(t.y - s.y) <= d; };
   // where a family member may set one down: the edge of a field (between two columns or two rows, 3 units out)
   function edgeSpots(fd) {
     const out = [], x0 = fd.c0 * TILE, y0 = fd.r0 * TILE, x1 = (fd.c0 + fd.cols) * TILE, y1 = (fd.r0 + fd.rows) * TILE, o = SPRINKLER.off;
@@ -27,25 +28,25 @@
   }
   // tiles: [{ x, y, f, open }] (tile centres), fields: [{ id, c0, r0, cols, rows }] in priority order (home first),
   // placed: [{ x, y }]. -> the next spot that waters the most open tiles nothing waters yet, or null when all are covered
-  function nextSpot(fields, tiles, placed) {
-    const open = tiles.filter(t => t.open && !placed.some(s => covers(s, t)));
+  function nextSpot(fields, tiles, placed, reach) {
+    const open = tiles.filter(t => t.open && !placed.some(s => covers(s, t, reach)));
     if (!open.length) return null;
     // field by field in priority order (home first, so the field the player watches is done first), the spot that waters most
     for (const fd of fields) { const mine = open.filter(t => t.f === fd.id); if (!mine.length) continue;
       let best = null, bs = 0;
       for (const s of edgeSpots(fd)) { if (placed.some(q => Math.hypot(q.x - s.x, q.y - s.y) < 6)) continue;
-        const n = mine.filter(t => covers(s, t)).length, sc = n * 100 - (s.y * 0.001 + s.x * 0.0001);
+        const n = mine.filter(t => covers(s, t, reach)).length, sc = n * 100 - (s.y * 0.001 + s.x * 0.0001);
         if (n > 0 && sc > bs) { bs = sc; best = s; } }
       if (best) return { x: best.x, y: best.y, f: best.f }; }
     return null;
   }
   // the player moves one: anywhere beside a field (not on a tile), as long as it reaches at least one tile
-  function spotOk(x, y, tiles) {
+  function spotOk(x, y, tiles, reach) {
     if (tiles.some(t => Math.abs(t.x - x) < 5 && Math.abs(t.y - y) < 5)) return { ok: false, why: '浇水器要放在田边，不能压在田里' };
-    if (!tiles.some(t => t.open && covers({ x, y }, t))) return { ok: false, why: '离田太远了，浇不到' };
+    if (!tiles.some(t => t.open && covers({ x, y }, t, reach))) return { ok: false, why: '离田太远了，浇不到' };
     return { ok: true };
   }
-  const coveredBy = (sprinklers, tiles) => sprinklers.map(s => tiles.filter(t => covers(s, t)));
+  const coveredBy = (sprinklers, tiles, reach) => sprinklers.map(s => tiles.filter(t => covers(s, t, reach)));
   // shop gate: the sprinkler can (花洒水壶) is bought, or three people work (farmer + 阿禾 + a child who helps)
   const sprinklerGate = (up, workers) => ((up && up.can) | 0) >= 4 || workers >= 3;
 
@@ -63,9 +64,9 @@
   const PRODUCT_IDS = Object.keys(PRODUCTS);
   const WHEAT_WANT = 10; // the mill's appetite: growing + carried + waiting wheat below this, and the family plants wheat
   // one step of a shop: a batch finishes, the next starts. -> 1 when a batch finished in this step
-  function workStep(w, def, dm) {
-    let made = 0;
-    if (w.left > 0) { w.left -= dm; if (w.left <= 0) { w.left = 0; w.ready = Math.min(def.outCap, w.ready + 1); made = 1; } }
+  function workStep(w, def, dm, speed) {
+    let made = 0; const rate = (speed > 0 ? speed : 1);
+    if (w.left > 0) { w.left -= dm * rate; if (w.left <= 0) { w.left = 0; w.ready = Math.min(def.outCap, w.ready + 1); made = 1; } }
     if (!(w.left > 0) && w.inp >= def.need && w.ready < def.outCap) { w.inp -= def.need; w.left = def.mins; }
     return made;
   }
@@ -215,7 +216,7 @@
   if (WD && WD.PENS && !WD.PENS.coop2) { applyPenLayout(WD.PENS, DEFAULT_HOST); for (const k of PEN2_IDS) if (!WD.PEN_IDS.includes(k)) WD.PEN_IDS.push(k); }
   if (AN && AN.PEN_IDS) for (const k of PEN2_IDS) if (!AN.PEN_IDS.includes(k)) AN.PEN_IDS.push(k);
 
-  const api = { TILE, SPRINKLER, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
+  const api = { TILE, SPRINKLER, reachOf, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
     WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, workGate, hasOrchard,
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
