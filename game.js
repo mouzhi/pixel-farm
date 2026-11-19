@@ -451,7 +451,7 @@ cv.width = W; cv.height = H;
 const mk = mkc;
 const shMask = new Uint32Array(W * H);
 const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H);
+const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = ''; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
@@ -3275,16 +3275,28 @@ function lighting(night, T) {
   if (WORKS_ON) PWA.lights(hz); // v5.6.0: lamps on the wheel's grid, busy workshops
   if (DECOR_ON) DA.lights(hz, T); // v5.7.0
   if (HOME_ON) HA.lights(hz, T); // v5.9.0: the new house's windows once someone lives there
-  const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer);
+  // v5.9.1: lights snap to whole pixels, off-screen ones are dropped, and each light only touches its own box (a running max per
+  // pixel instead of testing every light at every lit pixel); the layer is rebuilt only when the lights or the darkness change
+  const vis = [];
+  for (const [lx, ly, r, s] of lights) { const x = Math.round(lx), y = Math.round(ly); if (x + r < 0 || x - r >= W || y + r / 1.25 < 0 || y - r / 1.25 >= H) continue; vis.push([x, y, r, s]); }
+  const nq = Math.round(night * 256) / 256, key = nq + '|' + vis.map(l => l.join(',')).join(';');
+  if (key !== litKey) { litKey = key; litBuild(vis, nq); }
+  ctx.drawImage(litC, 0, 0);
+}
+function litBuild(vis, night) {
+  const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer), L = litL;
   d32.fill(((Math.round(255 * A) << 24) | (52 << 16) | (18 << 8) | 14) >>> 0); // unlit night tint everywhere, then only the light boxes
-  for (const [lx, ly, r] of lights) { const x0 = Math.max(0, Math.floor(lx - r)), x1 = Math.min(W - 1, Math.ceil(lx + r)), y0 = Math.max(0, Math.floor(ly - r / 1.25)), y1 = Math.min(H - 1, Math.ceil(ly + r / 1.25));
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
-      let L = 0; for (const [lx2, ly2, r2, s2] of lights) { const dd = Math.hypot(x - lx2, (y - ly2) * 1.25) / r2; if (dd < 1) L = Math.max(L, (1 - dd) * s2); }
-      const q = Math.min(1, Math.floor(L * 4 + BAYER[(y & 3) * 4 + (x & 3)]) / 3);
-      const p = (y * W + x) * 4;
-      d[p] = 14 + (255 - 14) * q; d[p + 1] = 18 + (180 - 18) * q; d[p + 2] = 52 + (90 - 52) * q; d[p + 3] = 255 * (A * (1 - q) + 0.18 * night * q);
-    } }
-  lctx.putImageData(litImg, 0, 0); ctx.drawImage(litC, 0, 0);
+  const box = ([lx, ly, r]) => [Math.max(0, Math.floor(lx - r)), Math.min(W - 1, Math.ceil(lx + r)), Math.max(0, Math.floor(ly - r / 1.25)), Math.min(H - 1, Math.ceil(ly + r / 1.25))];
+  const boxes = vis.map(box);
+  for (const [x0, x1, y0, y1] of boxes) for (let y = y0; y <= y1; y++) L.fill(0, y * W + x0, y * W + x1 + 1);
+  vis.forEach(([lx, ly, r, s], i) => { const [x0, x1, y0, y1] = boxes[i], ir = 1 / r;
+    for (let y = y0; y <= y1; y++) { const dy = (y - ly) * 1.25, dy2 = dy * dy, row = y * W;
+      for (let x = x0; x <= x1; x++) { const dx = x - lx, q2 = dx * dx + dy2; if (q2 >= r * r) continue; const v = (1 - Math.sqrt(q2) * ir) * s; if (v > L[row + x]) L[row + x] = v; } } });
+  for (const [x0, x1, y0, y1] of boxes) for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const p = y * W + x, q = Math.min(1, Math.floor(L[p] * 4 + BAYER[(y & 3) * 4 + (x & 3)]) / 3), o = p * 4;
+    d[o] = 14 + (255 - 14) * q; d[o + 1] = 18 + (180 - 18) * q; d[o + 2] = 52 + (90 - 52) * q; d[o + 3] = 255 * (A * (1 - q) + 0.18 * night * q);
+  }
+  lctx.putImageData(litImg, 0, 0);
 }
 function updateFx(dt) {
   if (window.PF_FX) PF_FX.update(dt);
@@ -3510,7 +3522,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.9.0';
+const GAME_VERSION = '5.9.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
