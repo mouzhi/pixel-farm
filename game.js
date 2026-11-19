@@ -2191,7 +2191,7 @@ function decorClick(w) {
   return null;
 }
 function decorDraw() {
-  if (!DECOR_ON) return; const T = S.t % 1440, carriers = actors().filter(a => a._carry).map(a => { const q = S.decor.orders.find(o => o.u === a._carry); return q ? { x: a.x, y: a.y, id: q.what === 'decor' ? (q.id || decorById(q.ref)) : q.what === 'hive' ? 'hive' : q.what === 'spr' ? 'sprinkler' : null } : null; }).filter(Boolean);
+  if (!DECOR_ON) return; const T = S.t % 1440, carriers = actors().filter(a => a._carry && !schoolWalk(a)).map(a => { const q = S.decor.orders.find(o => o.u === a._carry); return q ? { x: a.x, y: a.y, id: q.what === 'decor' ? (q.id || decorById(q.ref)) : q.what === 'hive' ? 'hive' : q.what === 'spr' ? 'sprinkler' : null } : null; }).filter(Boolean);
   const on = INPUT.mode === 'decor' || INPUT.mode === 'move', mode = { on, hover: on && INPUT.hover && INPUT.hover.dec, pick: INPUT.mode === 'move' ? INPUT.mvPick : null, items: INPUT.mode === 'move' ? movables() : [] };
   DA.draw(ctx, proj, onScreen, realT, T, dayLight(T), mode, carriers);
 }
@@ -2430,7 +2430,9 @@ function famSheet(look, cut = 0) {
 const lookOf = m => m.id === 'partner' ? ['partner', 0] : [m.id, (m.role === 'child' || m.role === 'play' || m.role === 'school') ? 6 : 3];
 const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
 const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', '.bbbbbbbbb.', 'b.........b']);
+const schoolWalk = a => !!(a && a.task && (a.task.kind === 'school-go' || a.task.kind === 'school-back')); // v5.8.1
 function carryFields(actor) { // hide the hip basket while a giant crop is held overhead
+  if (schoolWalk(actor)) return { basket: null, carry: null }; // v5.8.1: nothing in hand on the walk to and from school
   const last = actor.crops.length ? actor.crops[actor.crops.length - 1] : null;
   const carry = actor.crops.slice().reverse().find(it => SU.itemOf(it).giant) || null;
   return { basket: carry ? null : last, carry };
@@ -3238,7 +3240,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.8.0';
+const GAME_VERSION = '5.8.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, speed: S.speed || 1, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -3433,6 +3435,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
+  carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
