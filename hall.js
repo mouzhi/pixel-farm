@@ -9,6 +9,7 @@
   const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown;
   const SL = (typeof require === 'function' && typeof document === 'undefined') ? require('./slots.js') : root.PFSlots; // v5.10.3: gifts by kind
   const MK = (typeof require === 'function' && typeof document === 'undefined') ? require('./market.js') : root.PFMarket; // v5.10.3
+  const BK = (typeof require === 'function' && typeof document === 'undefined') ? require('./bakery.js') : root.PFBakery; // v5.10.4
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
   const BOARD = P(HALL.x - 9, HALL.y + HALL.hd + 12);       // the notice board: in front of the hall, beside its path
@@ -18,6 +19,7 @@
   // lot: centre, half size, door (where people stand), rot (Math.PI: door to the north, onto the street side), style (art)
   const LOTS = [
     { id: 'L5', x: 466, y: 91, hw: 8, hd: 7, door: P(466, 82), rot: Math.PI, style: 0 },
+    { id: 'bakery', x: 485, y: 91, hw: 8, hd: 7, door: P(485, 82), rot: Math.PI, style: 3 }, // v5.10.4: lot L6, 小桃's shop (coords live in bakery.js too)
     { id: 'L8', x: 560, y: 87, hw: 8, hd: 7, door: P(560, 78), rot: Math.PI, style: 1 },
     { id: 'L11', x: 546, y: 131, hw: 8, hd: 7, door: P(546, 122), rot: Math.PI, style: 2 },
   ];
@@ -28,16 +30,18 @@
     { id: 'L11', name: '下店上住的街边铺子', desc: '一楼是花店的橱窗，二楼住人，花匠秋姨开张', cost: 8000, wood: 120, who: 'n7' },
     // v5.10.3: the market square (market.js): the square grows, six stalls go up, every 7th day is market day
     { id: 'market', name: '集市广场', desc: '广场铺大一圈，搭起 6 个摊位；每 7 天一次集市日，家里的东西在集市上多卖两成', cost: 30000, wood: 200, lv: 2, kind: 'market' },
+    // v5.10.4: 小桃's bakery (bakery.js): an order board, 2 orders a day, 50% over the stall
+    { id: 'bakery', name: '小桃的面包房', desc: '小桃在南街开店。每天订单板上有 2 个订单，按单交货多付五成，家人跑腿送货', cost: 25000, wood: 150, lv: 2, kind: 'bakery' },
   ];
   const PROJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
-  const LEVELS = [0, 3, 5];                                 // projects built to reach 繁荣度 1, 2, 3 (v5.10.3: the market is the 4th; the bakery next makes 5)
+  const LEVELS = [0, 3, 5];                                 // projects built to reach 繁荣度 1, 2, 3 (v5.10.4: the bakery is the 5th and lifts the town to 3)
   const LV_NAME = ['', '小镇', '热闹的小镇', '繁华的小镇', '大镇子', '远近闻名'];
   const prosperity = st => { const n = Object.keys((st && st.built) || {}).length; let lv = 1; for (let i = 1; i < LEVELS.length; i++) if (n >= LEVELS[i]) lv = i + 1; return lv; };
   const nextLevelAt = st => { const n = Object.keys((st && st.built) || {}).length; const nx = LEVELS.find(t => t > n); return nx === undefined ? null : { need: nx - n }; };
 
   // ---------- the people: 镇长 from the day the town opens, one family per house from the morning after it is done ----------
   const SPOTS = { hall: P(HALL.door.x + 5, HALL.door.y + 4), board: P(BOARD.x + 3, BOARD.y + 5), plaza2: P(TN.PLAZA.x - 14, TN.PLAZA.y - 6),
-    street2: P(600, 72), street3: P(478, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17) };
+    street2: P(600, 72), street3: P(478, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17), bakery: BK ? BK.STAND : P(490, 79) };
   const NEIGHBOURS = [
     { id: 'n4', name: '镇长老顾', look: 'townE', home: 'h5', plan: [[8 * 60 + 30, 12 * 60, 'hall'], [13 * 60, 17 * 60, 'hall'], [17 * 60 + 30, 19 * 60 + 30, 'square']] },
     { id: 'n5', name: '裁缝阿梅', look: 'townF', lot: 'L5', plan: [[8 * 60, 11 * 60, 'plaza2'], [14 * 60, 17 * 60, 'board'], [18 * 60 + 30, 20 * 60 + 30, 'plaza2']] },
@@ -53,6 +57,12 @@
   function marketAt(st, n, day, T) {
     if (!MK || !MK.isDay(st, day)) return null; const t = ((T % 1440) + 1440) % 1440; if (t < MARKET_HOURS[0] || t >= MARKET_HOURS[1]) return null;
     const s = MK.STALLS.find(q => q.who === n.id); return s ? { at: MK.standAt(s), out: true, spot: 'stall:' + s.id } : null; }
+  // v5.10.4: once the bakery is up, 小桃 works there 8:00–17:00 (a market-day stall still comes first)
+  const BAKERY_HOURS = [8 * 60, 17 * 60];
+  function bakeryAt(st, n, day, T) {
+    if (!BK || !BK.built(st) || n.id !== 'n3') return null; const t = ((T % 1440) + 1440) % 1440;
+    if (t < BAKERY_HOURS[0] || t >= BAKERY_HOURS[1]) return null;
+    return { at: BK.STAND, out: true, spot: 'bakery' }; }
   function neighbourAt(n, T) {
     const t = ((T % 1440) + 1440) % 1440;
     for (const [a, b, s] of n.plan) if (t >= a && t < b) return { at: spotAt(s), out: true, spot: s };
@@ -122,7 +132,7 @@
   }
 
   // ---------- state (saved inside `town` as `hall`; append-only, old saves start with nothing built) ----------
-  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {} }); // v5.10.3: + market
+  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {} }); // v5.10.3 + market; v5.10.4 + bakery
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
   const DECOR_ID = /^[a-z_]{2,24}$/;
   function valid(v) {
@@ -132,12 +142,13 @@
     if (Array.isArray(o.gifts)) { const g = []; for (const id of o.gifts) if (typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id) && SL.townRoom(g, id)) g.push(id); out.gifts = g; }
     out.paper = int(o.paper, 0, 1e6);
     if (MK) out.market = MK.valid(o.market);
+    if (BK) out.bakery = BK.valid(o.bakery);
     const w = o.week && typeof o.week === 'object' ? o.week : {};
     out.week = { built: Array.isArray(w.built) ? w.built.filter(id => PROJ[id]).slice(0, PROJECTS.length) : [], gifts: int(w.gifts, 0, 99), trade: int(w.trade, 0, 1e9) };
     return out;
   }
 
-  const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, MARKET_HOURS, BUILD_HOURS, siteSpot,
+  const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, bakeryAt, MARKET_HOURS, BAKERY_HOURS, BUILD_HOURS, siteSpot,
     canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, giftPos, giftRoom, give, PAPER_EVERY, paperText, blocks, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHall = api;
 })(typeof window !== 'undefined' ? window : globalThis);

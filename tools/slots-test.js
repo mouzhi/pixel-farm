@@ -18,6 +18,11 @@ ok('home spots: on the home map, clear of the field, the house, the paths\' midd
   for (const a of all) { assert(WD.inRect(a.p.x, a.p.y, [-20, -20, 200, 140]), JSON.stringify(a.p)); assert(!hit(a.b, field), a.g + ' in the field ' + JSON.stringify(a.p)); assert(!hit(a.b, house), a.g + ' in the house ' + JSON.stringify(a.p)); }
   for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) assert(!hit(all[i].b, all[j].b), JSON.stringify(all[i].p) + ' / ' + JSON.stringify(all[j].p));
   const lampsN = SL.HOME.lamp.filter(p => Math.abs(p.y - 44.5) < 0.1).map(p => p.x); assert(lampsN.length >= 4, 'a row of lamps along the house front and the yard road');
+  // v5.10.4: south-of-field lamps are no longer a tight fence (were 24 apart with scarecrows in the 12-unit gaps)
+  const south = SL.HOME.lamp.filter(p => Math.abs(p.y - 101.5) < 1); assert.strictEqual(south.length, 2);
+  assert(Math.abs(south[0].x - south[1].x) >= 48, 'south lamps spread out');
+  assert.strictEqual(SL.HOME.lamp.length, 15, 'same number of lamp spots (overflow still goes to the storehouse)');
+  const stall = { x: 160, y: 100 }; for (const p of SL.HOME.lamp) assert(Math.hypot(p.x - stall.x, p.y - stall.y) >= 28, 'lamp hugging the stall ' + JSON.stringify(p));
 });
 ok('spotsFor: the kind\'s own list first, benches and string lights fall back to the nooks, then each little house', () => {
   const L = { door: { x: 300, y: 40 }, foot: [270, 20, 330, 50] };
