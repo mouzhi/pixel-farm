@@ -102,12 +102,11 @@
       return null;
     });
     // a little square table with two stools, seen from the south
-    const table = B(14, 12, 8, (x, y, z) => {
-      if ((x === 1 || x === 12) && (y === 1 || y === 10) && z <= 4) return Wd[1];
-      if (z === 5 && x >= 1 && x <= 12 && y >= 1 && y <= 10) return (x + y) % 3 ? Wd[4] : Wd[3];
-      if (z === 6 && x >= 2 && x <= 11 && y >= 2 && y <= 9 && (x === 2 || x === 11 || y === 2 || y === 9)) return Wd[2];
-      // stools in front (south) and behind
-      if ((Math.abs(x - 4) <= 1 && Math.abs(y - 11) <= 0 && z <= 3) || (Math.abs(x - 9) <= 1 && y === 0 && z <= 3)) return z === 3 ? Wd[4] : Wd[2];
+    const table = B(16, 16, 9, (x, y, z) => {
+      if ((x === 2 || x === 13) && (y === 3 || y === 12) && z <= 4) return Wd[1];
+      if (z === 5 && x >= 1 && x <= 14 && y >= 2 && y <= 13) return (x + y) % 3 ? Wd[4] : Wd[3];
+      if (z === 6 && x >= 2 && x <= 13 && y >= 3 && y <= 12) return ((x + y) % 4 === 0) ? Ac[0] : Rf[3];
+      if ((Math.abs(x - 5) <= 1 && y >= 14 && y <= 15 && z <= 3) || (Math.abs(x - 10) <= 1 && y <= 1 && z <= 3)) return z === 3 ? Wd[4] : Wd[2];
       return null;
     });
     const lamp = B(4, 4, 18, (x, y, z) => {
@@ -176,7 +175,7 @@
     if (lv > 0) {
       const lit = ck.dusk;
       const m = lv >= 3 ? (lit ? MD.diner2n : MD.diner2) : lv >= 2 ? (lit ? MD.diner1n : MD.diner1) : (lit ? MD.diner0n : MD.diner0);
-      add(m, L.diner.x, L.diner.y, 0, { diner: 1 });
+      add(m, L.diner.x, L.diner.y - 3, 0, { diner: 1 });
       const seats = IN.seatsOf(I), tables = Math.ceil(seats / 2);
       for (let i = 0; i < Math.min(tables, L.tables.length); i++) add(MD.table, L.tables[i].x, L.tables[i].y, 0, { table: i, big: 0 });
     } else if (job && job.id === 'diner') add(MD.dinerFrame, L.diner.x, L.diner.y, 0, { diner: 1, frame: 1 });

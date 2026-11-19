@@ -125,11 +125,12 @@ fs.mkdirSync(OUT, { recursive: true });
     at(14 * 60); dry();
     const stays = f.STAYS || [];
     if (!stays.length) until(() => (f.STAYS || []).length, 800);
+    for (const a of f.actors()) { a.home = true; a.sleeping = true; a.x = 16; a.y = 40; a.task = null; }
     const s0 = (f.STAYS || [])[0];
     const pond = window.PFFish && PFFish.POND_SPOT && PFFish.POND_SPOT.stand || { x: 54, y: 94 };
-    if (s0) { s0.pts = []; s0.inside = false; s0.leaving = false; s0.x = pond.x; s0.y = pond.y; s0.what = 'fish'; s0.task = { kind: 'fish', hook: { x: 40, y: 94 } }; s0.moving = false; }
+    if (s0) { s0.pts = []; s0.inside = false; s0.leaving = false; s0.x = pond.x; s0.y = pond.y; s0.fx = -1; s0.fy = 0; s0.what = 'fish'; s0.task = { kind: 'fish', hook: { x: 40, y: 94 } }; s0.moving = false; s0.wait = 999; }
     const fish0 = (S.catches || []).length;
-    f.advance(2, 10);
+    f.advance(0.2, 10);
     look(pond.x, pond.y, 0); hide();
     const s = (f.STAYS || [])[0];
     return { stays: (f.STAYS || []).length, what: s && s.what, task: s && s.task && s.task.kind, fish: (S.catches || []).length - fish0, x: s && Math.round(s.x), y: s && Math.round(s.y) }; })()`,

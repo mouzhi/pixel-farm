@@ -22,6 +22,7 @@ const HOOKS = [ // [anchor, code appended after it]; each anchor must occur exac
   ['B.done = 1; B.days++; B.gold += sum; B.extra += extra;', " window.__econ && __econ('orders', 'bakery', sum, base);"],
   ["emit('income', { gold: g, source: 'wage', who: k }); noteLog('income', 'town', g);", " window.__econ && __econ('wage', 'wage', g);"],
   ["if (g) { S.coins += g; S.earned += g; S.todayEarn += g; emit('income', { gold: g, source: 'kidshop', who: k }); noteLog('income', 'town', g); }", " window.__econ && __econ('kidshop', 'kidshop', g);"],
+  ['function innEarn(gold, src, x, y) {', " window.__econ && gold > 0 && __econ(src === 'inn-meals' ? 'innmeals' : 'innrooms', src, gold);"],
 ];
 
 function patched() {
@@ -56,19 +57,19 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       : /^(flour|jam|cheese|honey)$/.test(t) ? 'works' : /^(crucian|carp|grassc|bass|koi|sardine|seabass|snapper|tuna|sword)$/.test(t) ? 'fish' : t === 'woodsell' ? 'wood' : t === 'seeds' ? 'seeds' : 'other';
     if (POLICY === 'idle-auto') __farm.setAutoBuy(true);
     const E = window.__E = { afk: AFK, day: null, days: [], unlocks: [], seen: {}, policy: POLICY, lastChop: 0 };
-    const fresh = () => ({ crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, orders: 0, orderExtra: 0, wage: 0, kidshop: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] });
+    const fresh = () => ({ crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, orders: 0, orderExtra: 0, wage: 0, kidshop: 0, innrooms: 0, innmeals: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] });
     E.cur = fresh();
     window.__econ = (where, ty, g, base) => { const c = E.cur;
       if (where === 'town') { c.town += g; c.townExtra += g - base; return; }
       if (where === 'orders') { c.orders += g; c.orderExtra += g - base; return; }
-      if (where === 'wage' || where === 'kidshop') { c[where] += g; return; }
+      if (where === 'wage' || where === 'kidshop' || where === 'innrooms' || where === 'innmeals') { c[where] += g; return; }
       if (where === 'home' || where === 'chop' || where === 'yard') { c[where] += g; return; }
       c[CAT(ty)] += g; };
     const unlock = (what, extra) => E.unlocks.push(Object.assign({ day: S.day, what }, extra || {}));
     window.addEventListener('pf:farm', ev => { const d = ev.detail; if (d.type !== 'purchase') return; const k = /^(hay|seeds)$/.test(d.item) ? d.item : /^plot:/.test(d.item) ? 'plots' : 'shop';
       E.cur.spend[k] = (E.cur.spend[k] || 0) + (d.gold || 0); if (k === 'shop' || k === 'plots') { E.cur.buys.push(d.item + (d.level ? ':' + d.level : '') + (d.mod ? ':' + d.mod : '') + (d.who === 'auto' ? '(auto)' : '')); unlock(d.item + (d.level ? ' L' + d.level : ''), { gold: d.gold, wood: d.wood || 0, who: d.who }); } });
     E.snap = () => { const FA = __farm.FARMER, fm = S.family, c = E.cur;
-      const inc = ['crops', 'fruit', 'animals', 'fish', 'works', 'wood', 'seeds', 'town', 'orders', 'wage', 'kidshop', 'home', 'chop', 'yard', 'other'].reduce((a, k) => a + c[k], 0);
+      const inc = ['crops', 'fruit', 'animals', 'fish', 'works', 'wood', 'seeds', 'town', 'orders', 'wage', 'kidshop', 'innrooms', 'innmeals', 'home', 'chop', 'yard', 'other'].reduce((a, k) => a + c[k], 0);
       return Object.assign(c, { day: S.day, coins: S.coins, earned: S.earned, todayEarn: S.todayEarn, incSum: inc, surprise: S.surpriseGold || 0, wood: FA.wood, woodCap: __farm.woodCap(),
         saplings: (FA.saplings.apple | 0) + (FA.saplings.orange | 0), open: __farm.tiles.filter(t => t.open).length, herd: S.animals.length, people: 1 + S.members.length,
         love: fm.love, kids: fm.kids.length, plots: Object.keys(S.plots || {}).length, ups: Object.values(S.up).reduce((a, b) => a + b, 0), hay: S.hay,
@@ -100,10 +101,10 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
     const row = await p.evaluate(() => { const S = __farm.S, E = window.__E; let guard = 0;
       while (S.day === E.day && guard++ < 200) { __farm.advance(20, 3); E.hour(); }
       // S.day just ticked: the finished day is S.dayEarn's last entry
-      const r = E.snap(); r.day = E.day; r.dayEarn = S.dayEarn[S.dayEarn.length - 1]; r.realSec = guard * 20; E.days.push(r); E.cur = (() => { const c = { crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, orders: 0, orderExtra: 0, wage: 0, kidshop: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] }; return c; })(); E.day = S.day;
+      const r = E.snap(); r.day = E.day; r.dayEarn = S.dayEarn[S.dayEarn.length - 1]; r.realSec = guard * 20; E.days.push(r); E.cur = (() => { const c = { crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, orders: 0, orderExtra: 0, wage: 0, kidshop: 0, innrooms: 0, innmeals: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] }; return c; })(); E.day = S.day;
       return r; });
     const sp = Object.entries(row.spend).map(([k, v]) => k + ' ' + v).join(', ');
-    console.log(`d${String(row.day).padStart(3)} earn ${String(row.dayEarn).padStart(6)} coins ${String(row.coins).padStart(7)} wood ${row.wood}/${row.woodCap} crops ${row.crops} fruit ${row.fruit} anim ${row.animals} herd ${row.herd} fish ${row.fish} works ${row.works} town ${row.town} orders ${row.orders || 0} wage ${row.wage || 0} shop ${row.kidshop || 0} home ${row.home} | spend ${sp} | ${row.buys.join(' ')} | ${Math.round((Date.now() - t0) / 1000)}s`);
+    console.log(`d${String(row.day).padStart(3)} earn ${String(row.dayEarn).padStart(6)} coins ${String(row.coins).padStart(7)} wood ${row.wood}/${row.woodCap} crops ${row.crops} fruit ${row.fruit} anim ${row.animals} herd ${row.herd} fish ${row.fish} works ${row.works} town ${row.town} orders ${row.orders || 0} wage ${row.wage || 0} shop ${row.kidshop || 0} inn ${((row.innrooms||0)+(row.innmeals||0))} home ${row.home} | spend ${sp} | ${row.buys.join(' ')} | ${Math.round((Date.now() - t0) / 1000)}s`);
     if (d % 5 === 0 || d === DAYS) { const all = await p.evaluate(() => ({ days: __E.days, unlocks: __E.unlocks, up: __farm.S.up, plots: __farm.S.plots }));
       fs.writeFileSync(path.join(OUT, `econ_${POLICY}${AFK ? '_afk' + AFK : ''}.json`), JSON.stringify(Object.assign({ policy: POLICY, seed: SEED, errs }, all))); }
   }

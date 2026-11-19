@@ -79,20 +79,20 @@
     const pad = 8, ix0 = x0 + pad, iy0 = y0 + pad, ix1 = x1 - pad, iy1 = y1 - pad;
     const nearEast = Math.abs(gate.x - x1) <= Math.abs(gate.x - x0);
     const gateSouth = gate.y >= (y0 + y1) / 2;
-    const dinerW = 20, dinerD = 12, cw = 14, cd = 10, tDepth = 10;
+    const dinerW = 20, dinerD = 12, cw = 14, cd = 10, tDepth = 12;
     // tables always sit on the south side of the restaurant (the default camera). The restaurant itself
-    // stays near the gate when the gate is on the south, otherwise it sits behind the cabins.
+    // stays near the gate; cabins take the opposite side so a tall roof does not sit on a cabin.
     let dinerY = gateSouth ? (iy1 - tDepth - dinerD / 2) : (iy0 + dinerD / 2 + 2);
     dinerY = clamp(dinerY, iy0 + dinerD / 2, iy1 - tDepth - dinerD / 2);
     const dinerX = nearEast
-      ? clamp(gate.x - dinerW / 2 - 2, ix0 + dinerW / 2, ix1 - dinerW / 2)
-      : clamp(gate.x + dinerW / 2 + 2, ix0 + dinerW / 2, ix1 - dinerW / 2);
+      ? clamp(Math.max(gate.x - dinerW / 2 - 2, ix1 - dinerW / 2 - 2), ix0 + dinerW / 2, ix1 - dinerW / 2)
+      : clamp(Math.min(gate.x + dinerW / 2 + 2, ix0 + dinerW / 2 + 2), ix0 + dinerW / 2, ix1 - dinerW / 2);
     const diner = { x: Math.round(dinerX), y: Math.round(dinerY), hw: dinerW / 2, hd: dinerD / 2,
       door: P(Math.round(dinerX), Math.round(dinerY + dinerD / 2)), rot: 0 };
     const tables = [];
     for (let i = 0; i < 6; i++) {
       const col = i % 3, row = (i / 3) | 0;
-      tables.push({ i, x: Math.round(diner.x - 8 + col * 8), y: Math.round(diner.door.y + 6 + row * 7), seats: 2 });
+      tables.push({ i, x: Math.round(diner.x - 8 + col * 8), y: Math.round(diner.door.y + 8 + row * 8), seats: 2 });
     }
     diner.tables = tables;
     diner.stand = P(diner.door.x + 6, diner.door.y + 2);
@@ -100,21 +100,28 @@
     const cabins = [];
     const cabinBand = gateSouth ? (iy0 + cd / 2) : (iy1 - tDepth - cd / 2);
     let cabinY = clamp(cabinBand, iy0 + cd / 2, iy1 - cd / 2);
-    // keep a gap from the restaurant body
-    if (Math.abs(cabinY - diner.y) < dinerD / 2 + cd / 2 + 4) {
-      cabinY = diner.y + (gateSouth ? -1 : 1) * (dinerD / 2 + cd / 2 + 6);
+    // keep a gap from the restaurant body (the voxel model is a little deeper than this box)
+    if (Math.abs(cabinY - diner.y) < dinerD / 2 + cd / 2 + 10) {
+      cabinY = diner.y + (gateSouth ? -1 : 1) * (dinerD / 2 + cd / 2 + 14);
       cabinY = clamp(cabinY, iy0 + cd / 2, iy1 - cd / 2);
     }
-    const wideRow = (ix1 - ix0) >= cw * 4 + 8;
+    // cabins stay out of the restaurant's x-band so a south camera does not stack them
+    const gapX = dinerW / 2 + cw / 2 + 6;
+    let left = ix0 + cw / 2, right = ix1 - cw / 2;
+    if (diner.x - left < gapX) left = Math.min(right, diner.x + gapX);
+    if (right - diner.x < gapX) right = Math.max(left, diner.x - gapX);
+    if (left > right) { left = ix0 + cw / 2; right = ix1 - cw / 2; }
+    const wideRow = (right - left) >= cw * 3;
     if (wideRow) {
-      const left = ix0 + cw / 2, right = ix1 - cw / 2, span = right - left;
-      for (let i = 0; i < MAX_CABINS; i++) {
-        const x = Math.round(left + span * i / (MAX_CABINS - 1));
+      const span = right - left;
+      const n = MAX_CABINS;
+      for (let i = 0; i < n; i++) {
+        const x = Math.round(left + (n === 1 ? 0 : span * i / (n - 1)));
         const y = Math.round(cabinY);
         cabins.push({ i, x, y, hw: cw / 2, hd: cd / 2, door: P(x, y + cd / 2), rot: 0 });
       }
     } else {
-      const xs = [ix0 + cw / 2, ix1 - cw / 2];
+      const xs = [left, right];
       const ys = [cabinY, cabinY + (gateSouth ? cd + 8 : -(cd + 8))];
       let k = 0;
       for (const y of ys) for (const x of xs) {
@@ -123,7 +130,7 @@
         // slide a cabin sideways if it would sit on the restaurant
         if (Math.abs(xx - diner.x) < dinerW / 2 + cw / 2 + 2 && Math.abs(yy - diner.y) < dinerD / 2 + cd / 2 + 2) {
           xx = diner.x + (xx < diner.x ? -1 : 1) * (dinerW / 2 + cw / 2 + 4);
-          xx = clamp(xx, ix0 + cw / 2, ix1 - cw / 2);
+          xx = clamp(xx, left, right);
         }
         cabins.push({ i: k, x: Math.round(xx), y: Math.round(yy), hw: cw / 2, hd: cd / 2, door: P(Math.round(xx), Math.round(yy + cd / 2)), rot: 0 });
         k++;
