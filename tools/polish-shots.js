@@ -75,11 +75,11 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.waitForTimeout(200); await p.screenshot({ path: path.join(OUT, name) });
     check(name, r.none ? 'no card' : !r.lock ? 'no lock note (scene)' : r.ct < r.card * 0.35 ? 'name column ' + r.ct + ' of ' + r.card : r.h > 220 ? 'card tall ' + r.h : r.dupHead ? 'a section header twice' : null, r); await p.context().close(); }
   // 6c. progressive shop: a fresh farm hides what is more than two unlock steps away (cows, the new house, the works...) with a quiet note;
-  //     nothing owned or buyable is ever hidden; the day-59 fixture hides nothing
+  //     nothing owned or buyable is ever hidden, nor anything unlocked priced up to max(1000, 10x the 3-day average income); the day-59 fixture hides nothing
   for (const [tag, save] of [['day1', null], ['day59', FIXTURE]]) { const name = 'v591_shop_reveal_' + tag + '.png'; const p = await page(save);
     const r = await p.evaluate(() => { const o = document.getElementById('offline'); if (o) o.hidden = true; document.getElementById('shopBtn').click();
       const t = document.querySelector('#shop [data-tab="animals"]'); if (t) t.click(); __farm.refreshUI(); const f = __farm, S = f.S, SIM = window.PFSim;
-      const hidden = [], bad = []; for (const id of SIM.SHOP_IDS) { const d = f.shopDepth(id); if (d > f.REVEAL_MAX) { hidden.push(id); const o = SIM.offer(S.up, S.coins, id, f.F.wood); if (S.up[id] > 0 || o.ok) bad.push(id); } }
+      const hidden = [], bad = []; for (const id of SIM.SHOP_IDS) { const d = f.shopDepth(id); if (d > f.REVEAL_MAX) { hidden.push(id); const o = SIM.offer(S.up, S.coins, id, f.F.wood); if (S.up[id] > 0 || o.ok || (!o.locked && !o.lockText && !o.maxed && o.cost <= f.shopAfford())) bad.push(id); } }
       return { hidden, bad, cow: !!document.querySelector('#shop [data-item="cow"]'), chicken: !!document.querySelector('#shop [data-item="chicken"]'), more: !!document.querySelector('#shop .more') }; });
     await p.waitForTimeout(200); await p.screenshot({ path: path.join(OUT, name) });
     check(name, r.bad.length ? 'hid owned/buyable ' + r.bad : !r.chicken ? 'no chicken card' : tag === 'day1' ? (r.cow ? 'cow shown on day 1' : !r.more ? 'no 更多内容 note' : !r.hidden.includes('cottage') ? 'new house shown on day 1' : null)

@@ -272,7 +272,8 @@ async function test(name, fn) {
     const build = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent,
       coop: !document.querySelector('#shop [data-buy="coop"]').disabled, look: !!document.querySelector('#shop [data-look="pen:coop"]') }));
     assert(build.coop, 'coop affordable with 350 gold and no region'); assert(build.look);
-    for (const w of ['先买林场', '先买果园坡', '先买北牧场']) assert(build.txt.includes(w), 'locked text ' + w);
+    for (const w of ['先买林场', '先买果园坡']) assert(build.txt.includes(w), 'locked text ' + w);
+    assert(!build.txt.includes('先买北牧场') && /更多内容随进度解锁/.test(build.txt), 'v5.9.1: the cow shed (three steps away) waits behind the note'); // progressive shop
     await openShop(p, 'animals');
     const shop = await p.evaluate(() => ({ head: [...document.querySelectorAll('#shop .sec')].map(e => e.textContent).join('|'), txt: document.getElementById('shop').textContent }));
     assert(/养殖/.test(shop.head) && /小伙伴/.test(shop.head), 'sections: ' + shop.head);
