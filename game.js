@@ -451,7 +451,7 @@ cv.width = W; cv.height = H;
 const mk = mkc;
 const shMask = new Uint32Array(W * H);
 const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = ''; // v5.9.1: the light layer is cached by key
+const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
@@ -3285,6 +3285,7 @@ function lighting(night, T) {
   ctx.drawImage(litC, 0, 0);
 }
 function litBuild(vis, night) {
+  litBuilds++;
   const d = litImg.data, A = night * 0.7, d32 = new Uint32Array(d.buffer), L = litL;
   d32.fill(((Math.round(255 * A) << 24) | (52 << 16) | (18 << 8) | 14) >>> 0); // unlit night tint everywhere, then only the light boxes
   const box = ([lx, ly, r]) => [Math.max(0, Math.floor(lx - r)), Math.min(W - 1, Math.ceil(lx + r)), Math.max(0, Math.floor(ly - r / 1.25)), Math.min(H - 1, Math.ceil(ly + r / 1.25))];
@@ -3717,7 +3718,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
