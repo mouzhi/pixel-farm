@@ -30,7 +30,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const look = (x, y, a) => { f.setAngle(a || 0); f.panTo(x, y); f.advance(0.3, 10); };
     const hide = () => { const el = document.getElementById('leftBottom'); if (el) el.style.visibility = 'hidden'; };
     const lookBeach = (a) => { const L = f.innResortLayout && f.innResortLayout(); look((L && L.coast.center) ? L.coast.center.x : 272, (L && L.coast.center) ? L.coast.center.y : 236, a || 0); };
-    const lookInn = (a) => { const L = f.innLayout && f.innLayout(); if (L) look(L.yard.x, L.yard.y + 8, a || 0); };`;
+    const lookInn = (a) => { const L = f.innLayout && f.innLayout(); if (L) look(L.yard.x, L.yard.y + 8, a || 0); };
+    const parkFam = () => { for (const a of f.actors()) { a.x = 40; a.y = 40; a.pts = []; a.task = null; a.moving = false; a.wait = 999; } };`;
   const setup = `${helpers} f.SAVE.off = true; S.family.met = 1; S.family.moved = 1; S.family.love = 100; S.coins = 800000; f.FARMER.wood = 5000;
     for (const id of ['house','house','axe','forest','east','orchard','south','pasture','coast','coop','chicken','fold','sheep','can','can','searod']) f.buy(id);
     day(80); Object.assign(S.family, { kids: [{ id: 'kid0', name: '小豆', born: 15 }, { id: 'kid1', name: '小米', born: 40 }] }); f.syncFamily(); dry();`;
@@ -65,8 +66,15 @@ fs.mkdirSync(OUT, { recursive: true });
     at(13 * 60); dry();
     until(() => (f.STAYS || []).some(g => g.stay === 'beach' && !g.inside), 900);
     const auto = (S.autoBuy = true, f.autoBuyAtStall && f.autoBuyAtStall());
-    lookBeach(0); hide();
     const L = f.innResortLayout(), v = f.innView();
+    parkFam();
+    const us = L.parasols || [];
+    let ui = 0;
+    for (const s of (f.STAYS || []).filter(g => g.stay === 'beach' && !g.leaving)) {
+      const u = us[ui++ % Math.max(1, us.length)] || L.coast.center;
+      s.pts = []; s.x = u.x + 2; s.y = u.y + 3; s.what = 'lie'; s.task = { rest: 1 }; s.inside = false; s.moving = false;
+    }
+    lookBeach(0); hide();
     const looks = [...new Set((f.STAYS || []).filter(g => g.stay === 'beach').map(q => q.look))];
     return { r, paid, wood, same, huts: S.inn.resort.huts, parasols: S.inn.resort.parasols, stall: S.inn.resort.stall,
       pier: S.inn.resort.pier, deck: S.inn.resort.deck, stays: (f.STAYS || []).filter(g => g.stay === 'beach').length,
@@ -88,25 +96,39 @@ fs.mkdirSync(OUT, { recursive: true });
   // 2. sunset deck at evening, 18:00
   await shot('v5108_sunset_deck.png', `(() => { ${setup} ${readyTown} ${zoneResort} ${raiseResort}
     S.inn.arrived = 0; S.inn._morn = 0; f.innMorning();
-    at(18 * 60); dry();
-    until(() => (f.STAYS || []).some(g => g.what === 'sunset' || (g.stay === 'beach' && !g.inside)), 600);
-    const L = f.innResortLayout(); look(L.deck.x, L.deck.y, 0); hide();
-    const sitting = (f.STAYS || []).filter(g => g.what === 'sunset' || g.task && g.task.rest);
+    at(13 * 60); dry();
+    until(() => (f.STAYS || []).some(g => g.stay === 'beach' && !g.inside), 700);
+    at(18 * 60);
+    const L = f.innResortLayout();
+    parkFam();
+    for (const s of (f.STAYS || []).filter(g => g.stay === 'beach' && !g.leaving)) {
+      const seat = L.deck.sit[(s.room | 0) % L.deck.sit.length];
+      s.pts = []; s.x = seat.x; s.y = seat.y; s.what = 'sunset'; s.task = { rest: 1 }; s.inside = false; s.moving = false;
+    }
+    f.advance(0.3, 10); look(L.deck.x, L.deck.y, 0); hide();
+    const sitting = (f.STAYS || []).filter(g => g.what === 'sunset');
     return { t: S.t % 1440, deck: S.inn.resort.deck, sunset: f.IN.isSunset(S.t), sitting: sitting.length, stays: (f.STAYS || []).length, props: (f.props || []).filter(q => q.deck).length }; })()`,
     r => r.t < 17 * 60 || r.t >= 19 * 60 ? 'not sunset hour ' + r.t
       : !r.sunset ? 'isSunset false'
       : r.deck !== 1 ? 'no deck'
       : r.props < 1 ? 'no deck prop'
+      : r.sitting < 1 ? 'no one on the deck'
       : null);
 
   // 3. seafood stall (day, smoke)
   await shot('v5108_seafood_stall.png', `(() => { ${setup} ${readyTown} ${zoneResort} ${raiseResort}
+    S.inn.arrived = 0; S.inn._morn = 0; f.innMorning();
     at(12 * 60); dry();
-    for (const id of ['sardine','sardine','sardine','sardine','seabass','seabass']) f.FARMER.crops.push(id);
+    for (const id of ['sardine','sardine','sardine','sardine','seabass','seabass','sardine','sardine']) f.FARMER.crops.push(id);
     S.inn.resort._meal = 0; if (f.innTick) f.innTick(1);
-    const L = f.innResortLayout(); look(L.stall.x, L.stall.y + 4, 0); hide();
+    const L = f.innResortLayout();
+    parkFam();
+    until(() => (f.STAYS || []).some(g => g.stay === 'beach' && !g.inside), 400);
+    const eater = (f.STAYS || []).find(g => g.stay === 'beach' && !g.leaving);
+    if (eater) { eater.pts = []; eater.x = L.stall.stand.x; eater.y = L.stall.stand.y + 1; eater.what = 'eat'; eater.task = { rest: 1 }; eater.inside = false; eater.moving = false; }
+    f.advance(2.5, 12); look(L.stall.x, L.stall.y + 4, 0); hide();
     const v = f.innView();
-    return { stall: S.inn.resort.stall, meals: v.earn.meals, props: (f.props || []).filter(q => q.stall).length, served: S.inn.diner.served }; })()`,
+    return { stall: S.inn.resort.stall, meals: v.earn.meals, props: (f.props || []).filter(q => q.stall).length, served: (S.inn.diner && S.inn.diner.served) | 0, eater: !!(eater) }; })()`,
     r => !r.stall ? 'no stall' : r.props < 1 ? 'no stall prop' : null);
 
   // 4. guest pier fishing (catch is not kept)
@@ -115,15 +137,23 @@ fs.mkdirSync(OUT, { recursive: true });
     at(14 * 60); dry();
     const L = f.innResortLayout();
     until(() => (f.STAYS || []).some(g => g.stay === 'beach' && !g.inside), 700);
-    const g = (f.STAYS || []).find(q => q.what === 'fish' && q.stay === 'beach');
-    if (!g) { const s = (f.STAYS || []).find(q => q.stay === 'beach' && !q.inside); if (s) { s.pts = []; s.what = 'fish'; s.task = { kind: 'fish', hook: L.pier.hook }; s.x = L.pier.stand.x; s.y = L.pier.stand.y; } }
-    const fisher = (f.STAYS || []).find(q => q.what === 'fish') || (f.STAYS || []).find(q => q.stay === 'beach');
-    look(L.pier.stand.x, L.pier.stand.y, 0); hide();
+    const placeFisher = () => {
+      const s = (f.STAYS || []).find(q => q.stay === 'beach' && !q.leaving) || (f.STAYS || []).find(q => q.stay === 'beach');
+      if (!s) return null;
+      s.pts = []; s.what = 'fish'; s.task = { kind: 'fish', hook: L.pier.hook }; s.x = L.pier.stand.x; s.y = L.pier.stand.y; s.inside = false; s.moving = false; s.wait = 80;
+      return s;
+    };
+    placeFisher();
     const fish0 = f.FARMER.crops.filter(x => f.IN.isSeaFish(typeof x === 'string' ? x : (x && x.id))).length;
     f.advance(8, 10);
     const fish1 = f.FARMER.crops.filter(x => f.IN.isSeaFish(typeof x === 'string' ? x : (x && x.id))).length;
-    return { pier: S.inn.resort.pier, props: (f.props || []).filter(q => q.pier).length, stays: (f.STAYS || []).length, fisher: fisher && { what: fisher.what, x: Math.round(fisher.x), y: Math.round(fisher.y) }, fish0, fish1 }; })()`,
-    r => !r.pier ? 'no pier' : r.props < 1 ? 'no pier prop' : r.fish1 !== r.fish0 ? 'catch was kept' : r.stays < 1 ? 'no guests' : null);
+    parkFam();
+    const fisher = placeFisher();
+    look(L.pier.stand.x, L.pier.stand.y, 0); hide();
+    return { pier: S.inn.resort.pier, props: (f.props || []).filter(q => q.pier).length, stays: (f.STAYS || []).length, fisher: fisher && { what: fisher.what, look: fisher.look, x: Math.round(fisher.x), y: Math.round(fisher.y) }, fish0, fish1 }; })()`,
+    r => !r.pier ? 'no pier' : r.props < 1 ? 'no pier prop' : r.fish1 !== r.fish0 ? 'catch was kept' : r.stays < 1 ? 'no guests'
+      : !(r.fisher && /^beach[A-F]$/.test(r.fisher.look)) ? 'fisher look ' + JSON.stringify(r.fisher)
+      : null);
 
   // 5–6. two-storey inn day and night
   await shot('v5108_inn2_day.png', `(() => { ${setup} ${readyTown} ${zoneInn}

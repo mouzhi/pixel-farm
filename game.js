@@ -3046,7 +3046,7 @@ function innSpawnGroup(g, atDoor) {
   const e = beach ? (IN.COAST && IN.COAST.gate) || { x: 220, y: 212 } : innEntry();
   const looks = beach ? IN.BEACH_LOOKS : IN.LOOKS;
   const shown = Math.min(g.n | 0 || 1, Math.max(0, IN.ON_SCREEN - STAYS.filter(s => !s.leaving).length));
-  const T = S.t % 1440, night = T >= 18 * 60 || T < IN.LEAVE_MORNING;
+  const T = S.t % 1440, night = innBedtime(T);
   for (let i = 0; i < shown; i++) {
     const look = looks[(looks.indexOf(g.look) + i + looks.length) % looks.length];
     const dest = { x: door.x + (i - 1) * 3, y: door.y + 2 };
@@ -3075,13 +3075,17 @@ function innEnsure() {
     innSpawnGroup(g, false);
   }
 }
+function innBedtime(T) { // with a sunset deck, guests stay out to watch the sun until 19:00
+  const bed = (IN && S.inn && IN.deckUp(S.inn)) ? 19 * 60 : 18 * 60;
+  return T >= bed || T < IN.LEAVE_MORNING;
+}
 function innTick(dm) {
   if (!IN || !S.inn) return;
   const T = ((S.t % 1440) + 1440) % 1440;
   innEnsure();
   if (IN.dinerUp(S.inn) && T >= 11 * 60 + 30 && S.inn.diner.last !== S.day) innServeMeals();
   if (IN.stallUp(S.inn) && T >= 11 * 60 + 30 && !(S.inn.resort && S.inn.resort._meal === S.day)) innServeStall();
-  const night = T >= 18 * 60 || T < IN.LEAVE_MORNING;
+  const night = innBedtime(T);
   const leavingHour = T >= 7 * 60 && T < IN.LEAVE_MORNING + 40;
   for (let i = STAYS.length - 1; i >= 0; i--) {
     const s = STAYS[i];
@@ -3625,21 +3629,23 @@ function drawSunsetWash(ctx, T, realT) { // v5.10.8: one warm gradient on the sk
   const a = Math.max(0, Math.min(1, 1 - Math.abs((T / 60) - 18) / 1.05));
   if (a <= 0) return;
   const sky = ctx.createLinearGradient(0, 0, 0, H * 0.45);
-  sky.addColorStop(0, `rgba(255, 150, 70, ${0.18 * a})`);
-  sky.addColorStop(0.55, `rgba(255, 190, 110, ${0.10 * a})`);
+  sky.addColorStop(0, `rgba(255, 140, 60, ${0.28 * a})`);
+  sky.addColorStop(0.55, `rgba(255, 180, 100, ${0.16 * a})`);
   sky.addColorStop(1, `rgba(255, 220, 160, 0)`);
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H * 0.5);
-  const box = typeof seaBox === 'function' ? seaBox() : null;
-  const x0 = box ? box.x : 0, y0 = box ? box.y : H * 0.55, bw = box ? box.w : W, bh = box ? box.h : H * 0.4;
-  const sea = ctx.createLinearGradient(x0, y0, x0, y0 + bh);
-  sea.addColorStop(0, `rgba(255, 170, 80, ${0.28 * a})`);
-  sea.addColorStop(1, `rgba(255, 120, 50, ${0.08 * a})`);
-  ctx.fillStyle = sea; ctx.fillRect(x0, y0, bw, bh);
-  ctx.fillStyle = `rgba(255, 230, 160, ${0.55 * a})`;
-  for (let i = 0; i < 8; i++) {
-    const px = x0 + ((i * 47 + (realT * 13 | 0)) % Math.max(1, bw));
-    const py = y0 + 4 + ((i * 29) % Math.max(1, bh - 8));
-    if (((realT * 2 + i) % 2) < 1.2) ctx.fillRect(px, py, 2, 1);
+  const box = typeof seaBox === 'function' ? seaBox() : null; // seaBox returns [x, y, w, h]
+  const x0 = box ? +box[0] : 0, y0 = box ? +box[1] : (H * 0.55), bw = box ? +box[2] : W, bh = box ? +box[3] : (H * 0.4);
+  if ([x0, y0, bw, bh].every(Number.isFinite) && bw > 0 && bh > 0) {
+    const sea = ctx.createLinearGradient(x0, y0, x0, y0 + bh);
+    sea.addColorStop(0, `rgba(255, 160, 70, ${0.42 * a})`);
+    sea.addColorStop(1, `rgba(255, 110, 45, ${0.16 * a})`);
+    ctx.fillStyle = sea; ctx.fillRect(x0, y0, bw, bh);
+    ctx.fillStyle = `rgba(255, 230, 160, ${0.7 * a})`;
+    for (let i = 0; i < 8; i++) {
+      const px = x0 + ((i * 47 + ((realT * 13) | 0)) % bw);
+      const py = y0 + 4 + ((i * 29) % Math.max(1, bh - 8));
+      if (((realT * 2 + i) % 2) < 1.2) ctx.fillRect(px, py, 2, 1);
+    }
   }
 }
 function warmth(T) { const h = T / 60; const a = Math.max(0, 1 - Math.abs(h - 18.3) / 1.6), b = Math.max(0, 1 - Math.abs(h - 6) / 1.2); return Math.max(a, b * 0.8); }
