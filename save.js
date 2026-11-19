@@ -14,8 +14,9 @@
   const PW = (typeof require === 'function' && typeof document === 'undefined') ? require('./works.js') : root.PFWorks; // v5.6.0
   const DC = (typeof require === 'function' && typeof document === 'undefined') ? require('./decor.js') : root.PFDecor; // v5.7.0
   const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown; // v5.8.0
+  const HM = (typeof require === 'function' && typeof document === 'undefined') ? require('./home.js') : root.PFHome; // v5.9.0
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 14;
+  const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -94,9 +95,14 @@
       upgrades: Object.assign({ town: 0 }, s.upgrades),
       town: s.town && typeof s.town === 'object' ? s.town : TN.empty(),
     }),
+    // v5.9.0 phase 11: no new house bought, nobody married, nobody close to anyone yet (closeness starts from today)
+    15: s => Object.assign({}, s, {
+      upgrades: Object.assign({ cottage: 0 }, s.upgrades),
+      home: s.home && typeof s.home === 'object' ? s.home : HM.empty(),
+    }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon', 'wheat']; // v5.6.0 wheat (a missing count reads as 0)
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town', 'cottage']; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']; // v5.6.0 second pens
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
@@ -198,6 +204,7 @@
       works: PW.valid(s.works, PL.validPlots(s.plots)), // v5.6.0
       decor: DC.valid(s.decor), // v5.7.0
       town: TN.valid(s.town), // v5.8.0
+      home: HM.valid(s.home), // v5.9.0
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
