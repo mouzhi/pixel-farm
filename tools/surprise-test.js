@@ -164,4 +164,13 @@ test('expected extra income from published rates stays under 10%', () => {
   assert.ok(extra / earn < 0.10, 'mid extra ' + (extra / earn).toFixed(3) + ' of income');
 });
 
+test('v5.9.1: double yolks halved; repeats of a kind read as one line with the count', () => {
+  assert.strictEqual(SU.EGG.double.chance, 0.03);
+  const ev = { kind: 'double-egg', msg: '一颗双黄蛋！' };
+  assert.strictEqual(SU.mergedMsg(ev, 1), '一颗双黄蛋！');
+  assert.strictEqual(SU.mergedMsg(ev, 3), '今天捡到 3 颗双黄蛋');
+  for (const k of ['gold-egg', 'white-truffle', 'big-truffle', 'glow', 'giant', 'cat-seed']) assert.ok(/\d/.test(SU.mergedMsg({ kind: k, msg: 'x' }, 2)), k);
+  assert.strictEqual(SU.mergedMsg({ kind: 'other', msg: 'x' }, 5), 'x');
+});
+
 console.log(n + ' passed');
