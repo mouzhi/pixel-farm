@@ -55,7 +55,7 @@ jobs:
         run: node tools/home-test.js
       - name: v5.10.0 (town hall, projects, prosperity, gifts) unit tests
         run: node tools/hall-test.js
-      - name: v5.10.1 economy unit tests (24-hour offline window, clock turned back, family buys basics only)
+      - name: v5.10.1 / v5.10.2 economy unit tests (24-hour offline window, short absences, clock turned back, family buys basics only, speed refund)
         run: node tools/econ-test.js
       - name: Surprise browser test
         env:
@@ -122,3 +122,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/econ-shots.js
+      - name: v5.10.2 one game speed (no 2x / 4x in the shop or top bar, a bought speed refunded once, short absences outside the offline window)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/nospeed-shots.js
