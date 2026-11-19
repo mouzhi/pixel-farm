@@ -1,5 +1,5 @@
 // v5.9.1 browser checks (polish): night light layer cached, one-row toolbar, welcome-back only after 10 minutes, same-kind surprises
-//   on one log line, saplings with nowhere to go say so, town lamps / windows / evening square, the day-59 fixture.
+//   on one log line, saplings with nowhere to go say so, town lamps / windows / evening square, the progressive shop, the day-59 fixture.
 //   node tools/polish-shots.js   writes /workspace/pf-shots/v591_*.png (PF_SHOTS to change); exits 1 on an error or a failed check.
 //   PF_REAL_SAVE=<save.json | dump with ===SAVE===> also loads that save (never committed) and shoots it at night with the new toolbar.
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -74,6 +74,16 @@ fs.mkdirSync(OUT, { recursive: true });
       const heads = [...document.querySelectorAll('#shop .sec')].map(e => e.textContent); return { card: W(c), ct: W(c.querySelector('.ct')), h: Math.round(c.getBoundingClientRect().height), lock: !!c.querySelector('.short.lock'), dupHead: heads.length !== new Set(heads).size }; });
     await p.waitForTimeout(200); await p.screenshot({ path: path.join(OUT, name) });
     check(name, r.none ? 'no card' : !r.lock ? 'no lock note (scene)' : r.ct < r.card * 0.35 ? 'name column ' + r.ct + ' of ' + r.card : r.h > 220 ? 'card tall ' + r.h : r.dupHead ? 'a section header twice' : null, r); await p.context().close(); }
+  // 6c. progressive shop: a fresh farm hides what is more than two unlock steps away (cows, the new house, the works...) with a quiet note;
+  //     nothing owned or buyable is ever hidden; the day-59 fixture hides nothing
+  for (const [tag, save] of [['day1', null], ['day59', FIXTURE]]) { const name = 'v591_shop_reveal_' + tag + '.png'; const p = await page(save);
+    const r = await p.evaluate(() => { const o = document.getElementById('offline'); if (o) o.hidden = true; document.getElementById('shopBtn').click();
+      const t = document.querySelector('#shop [data-tab="animals"]'); if (t) t.click(); __farm.refreshUI(); const f = __farm, S = f.S, SIM = window.PFSim;
+      const hidden = [], bad = []; for (const id of SIM.SHOP_IDS) { const d = f.shopDepth(id); if (d > f.REVEAL_MAX) { hidden.push(id); const o = SIM.offer(S.up, S.coins, id, f.F.wood); if (S.up[id] > 0 || o.ok) bad.push(id); } }
+      return { hidden, bad, cow: !!document.querySelector('#shop [data-item="cow"]'), chicken: !!document.querySelector('#shop [data-item="chicken"]'), more: !!document.querySelector('#shop .more') }; });
+    await p.waitForTimeout(200); await p.screenshot({ path: path.join(OUT, name) });
+    check(name, r.bad.length ? 'hid owned/buyable ' + r.bad : !r.chicken ? 'no chicken card' : tag === 'day1' ? (r.cow ? 'cow shown on day 1' : !r.more ? 'no 更多内容 note' : !r.hidden.includes('cottage') ? 'new house shown on day 1' : null)
+      : (r.hidden.length ? 'late game hides ' + r.hidden : r.more ? 'note with nothing hidden' : null), r); await p.context().close(); }
   // 7. (local only) the player's own save at night with the new toolbar
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) { const save = readSave(process.env.PF_REAL_SAVE);
     const p = await page(save); const r = await p.evaluate(night); Object.assign(r, await p.evaluate(layout)); await p.waitForTimeout(200);

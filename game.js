@@ -1762,6 +1762,31 @@ SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the sh
   if (id === 'party') return S.family.moved ? null : '阿禾搬来以后才办得起派对'; // v5.7.0
   return null;
 };
+// v5.9.1 progressive shop: how many unlock steps an item is from buyable (0: owned, buyable, or only short of money it can soon have).
+// The shop shows items up to REVEAL_MAX steps away (locked ones with their condition) and hides the rest, so a new farm's shop is short.
+const REVEAL_MAX = 2;
+const plotMod = (...mods) => Object.values(S.plots || {}).some(p => p && mods.includes(p.mod));
+const revealSteps = id => { // the outside conditions behind a gate, in order; each one not met yet is a step
+  const moved = !!S.family.moved;
+  if (id === 'town') return [moved, !!(S.plots.eroad && S.plots.eroad.mod === 'road'), TN ? TN.schoolDays(S.town) > 0 || S.family.kids.length > 0 : true];
+  if (id === 'cottage') return [moved, plotMod('meadow', 'field'), S.family.kids.length > 0];
+  if (PW.WORKS[id]) return [moved, plotMod('workshop')];
+  if (id === 'wheel') return [moved, plotMod('dam')];
+  if (id === 'hive') return [moved, plotMod('meadow', 'orchard')];
+  if (PW.PEN2[id]) return [moved, plotMod('pasture')];
+  if (id === 'party') return [moved];
+  return null;
+};
+function shopDepth(id) {
+  const it = SIM.shopItem(id); if (!it) return 0; const have = S.up[id] | 0; if (have > 0) return 0;
+  const o = SIM.offer(S.up, S.coins, id, FARMER.wood); if (!o || o.maxed || o.ok) return 0;
+  let d = 0;
+  if (o.locked && o.locked !== id) d += 1 + shopDepth(o.locked); // needs another shop item first
+  else if (o.lockText) { const st = revealSteps(id); d += Math.max(1, st ? st.filter(x => !x).length : 1); }
+  const earn = S.dayEarn.length ? S.dayEarn.reduce((a, b) => a + b, 0) / S.dayEarn.length : 0, reach = Math.max(S.coins, 3 * earn, 300);
+  if (o.cost > 4 * reach) d += 1; // far beyond what the farm has or makes in a few days
+  return d;
+}
 function worksBought(id) { // before applyUpgrades: put the new thing in its place
   const W = S.works;
   if (PW.WORKS[id]) { const sl = PW.freeSlot(S.plots, W.works); if (sl) W.works[id] = { at: sl.at, slot: sl.slot, inp: 0, left: 0, ready: 0 }; }
@@ -3718,7 +3743,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { shopDepth, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
