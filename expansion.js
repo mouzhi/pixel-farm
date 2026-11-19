@@ -74,6 +74,7 @@
     if (mod === 'road') { const d = Math.abs(y - 66); return d < 5 ? [d > 3.8 ? Wd[3] : Wd[4], 'dirt'] : [G[3], 'grass']; }
     if (mod === 'playground') { const s = playSand(p, x, y); if (s) return s; return [v > 0.7 ? G[4] : G[3], 'grass']; }
     if (mod === 'inn') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const w = vnoise(x / 4, y / 4, 51); return [w > 0.78 ? Wd[3] : w < 0.12 ? St[2] : Wd[4], 'dirt']; }
+    if (mod === 'resort') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const path = Math.abs((x - x0) / Math.max(1, x1 - x0) - (y - y0) / Math.max(1, y1 - y0)); const w = vnoise(x / 5, y / 5, 61); if (path < 0.12 || (x - x0) + (y1 - y) < 28) return [w > 0.55 ? Wd[4] : Wd[5], 'sand']; return [w > 0.7 ? Wd[4] : G[3], w > 0.7 ? 'sand' : 'grass']; }
     if (mod === 'trail') return null;
     return [G[3], 'grass'];
   }

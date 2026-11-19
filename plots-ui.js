@@ -23,6 +23,7 @@
     bridge: pixIcon(pad(['', '', '', ' k            k', ' kkkkkkkkkkkkkk', ' ssssssssssssss', ' ss  ssssss  ss', ' s    ssss    s', ' wwwwwwwwwwwwww', ' WwWwWwWwWwWwWw']), { k: wd[2], s: st[2], w: wt[3], W: wt[4] }),
     trail: pixIcon(pad(['        ss', '       sssss', '      sss d s', '     sss dd ss', '    sss dd  sss', '   sss  dd  ssss', '  sss    dd sssss', ' sss     dd ssss', 'gggggggggddggggg']), { s: st[1], d: wd[4], g: gr[3] }),
     inn: pixIcon(pad(['', '   rrrr    rrrr', '  rwwwwr  rwwwwr', '  rwbwwr  rwbwwr', '  rwwwwr  rwwwwr', '  rwwdwr  rwwdwr', '  rwwwwr  rwwwwr', ' sssssssssssssss']), { r: rf[2], w: wd[4], b: wt[4], d: wd[1], s: wd[3] }),
+    resort: pixIcon(pad(['', ' u    u    u', ' uuu  uuu  uuu', '  s    s    s', '  s    s    s', 'ssssssssssssssss', ' s  ss  ss  ss', ' wwwwwwwwwwwwww', ' WwWwWwWwWwWwWw']), { u: ac[1], s: wd[4], w: wt[3], W: wt[4] }),
   };
   const icon = mod => `<i style="background:url(${ICON[mod] || ICON.field});background-size:32px;image-rendering:pixelated"></i>`;
   const nameOf = id => (PL.plot(id) || {}).name || id;

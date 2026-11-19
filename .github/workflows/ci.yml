@@ -65,6 +65,8 @@ jobs:
         run: node tools/careers-test.js
       - name: v5.10.7 (farmstay inn) unit tests
         run: node tools/inn-test.js
+      - name: v5.10.8 (beach resort) unit tests
+        run: node tools/resort-test.js
       - name: v5.10.1 / v5.10.2 economy unit tests (24-hour offline window, short absences, clock turned back, family buys basics only, speed refund)
         run: node tools/econ-test.js
       - name: Surprise browser test
