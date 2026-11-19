@@ -3556,11 +3556,15 @@ function noteProgress(extra) {
 }
 function noteShopOpened() { S.streaks = BOOK.noteShopOpen(S.streaks, S.day); }
 
+const surpDay = { day: -1, m: {} }; // v5.9.1: today's surprises by kind (not saved): { n, line, ev } so repeats rewrite one log line
 function surpriseNote(ev, x, y) {
   if (!ev) return;
-  say(ev.msg); log(ev.msg);
+  if (surpDay.day !== S.day) { surpDay.day = S.day; surpDay.m = {}; }
+  const was = surpDay.m[ev.kind], n = was ? was.n + 1 : 1, msg = SU.mergedMsg ? SU.mergedMsg(ev, n) : ev.msg;
+  if (was) { const i = S.log.indexOf(was.line); if (i >= 0) S.log.splice(i, 1); const j = S.events.lastIndexOf(was.ev); if (j >= 0) S.events.splice(j, 1); }
+  else { say(ev.msg); emit('surprise', { kind: ev.kind }); } // the bubble and the jingle only for the first of a kind each day; v5.2: audio.js plays a jingle
+  log(msg); surpDay.m[ev.kind] = { n, line: S.log[0], ev: S.events[S.events.length - 1] };
   noteLog('event', Object.assign({}, ev, { type: 'surprise', kind: ev.kind, day: S.day, t: S.t }));
-  emit('surprise', { kind: ev.kind }); // v5.2: audio.js plays a jingle
   if (x != null) { popText(x, y, 18, '!', '#fff2a8'); burst(x, y, 12, ['#fff2a8', '#ffffff', '#ffd76a'], 10, 'spark'); }
 }
 
