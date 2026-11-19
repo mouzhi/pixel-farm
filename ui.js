@@ -595,8 +595,9 @@
   hintSync();
   // ---- offline summary ----
   const dur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} 小时 ${m} 分` : m ? `${m} 分钟` : `${s} 秒`; };
+  const OFFLINE_POP_SEC = 600; // v5.9.1: the welcome-back box only after 10 minutes away
   function showOffline(r) {
-    if (!r) return; const box = $('offline');
+    if (!r || !(r.awaySec >= OFFLINE_POP_SEC)) return; const box = $('offline'); // v5.9.1: a short break only gets the log line (离线期间赚了…)
     box.innerHTML = `<h3>欢迎回来</h3><div>离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}</div>` +
       (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
       (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
