@@ -275,18 +275,23 @@
     if (tabId === 'animals' && it.farm) return '养殖（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）';
     return '';
   }
+  // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
+  const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
+  const tabShown = t => t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
-    const S = G.S, tabs = shopTabs();
+    const S = G.S, tabs = shopTabs().filter(tabShown);
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, S.coins, G.F.wood, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : ''].join(','); // v5.6.0: what the phase-8 gates read
+    const key = [shopTab, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : ''].join(','); // v5.6.0: what the phase-8 gates read
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
     const tab = tabs.find(t => t.id === shopTab) || tabs[0];
     let sec = '';
     if (plotView && PU) { shop.innerHTML = h + PU.detailHtml(plotView, PH) + '</div>'; return; } // v5.5.0
+    let hidden = 0;
     for (const id of tab.ids) {
+      if (!shown(id)) { hidden++; continue; }
       const o = SIM.offer(S.up, S.coins, id, G.F.wood), it = o.item, n = it.levels.length, lv = o.have;
       const s2 = sectionFor(it, tab.id); if (s2 && s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
@@ -296,6 +301,7 @@
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
+    if (hidden) h += `<div class="more" title="还有 ${hidden} 项，等前面的东西买了、家里有了新变化就会出现">更多内容随进度解锁</div>`;
     if (tab.id === 'land' && PU) h += PU.listHtml(PH); // v5.5.0: the outer ring
     if (tab.id === 'tools') {
       const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
