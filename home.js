@@ -55,7 +55,7 @@
   }
   const mateIndex = id => Math.max(0, MATE_IDS.indexOf(id));
   const mateName = id => MATES[mateIndex(id)].name;
-  const nbName = id => (NEIGHBOURS.find(n => n.id === id) || { name: id }).name;
+  const nbName = id => ((NEIGHBOURS.find(n => n.id === id) || hallNb().find(n => n.id === id)) || { name: id }).name;
 
   // ---------- the new house ----------
   // the shop sells up to two (one for each child); the second costs a little more ("按人口再加一档")

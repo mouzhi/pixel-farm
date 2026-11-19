@@ -70,16 +70,16 @@ fs.mkdirSync(OUT, { recursive: true });
     const seen = [];
     until(() => { const k = kid(), s = sp(); if (!k || !s) return false;
       if (f.workWalk(k) || f.workWalk(s)) seen.push({ kx: Math.round(k.x), ky: Math.round(k.y), sx: Math.round(s.x), sy: Math.round(s.y), kt: k.task && k.task.kind, st: s.task && s.task.kind });
-      return k.x > 400 && s.x > 380 && (f.workWalk(k) || (k.task && k.task.kind === 'work')); }, 1800);
+      return k.x > 400 && Math.abs(k.y - 66) < 10 && (f.workWalk(k) || (k.task && /^work/.test(k.task.kind))); }, 2200);
     const k = kid(), s = sp();
-    look(Math.max(k && k.x || 420, 420), 70, 0); hide();
+    look(Math.max(k && k.x || 430, 430), 66, 0); hide();
     return { pick, path: S.home.path.kid0, t: S.t % 1440,
       k: k && { x: Math.round(k.x), y: Math.round(k.y), task: k.task && k.task.kind, walk: f.workWalk(k), carry: f.carryFields(k), look: f.lookOf(k) },
       s: s && { x: Math.round(s.x), y: Math.round(s.y), task: s.task && s.task.kind, walk: f.workWalk(s), carry: f.carryFields(s) },
       seen: seen.slice(-3) }; })()`,
     r => !r.pick || !r.pick.ok ? 'pick ' + JSON.stringify(r.pick)
       : !r.path || r.path.way !== 'work' || r.path.at !== 'bakery' ? 'path ' + JSON.stringify(r.path)
-      : !r.k || r.k.x < 360 ? 'kid not on the avenue ' + JSON.stringify(r.k)
+      : !r.k || r.k.x < 360 || Math.abs(r.k.y - 66) > 14 ? 'kid not on the avenue ' + JSON.stringify(r.k)
       : !r.s || r.s.x < 300 ? 'spouse not commuting ' + JSON.stringify(r.s)
       : r.k.carry && (r.k.carry.basket || r.k.carry.carry) ? 'kid holding a tool ' + JSON.stringify(r.k.carry)
       : r.s && r.s.carry && (r.s.carry.basket || r.s.carry.carry) ? 'spouse holding a tool'
@@ -92,8 +92,10 @@ fs.mkdirSync(OUT, { recursive: true });
     const paid = c0 - S.coins, wood = w0 - f.FARMER.wood, lot = pick.at || (S.home.path.kid0 && S.home.path.kid0.at);
     until(() => S.home.wed.kid0 && S.home.wed.kid0.moved, 2500);
     const ready0 = f.CR.shopReady(S.home.path.kid0, S.day);
-    nextMorning(); dry(); at(11 * 60); f.advance(2, 10);
-    const l = f.CR.LOT[lot], k = kid(), s = sp();
+    nextMorning(); dry(); at(9 * 60); const l = f.CR.LOT[lot];
+    until(() => { const k = kid(); return k && l && Math.hypot(k.x - l.door.x, k.y - l.door.y) < 16; }, 1800);
+    at(11 * 60); f.advance(2, 10);
+    const k = kid(), s = sp();
     look(l.x, l.y + 8, 0); hide();
     const props = (f.props || []).filter(q => q.town === lot).map(q => q.town);
     return { pick, paid, wood, lot, ready0, ready: f.CR.shopReady(S.home.path.kid0, S.day), lv: f.townLv(), hallLv: window.PFHall.prosperity(S.town.hall),

@@ -2651,6 +2651,7 @@ function careerCtx(kid, extra) {
   const w = S.home && S.home.wed && S.home.wed[kid], k = S.family.kids.find(q => q.id === kid);
   return Object.assign({ hall: S.town && S.town.hall, lots: (S.town.lots || (S.town.lots = {})), coins: S.coins, wood: FARMER.wood, mate: w && w.mate, kidName: k ? k.name : '孩子', nb: (S.home && S.home.nb) || {}, day: S.day }, extra || {});
 }
+function careerDone() { try { dispatchEvent(new Event('pf:career-done')); } catch (e) {} }
 function careerSettle(r, kid, how) {
   if (!r || !r.ok) return r;
   if (r.paid) { S.coins -= r.paid; emit('purchase', { item: 'career-shop', gold: r.paid, wood: Math.max(0, r.wood), who: 'player' }); }
@@ -2668,7 +2669,7 @@ function careerPick(kid, way, at, kind) {
   if (!CR || !S.home) return { ok: false, why: '还没有成家' };
   const ctx = careerCtx(kid), choice = { way, at, kind };
   const r = CR.take(S.home, S.town.lots || (S.town.lots = {}), kid, choice, ctx, S.day);
-  if (r.ok) { careerSettle(r, kid, ''); if (careerPrompt && careerPrompt.kid === kid) careerPrompt = null; }
+  if (r.ok) { careerSettle(r, kid, ''); if (careerPrompt && careerPrompt.kid === kid) careerPrompt = null; careerDone(); }
   return r;
 }
 function careerChange(kid, way, at, kind) {
@@ -2684,12 +2685,15 @@ function careerOffer(kid) {
   careerPrompt = { kid, day: S.day };
   try { dispatchEvent(new CustomEvent('pf:career', { detail: careerView(kid, 'wedding') })); } catch (e) {}
 }
-function careerEnsure(kid) { // if the wedding path was never picked, take the default
-  if (!CR || !S.home || !HM.isMarried(S.home, kid) && !(S.home.wed[kid] && S.home.wed[kid].mate)) return;
+function careerEnsure(kid) { // if the wedding path was never picked, take the default (legacy married kids stay 留家种地)
+  if (!CR || !S.home) return;
+  const w = S.home.wed[kid]; if (!w || !w.mate) return;
+  if (w.day !== S.day && w.moved !== S.day) return;
   const p = CR.pathOf(S.home, kid); if (!p.implied && p.day) return;
   const r = CR.take(S.home, S.town.lots || (S.town.lots = {}), kid, careerDefault(kid), careerCtx(kid), S.day);
   if (r && r.ok) careerSettle(r, kid, '（按默认的去向）');
   if (careerPrompt && careerPrompt.kid === kid) careerPrompt = null;
+  careerDone();
 }
 function careerMorning() {
   if (!CR || !S.home || !S.town) return;
@@ -2697,7 +2701,7 @@ function careerMorning() {
   for (const k of HM.KID_IDS) {
     const r = CR.applyPending(S.home, S.town.lots, k, careerCtx(k), S.day);
     if (r && r.ok) careerSettle(r, k, '（换的活法今天起算）');
-    if (S.home.wed[k] && S.home.wed[k].day < S.day) careerEnsure(k);
+    if (S.home.wed[k] && S.home.wed[k].moved === S.day) careerEnsure(k);
   }
   if (TOWN_ON && TA && TA.sync) TA.sync(true);
 }
@@ -2746,6 +2750,21 @@ function careerView(kid, mode) {
   const ctx = careerCtx(kid), opts = CR.options(S.home, kid, ctx), p = CR.pathOf(S.home, kid);
   const fee = mode === 'wedding' ? 0 : (p.free || p.implied ? 0 : CR.CHANGE.cost);
   return { kid, name: ctx.kidName, mate: ctx.mate ? HM.mateName(ctx.mate) : '', mode: mode || 'change', fee, free: fee === 0 && mode !== 'wedding', coins: S.coins, wood: FARMER.wood, path: { way: p.way, at: p.at, kind: p.kind, pending: p.pending }, options: opts };
+}
+function careerVia(from, dest, homeward) {
+  if (!TN || !dest) return [];
+  const gate = TN.GATE, sr = schoolRoute(), along = (sr && sr.via) ? sr.via.slice() : [{ x: gate.x - 2, y: 66 }];
+  const onRoad = Math.abs(from.y - 66) < 8 && from.x > 200;
+  const via = [];
+  if (!homeward && from.x < dest.x && from.x < gate.x + 20) {
+    for (const p of along) if (p.x >= Math.min(from.x, gate.x) - 20 && p.x <= Math.max(dest.x, gate.x) + 4) via.push(p);
+    if (dest.y !== 66) via.push({ x: dest.x, y: 66 });
+  } else if (homeward) {
+    via.push({ x: from.x, y: 66 });
+    const back = along.slice().reverse();
+    for (const p of back) if (p.x <= from.x + 8) via.push(p);
+  }
+  return via;
 }
 function careerSigns() { // a name board over the child's shop door
   if (!CR || !S.town || !S.town.lots || !S.home) return;
@@ -2841,11 +2860,11 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     }
     if (T < (work ? CR.WORK.end : CR.SHOP_HOURS.to)) {
       const label = work ? (`去${CR.JOB[path.at] ? CR.JOB[path.at].name : '镇上'}上班`) : (`去${CR.shopName(kidName(kid), path.kind)}守店`);
-      return { kind: work ? 'work-go' : 'shop-go', label, to: dest, dur: 8 };
+      return { kind: work ? 'work-go' : 'shop-go', label, to: dest, via: careerVia(F, dest, false), keepVia: true, dur: 8 };
     }
   }
   if (dest && (work || shop) && T >= (work ? CR.WORK.end : CR.SHOP_HOURS.to) && T < BEDTIME) {
-    if (Math.hypot(F.x - L.door.x, F.y - L.door.y) > 5) return { kind: 'work-back', label: '下班回家', to: L.door, dur: 8 };
+    if (Math.hypot(F.x - L.door.x, F.y - L.door.y) > 5) return { kind: 'work-back', label: '下班回家', to: L.door, via: careerVia(F, L.door, true), keepVia: true, dur: 8 };
   }
   if (fest && path && path.way === 'shop' && CR.shopReady(path, S.day) && T >= 10 * 60 && T < 16 * 60) {
     const d = CR.doorOf(path.at); if (d) return { kind: 'shop-fest', label: '节日在店门口和家人聚', to: { x: d.x + (sp ? 2 : -2), y: d.y + 3 }, dur: 16, rest: true }; }

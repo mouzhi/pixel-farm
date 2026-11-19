@@ -749,6 +749,7 @@
     careerBox.hidden = true; careerData = null; careerSel = null; if (G.refreshUI) G.refreshUI();
   }
   addEventListener('pf:career', e => showCareer(e.detail));
+  addEventListener('pf:career-done', () => { if (careerBox) careerBox.hidden = true; careerData = null; careerSel = null; });
   addEventListener('pointerdown', e => { if (!careerBox || careerBox.hidden) return; if (careerBox.contains(e.target)) return; closeCareer(true); });
 
   G.refreshUI = () => { invKey = ''; storeKey = ''; shopKey = ''; codexKey = ''; inv(); if (!shop.hidden) drawShop(true); if (!store.hidden) drawStore(true); if (codexEl && !codexEl.hidden) drawCodex(true); if (G.hud) G.hud(); };
