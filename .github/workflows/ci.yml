@@ -16,7 +16,7 @@ jobs:
           node-version: 20
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js hall.js market.js slots.js yard.js town.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js hall.js careers.js market.js slots.js yard.js town.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
       - name: Headless smoke test
@@ -61,6 +61,8 @@ jobs:
         run: node tools/bakery-test.js
       - name: v5.10.5 (woodshop, smithy) unit tests
         run: node tools/workshop-test.js
+      - name: v5.10.6 (careers after marriage) unit tests
+        run: node tools/careers-test.js
       - name: v5.10.1 / v5.10.2 economy unit tests (24-hour offline window, short absences, clock turned back, family buys basics only, speed refund)
         run: node tools/econ-test.js
       - name: Surprise browser test
@@ -148,3 +150,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/workshop-shots.js
+      - name: v5.10.6 browser test (wedding path, commute, the child's shop, 换个活法, fixtures)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/careers-shots.js

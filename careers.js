@@ -319,7 +319,7 @@
     if (at === 'bakery') return (BK && BK.STAND) || P(490, 79);
     if (at === 'wood') return (WS && WS.STAND) || P(576, 139);
     if (at === 'smith') return (SM && SM.STAND) || P(608, 139);
-    const l = LOT[at]; return l ? P(l.door.x, l.door.y + (l.rot ? 1 : -1)) : null;
+    const l = LOT[at]; return l ? P(l.door.x, l.door.y + (l.rot === Math.PI ? -1 : 1)) : null;
   }
   const doorOf = at => { const l = LOT[at]; return l ? l.door : standOf(at); };
   function blocks(lots, path, day) {
@@ -338,7 +338,7 @@
     const o = usedLots(lots);
     for (const id of Object.keys(o)) {
       const l = LOT[id], p = path && path[o[id]]; if (!l || !shopReady(p, day)) continue;
-      out.push({ x: l.door.x, y: l.door.y + (l.rot ? 1 : -1), z: 6, r: 16, s: 0.6 });
+      out.push({ x: l.door.x, y: l.door.y + (l.rot === Math.PI ? -1 : 1), z: 6, r: 16, s: 0.6 });
     }
     return out;
   }
