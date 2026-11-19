@@ -29,7 +29,7 @@ const server = http.createServer((req, res) => {
     const tryBuy = () => { while (i < ORDER.length) { const id = ORDER[i], r = __farm.buy(id);
       if (r.ok) { buys.push({ id, label: r.offer.level.label, gold: r.offer.cost, wood: r.offer.wood || 0, day: S.day, t: Math.floor(S.t % 1440) }); i++; }
       else if (r.reason === 'maxed') i++; else break; } };
-    __farm.setGameSpeed(S.eff.speedMax); tryBuy();
+    tryBuy();
     let last = S.day, minutes = { chop: 0, fish: 0, idle: 0 }, sample = 0;
     while (S.day < start + DAYS) {
       __farm.advance(5, 10);

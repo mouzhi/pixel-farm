@@ -46,10 +46,10 @@ ok('reset keeps one copy of the old save', () => {
   const m = new Mem({ [SAVE.KEY]: 'x', [SAVE.BAK]: 'y' }); SAVE.reset(m);
   assert.strictEqual(m.getItem(SAVE.KEY), null); assert.strictEqual(m.getItem(SAVE.BAK), null); assert([...m.m.keys()].some(k => k.startsWith(SAVE.PREFIX + 'reset:')));
 });
-ok('v1 -> current: nothing bought, 1x speed, farm and gold kept, yard left to seed', () => {
+ok('v1 -> current: nothing bought, one game speed, farm and gold kept, yard left to seed', () => {
   const v1 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), s = SAVE.migrate(v1);
   assert.strictEqual(v1.saveVersion, 1); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
-  assert.deepStrictEqual(s.upgrades, SIM.emptyUpgrades()); assert.deepStrictEqual(s.settings, { speed: 1, autoBuy: false, autoDay: 0, autoN: 0 }); assert.deepStrictEqual(s.offline, { win: [] });
+  assert.deepStrictEqual(s.upgrades, Object.assign(SIM.emptyUpgrades(), { speed: 0 })); assert.deepStrictEqual(s.settings, { speed: 1, speedRefund: 0, autoBuy: false, autoDay: 0, autoN: 0 }); assert.deepStrictEqual(s.offline, { win: [] });
   assert.strictEqual(s.coins, v1.coins); assert.strictEqual(s.clock.day, v1.clock.day); assert.strictEqual(s.tiles.length, v1.tiles.length);
   assert.deepStrictEqual(s.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]), v1.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]));
   assert.strictEqual(s.inventory.store.carrot, v1.inventory.store.carrot); assert.strictEqual(s.inventory.store.watermelon, 0);
@@ -67,7 +67,7 @@ ok('v2 -> current: bought levels kept, missing yard stays unset, junk yard items
 });
 ok('v2 keeps bought levels and rejects junk', () => {
   const v2 = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), { saveVersion: 2, upgrades: { can: 2, speed: 1, bogus: 5, hoe: -3 }, settings: { speed: 3 } }));
-  assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1);
+  assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1); // v5.10.2: the legacy speed level is kept so the game can refund it
 });
 ok('v3 -> current: regions and axe not bought, trees rebuilt, orders empty, tiles on the home field, yard kept', () => {
   const v2 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v3-day4.json'), 'utf8')), s = SAVE.migrate(v2);
@@ -296,7 +296,7 @@ ok('chop drops: about 60% of chops drop something; fruit, flower, rare seed, coi
     if (y.drop === 'coins') assert(y.gold >= 10 && y.gold <= 30); }
   for (const d of WD.DROPS) assert(Math.abs(n[d.id] / N - d.p) < 0.02, d.id); assert(Math.abs(n.none / N - 0.4) < 0.02);
 });
-ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
+ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS.filter(k => k !== 'speed'), SIM.SHOP_IDS); }); // v5.10.2: save.js keeps the legacy speed level to refund it
 ok('shop tabs cover every item once', () => {
   const ids = SIM.SHOP_TABS.flatMap(t => t.ids);
   assert.deepStrictEqual(ids.slice().sort(), SIM.SHOP_IDS.slice().sort());
@@ -305,14 +305,20 @@ ok('shop tabs cover every item once', () => {
 });
 ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
-  assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);
+  assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ can: 4 }, 1e9, 'can').maxed, true);
+  assert(!SIM.SHOP_IDS.includes('speed'), 'v5.10.2: no game speed in the shop'); assert(!SIM.SHOP_TABS.some(t => t.ids.includes('speed')));
   for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = (SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive')) || SIM.shopItem(id).flat; for (let i = 1; i < L.length; i++) assert(flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
 });
+ok('v5.10.2: a bought 2x / 4x is refunded once (600 / 3600), settings keep only speed 1 and the refund', () => {
+  assert.deepStrictEqual([0, 1, 2, 3, -1, 'x'].map(SIM.speedRefund), [0, 600, 3600, 3600, 0, 0]);
+  const v = SAVE.validate(Object.assign(SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day59-manor.json'), 'utf8'))), { settings: { speed: 4, speedRefund: 3600.4 } }));
+  assert.strictEqual(v.upgrades.speed, 2); assert.deepStrictEqual([v.settings.speed, v.settings.speedRefund], [1, 3600]);
+});
 ok('shop effects: base and fully upgraded', () => {
-  const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.speedMax, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, 1, false]);
+  const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, false]); assert(!('speedMax' in b));
   assert.deepStrictEqual(b.crops, ['carrot', 'cabbage', 'pumpkin']);
   const max = {}; for (const id of SIM.SHOP_IDS) max[id] = SIM.shopItem(id).levels.length; const m = SIM.effects(max);
-  assert.deepStrictEqual([m.waterMax, m.water3, m.walk, m.basket, m.speedMax, m.till3, m.tillDur], [40, true, 1.962, 40, 4, true, 2]); // 1.8 boots × 1.09 from three dogs
+  assert.deepStrictEqual([m.waterMax, m.water3, m.walk, m.basket, m.till3, m.tillDur], [40, true, 1.962, 40, true, 2]); // 1.8 boots × 1.09 from three dogs
   assert.deepStrictEqual(m.crops, SIM.IDS);
   assert.deepStrictEqual([0, 1, 2, 3].map(SIM.homeOpenCount), [12, 16, 20, 24]);
 });

@@ -8,7 +8,7 @@ load = lambda n: json.load(open(os.path.join(D, n)))
 runs = {k: load(f'econ_{k}.json') for k in ('casual', 'growth', 'idle')}
 SRC = ['crops', 'fruit', 'animals', 'fish', 'works', 'town', 'home', 'wood', 'seeds', 'chop', 'yard', 'other']
 DECO = ('bench', 'flowerpot', 'scarecrow', 'birdbath', 'lamppost', 'stonelamp', 'stringlights', 'party')
-NAMES = {'field': '扩田', 'can': '水壶', 'shoe': '鞋', 'hoe': '锄头', 'basket': '篮子', 'speed': '倍速', 'strawberry': '草莓', 'watermelon': '西瓜', 'axe': '斧头',
+NAMES = {'field': '扩田', 'can': '水壶', 'shoe': '鞋', 'hoe': '锄头', 'basket': '篮子', 'strawberry': '草莓', 'watermelon': '西瓜', 'axe': '斧头',
   'forest': '林场', 'east': '东田', 'orchard': '果园坡', 'south': '南坡', 'pasture': '北牧场', 'coop': '鸡舍', 'chicken': '鸡', 'sty': '猪圈', 'pig': '猪', 'fold': '羊圈',
   'graze': '草地', 'sheep': '羊', 'shed': '牛棚', 'cow': '牛', 'cat': '猫', 'dog': '狗', 'house': '房子', 'fence': '篱笆', 'rod': '钓竿', 'coast': '海边', 'searod': '海竿',
   'lumber': '伐木小屋', 'sprinkler': '浇水器', 'mill': '磨坊', 'jam': '果酱铺', 'cheese': '奶酪坊', 'wheel': '水车', 'hive': '蜂箱', 'coop2': '二鸡舍', 'sty2': '二猪圈',
@@ -22,7 +22,7 @@ def label(u):
     if w == '阿禾 moved in': return '阿禾搬来'
     if w == '阿禾 love 100': return '好感满'
     m = w.split(' ')
-    if m[0] in NAMES: return NAMES[m[0]] + (m[1][1:] if len(m) > 1 and m[0] in ('field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'axe', 'house', 'rod') else '')
+    if m[0] in NAMES: return NAMES[m[0]] + (m[1][1:] if len(m) > 1 and m[0] in ('field', 'can', 'shoe', 'hoe', 'basket', 'axe', 'house', 'rod') else '')
     if w.startswith('kid') and 'born' in w: return '孩子' + str(int(w[3]) + 1) + '出生'
     if w.startswith('school'): return '上学'
     return None
@@ -69,10 +69,16 @@ for k in ('casual', 'growth', 'idle'):
         out.append(f'\n{k} 第 {a}–{b} 天 收入构成: ' + ', '.join(f'{s} {v[0]:,}（{v[1]}%）' for s, v in shares(runs[k], a, b).items()) + ' | 支出: ' + ', '.join(f'{s} {v:,}' for s, v in spend(runs[k], a, b).items()))
 # real seconds per game day (1x) measured by the harness loop
 rs = [r['realSec'] for r in runs['idle']['days'] if r.get('realSec')]
-if rs: out.append(f'\n1× 每个游戏日的实时秒数（测得，20 秒一步）：平均 {sum(rs) / len(rs):.0f} 秒，最少 {min(rs)}，最多 {max(rs)}')
-# 30-minute AFK: the casual player stops clicking on day X; gold over the next 30 real minutes at 1x / 2x / 4x
+if rs: out.append(f'\n每个游戏日的实时秒数（测得，20 秒一步；v5.10.2 起只有一种速度）：平均 {sum(rs) / len(rs):.0f} 秒，最少 {min(rs)}，最多 {max(rs)}')
 DAY_SEC = 313
-out.append('\n### 30 分钟挂机（第 X 天起不再点任何东西）\n| 起始天 | 手里 | 当天日入 | 1×（5.75 天） | 2×（11.5 天） | 4×（23 天） | 切走 / 关掉 30 分钟（离线结算） |\n|---:|---:|---:|---:|---:|---:|---:|')
+# v5.10.2: real hours of play (the page open, nothing offline) to reach day 30 / 60 / 90
+def hours_to(run, day):
+    sec = [r.get('realSec') or DAY_SEC for r in run['days'] if r['day'] <= day]
+    return sum(sec) / 3600 if len(sec) >= day else None
+hs = [(d, hours_to(runs['casual'], d)) for d in (30, 60, 90)]
+out.append('\n玩到第 N 天要开着页面多少实时小时（不算离线）：' + '，'.join(f'第 {d} 天 {h:.1f} 小时' for d, h in hs if h is not None))
+# 30-minute AFK: the casual player stops clicking on day X; gold over the next 30 real minutes (one game speed since v5.10.2)
+out.append('\n### 30 分钟挂机（第 X 天起不再点任何东西）\n| 起始天 | 手里 | 当天日入 | 开着页面 30 分钟（约 5.75 天） | 切走 / 关掉 30 分钟（离线结算） |\n|---:|---:|---:|---:|---:|')
 for x in (3, 10, 30, 60):
     try: a = load(f'econ_casual_afk{x}.json')
     except Exception: continue
@@ -83,7 +89,7 @@ for x in (3, 10, 30, 60):
         return round(g)
     n1 = 1800 / DAY_SEC
     avg3 = sum(rows[k]['dayEarn'] for k in range(x - 2, x + 1) if k in rows) / 3
-    out.append(f"| {x} | {rows[x]['coins']:,} | {rows[x]['dayEarn']:,} | {gold(n1):,} | {gold(2 * n1):,} | {gold(4 * n1):,} | {math.floor(avg3 * min(3, n1 * 0.5)):,} |")
+    out.append(f"| {x} | {rows[x]['coins']:,} | {rows[x]['dayEarn']:,} | {gold(n1):,} | {math.floor(avg3 * min(3, n1 * 0.5)):,} |")
 open(os.path.join(D, 'econ_report.md'), 'w').write('\n'.join(out)); print('\n'.join(out))
 
 # ---- chart ----

@@ -6,7 +6,7 @@
 // v4.6: fishing (starter rod, pond idle task, rod upgrades, seaside, sea rod), catch log, save migration.
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
-const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures'), SAVE = require('../save.js');
+const ROOT = path.resolve(__dirname, '..'), FIX = path.join(__dirname, 'fixtures'), SAVE = require('../save.js'), SIM = require('../sim.js');
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => {
   const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html');
@@ -54,7 +54,7 @@ async function test(name, fn) {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')); s.savedAt = Date.now();
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => ({ day: __farm.S.day, coins: __farm.S.coins, notes: __farm.SAVE.notes }));
-    assert.strictEqual(r.day, s.clock.day); assert.strictEqual(r.coins, s.coins || 0); assert.deepStrictEqual(r.notes, []);
+    assert.strictEqual(r.day, s.clock.day); assert.strictEqual(r.coins, (s.coins || 0) + SIM.speedRefund((s.upgrades || {}).speed)); assert.deepStrictEqual(r.notes, []); // v5.10.2: a bought 2x / 4x comes back as gold
     const d = await p.evaluate(() => { __farm.advance(330, 10); return __farm.S.day; }); assert(d > s.clock.day); assert.deepStrictEqual(p.errs, []);
   });
   await test('broken save falls back to the backup', async ctx => {
@@ -103,7 +103,7 @@ async function test(name, fn) {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')); s.savedAt = Date.now();
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => { __farm.saveNow(); const v = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:save'));
-      return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: __farm.S.speed, yard: v.yard && v.yard.length, kinds: [...new Set((v.yard || []).map(c => c.type))] }; });
+      return { v: v.saveVersion, up: v.upgrades, open: __farm.tiles.filter(t => t.open).length, coins: __farm.S.coins, speed: v.settings.speed, yard: v.yard && v.yard.length, kinds: [...new Set((v.yard || []).map(c => c.type))] }; });
     assert.strictEqual(r.v, SAVE.CURRENT); assert(Object.values(r.up).every(x => x === 0)); assert.strictEqual(r.open, 12); assert.strictEqual(r.coins, s.coins); assert.strictEqual(r.speed, 1);
     assert(r.yard >= 8, 'old save should get a yard to tidy: ' + r.yard); assert(r.kinds.every(k => ['rock', 'branch', 'weed', 'pebble'].includes(k)));
     assert.deepStrictEqual(p.errs, []);
@@ -127,19 +127,31 @@ async function test(name, fn) {
     assert(!/坐在池塘边休息/.test(r.label) || r.left === 0, 'should not rest while clutter remains: ' + JSON.stringify(r));
     assert.deepStrictEqual(p.errs, []);
   });
-  await test('shop: buy from the panel, upgrades survive reload, speed buttons work', async ctx => {
+  await test('shop: buy from the panel, upgrades survive reload, no speed buttons', async ctx => {
     const p = await open(ctx);
     await p.evaluate(() => { __farm.S.coins = 1000; });
     await openShop(p, 'land'); await p.waitForSelector('#shop:not([hidden]) [data-buy="field"]'); await p.click('#shop [data-buy="field"]');
-    await openShop(p, 'tools'); await p.click('#shop [data-buy="speed"]');
-    let r = await p.evaluate(() => ({ coins: __farm.S.coins, up: Object.assign({}, __farm.S.up), open: __farm.tiles.filter(t => t.open).length, poor: __farm.buy('watermelon') }));
-    assert.strictEqual(r.coins, 1000 - 60 - 600); assert.strictEqual(r.up.field, 1); assert.strictEqual(r.up.speed, 1); assert.strictEqual(r.open, 16);
-    assert.deepStrictEqual(r.poor, { ok: false, reason: 'short', short: 2500 - 340 });
-    await p.waitForSelector('#speed:not([hidden]) [data-v="2"]'); await p.click('#speed [data-v="2"]');
-    assert.strictEqual(await p.evaluate(() => __farm.S.speed), 2);
+    await openShop(p, 'tools'); await p.click('#shop [data-buy="can"]');
+    let r = await p.evaluate(() => ({ coins: __farm.S.coins, up: Object.assign({}, __farm.S.up), open: __farm.tiles.filter(t => t.open).length, poor: __farm.buy('watermelon'), speedBuy: !!document.querySelector('#shop [data-buy="speed"]') }));
+    assert.strictEqual(r.coins, 1000 - 60 - 80); assert.strictEqual(r.up.field, 1); assert.strictEqual(r.up.can, 1); assert.strictEqual(r.open, 16); assert.strictEqual(r.speedBuy, false);
+    assert.deepStrictEqual(r.poor, { ok: false, reason: 'short', short: 2500 - 860 });
     await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
-    r = await p.evaluate(() => ({ coins: __farm.S.coins, field: __farm.S.up.field, open: __farm.tiles.filter(t => t.open).length, speed: __farm.S.speed, bar: !document.getElementById('speed').hidden }));
-    assert.deepStrictEqual(r, { coins: 340, field: 1, open: 16, speed: 2, bar: true }); assert.deepStrictEqual(p.errs, []);
+    r = await p.evaluate(() => ({ coins: __farm.S.coins, field: __farm.S.up.field, open: __farm.tiles.filter(t => t.open).length, bar: !!document.getElementById('speed'), set: typeof __farm.setGameSpeed }));
+    assert.deepStrictEqual(r, { coins: 860, field: 1, open: 16, bar: false, set: 'undefined' }); assert.deepStrictEqual(p.errs, []);
+  });
+  await test('v5.10.2: a save that bought 4x gets 3600 back once, runs at one speed, and keeps it after reload', async ctx => {
+    const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v15-day72-cottage.json'), 'utf8')); s.savedAt = Date.now(); s.upgrades.speed = 2; s.settings = Object.assign({}, s.settings, { speed: 4 });
+    const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
+    const t0 = await p.evaluate(() => __farm.S.t);
+    let r = await p.evaluate(() => { __farm.saveNow(); const v = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:save'));
+      return { coins: __farm.S.coins, refund: v.settings.speedRefund, speed: v.settings.speed, lv: v.upgrades.speed, log: __farm.S.log.join('|') }; });
+    assert.strictEqual(r.coins, s.coins + 3600); assert.deepStrictEqual([r.refund, r.speed, r.lv | 0], [3600, 1, 0]); assert(/倍速已取消.*退回 3600 金/.test(r.log), r.log);
+    const mins = await p.evaluate(() => { const S = __farm.S; S.t = Math.floor(S.t / 1440) * 1440 + 9 * 60; const a = S.t; __farm.F.sleeping = false; __farm.advance(10, 10); return S.t - a; });
+    assert(mins > 25 && mins < 35, 'one speed: 10 s is about 30 game minutes, got ' + mins);
+    const c1 = await p.evaluate(() => { __farm.saveNow(); return __farm.S.coins; });
+    await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
+    r = await p.evaluate(() => ({ coins: __farm.S.coins, refund: __farm.S.speedRefund, log: __farm.S.log.join('|') }));
+    assert.deepStrictEqual([r.coins, r.refund], [c1, 3600], 'no second refund'); assert(!/倍速已取消/.test(r.log.split('|')[0] || ''), r.log); assert.deepStrictEqual(p.errs, []);
   });
   await test('wide hoe tills 3x3, harvests drop seeds, strawberries regrow', async ctx => {
     const p = await open(ctx);
@@ -399,7 +411,7 @@ async function test(name, fn) {
     const fam = await p.evaluate(() => { const f = __farm, S = f.S; S.family.love = 100; f.advance(1440, 10);
       const moved = S.family.moved > 0 && S.members.length === 1 && S.members[0].role === 'partner'; const movedLog = S.events.some(e => /阿禾搬进了大木屋/.test(e.msg));
       S.coins = 1e5; f.FARMER.wood = 1000; f.buy('house'); f.buy('house'); f.buy('forest'); f.buy('sty'); f.buy('fence');
-      S.day = Math.max(S.day, 50); S.t = S.day * 1440 + 9 * 60; S.speed = 1;
+      S.day = Math.max(S.day, 50); S.t = S.day * 1440 + 9 * 60;
       Object.assign(S.family, { moved: S.day - 48, kids: [{ id: 'kid0', name: '小豆', born: S.day - 45 }, { id: 'kid1', name: '小米', born: S.day - 32 }] }); f.syncFamily();
       const roles = S.members.map(m => m.role);
       let clash = 0; const key = a => a.task ? [a.task.tile, a.task.an, a.task.key].filter(Boolean) : [];
