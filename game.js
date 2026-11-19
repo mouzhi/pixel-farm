@@ -16,6 +16,7 @@ const WX = window.PFWeather, INS = window.PFInsects; // v5.4.3: light rain and i
 const WA = window.PFWood; // v5.3.1: wood automation (auto chopping, axe levels, the lumber hut)
 const PL = window.PFPlots, XP = window.PFExpand; // v5.5.0: the outer ring (plots.js rules, expansion.js art)
 const WD = window.PFWorld, WORLD = WD.WORLD, FS = window.PFFish, NAV = window.PFPath; // v4.6: the big map (64 x 50 tiles), seaside to the south; the farm keeps its 0..192 x 0..128 coordinates
+const MK = window.PFMarket; // v5.10.3: 集市 (market.js rules; art in town-art.js)
 const HL = window.PFHall; // v5.10.0: 镇公所, the board's projects, gifts to the town (hall.js rules; art in town-art.js)
 const TN = window.PFTown, TA = window.PFTownArt, WORLD55 = WD.WORLD55 || WORLD; // v5.8.0 phase 10: the town east of 东大道 (town.js rules, town-art.js art)
 if (TN) for (const k in TN.STREETS) if (!WD.ROUTES[k]) WD.ROUTES[k] = TN.STREETS[k]; // the town's streets are routes like the farm lanes
@@ -2178,7 +2179,7 @@ function neighbourTick(dm) {
   if (NEIGH.length !== defs.length) for (const n of defs) if (!NEIGH.some(g => g.id === n.id)) { const h = HL ? HL.doorOf(n) : TN.BY_ID[n.home].door; NEIGH.push({ id: n.id, name: n.name, def: n, look: n.look, x: h.x, y: h.y, fx: 0, fy: 1, pts: [], spot: 'home', out: false, moving: false }); }
   const T = S.t % 1440;
   for (const g of NEIGH) { if (GUESTS.some(q => q.look === g.look)) { if (g.out) { g.out = false; g.spot = 'party'; g.pts.length = 0; const h = HL ? HL.doorOf(g.def) : TN.BY_ID[g.def.home].door; g.x = h.x; g.y = h.y; } continue; } // tonight they are the party guests
-    const w = hallSite(g, T) || (HL ? HL.neighbourAt(g.def, T) : TN.neighbourAt(g.def, T));
+    const w = hallSite(g, T) || (HL && HL.marketAt(S.town.hall, g.def, S.day, T)) || (HL ? HL.neighbourAt(g.def, T) : TN.neighbourAt(g.def, T));
     if (w.spot !== g.spot) { g.spot = w.spot; g.out = true; g.pts = routeVia(g, w.at).concat([{ x: w.at.x, y: w.at.y }]); }
     if (g.pts.length) guestStep(g, dm); else { g.moving = false; if (g.spot === 'home') g.out = false; } }
 }
@@ -2190,8 +2191,8 @@ const hallCtx = () => ({ open: townOpen(), coins: S.coins, wood: FARMER.wood });
 function hallStart(id) {
   const H = S.town.hall, why = HL.canStart(H, id, hallCtx()); if (why) return { ok: false, why };
   const p = HL.PROJ[id]; S.coins -= p.cost; FARMER.wood -= p.wood; HL.start(H, id, S.day); emit('purchase', { item: 'hall:' + id, level: 1, gold: p.cost, wood: p.wood, who: 'player' });
-  const l = HL.LOT[id]; burst(l.x, l.y, 14, [Wd[3], Wd[4], '#fff2a8'], 8); markNavDirty(); if (TOWN_ON) TA.sync(true);
-  log(`镇公所的告示板：${p.name}开工了，木匠阿松搭起脚手架，明天一早就能盖好`); return { ok: true }; }
+  const l = HL.LOT[id] || TN.PLAZA; burst(l.x, l.y, 14, [Wd[3], Wd[4], '#fff2a8'], 8); markNavDirty(); if (TOWN_ON) TA.sync(true);
+  log(`镇公所的告示板：${p.name}开工了，木匠阿松${p.kind === 'market' ? '在广场上搭摊位' : '搭起脚手架'}，明天一早就能盖好`); return { ok: true }; }
 function hallGive(id, u) { // 送给镇上: from the storehouse (u undefined) or from the yard (u: the placed one)
   const H = S.town.hall; if (!townOpen()) return { ok: false, why: '先把镇子买下来' }; if (!HL.GIFT_OK(id)) return { ok: false, why: '派对区留在家里' };
   if (!HL.giftSpot(H)) return { ok: false, why: '主街上已经摆满了' };
@@ -2203,8 +2204,8 @@ function hallTick() {
   if (!HL || !townOpen()) return; const H = S.town.hall;
   if (!H.paper) H.paper = S.day; // the paper starts counting the week the town opens
   const lv0 = HL.prosperity(H), done = HL.finish(H, S.day);
-  if (done) { const p = HL.PROJ[done], l = HL.LOT[done], who = HL.NEIGHBOURS.find(n => n.id === p.who); H.week.built.push(done); markNavDirty(); if (TOWN_ON) TA.sync(true);
-    burst(l.x, l.y - 6, 20, ['#fff2a8', '#ffd76a', Wd[4]], 14); log(`镇上的${p.name}盖好了${who ? '，' + who.name + '一家搬了进来' : ''}`);
+  if (done) { const p = HL.PROJ[done], l = HL.LOT[done] || TN.PLAZA, who = HL.NEIGHBOURS.find(n => n.id === p.who); H.week.built.push(done); markNavDirty(); if (TOWN_ON) TA.sync(true);
+    burst(l.x, l.y - 6, 20, ['#fff2a8', '#ffd76a', Wd[4]], 14); log(`镇上的${p.name}盖好了${who ? '，' + who.name + '一家搬了进来' : ''}${p.kind === 'market' ? `；每 7 天一次集市日，下一次是第 ${MK.nextDay(H, S.day)} 天` : ''}`); if (p.kind === 'market') groundDirty = true;
     const lv = HL.prosperity(H); if (lv > lv0) log(`镇子的繁荣度升到 ${lv}（${HL.LV_NAME[lv]}）`); }
   if (S.day - H.paper >= HL.PAPER_EVERY && S.t % 1440 >= WAKE + 60) {
     log(HL.paperText({ day: S.day, built: H.week.built, gifts: H.week.gifts, trade: H.week.trade, lv: HL.prosperity(H), people: TN.NEIGHBOURS.length + HL.residents(H).length }));
@@ -2226,9 +2227,11 @@ function hallView() { // what the board shows (ui.js)
 const tradeOk = a => townOpen() && (!a.role || FAM.canDo(a.role, 'towntrade')) && a.role !== 'child';
 const tradeList = a => a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && TN.tradeable(o.ty, FS.isFish(o.ty)));
 function tradeKeep(a, keep) { // while the town shop is still open today, the tradeable goods stay in the basket for it
-  const T = S.t % 1440; if (!tradeOk(a) || T >= TN.TRADE.to - 30) return keep;
+  const T = S.t % 1440; if (marketDay() && tradeOk(a)) return marketKeep(a, keep, T); // v5.10.3
+  if (!tradeOk(a) || T >= TN.TRADE.to - 30) return keep;
   const k = keep.slice(); for (const o of tradeList(a)) k[o.i] = true; return k; }
 function townBoard(post, T) {
+  if (marketBoard(post, T)) return; // v5.10.3: on market day everything goes to the square (周婶 keeps her stall there)
   if (!tradeOk(F) || T < TN.TRADE.from || T >= TN.TRADE.to) return;
   if (tradeList(F).length >= TN.TRADE.min) post('towntrade', 66 + travel(F, TN.SHOP_DOOR) / 8, TN.SHOP_DOOR, () => tradeTask(), 'town:trade:' + (F === FARMER ? 'farmer' : F.id)); // an errand: the long walk is not held against it
 }
@@ -2243,10 +2246,70 @@ function tradeTask() {
     popText(TN.SHOP_DOOR.x, TN.SHOP_DOOR.y - 8, 26, '+' + sum, '#ffd76a'); burst(TN.SHOP_DOOR.x, TN.SHOP_DOOR.y - 4, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
     log(`${F === FARMER ? '' : F.name}在镇上小店卖了 ${n} 件，得 ${sum} 金（比集市多 ${extra} 金）`); } };
 }
-function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); if (TOWN_ON) TA.sync(); }
+// ---- v5.10.3 集市: every 7th day a grown-up takes the basket to the family's stall on the square (market.js) ----
+const marketH = () => (MK && HL && TN && S.town && S.town.hall ? S.town.hall : null);
+const marketDay = () => { const H = marketH(); return !!(H && townOpen() && MK.isDay(H, S.day)); };
+const marketOpenNow = () => { const H = marketH(); return !!(H && townOpen() && MK.open(H, S.day, S.t % 1440)); };
+const MK_F = { fish: ty => FS.isFish(ty), fruit: ty => !!WD.FRUIT[ty], animal: ty => !!AN.PRODUCTS[ty], good: ty => !!(PW && PW.PRODUCTS[ty]) };
+const marketKind = ty => MK.kindOf(ty, MK_F);
+function marketList(a) { // what of this basket goes to the market (not what a workshop is waiting for; 「我来挑」 kinds only)
+  const M = marketH().market, wk = worksKeep(a);
+  return a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && !wk[o.i] && MK.takes(M, marketKind(o.ty)));
+}
+function marketKeep(a, keep, T) { if (T >= MK.HOURS.to - 30) return keep; const k = keep.slice(); for (const o of marketList(a)) k[o.i] = true; return k; }
+function marketBoard(post, T) {
+  if (!marketDay()) return false; if (!tradeOk(F) || !marketOpenNow()) return true;
+  const n = marketList(F).length, full = F.crops.length >= BASK();
+  if (n >= MK.MIN || (n && (full || T >= MK.HOURS.to - 60))) post('market', (full ? 100 : 70) + travel(F, MK.FARM_SPOT) / 8, MK.FARM_SPOT, () => marketTask(), 'town:market:' + (F === FARMER ? 'farmer' : F.id));
+  return true;
+}
+function marketTask() {
+  const at = MK.FARM_SPOT;
+  return { kind: 'market', label: '正在推车去集市摆摊', to: at, dur: 8, pose: 'pull', done: () => {
+    const H = marketH(); if (!H || !marketOpenNow()) { log('集市已经散了，东西带回家里的摊子卖'); return; }
+    const list = marketList(F); if (!list.length) return; const M = H.market, hot = MK.hot(S.day); let sum = 0, base = 0, nHot = 0; const by = { crops: 0, fruit: 0, animals: 0, fish: 0, wood: 0 };
+    for (const o of list) { const g = priceOfAny(o.it), kd = marketKind(o.ty), p = MK.price(g, kd, S.day); base += g; sum += p; if (kd === hot) nHot++;
+      if (kd === 'fish') { by.fish += p; S.fishGold = (S.fishGold || 0) + p; } else if (kd === 'fruit') { by.fruit += p; S.fruitGold = (S.fruitGold || 0) + p; } else if (kd === 'animals') { by.animals += p; S.animalGold = (S.animalGold || 0) + p; } else by.crops += p; }
+    const gone = new Set(list.map(o => o.i)), left = F.crops.filter((_, i) => !gone.has(i)); F.crops.length = 0; F.crops.push(...left);
+    const n = list.length, extra = sum - base; S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
+    if (M.last !== S.day) { M.last = S.day; M.days++; } M.gold += sum; M.extra += extra; S.town.trade += extra; H.week.trade += extra;
+    emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]);
+    popText(at.x, at.y - 10, 26, '+' + sum, '#ffd76a'); burst(at.x, at.y - 6, 12, ['#ffd76a', '#fff2a8'], 6, 'coin');
+    log(`${F === FARMER ? '' : F.name}在集市上卖了 ${n} 件，得 ${sum} 金（比自家摊子多 ${extra} 金${nHot ? `，其中 ${nHot} 件是今天的抢手货${MK.KIND[hot].name}` : ''}）`); } };
+}
+function marketMorning() { // the first tick of a market day: one line in the log
+  const H = marketH(); if (!H || !townOpen()) return; const M = H.market;
+  if (M._told === S.day) return; M._told = S.day;
+  if (MK.isDay(H, S.day)) log(`今天是集市日！广场上摆满了摊子，今天的抢手货是${MK.KIND[MK.hot(S.day)].name}（多卖三成，别的多卖一成半）`);
+  else if (MK.nextDay(H, S.day) === S.day + 1) log(`明天是集市日，抢手货是${MK.KIND[MK.hot(S.day + 1)].name}`);
+}
+function setMarketPick(on, kind) { // 「我来挑」 (ui.js): on = 0/1 switches the mode; kind toggles one kind
+  const H = marketH(); if (!H) return; const M = H.market;
+  if (on !== undefined && on !== null) M.pick = on ? 1 : 0;
+  if (kind && MK.KIND[kind]) M.take[kind] = M.take[kind] ? 0 : 1;
+}
+function marketView() {
+  const H = marketH(); if (!H || !MK.built(H)) return null; const M = H.market, nx = MK.nextDay(H, S.day), today = MK.isDay(H, S.day);
+  return { today, open: marketOpenNow(), next: today ? S.day : nx, hot: MK.KIND[MK.hot(today ? S.day : nx)].name, hotId: MK.hot(today ? S.day : nx), pick: M.pick, take: Object.assign({}, M.take), kinds: MK.KINDS, days: M.days, gold: M.gold, extra: M.extra };
+}
+// the crowd on market day: pedlars at the stalls nobody lives here to keep, and shoppers going round them
+const MKT = [];
+const MKT_LOOKS = ['guestA', 'mateB', 'townF', 'townD', 'mateC', 'guestB', 'townG'];
+function marketCrowd(dm) {
+  if (!marketOpenNow()) { MKT.length = 0; return; }
+  const H = marketH(), res = new Set((HL.residents(H) || []).map(n => n.id).concat(TN.NEIGHBOURS.map(n => n.id)));
+  if (!MKT.length) { let i = 0;
+    for (const s of MK.STALLS) if (s.who !== 'farm' && !res.has(s.who)) { const at = MK.standAt(s); MKT.push({ id: 'ped' + s.id, pedlar: 1, look: MKT_LOOKS[(i++) % MKT_LOOKS.length], x: at.x, y: at.y, fx: 0, fy: 1, pts: [], moving: false, wait: 1e9 }); }
+    for (let k = 0; k < 6; k++) { const s = MK.STALLS[(k * 5 + S.day) % MK.STALLS.length], at = MK.standAt(s); MKT.push({ id: 'shop' + k, look: MKT_LOOKS[(k + 3) % MKT_LOOKS.length], x: at.x + (k % 3) * 3 - 3, y: at.y + 4, fx: 0, fy: -1, pts: [], moving: false, wait: 8 + k * 7 }); } }
+  for (const g of MKT) { if (g.pedlar) continue; if (g.pts.length) { guestStep(g, dm); continue; } g.moving = false; g.fx = 0; g.fy = -1;
+    if ((g.wait -= dm) > 0) continue; const s = MK.STALLS[(Math.random() * MK.STALLS.length) | 0], at = MK.standAt(s), to = { x: at.x + (Math.random() - 0.5) * 6, y: at.y + 4 };
+    g.pts = routeVia(g, to).concat([to]); g.wait = 20 + Math.random() * 40; }
+}
+function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (TOWN_ON) TA.sync(); }
 function townDraw(list) {
   for (const g of VISITORS) { const sh = famSheet(g.look, 6); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of NEIGH) if (g.out) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
+  for (const g of MKT) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.3: the market crowd
 }
 // ---------- v5.9.0 phase 11: 好感, the new house, the wedding, the couple's little farm (rules in home.js, art in home-art.js) ----------
 var HOME_ON = false;
@@ -3836,7 +3899,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
