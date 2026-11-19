@@ -17,22 +17,23 @@
   const capBonus = H => (built(H) ? CAP_BONUS : 0);
   const capOf = (base, H) => (base | 0) + capBonus(H);
   // ---------- state: inside town.hall as `woodshop` (append-only; old saves start automatic, nothing crafted) ----------
-  const empty = () => ({ auto: 1, days: 0, used: 0, last: 0 });
+  const empty = () => ({ auto: 1, days: 0, used: 0, last: 0, made: 0 });
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
   function valid(v) {
     const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {}, out = empty();
     out.auto = o.auto === 0 || o.auto === false ? 0 : 1;
-    out.days = int(o.days, 0, 1e6); out.used = int(o.used, 0, 1e9); out.last = int(o.last, 0, 1e6);
+    out.days = int(o.days, 0, 1e6); out.used = int(o.used, 0, 1e9); out.last = int(o.last, 0, 1e6); out.made = out.last ? int(o.made, 0, 9) : 0;
     return out;
   }
   const setAuto = (W, on) => { W.auto = on ? 1 : 0; return W; };
   // once a day, if auto is on and the pile is above the reserve, spend COST wood and make a bench.
   // -> { ok, wood, item } or { ok: false, why }
-  function craft(W, day, wood) {
-    if (W.last === (day | 0)) return { ok: false, why: 'today' };
+  function craft(W, day, wood, times) {
+    const want = Math.max(1, times | 0), today = W.last === (day | 0) ? (W.made | 0) : 0;
+    if (today >= want) return { ok: false, why: 'today' };
     if (!W.auto) return { ok: false, why: 'paused' };
     if ((wood | 0) < KEEP + COST) return { ok: false, why: 'keep' };
-    W.last = day | 0; W.days++; W.used += COST; return { ok: true, wood: COST, item: ITEM };
+    W.last = day | 0; W.made = today + 1; W.days++; W.used += COST; return { ok: true, wood: COST, item: ITEM };
   }
   const api = { CAP_BONUS, KEEP, COST, ITEM, LOT, STAND, PILE, HOURS, built, open, capBonus, capOf, empty, valid, setAuto, craft };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWoodshop = api;

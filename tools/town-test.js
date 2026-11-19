@@ -84,7 +84,7 @@ ok('state: empty, valid() repairs junk, keeps good values, counts school days', 
   assert.deepStrictEqual(TN.valid(null), TN.empty());
   const v = TN.valid({ school: { kid0: 7, evil: 3, kid1: -2 }, last: { kid0: 40.4 }, skip: { kid1: 'x' }, mate: { last: 38, day: 40, kid: 'kid0', who: 9 }, trade: 1234 });
   assert.deepStrictEqual(v.school, { kid0: 7 }); assert.deepStrictEqual(v.last, { kid0: 40 }); assert.deepStrictEqual(v.skip, {});
-  assert.deepStrictEqual(v.mate, { last: 38, day: 40, kid: 'kid0', who: TN.MATES.length - 1 }); assert.strictEqual(v.trade, 1234);
+  assert.deepStrictEqual(v.mate, { last: 38, day: 40, kid: 'kid0', who: TN.MATES.length - 1 }); assert.strictEqual(v.trade, 1234); assert.deepStrictEqual(v.lots, {});
   assert.strictEqual(TN.schoolDays({ school: { kid0: 3, kid1: 4 } }), 7); assert.strictEqual(TN.schoolDays(undefined), 0);
 });
 const TOWN0 = () => Object.assign(TN.empty(), { hall: require('../hall.js').empty() }); // v5.10.0: the town gains an empty hall
@@ -101,7 +101,7 @@ ok('save: a v13 save gains only the town; a v14 town round-trips', () => {
   const v13 = SAVE.migrate(JSON.parse(JSON.stringify(raw))); delete v13.town; delete v13.upgrades.town; v13.saveVersion = 13;
   const s = SAVE.migrate(JSON.parse(JSON.stringify(v13))); const a = Object.assign({}, s); delete a.town; delete a.saveVersion; a.upgrades = Object.assign({}, a.upgrades); delete a.upgrades.town;
   const b = Object.assign({}, v13); delete b.saveVersion; assert.deepStrictEqual(a, b);
-  s.town = { school: { kid0: 12 }, last: { kid0: 70 }, skip: { kid0: 66 }, mate: { last: 68, day: 70, kid: 'kid0', who: 1 }, trade: 88, hall: require('../hall.js').empty() }; s.upgrades.town = 1; // v5.10.0: + hall
+  s.town = { school: { kid0: 12 }, last: { kid0: 70 }, skip: { kid0: 66 }, mate: { last: 68, day: 70, kid: 'kid0', who: 1 }, trade: 88, lots: {}, hall: require('../hall.js').empty() }; s.upgrades.town = 1; // v5.10.0: + hall; v5.10.6: + lots
   const back = SAVE.validate(JSON.parse(JSON.stringify(s))); assert.deepStrictEqual(back.town, s.town); assert.strictEqual(back.upgrades.town, 1);
 });
 console.log(`town-test: ${n} ok`);
