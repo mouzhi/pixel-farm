@@ -9,40 +9,68 @@
   const own = [];
   const hash = (a, b, c) => { let n = a * 374761393 + b * 668265263 + c * 1442695; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967296; };
 
-  // ---------- models (voxel = 1 screen px; 2 voxels per world unit) ----------
+  // ---------- models (voxel = 1 screen px = half a world unit) ----------
+  // the cottage's walls are the collision block (HM.HOUSE.hw x hd world units, 2 voxels each); the model is a little wider for
+  // the roof overhang and deeper for the porch. CY: how far (world units) south of the anchor the model's centre sits.
+  const W2 = HM.HOUSE.hw * 4, D2 = HM.HOUSE.hd * 4, CW = W2 + 8, CD = D2 + 14, CX0 = 4, CX1 = W2 + 3, CY0 = 3, CY1 = D2 + 2, ZW = 20;
+  const CY = (CD / 2 - (CY0 + CY1) / 2) / 2;
+  const toWorld = (vx, vy) => ({ dx: (vx - CW / 2) / 2, dy: (vy - CD / 2) / 2 + CY });
+  const CHIM = { x0: CX1 - 9, x1: CX1 - 6, y0: CY0 + 6, y1: CY0 + 9, top: ZW + 22 };
+  const WINS = [CX0 + 4, CX1 - 12];             // the two front windows (left edge, 9 voxels wide)
+  const DOOR = { x0: Math.round((CX0 + CX1) / 2) - 4, x1: Math.round((CX0 + CX1) / 2) + 3 };
   function makeModels(x) {
-    const B = x.buildModel, gable = x.gableY, W2 = HM.HOUSE.hw * 2, D2 = HM.HOUSE.hd * 2;
-    // the new house: log walls on a stone footing, a green door under a little porch roof, flower boxes, a stone chimney
-    const cottage = roof => B(W2 + 4, D2 + 8, 28, (x, y, z) => { const X0 = 2, X1 = W2 + 1, Y0 = 2, Y1 = D2 + 1, ZW = 11;
-      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
-        if (!(front || side || back)) return Wd[3];
-        if (z <= 1) return z ? St[2] : St[1];
-        if (front && x >= 13 && x <= 16 && z <= 8) return z === 8 ? Wd[1] : (x === 15 && z === 4 ? Ac[1] : G[1]);   // the door
-        if ((front || back) && (x === 6 || x === 7 || x === 22 || x === 23) && z >= 5 && z <= 8) return z === 8 ? Wd[1] : Wt[3];
-        if (side && y >= 9 && y <= 11 && z >= 5 && z <= 8) return Wt[3];
-        if ((side && (y === Y0 || y === Y1)) || (front && (x === X0 || x === X1))) return Wd[1];                  // corner posts
-        return z % 3 === 0 ? Wd[2] : Wd[3]; }                                                                     // log courses
-      if (y === Y1 + 1 && z === 4 && ((x >= 4 && x <= 9) || (x >= 20 && x <= 25))) return Wd[1];                 // flower boxes
-      if (y === Y1 + 1 && z === 5 && ((x >= 4 && x <= 9) || (x >= 20 && x <= 25))) return (x % 2) ? Ac[3] : Rf[3];
-      if (y >= Y1 + 1 && y <= Y1 + 4 && x >= 11 && x <= 18 && z === 10 - (y - Y1 - 1)) return roof;              // porch roof
-      if (y === Y1 + 4 && (x === 11 || x === 18) && z < 7) return Wd[1];                                         // porch posts
-      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[4] });
-      if (r === 'fill') return Wd[4]; if (r) return r;
-      if (x >= 4 && x <= 6 && y >= 6 && y <= 8 && z <= 25) return z >= 23 ? St[1] : St[2];                       // chimney
+    const B = x.buildModel, gable = x.gableY, cx = (CX0 + CX1) / 2;
+    const win = (u, v, u0, v0, s) => { const du = u - u0, dv = v - v0; if (du < 0 || du >= s || dv < 0 || dv >= s) return null;
+      if (du === 0 || du === s - 1 || dv === 0 || dv === s - 1) return Wd[1];                               // frame
+      if (du === (s >> 1) || dv === (s >> 1)) return Ac[0];                                                 // cross bars
+      return (du <= 2 && dv >= s - 4) ? Wt[5] : Wt[3]; };
+    const logs = z => (z % 3 === 2 ? Wd[2] : (z % 6 < 3 ? Wd[3] : Wd[4]));
+    // the new house: a log cottage on a stone footing; two front windows with flower boxes, one on each side and one at the
+    // back, a small green door with a lantern, a porch with its own little roof, a gable vent and a stone chimney
+    const cottage = roof => B(CW, CD, ZW + 24, (x, y, z) => {
+      const inX = x >= CX0 && x <= CX1, inY = y >= CY0 && y <= CY1;
+      if (x >= CHIM.x0 && x <= CHIM.x1 && y >= CHIM.y0 && y <= CHIM.y1 && z >= 3 && z <= CHIM.top) return z >= CHIM.top - 1 ? St[1] : (z % 4 === 0 ? St[1] : St[2]);
+      if (z <= 2 && x >= CX0 - 1 && x <= CX1 + 1 && y >= CY0 - 1 && y <= CY1 + 1) return (z === 2 || (x + y + z) % 5) ? St[2] : St[1]; // footing
+      if (inX && inY && z >= 3 && z <= ZW) {
+        const front = y >= CY1 - 1, back = y <= CY0 + 1, side = x <= CX0 + 1 || x >= CX1 - 1;
+        if (!(front || back || side)) return Wd[4];
+        if (side && (front || back)) return Wd[1];                                                          // corner posts
+        if (z >= ZW - 1) return Wd[2];                                                                      // eave beam
+        if (front) {
+          if (x >= DOOR.x0 && x <= DOOR.x1 && z <= 15) { if (x === DOOR.x0 || x === DOOR.x1 || z === 15) return Wd[1]; if (x === DOOR.x1 - 2 && z === 9) return Ac[1]; return (x - DOOR.x0) % 3 === 0 ? G[1] : G[2]; }
+          for (const u0 of WINS) { const w = win(x, z, u0, 8, 9); if (w) return w; } }
+        if (side) { const w = win(y, z, Math.round((CY0 + CY1) / 2) - 4, 8, 8); if (w) return w; }
+        if (back) { const w = win(x, z, Math.round(cx) - 4, 8, 8); if (w) return w; }
+        return logs(z); }
+      if (y === CY1 + 1 && z >= 6 && z <= 7) for (const u0 of WINS) if (x >= u0 && x <= u0 + 8) return z === 6 ? Wd[1] : ((x % 3 === 0) ? Ac[3] : (x % 3 === 1) ? G[3] : Rf[3]); // flower boxes
+      if (y === CY1 + 1 && x === DOOR.x1 + 2 && z >= 12 && z <= 15) return z === 15 ? Wd[1] : z === 12 ? Wd[1] : Ac[1];               // the lantern
+      const P0 = DOOR.x0 - 6, P1 = DOOR.x1 + 6;
+      if (y > CY1 && y <= CY1 + 6 && x >= P0 && x <= P1) {                                                  // the porch
+        if (z <= 1) return (x & 1) ? Wd[3] : Wd[4];
+        if ((x === P0 || x === P1) && y === CY1 + 6 && z <= 16) return Wd[2];
+        if (z === 17 + Math.floor((CY1 + 1 - y) / 2) + 2 || z === 18 + Math.floor((CY1 + 1 - y) / 2) + 2) return z % 2 ? PAL.dark(roof, 1) : roof;
+        return null; }
+      if (z === 0 && y > CY1 + 6 && y <= CY1 + 8 && x >= DOOR.x0 && x <= DOOR.x1) return St[3];             // doorstep
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 0.8, x0: CX0 - 3, x1: CX1 + 3, y0: CY0 - 2, y1: CY1 + 2, fy0: CY0, fy1: CY1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[2] });
+      if (r === 'fill') { if (y >= CY1 - 1 && Math.abs(x - cx) <= 2 && z >= ZW + 4 && z <= ZW + 7) return (Math.abs(x - cx) === 2 || z === ZW + 4 || z === ZW + 7) ? Wd[1] : Wt[3]; return logs(z); }
+      if (r) return r;
       return null; });
-    // being built: a stone footing, the first log courses on the back and sides, corner and door posts, the top beams and two
-    // rafters, a stack of logs and planks out front (so it reads as a house going up, not a fence)
-    const frame = B(W2 + 4, D2 + 8, 20, (x, y, z) => { const X0 = 2, X1 = W2 + 1, Y0 = 2, Y1 = D2 + 1, cx = (X0 + X1) / 2;
-      const inside = x >= X0 && x <= X1 && y >= Y0 && y <= Y1, edge = x === X0 || x === X1 || y === Y0 || y === Y1;
-      if (inside && z <= 1) return edge ? (z ? St[2] : St[1]) : (z ? null : St[2]);
-      const post = (x === X0 || x === X1) && (y === Y0 || y === Y1), doorPost = y === Y1 && (x === 12 || x === 17);
-      if ((post || doorPost) && z <= 11) return Wd[1];
-      if (inside && edge && y !== Y1 && z >= 2 && z <= 5) return z % 3 === 0 ? Wd[2] : Wd[3];                  // first log courses
-      if (z === 11 && inside && edge) return Wd[2];                                                         // top beams
-      if ((y === Y0 || y === Y1) && z >= 12 && z <= 17 && Math.abs(x - cx) === (17 - z) * 1.5) return Wd[1];   // rafters
-      if ((y === Y0 || y === Y1) && z >= 12 && z <= 17 && Math.abs(Math.abs(x - cx) - (17 - z) * 1.5) < 0.6) return Wd[1];
-      if (y >= Y1 + 3 && y <= Y1 + 5 && x >= 18 && x <= 26 && z <= 3) return z === 3 ? Wd[4] : Wd[3];          // planks
-      if (y >= Y1 + 3 && y <= Y1 + 5 && x >= 3 && x <= 10 && z <= 2 && !(z === 2 && y === Y1 + 4)) return (x === 3 || x === 10) ? Wd[1] : Wd[2]; // logs
+    // being built (the same size): the footing, the first log courses round three walls, corner and door posts, the eave beams,
+    // a rafter pair on each gable, and logs and planks waiting out front
+    const frame = B(CW, CD, ZW + 18, (x, y, z) => {
+      const inX = x >= CX0 && x <= CX1, inY = y >= CY0 && y <= CY1, edge = x === CX0 || x === CX1 || y === CY0 || y === CY1;
+      if (z <= 2 && x >= CX0 - 1 && x <= CX1 + 1 && y >= CY0 - 1 && y <= CY1 + 1) { const rim = x <= CX0 || x >= CX1 || y <= CY0 || y >= CY1;
+        if (rim) return (z === 2 || (x + y + z) % 5) ? St[2] : St[1]; return z === 0 ? ((x % 4) ? Wd[3] : Wd[2]) : null; } // footing, a plank floor inside
+      if (!(inX && inY)) {
+        if (y >= CY1 + 3 && y <= CY1 + 7 && x >= CX1 - 12 && x <= CX1 && z <= 5) return z === 5 ? Wd[4] : (z % 2 ? Wd[3] : Wd[2]);  // planks
+        if (y >= CY1 + 3 && y <= CY1 + 8 && x >= CX0 && x <= CX0 + 12 && z <= 4 && !((z === 4) && (y === CY1 + 3 || y === CY1 + 8))) return (x === CX0 || x === CX0 + 12) ? Wd[1] : Wd[2]; // logs
+        return null; }
+      const post = (x === CX0 || x === CX1) && (y === CY0 || y === CY1), doorPost = y === CY1 && (x === DOOR.x0 || x === DOOR.x1);
+      if ((post || doorPost) && z <= ZW) return Wd[1];
+      if (edge && y !== CY1 && z >= 3 && z <= 8) return logs(z);                                            // first courses
+      if (edge && z === ZW) return Wd[2];                                                                   // eave beams
+      if ((y === CY0 || y === CY1) && z > ZW && Math.abs(Math.abs(x - cx) - (CX1 + 3 - cx - (z - ZW) * 1.25)) < 0.9 && Math.abs(x - cx) <= CX1 - cx) return Wd[1]; // rafters
+      if ((y === CY0 || y === CY1) && Math.abs(x - cx) < 1 && z > ZW && z <= ZW + 13) return Wd[1];        // king post
       return null; });
     // a little hen house: plank walls, a sloped roof, a round door and a ramp
     const coop = B(18, 12, 14, (x, y, z) => { const X0 = 1, X1 = 16, Y0 = 1, Y1 = 9;
@@ -78,8 +106,8 @@
     const k = hs.map(h => [h.site, h.x, h.y, h.m, h.built ? 1 : 0].join(':')).join('|'); if (!force && k === lastKey) return;
     const moved = k !== lastKey; lastKey = k; removeAll(); FEET = feet();
     hs.forEach((h, i) => { const L = HM.layout(h);
-      if (!h.built) { own.push(X.addProp(MD.frame, h.x, h.y + 1, 0, { xp: 1, big: 1, home: i })); return; }
-      own.push(X.addProp(MD.cottages[i % MD.cottages.length], h.x, h.y + 1.5, 0, { xp: 1, big: 1, home: i }));
+      if (!h.built) { own.push(X.addProp(MD.frame, h.x, h.y + CY, 0, { xp: 1, big: 1, home: i })); return; }
+      own.push(X.addProp(MD.cottages[i % MD.cottages.length], h.x, h.y + CY, 0, { xp: 1, big: 1, home: i }));
       own.push(X.addProp(MD.coop, L.coop.x, L.coop.y, 0, { xp: 1, home: i }));
       if (MD.bench) own.push(X.addProp(MD.bench, L.bench.x, L.bench.y, 0, { xp: 1, home: i })); });
     // the yard is cleared: the meadow's wild bushes inside the footprint go (they are scenery, never saved)
@@ -92,10 +120,16 @@
   // evenings: the windows glow once someone lives there
   function lights(hz, T) {
     if (!(T >= 17 * 60 + 30 || T < 6 * 60 + 30)) return;
-    for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) { hz(h.x - 4.5, h.y + HM.HOUSE.hd + 2, 12, 34, 0.9); hz(h.x + 4.5, h.y + HM.HOUSE.hd + 2, 12, 34, 0.9); }
+    const fy = toWorld(0, CY1 + 1).dy, lant = toWorld(DOOR.x1 + 2, CY1 + 1);
+    for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) {
+      for (const u0 of WINS) hz(h.x + toWorld(u0 + 4.5, 0).dx, h.y + fy + 1, 12, 22, 0.85);
+      hz(h.x + lant.dx, h.y + lant.dy + 1, 14, 14, 0.8); }
   }
+  // the chimney top (world units, z up) of each house someone lives in, for a curl of smoke
+  function smoke() { const c = toWorld((CHIM.x0 + CHIM.x1) / 2 + 0.5, (CHIM.y0 + CHIM.y1) / 2 + 0.5);
+    return (S && S.home ? S.home.houses : []).filter(h => h.built && h.kid).map(h => ({ x: h.x + c.dx, y: h.y + c.dy, z: (CHIM.top + 1) / 2 })); }
   const inYard = (x, y) => feet().some(({ L }) => x > L.foot[0] - 3 && x < L.foot[2] + 3 && y > L.foot[1] - 3 && y < L.foot[3] + 3);
   const repaintAt = f => { if (X && X.repaint) X.repaint([f[0] - 4, f[1] - 4, f[2] + 4, f[3] + 4]); };
-  const api = { mount, sync, inYard, repaintAt, ground, blocks, lights, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };
+  const api = { mount, sync, inYard, repaintAt, ground, blocks, lights, smoke, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };
   root.PFHomeArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

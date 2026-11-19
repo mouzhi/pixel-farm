@@ -2269,10 +2269,10 @@ const homeBusy = id => S.home.houses.some(h => h.site === id) ? '这块地上有
 // ---- building it: a grown-up goes over and puts it up (about 40 game minutes) ----
 function homeBoard(post) {
   S.home.houses.forEach((h, i) => { if (h.built) return; const L = HM.layout(h);
-    post('homebuild', 62, { x: h.x + (h.m ? -10 : 10), y: h.y + 3 }, () => homeBuildTask(i), 'home:build:' + i); });
+    post('homebuild', 62, { x: h.x + (h.m ? -8 : 8), y: h.y + HM.HOUSE.hd + 3 }, () => homeBuildTask(i), 'home:build:' + i); });
 }
 function homeBuildTask(i) { const h = S.home.houses[i], L = HM.layout(h);
-  return { kind: 'homebuild', label: '正在盖新房子', to: { x: h.x + (h.m ? -10 : 10), y: h.y + 3 }, dur: HM.HOUSE.build, fx: 'wood', pose: 'hoe', done: () => {
+  return { kind: 'homebuild', label: '正在盖新房子', to: { x: h.x + (h.m ? -8 : 8), y: h.y + HM.HOUSE.hd + 3 }, dur: HM.HOUSE.build, fx: 'wood', pose: 'hoe', done: () => {
     if (!h || h.built) return; h.built = S.day; homeTilesSync(); if (HOME_ON) HA.sync(true); markNavDirty();
     burst(h.x, h.y, 26, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); log(`${PL.plot(h.site).name}的新房子盖好了，旁边留了 6 格小田和一个小鸡舍`); noteProgress(); } };
 }
@@ -3340,6 +3340,7 @@ function updateFx(dt) {
   if (!fireflies.length) for (let i = 0; i < 18; i++) fireflies.push({ x: VR(10, 80), y: VR(80, 122), z: VR(2, 9), ph: VR(0, 6) });
   for (const f of fireflies) { f.x += Math.sin(realT * 0.7 + f.ph) * dt * 3; f.y += Math.cos(realT * 0.5 + f.ph) * dt * 2; }
   if (F.home && Math.random() < dt * 2.5) particles.push({ ...houseSmoke(S.eff.house || 0), vx: 2, vy: -1, vz: 5, c: vpick([St[3], Ac[0]]), life: 2.4, kind: 'smoke' });
+  if (HOME_ON && HA.smoke) for (const c of HA.smoke()) if (Math.random() < dt * 1.5) particles.push({ x: c.x, y: c.y, z: c.z, vx: 2, vy: -1, vz: 5, c: vpick([St[3], Ac[0]]), life: 2.2, kind: 'smoke' }); // v5.9.x: the new house's chimney
 }
 let hudPrices = '';
 function hud() {

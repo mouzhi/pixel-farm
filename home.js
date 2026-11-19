@@ -56,10 +56,10 @@
 
   // ---------- the new house ----------
   // the shop sells up to two (one for each child); the second costs a little more ("按人口再加一档")
-  const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }], hw: 7, hd: 5.5, build: 40 };
+  const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }], hw: 10, hd: 7, build: 40 }; // walls 20 x 14 (2.5 x 1.75 tiles)
   // the layout round the anchor (the house's centre, door to the south): the house, six tiles to one side (mirror: the other),
   // a little hen house on the far side of the house, a bench by the door. World units, 8 = one farm tile.
-  const TILE_AT = [[16, -4], [24, -4], [32, -4], [16, 4], [24, 4], [32, 4]];
+  const TILE_AT = [[17, -4], [25, -4], [33, -4], [17, 4], [25, 4], [33, 4]]; // v5.9.x: one unit further out for the bigger house
   const GARDEN = ['cabbage', 'pumpkin', 'carrot', 'pumpkin', 'cabbage', 'carrot']; // what each tile grows (their own seeds)
   const HENS = 2;
   const sx = (h, dx) => h.x + (h.m ? -dx : dx);
