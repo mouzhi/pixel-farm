@@ -53,6 +53,8 @@ jobs:
         run: node tools/town-test.js
       - name: Phase 11 (new house, weddings, closeness) unit tests
         run: node tools/home-test.js
+      - name: v5.10.0 (town hall, projects, prosperity, gifts) unit tests
+        run: node tools/hall-test.js
       - name: Surprise browser test
         env:
           CHROME: /usr/bin/google-chrome
@@ -108,3 +110,8 @@ jobs:
           CHROME: /usr/bin/google-chrome
           PF_SHOTS: /tmp/pf-shots
         run: node tools/cottage-shots.js
+      - name: v5.10.0 browser test (town hall, the board, scaffolding, three two-storey houses, gifts at night, the weekly paper, fixtures)
+        env:
+          CHROME: /usr/bin/google-chrome
+          PF_SHOTS: /tmp/pf-shots
+        run: node tools/hall-shots.js

@@ -250,7 +250,8 @@
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
   const shop = $('shop'); let shopKey = '', shopFocus = '', plotView = ''; // plotView: v5.5.0 one plot's page (plots-ui.js)
   const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
-  const shopTabs = () => SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }];
+  const HALL_TAB = { id: 'hall', name: '镇公所', title: '镇公所的告示板：建设项目、繁荣度、送给镇上的装饰', ids: [] }; // v5.10.0
+  const shopTabs = () => (SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }]).concat(G.hallView ? [HALL_TAB] : []);
   const readShopTab = () => { try { const v = localStorage.getItem(SHOP_TAB_KEY); if (shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
   let shopTab = readShopTab();
   const setShopTab = id => { if (!shopTabs().some(t => t.id === id)) return; shopTab = id; try { localStorage.setItem(SHOP_TAB_KEY, id); } catch (e) {} };
@@ -277,12 +278,12 @@
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
-  const tabShown = t => t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
+  const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
     const S = G.S, tabs = shopTabs().filter(tabShown);
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : ''].join(','); // v5.6.0: what the phase-8 gates read
+    const key = [shopTab, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length]) : ''].join(','); // v5.6.0: what the phase-8 gates read
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -302,6 +303,7 @@
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
     if (hidden) h += `<div class="more" title="还有 ${hidden} 项，等前面的东西买了、家里有了新变化就会出现">更多内容随进度解锁</div>`;
+    if (tab.id === 'hall') h += hallHtml();
     if (tab.id === 'land' && PU) h += PU.listHtml(PH); // v5.5.0: the outer ring
     if (tab.id === 'tools') {
       const FS = window.PFFish, food = FS && FS.FOOD, gf = FS && FS.ORN_BY && FS.ORN_BY.goldfish;
@@ -329,9 +331,28 @@
     shop.innerHTML = h + '</div>';
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
+  // v5.10.0 镇公所的告示板: prosperity, the building projects (one at a time, done the next morning), gifts to the town
+  function hallHtml() {
+    const v = G.hallView(); if (!v) return '';
+    const stars = '★'.repeat(v.lv) + '☆'.repeat(Math.max(0, 5 - v.lv));
+    let h = `<div class="sec">繁荣度 <span class="stars" title="繁荣度 ${v.lv}">${stars}</span> ${esc(v.lvName)} · 镇上住着 ${v.people} 位邻居${v.next ? ` · 再盖 ${v.next.need} 座升到 ${v.lv + 1}` : ''}</div>`;
+    h += `<div class="sec">建设项目（一次盖一座：付钱后木匠阿松搭脚手架，第二天一早盖好，新邻居搬进来）</div>`;
+    for (const p of v.projects) {
+      const st = p.built ? '已盖好' : p.building ? '正在盖' : '未开工', can = !p.why;
+      const short = p.built || p.building ? '' : p.why === '金币不够' || p.why === '木材不够' ? `<span class="short"><span class="lab">还差</span><span class="price">${G.S.coins < p.cost ? costChip(p.cost - G.S.coins, 'coin') : ''}${G.F.wood < p.wood ? costChip(p.wood - G.F.wood, 'wood') : ''}</span></span>` : p.why ? `<span class="short lock">${esc(p.why)}</span>` : '';
+      h += `<div class="card${p.built ? ' max' : ''}" data-item="hall:${p.id}">${icon('town')}<div class="ct"><div><b>${esc(p.name)}</b> <span class="lv">${st}</span></div><div class="d">${esc(p.desc)}</div></div><div class="cb">` +
+        (p.built ? '<span class="done">✓</span>' : p.building ? '<span class="short">明天一早盖好</span>' : `<button class="pbtn" data-hall="start:${p.id}"${can ? '' : ' disabled'}>${priceChips(p.cost, p.wood)}</button>${short}`) + '</div></div>';
+    }
+    h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
+    const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));
+    if (!rows.length) h += `<div class="more">仓库和院子里还没有能送的装饰（派对区留在家里）</div>`;
+    for (const { o, from, label } of rows) h += `<div class="card" data-item="gift:${from}:${o.id}">${icon(o.id)}<div class="ct"><div><b>${esc(o.name)}</b> <span class="lv">${label}</span></div><div class="d">${from === 'yard' ? '从院子里收一件送过去（院子里摆得太挤时正好）' : '从仓库拿一件送过去'}</div></div><div class="cb"><button class="pbtn" data-hall="give:${o.id}:${from === 'yard' ? o.u : ''}"${v.room > 0 ? '' : ' disabled'}>送给镇上</button></div></div>`;
+    if (v.gifts.length) h += `<div class="more">主街上已经有 ${v.gifts.length} 件农场送的装饰</div>`;
+    return h;
+  }
   const toggleShop = (v, opt) => { shop.hidden = v === undefined ? !shop.hidden : !v; if (!shop.hidden) { menu.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; if (opt && opt.tab) setShopTab(opt.tab); shopFocus = (opt && opt.focus) || ''; plotView = (opt && opt.plot) || ''; drawShop(true); if (G.noteShopOpened) G.noteShopOpened(); } };
   shop.addEventListener('click', e => {
-    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone]'); if (!el || !shop.contains(el)) return;
+    const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
     if (d.tab) { setShopTab(d.tab); plotView = ''; drawShop(true); }
@@ -341,9 +362,11 @@
     if (d.pbuy || d.pzone) { const [pid, mod] = (d.pbuy || d.pzone).split(':'), r = d.pbuy ? G.buyPlot(pid, mod) : G.rezonePlot(pid, mod); drawShop(true); if (!r.ok) el.classList.add('shake'); }
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
     if (d.buy) { const r = G.buy(d.buy); drawShop(true); speedBar(); if (!r.ok) el.classList.add('shake'); }
+    if (d.hall) { const [a, id, u] = d.hall.split(':'), r = a === 'start' ? G.hallStart(id) : G.hallGive(id, u === '' || u === undefined ? undefined : +u); drawShop(true); if (!r.ok) el.classList.add('shake'); } // v5.10.0
   });
   $('shopBtn').addEventListener('click', () => toggleShop());
   G.openPlot = id => toggleShop(true, { tab: 'land', plot: id }); // v5.5.0: the plot labels on the map
+  G.openHall = () => toggleShop(true, { tab: 'hall' }); // v5.10.0: the notice board in the town
 
   const store = $('store'); let storeKey = '';
   function rowIcon(row) {

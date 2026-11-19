@@ -87,20 +87,21 @@ ok('state: empty, valid() repairs junk, keeps good values, counts school days', 
   assert.deepStrictEqual(v.mate, { last: 38, day: 40, kid: 'kid0', who: TN.MATES.length - 1 }); assert.strictEqual(v.trade, 1234);
   assert.strictEqual(TN.schoolDays({ school: { kid0: 3, kid1: 4 } }), 7); assert.strictEqual(TN.schoolDays(undefined), 0);
 });
+const TOWN0 = () => Object.assign(TN.empty(), { hall: require('../hall.js').empty() }); // v5.10.0: the town gains an empty hall
 ok('save: the day-59 manor fixture (v10) migrates to v14: the town unbought, school days counted from today', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8'));
   const s = SAVE.migrate(JSON.parse(JSON.stringify(raw)));
-  assert.strictEqual(SAVE.CURRENT, 15); assert.strictEqual(s.saveVersion, 15); assert.deepStrictEqual(s.town, TN.empty()); assert.strictEqual(s.upgrades.town, 0);
+  assert.strictEqual(SAVE.CURRENT, 15); assert.strictEqual(s.saveVersion, 15); assert.deepStrictEqual(s.town, TOWN0()); assert.strictEqual(s.upgrades.town, 0);
   for (const k of Object.keys(raw.upgrades)) assert.strictEqual(s.upgrades[k], raw.upgrades[k], k);
   assert.strictEqual(s.coins, raw.coins); assert.strictEqual(s.clock.day, raw.clock.day);
-  const v = SAVE.validate(s); assert.deepStrictEqual(v.town, TN.empty());
+  const v = SAVE.validate(s); assert.deepStrictEqual(v.town, TOWN0());
 });
 ok('save: a v13 save gains only the town; a v14 town round-trips', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8'));
   const v13 = SAVE.migrate(JSON.parse(JSON.stringify(raw))); delete v13.town; delete v13.upgrades.town; v13.saveVersion = 13;
   const s = SAVE.migrate(JSON.parse(JSON.stringify(v13))); const a = Object.assign({}, s); delete a.town; delete a.saveVersion; a.upgrades = Object.assign({}, a.upgrades); delete a.upgrades.town;
   const b = Object.assign({}, v13); delete b.saveVersion; assert.deepStrictEqual(a, b);
-  s.town = { school: { kid0: 12 }, last: { kid0: 70 }, skip: { kid0: 66 }, mate: { last: 68, day: 70, kid: 'kid0', who: 1 }, trade: 88 }; s.upgrades.town = 1;
+  s.town = { school: { kid0: 12 }, last: { kid0: 70 }, skip: { kid0: 66 }, mate: { last: 68, day: 70, kid: 'kid0', who: 1 }, trade: 88, hall: require('../hall.js').empty() }; s.upgrades.town = 1; // v5.10.0: + hall
   const back = SAVE.validate(JSON.parse(JSON.stringify(s))); assert.deepStrictEqual(back.town, s.town); assert.strictEqual(back.upgrades.town, 1);
 });
 console.log(`town-test: ${n} ok`);

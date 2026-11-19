@@ -104,7 +104,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const r = await p.evaluate(() => { const f = __farm, s = f.snapshot(); f.advance(120, 10); const s2 = f.snapshot(); f.setAngle(0.5); f.panTo(420, 66); f.advance(0.3, 10);
       return { v: f.version, sv: s.saveVersion, day: s.clock.day, town: s.town, up: s.upgrades.town, eff: f.S.eff.town, plots: Object.keys(s.plots).length, animals: s.animals.length, later: s2.clock.t > s.clock.t, gateShut: f.TA.state().inProps }; });
     await p.screenshot({ path: path.join(OUT, 'v580_fixture_day59.png') });
-    const empty = JSON.stringify({ school: {}, last: {}, skip: {}, mate: { last: 0, day: 0, kid: null, who: 0 }, trade: 0 });
+    const empty = JSON.stringify({ school: {}, last: {}, skip: {}, mate: { last: 0, day: 0, kid: null, who: 0 }, trade: 0, hall: require('../hall.js').empty() }); // v5.10.0: + an empty hall
     const bad = r.v !== VERSION ? 'version' : r.sv !== SAVE_V ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.town) !== empty ? 'town not empty' : r.up !== 0 || r.eff ? 'town bought' : !r.gateShut ? 'gate open' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : r.animals !== save.animals.length ? 'animals' : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'v580_fixture_day59.png', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close();
   }

@@ -15,6 +15,7 @@
   const DC = (typeof require === 'function' && typeof document === 'undefined') ? require('./decor.js') : root.PFDecor; // v5.7.0
   const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown; // v5.8.0
   const HM = (typeof require === 'function' && typeof document === 'undefined') ? require('./home.js') : root.PFHome; // v5.9.0
+  const HL = (typeof require === 'function' && typeof document === 'undefined') ? require('./hall.js') : root.PFHall; // v5.10.0
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -203,7 +204,7 @@
       plots: PL.validPlots(s.plots), // v5.5.0
       works: PW.valid(s.works, PL.validPlots(s.plots)), // v5.6.0
       decor: DC.valid(s.decor), // v5.7.0
-      town: TN.valid(s.town), // v5.8.0
+      town: Object.assign(TN.valid(s.town), { hall: HL.valid(s.town && s.town.hall) }), // v5.8.0; v5.10.0: + hall (镇公所: projects, gifts), filled in when missing
       home: HM.valid(s.home), // v5.9.0
     };
   }
