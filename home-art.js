@@ -59,7 +59,8 @@
     // a rafter pair on each gable, and logs and planks waiting out front
     const frame = B(CW, CD, ZW + 18, (x, y, z) => {
       const inX = x >= CX0 && x <= CX1, inY = y >= CY0 && y <= CY1, edge = x === CX0 || x === CX1 || y === CY0 || y === CY1;
-      if (z <= 2 && x >= CX0 - 1 && x <= CX1 + 1 && y >= CY0 - 1 && y <= CY1 + 1) return (z === 2 || (x + y + z) % 5) ? St[2] : St[1];
+      if (z <= 2 && x >= CX0 - 1 && x <= CX1 + 1 && y >= CY0 - 1 && y <= CY1 + 1) { const rim = x <= CX0 || x >= CX1 || y <= CY0 || y >= CY1;
+        if (rim) return (z === 2 || (x + y + z) % 5) ? St[2] : St[1]; return z === 0 ? ((x % 4) ? Wd[3] : Wd[2]) : null; } // footing, a plank floor inside
       if (!(inX && inY)) {
         if (y >= CY1 + 3 && y <= CY1 + 7 && x >= CX1 - 12 && x <= CX1 && z <= 5) return z === 5 ? Wd[4] : (z % 2 ? Wd[3] : Wd[2]);  // planks
         if (y >= CY1 + 3 && y <= CY1 + 8 && x >= CX0 && x <= CX0 + 12 && z <= 4 && !((z === 4) && (y === CY1 + 3 || y === CY1 + 8))) return (x === CX0 || x === CX0 + 12) ? Wd[1] : Wd[2]; // logs
@@ -121,8 +122,8 @@
     if (!(T >= 17 * 60 + 30 || T < 6 * 60 + 30)) return;
     const fy = toWorld(0, CY1 + 1).dy, lant = toWorld(DOOR.x1 + 2, CY1 + 1);
     for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) {
-      for (const u0 of WINS) hz(h.x + toWorld(u0 + 4.5, 0).dx, h.y + fy + 1, 12, 34, 0.9);
-      hz(h.x + lant.dx, h.y + lant.dy + 1, 7, 20, 0.8); }
+      for (const u0 of WINS) hz(h.x + toWorld(u0 + 4.5, 0).dx, h.y + fy + 1, 12, 22, 0.85);
+      hz(h.x + lant.dx, h.y + lant.dy + 1, 14, 14, 0.8); }
   }
   // the chimney top (world units, z up) of each house someone lives in, for a curl of smoke
   function smoke() { const c = toWorld((CHIM.x0 + CHIM.x1) / 2 + 0.5, (CHIM.y0 + CHIM.y1) / 2 + 0.5);
