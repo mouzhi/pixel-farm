@@ -29,6 +29,12 @@ ok('spots: every piece has its own place, none on top of another', () => {
   for (let i = 0; i < solo.length; i++) for (let j = i + 1; j < solo.length; j++) assert(Math.hypot(solo[i][1].x - solo[j][1].x, solo[i][1].y - solo[j][1].y) >= 5, solo[i][0] + ' / ' + solo[j][0]);
   assert.strictEqual(YD.room('catbed', { cats: 2 }), 2); assert.strictEqual(YD.room('doghouse', { dogs: 0 }), 0); assert.strictEqual(YD.room('saltlick', { pens: { sty: {}, shed: {} } }), 2);
 });
+ok('spots: the yard things keep clear of every decoration spot in the home yard (slots.js)', () => {
+  const SL = require('../slots.js'), far = { sty: { x: -999, y: 0 }, fold: { x: -999, y: -999 }, shed: { x: 0, y: -999 } };
+  for (const it of YD.ITEMS) { if (/^(gravel|flag|curtains|roof|saltlick)$/.test(it.id)) continue;
+    for (let i = 0; i < it.max; i++) { const p = YD.spotOf(it.id, i, far); if (!p) continue;
+      for (const [g, list] of Object.entries(SL.HOME)) for (const q of list) assert(Math.hypot(q.x - p.x, q.y - p.y) >= 6, `${it.id}${i} on the ${g} spot ${q.x},${q.y}`); } }
+});
 ok('effects: stall +2% each, path speed, the fence halves the field clutter, pens and honey', () => {
   assert.strictEqual(YD.stallMult({}), 1); assert.strictEqual(+YD.stallMult({ awning: 1, scale: 1, sign: 1, vase: 1 }).toFixed(3), 1.06);
   assert.strictEqual(YD.paveAt({}, 40, 54), null); assert.strictEqual(YD.paveAt({ gravel: 3 }, 40, 54), 'gravel'); assert.strictEqual(YD.paveAt({ gravel: 3 }, 80, 54), null);
