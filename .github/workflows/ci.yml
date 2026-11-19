@@ -56,7 +56,7 @@ jobs:
       - name: v5.10.0 (town hall, projects, prosperity, gifts) unit tests
         run: node tools/hall-test.js
       - name: v5.10.3 (market, decoration spots, yard things) unit tests
-        run: node tools/market-test.js && node tools/slots-test.js
+        run: node tools/market-test.js && node tools/slots-test.js && node tools/yard-test.js
       - name: v5.10.1 / v5.10.2 economy unit tests (24-hour offline window, short absences, clock turned back, family buys basics only, speed refund)
         run: node tools/econ-test.js
       - name: Surprise browser test

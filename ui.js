@@ -93,8 +93,9 @@
     return `<i style="background:url(${atlas || (window.PF_CROPS && window.PF_CROPS.src)}) no-repeat;background-size:${32 * SIM.IDS.length}px 32px;background-position:${-32 * SIM.IDS.indexOf(k)}px 0"></i>`; };
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   const DART = () => window.PFDecorArt; // v5.7.0: decorations draw their own icons from their models
-  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || BLANK;
-  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)));
+  const YART = id => window.PFYardArt && PFYardArt.iconURL(id); // v5.10.3: the yard things
+  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || BLANK;
+  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)) || YART(id));
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${iconURL(id)});background-size:32px;image-rendering:pixelated"></i>`);
   const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
   const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
@@ -269,6 +270,8 @@
     if (tabId === 'works' && it.id === 'hive') return '养蜂（花甸或果园坡）';
     if (tabId === 'decor' && PFDecor.CATALOG[it.id] && PFDecor.CATALOG[it.id].light && it.id !== 'party') return '夜灯（接上水车的电，天一黑自己亮；没电时也能先摆着）';
     if (tabId === 'decor' && it.id === 'party') return '派对区（不定期的晚上一家人聚在这里，有时镇上的人来做客）';
+    if (tabId === 'yard' && it.yard) { const k = window.PFYard && PFYard.ITEM[it.id] && PFYard.ITEM[it.id].kind; // v5.10.3
+      return k === 'stall' ? '阿禾的小摊（摊子上的小改动，卖东西多一点、阿禾更开心）' : k === 'care' ? '动物照护（窝、刷子和盐砖，动物每晚更开心）' : '院子（家人自己铺路、装好，每样都有固定的地方）'; }
     if (tabId === 'decor') return '装饰（买了放进仓库，家人会找空地摆上；用「挪东西」可以换地方）';
     if (tabId === 'animals' && it.pet) return '小伙伴（猫猫狗狗，不吃干草）';
     if (tabId === 'animals' && it.farm) return '养殖（鸡在家门口，猪在林场边，羊在果园坡，牛在北牧场）';
@@ -297,7 +300,7 @@
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
       const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
       const short = o.lockText ? `<span class="short lock">${esc(o.lockText)}</span>` : o.locked ? `<span class="short lock">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${o.short ? costChip(o.short, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>`;
-      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
+      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(it.yard ? it.icon : id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }

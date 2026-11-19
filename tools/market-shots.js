@@ -57,6 +57,24 @@ fs.mkdirSync(OUT, { recursive: true });
     r => r.pick !== 1 || r.fish !== 0 || r.kinds !== 5 ? JSON.stringify(r) : null);
   // 3b. market night: the square at dusk, stalls under the lamps
   await shot('v5103_market_night.png', `(() => { ${setup} ${houses} f.hallStart('market'); nextMorning(); at(20 * 60 + 30); f.advance(1, 10); look(524, 100, 0); return { stalls: ${stalls()} }; })()`, r => r.stalls !== 6 ? 'stalls ' + r.stalls : null);
+  // 4. the yard things (v5.10.3): bought in the 「院子」 tab, the family sets them up; effects; the decor slots stay free
+  const yardAll = `for (const id of ['cat', 'cat', 'dog', 'dog', 'sty', 'shed']) f.buy(id); const okSlots = () => ['lamppost', 'flowerpot', 'bench', 'scarecrow'].map(id => f.slotWhy(id).filter(q => !q[2]).length).join('/');
+    const slots0 = okSlots(), auto0 = S.autoBuy; S.autoBuy = true; const bought = {}, c0 = S.coins;
+    for (const id of f.YD.IDS) { let k = 0; while ((id !== 'roof' || k < 1) && f.buy(id).ok) k++; bought[id] = k; } S.autoBuy = auto0;
+    const spent = c0 - S.coins; at(7 * 60); dry(); const t0 = S.t; until(() => (S.homeyard.put.mailbox | 0) > 0, 1500); const byFamily = { mailbox: S.homeyard.put.mailbox | 0, min: Math.round(S.t - t0) };
+    let guard = 0; while (f.yardTodo() && guard++ < 200) f.yardSetup(f.yardTodo());`;
+  await shot('v5103_yard_day.png', `(() => { ${setup} ${yardAll} at(10 * 60 + 30); dry(); f.advance(1, 10); look(70, 40, 0);
+    return { bought, spent, byFamily, put: S.homeyard.put, todo: f.yardTodo() || null, mult: +f.priceMult().toFixed(3), walk: [f.yardWalk(36, 44), f.yardWalk(80, 54), f.yardWalk(40, 80)], clothes: f.clothesOut(),
+      ground: f.groundAt(60, 54)[0], props: (f.props || []).filter(q => q.yard).length, slots: [slots0, okSlots()], beds: [f.petBed(false, 0), f.petBed(true, 1)],
+      log: S.events.map(e => e.msg).filter(m => /信箱|小路|石板|栅栏|遮阳棚|盐砖|猫窝|狗屋|房顶/.test(m)).slice(0, 8) }; })()`,
+    r => r.todo ? 'left ' + r.todo : !r.byFamily.mailbox ? 'family did not set up the mailbox' : r.mult !== 1.06 ? 'mult ' + r.mult : r.walk.join() !== '1.1,1.1,1' ? 'walk ' + r.walk : !r.clothes ? 'no clothes out' : r.slots[0] !== r.slots[1] ? 'slots ' + r.slots : r.put.saltlick !== 3 || r.put.catbed !== 2 || r.put.doghouse !== 2 ? 'room ' + JSON.stringify(r.put) : null);
+  await shot('v5103_yard_night.png', `(() => { ${setup} ${yardAll} at(21 * 60); f.advance(1, 10); look(60, 44, 0);
+    const pets = f.PETS_LIVE ? f.PETS_LIVE.length : 0; return { put: S.homeyard.put, clothes: f.clothesOut(), pets }; })()`, r => r.clothes ? 'clothes out at night' : null);
+  await shot('v5103_yard_fence.png', `(() => { ${setup} ${yardAll} at(9 * 60); dry(); f.advance(1, 10); look(96, 66, 0); return { fence: S.homeyard.put.vegfence }; })()`, r => r.fence !== 20 ? 'fence' : null);
+  await shot('v5103_yard_stall.png', `(() => { ${setup} ${yardAll} at(11 * 60); dry(); f.advance(1, 10); look(156, 100, 0); return { mult: +f.priceMult().toFixed(3) }; })()`, r => r.mult !== 1.06 ? 'mult' : null);
+  // 4b. the night: straw +3 for the coop, a salt lick +2 for its pen, the letter now and then; a save round-trips `homeyard`
+  await shot('v5103_yard_save.png', `(() => { ${setup} ${yardAll} const snap = f.SAVE.snapshot ? f.SAVE.snapshot() : null; const js = JSON.stringify(f.snapshot ? f.snapshot() : snap);
+    const sv = JSON.parse(js); return { has: !!sv.homeyard, put: sv.homeyard && sv.homeyard.put, up: sv.upgrades && sv.upgrades.gravel }; })()`, r => !r.has || r.up !== 20 || !r.put || r.put.gravel !== 20 ? JSON.stringify(r) : null);
   // 8. (local only) the real day-82 save: the home yard by day and by night (PF_DECOR_TAG=before on the old code, after on this one)
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) { const save = readSave(process.env.PF_REAL_SAVE), tag = process.env.PF_DECOR_TAG || 'after';
     for (const [when, T] of [['day', 12 * 60], ['night', 21 * 60 + 30]]) await shot(`v5103_decor_${tag}${when === 'day' ? '' : '_night'}.png`, `(() => { const f = __farm, S = f.S; const at = T => { S.t = Math.floor(S.t / 1440) * 1440 + T; };

@@ -16,6 +16,7 @@
   const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown; // v5.8.0
   const HM = (typeof require === 'function' && typeof document === 'undefined') ? require('./home.js') : root.PFHome; // v5.9.0
   const HL = (typeof require === 'function' && typeof document === 'undefined') ? require('./hall.js') : root.PFHall; // v5.10.0
+  const YD = (typeof require === 'function' && typeof document === 'undefined') ? require('./yard.js') : root.PFYard; // v5.10.3
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -103,7 +104,7 @@
     }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon', 'wheat']; // v5.6.0 wheat (a missing count reads as 0)
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed' /* v5.10.2: legacy, refunded on load */, 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town', 'cottage']; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed' /* v5.10.2: legacy, refunded on load */, 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town', 'cottage', ...(YD ? YD.IDS : [])]; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']; // v5.6.0 second pens
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
@@ -191,7 +192,7 @@
       },
       farmer: { x: num(f.x, 36, -260, 452), y: num(f.y, 40, -212, 388), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
-      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 16)])), // v5.6.0: 16 sprinklers, 12 chickens
+      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 24)])), // v5.6.0: 16 sprinklers, 12 chickens; v5.10.3: 20 path pieces
       settings: validSettings(obj(s.settings)), // v5.10.1 append-only: autoBuy (off by default), the day and count of the family's purchases
       offline: { win: validOfflineWin(obj(s.offline).win) }, // v5.10.1 append-only: settlements in the last 24 real hours
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
@@ -215,6 +216,7 @@
       decor: DC.valid(s.decor), // v5.7.0
       town: Object.assign(TN.valid(s.town), { hall: HL.valid(s.town && s.town.hall) }), // v5.8.0; v5.10.0: + hall (镇公所: projects, gifts), filled in when missing
       home: HM.valid(s.home), // v5.9.0
+      ...(s.homeyard && YD ? { homeyard: YD.valid(s.homeyard) } : {}), // v5.10.3 append-only: the yard, stall and animal-care things set up
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
