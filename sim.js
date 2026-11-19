@@ -230,15 +230,58 @@
     for (const k of IDS) { const m = (prices && prices[k]) || 1; out[k] = Math.round(Math.min(1.2, Math.max(0.8, m + 0.3 * (1 - m) + (rnd() * 2 - 1) * 0.05)) * 1000) / 1000; }
     return out;
   }
-  // offline: away time -> game days at 50% of the online rate (always 1x speed), at most 3 days, times the recent daily income
-  function offlineSettle(awaySec, dayEarn) {
+  // offline: away time -> game days at 50% of the online rate (always 1x speed), at most 3 days, times the recent daily income.
+  // v5.9.2: and at most 3 days in any 24 real hours. `win` is the save's list of past settlements [{ at: ms, days }]; without it
+  // (old callers, unit tests of the per-visit rule) there is no 24-hour window.
+  const OFFLINE_WIN_MS = 24 * 3600 * 1000, OFFLINE_WIN_MAX = 12;
+  // the settlements still inside the 24-hour window. A time in the future (the clock was set forward, then back) counts as
+  // "just now", so turning the clock back never frees the window early; it frees 24 real hours later.
+  function offlineWindow(win, now) {
+    return (Array.isArray(win) ? win : []).filter(w => w && isFinite(w.at) && w.days > 0)
+      .map(w => ({ at: Math.min(w.at, now), days: Math.min(OFFLINE_CAP_DAYS, w.days) }))
+      .filter(w => w.at > now - OFFLINE_WIN_MS).slice(-OFFLINE_WIN_MAX);
+  }
+  function offlineSettle(awaySec, dayEarn, win, now) {
     if (!(awaySec >= OFFLINE_MIN_SEC)) return null;
-    const days = Math.min(OFFLINE_CAP_DAYS, awaySec / DAY_REAL_SEC * OFFLINE_RATE);
+    const raw = awaySec / DAY_REAL_SEC * OFFLINE_RATE, asked = Math.round(Math.min(OFFLINE_CAP_DAYS, raw) * 100) / 100;
     const recent = (dayEarn || []).slice(-3), avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
-    return { awaySec, days: Math.round(days * 100) / 100, capped: awaySec / DAY_REAL_SEC * OFFLINE_RATE > OFFLINE_CAP_DAYS, avg: Math.round(avg), gold: Math.floor(avg * days) };
+    const out = { awaySec, asked, days: asked, capped: raw > OFFLINE_CAP_DAYS, avg: Math.round(avg), used: 0, limited: false };
+    if (win !== undefined) {
+      now = +now || Date.now();
+      const w = offlineWindow(win, now), used = Math.round(w.reduce((a, x) => a + x.days, 0) * 100) / 100;
+      out.used = used; out.days = Math.max(0, Math.round(Math.min(asked, OFFLINE_CAP_DAYS - used) * 100) / 100); out.limited = out.days < asked;
+      if (out.days > 0) w.push({ at: now, days: out.days });
+      out.win = w.slice(-OFFLINE_WIN_MAX);
+      out.nextFullAt = out.win.length ? Math.max(...out.win.map(x => x.at)) + OFFLINE_WIN_MS : now; // all of today's days are free again
+    }
+    out.gold = Math.floor(avg * out.days);
+    return out;
+  }
+  // v5.9.2 「家人帮忙添置」 (off by default): the only things the family ever buys for the player, in this order. No wood, no
+  // decorations, pets, speed, land, buildings, workshops or town things: those are the player's own choices.
+  const AUTO_BUY = ['field', 'field', 'field', 'can', 'shoe', 'hoe', 'basket', 'coop', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken',
+    'can', 'shoe', 'strawberry', 'basket'];
+  const AUTO_MULT = 3, AUTO_FLOOR = 300; // buy only with 3x the price in hand, and keep max(300, 2x the recent daily average) after it
+  // the next AUTO_BUY step not bought yet (the list repeats an id once per level: the k-th 'field' is field level k)
+  function autoNext(up) {
+    const seen = {};
+    for (const id of AUTO_BUY) { seen[id] = (seen[id] || 0) + 1; if ((up && up[id] | 0) < seen[id]) return { id, level: seen[id] }; }
+    return null;
+  }
+  // what the family would buy now: { id, cost } or { id: null, why }. shown(id): the shop's progressive reveal (game.js)
+  function autoPick(up, coins, wood, dayEarn, shown) {
+    const next = autoNext(up); if (!next) return { id: null, why: 'done' };
+    const o = offer(up, coins, next.id, wood);
+    if (!o || o.maxed || o.have + 1 !== next.level) return { id: null, why: 'order' };
+    if (o.locked) return { id: null, why: 'locked', next: next.id };
+    if (shown && !shown(next.id)) return { id: null, why: 'hidden', next: next.id };
+    const recent = (dayEarn || []).slice(-3), avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+    const keep = Math.max(AUTO_FLOOR, Math.round(2 * avg));
+    if (!o.ok || coins < o.cost * AUTO_MULT || coins - o.cost < keep) return { id: null, why: 'purse', next: next.id, cost: o.cost, keep };
+    return { id: next.id, cost: o.cost, keep };
   }
   const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC,
     CROPS, IDS, SHOP, SHOP_IDS, SHOP_TABS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
-    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, gate: null };
+    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, gate: null };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

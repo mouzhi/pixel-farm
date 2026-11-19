@@ -277,16 +277,17 @@
     return '';
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
+  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑不会买。'; // v5.9.2
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
   const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
     const S = G.S, tabs = shopTabs().filter(tabShown);
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length]) : ''].join(','); // v5.6.0: what the phase-8 gates read
+    const key = [shopTab, !!S.autoBuy, tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length]) : ''].join(','); // v5.6.0: what the phase-8 gates read
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
-    let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
+    let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button type="button" class="pbtn auto${S.autoBuy ? ' on' : ''}" data-a="autobuy" aria-pressed="${S.autoBuy ? 'true' : 'false'}" title="${AUTO_TIP}">家人帮忙添置 · ${S.autoBuy ? '开' : '关'}</button><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
     const tab = tabs.find(t => t.id === shopTab) || tabs[0];
     let sec = '';
     if (plotView && PU) { shop.innerHTML = h + PU.detailHtml(plotView, PH) + '</div>'; return; } // v5.5.0
@@ -355,6 +356,7 @@
     const el = e.target.closest('[data-buy],[data-a],[data-tab],[data-look],[data-plot],[data-plotlook],[data-pbuy],[data-pzone],[data-hall]'); if (!el || !shop.contains(el)) return;
     const d = el.dataset;
     if (d.a === 'close') toggleShop(false);
+    if (d.a === 'autobuy') { G.setAutoBuy(!G.S.autoBuy); drawShop(true); return; } // v5.9.2
     if (d.tab) { setShopTab(d.tab); plotView = ''; drawShop(true); }
     if (d.a === 'back') { const was = plotView; plotView = ''; shopFocus = 'plot:' + was; drawShop(true); }
     if (d.plot) { plotView = d.plot; drawShop(true); shop.scrollTop = 0; }
@@ -628,11 +630,14 @@
   const dur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} 小时 ${m} 分` : m ? `${m} 分钟` : `${s} 秒`; };
   const OFFLINE_POP_SEC = 600; // v5.9.1: the welcome-back box only after 10 minutes away
   function showOffline(r) {
-    if (!r || !(r.awaySec >= OFFLINE_POP_SEC)) return; const box = $('offline'); // v5.9.1: a short break only gets the log line (离线期间赚了…)
-    box.innerHTML = `<h3>欢迎回来</h3><div>离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}</div>` +
+    if (!r || !(r.awaySec >= OFFLINE_POP_SEC) || !(r.days > 0)) return; const box = $('offline'); // v5.9.1: a short break only gets the log line (离线期间赚了…); v5.9.2: so does a used-up 24-hour window
+    const first = r.limited ? `离开了 ${dur(r.awaySec)}，折合 ${r.asked} 天；过去 24 小时已经结算过 ${r.used} 天，这次按 ${r.days} 天算`
+      : `离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}`;
+    box.innerHTML = `<h3>欢迎回来</h3><div>${first}</div>` +
       (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
       (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
       (r.rain ? `<div>这天下过小雨，田都湿了</div>` : '') +
+      (r.limited && r.nextText ? `<div class="offnote" style="font-size:11px;opacity:.75">每 24 小时最多结算 3 天离线收益，${r.nextText} 以后再满</div>` : '') +
       `<div class="row" style="justify-content:center;display:flex;margin-top:8px"><button class="pbtn" id="offOk">好的</button></div>`;
     box.hidden = false; $('offOk').onclick = () => { box.hidden = true; };
   }
