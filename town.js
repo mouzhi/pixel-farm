@@ -80,17 +80,30 @@
   // ---------- neighbours (only once the town is open) ----------
   // each one: a home, and where they are by the clock; hidden indoors outside their hours
   const NEIGHBOURS = [
-    { id: 'n0', name: '周婶', look: 'townC', home: 'h2', plan: [[7 * 60, 18 * 60, 'shop']] },
-    { id: 'n1', name: '林老师', look: 'townD', home: 'h1', plan: [[7 * 60 + 30, 14 * 60 + 30, 'schoolgate'], [15 * 60, 17 * 60 + 30, 'plaza']] },
+    // v5.9.1: 周婶 and 林老师 sit out on the square in the evening (not 阿松 or 小桃: on a party night they are the guests)
+    { id: 'n0', name: '周婶', look: 'townC', home: 'h2', plan: [[7 * 60, 18 * 60, 'shop'], [18 * 60 + 30, 20 * 60 + 30, 'plaza']] },
+    { id: 'n1', name: '林老师', look: 'townD', home: 'h1', plan: [[7 * 60 + 30, 14 * 60 + 30, 'schoolgate'], [15 * 60, 17 * 60 + 30, 'plaza'], [18 * 60, 20 * 60 + 30, 'bench']] },
     { id: 'n2', name: '木匠阿松', look: 'guestA', home: 'h3', plan: [[8 * 60, 11 * 60, 'plaza'], [11 * 60, 16 * 60, 'street'], [16 * 60, 17 * 60, 'shop']] }, // home by 17:00: the party guests are the same people
     { id: 'n3', name: '面包师小桃', look: 'guestB', home: 'h4', plan: [[9 * 60, 12 * 60, 'shop'], [13 * 60, 17 * 60, 'plaza']] },
   ];
-  const SPOTS = { shop: P(SHOP_DOOR.x + 5, SHOP_DOOR.y + 3), schoolgate: P(SCHOOL_DOOR.x - 6, SCHOOL_DOOR.y + 4), plaza: P(PLAZA.x + 12, PLAZA.y + 10), street: P(560, 72) };
+  const SPOTS = { shop: P(SHOP_DOOR.x + 5, SHOP_DOOR.y + 3), schoolgate: P(SCHOOL_DOOR.x - 6, SCHOOL_DOOR.y + 4), plaza: P(PLAZA.x + 12, PLAZA.y + 10), street: P(560, 72), bench: P(PLAZA.x - 10, PLAZA.y + 18) }; // bench: by the square's bench (v5.9.1)
   // -> { at: {x, y}, out: true when they are out of the house }
   function neighbourAt(n, T) {
     const t = ((T % 1440) + 1440) % 1440, home = BY_ID[n.home].door;
     for (const [a, b, s] of n.plan) if (t >= a && t < b) return { at: SPOTS[s], out: true, spot: s };
     return { at: home, out: false, spot: 'home' };
+  }
+
+  // ---------- lights at night (v5.9.1): the street lamps, and windows while people are up ----------
+  const LAMPS = [P(470, 72), P(516, 60), P(560, 72), P(612, 60), P(530, 120)];
+  const LIT = { lamps: [17 * 60 + 30, 6 * 60 + 30], homes: [17 * 60 + 30, 22 * 60 + 30], shop: [17 * 60 + 30, 19 * 60] };
+  // -> [{ x, y, z, r, s }] for game.js's lighting pass at time T (minutes)
+  function lightsAt(T) {
+    const t = ((T % 1440) + 1440) % 1440, out = [];
+    if (t >= LIT.lamps[0] || t < LIT.lamps[1]) for (const l of LAMPS) out.push({ x: l.x, y: l.y, z: 14, r: 27, s: 0.9 });
+    const homes = t >= LIT.homes[0] && t < LIT.homes[1], shop = t >= LIT.shop[0] && t < LIT.shop[1];
+    for (const b of BUILDINGS) if ((b.kind === 'house' && homes) || (b.kind === 'shop' && shop)) out.push({ x: b.door.x, y: b.door.y + (b.rot ? 1 : -1), z: 6, r: b.kind === 'shop' ? 20 : 14, s: 0.55 });
+    return out;
   }
 
   // ---------- the town shop ----------
@@ -118,6 +131,6 @@
   // the streets join the farm's routes (ground paints them as dirt, the nav grid prefers them, no trees grow on them)
   if (root.PFWorld && root.PFWorld.ROUTES) for (const k in STREETS) if (!root.PFWorld.ROUTES[k]) root.PFWorld.ROUTES[k] = STREETS[k];
   const api = { RECT, STRIP, GATE, STREETS, BUILDINGS, BY_ID, PLAZA, SCHOOLYARD, SCHOOL_DOOR, SHOP_DOOR, inTown, inStrip, inRect, PRICE, gate, blocks,
-    FARM_VIA, schoolRoute, SKIP, skipSchool, MATES, MATE, mateToday, mateName, NEIGHBOURS, SPOTS, neighbourAt, TRADE, tradeable, tradePrice, empty, valid, schoolDays };
+    FARM_VIA, schoolRoute, SKIP, skipSchool, MATES, MATE, mateToday, mateName, NEIGHBOURS, SPOTS, neighbourAt, LAMPS, LIT, lightsAt, TRADE, tradeable, tradePrice, empty, valid, schoolDays };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFTown = api;
 })(typeof window !== 'undefined' ? window : globalThis);

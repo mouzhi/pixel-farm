@@ -3275,6 +3275,7 @@ function lighting(night, T) {
   if (WORKS_ON) PWA.lights(hz); // v5.6.0: lamps on the wheel's grid, busy workshops
   if (DECOR_ON) DA.lights(hz, T); // v5.7.0
   if (HOME_ON) HA.lights(hz, T); // v5.9.0: the new house's windows once someone lives there
+  if (TOWN_ON && TA.lights) TA.lights(hz, T); // v5.9.1: the town's street lamps and lit windows
   // v5.9.1: lights snap to whole pixels, off-screen ones are dropped, and each light only touches its own box (a running max per
   // pixel instead of testing every light at every lit pixel); the layer is rebuilt only when the lights or the darkness change
   const vis = [];

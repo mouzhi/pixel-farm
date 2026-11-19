@@ -102,7 +102,7 @@
     const bench = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models() && root.PFDecorArt.models().bench;
     if (bench) for (const [bx, by, r] of [[TN.PLAZA.x - 10, TN.PLAZA.y + 14, 0], [TN.PLAZA.x + 14, TN.PLAZA.y - 10, Math.PI / 2], [604, 60, 0], [566, 60, 0]]) own.always.push(add(bench, bx, by, r, { xp: 1, town: 'bench' }));
     for (const b of TN.BUILDINGS) if (b.kind === 'house') { const fy = b.rot ? b.y - b.hd - 3 : b.y + b.hd + 3; own.always.push(add(MD.flowers, b.x - 9, fy, 0, { xp: 1, town: 'flowers' })); }
-    if (x.lampModel) for (const [lx, ly] of [[470, 72], [516, 60], [560, 72], [612, 60], [530, 120]]) own.always.push(add(x.lampModel(), lx, ly, 0, { xp: 1, town: 'lamp' }));
+    if (x.lampModel) for (const l of TN.LAMPS) own.always.push(add(x.lampModel(), l.x, l.y, 0, { xp: 1, town: 'lamp' }));
     // the town's fence: all round, with the west gap at the gate
     const R0 = TN.RECT, fence = x.models.fence;
     for (let fx = R0[0]; fx < R0[2]; fx += 8) for (const fy of [R0[1], R0[3]]) own.always.push(add(fence, fx + 4, fy, 0, { xp: 1, town: 'fence' }));
@@ -127,6 +127,8 @@
     X.markNavDirty();
   }
   // a little sign over the shut gate while the town is locked (drawn by game.js with the plot locks)
-  const api = { ground, mount, sync, models: () => MD, state: () => ({ closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
+  // v5.9.1: the town's lamps and windows for game.js's lighting pass (only while the town is open)
+  function lights(hz, T) { if (!(S && S.eff && S.eff.town)) return; for (const l of TN.lightsAt(T)) hz(l.x, l.y, l.z, l.r, l.s); }
+  const api = { ground, mount, sync, lights, models: () => MD, state: () => ({ closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
   root.PFTownArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

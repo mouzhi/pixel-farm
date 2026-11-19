@@ -72,6 +72,14 @@ ok('town shop: workshop goods, honey, fish, and (v5.9.1) animal products and orc
   assert(!TN.tradeable('carrot', false) && !TN.tradeable('pumpkin', false)); assert.strictEqual(TN.TRADE.min, 2);
   assert.strictEqual(TN.tradePrice(100), 120); assert.strictEqual(TN.tradePrice(37), 44);
 });
+ok('v5.9.1: lamps and windows at night, dark by day; two neighbours on the square in the evening', () => {
+  assert.strictEqual(TN.lightsAt(12 * 60).length, 0);
+  const ev = TN.lightsAt(18 * 60 + 30), late = TN.lightsAt(23 * 60), dawn = TN.lightsAt(5 * 60);
+  assert.strictEqual(ev.length, TN.LAMPS.length + TN.BUILDINGS.filter(b => b.kind === 'house').length + 1); // lamps, every house, the shop till 19:00
+  assert.strictEqual(late.length, TN.LAMPS.length); assert.strictEqual(dawn.length, TN.LAMPS.length);
+  const out = TN.NEIGHBOURS.filter(n => TN.neighbourAt(n, 19 * 60 + 30).out).map(n => n.id).sort();
+  assert.deepStrictEqual(out, ['n0', 'n1']); assert(TN.NEIGHBOURS.every(n => !TN.neighbourAt(n, 21 * 60).out));
+});
 ok('state: empty, valid() repairs junk, keeps good values, counts school days', () => {
   assert.deepStrictEqual(TN.valid(null), TN.empty());
   const v = TN.valid({ school: { kid0: 7, evil: 3, kid1: -2 }, last: { kid0: 40.4 }, skip: { kid1: 'x' }, mate: { last: 38, day: 40, kid: 'kid0', who: 9 }, trade: 1234 });
