@@ -2205,7 +2205,7 @@ function hallTick() {
   if (!H.paper) H.paper = S.day; // the paper starts counting the week the town opens
   const lv0 = HL.prosperity(H), done = HL.finish(H, S.day);
   if (done) { const p = HL.PROJ[done], l = HL.LOT[done] || TN.PLAZA, who = HL.NEIGHBOURS.find(n => n.id === p.who); H.week.built.push(done); markNavDirty(); if (TOWN_ON) TA.sync(true);
-    burst(l.x, l.y - 6, 20, ['#fff2a8', '#ffd76a', Wd[4]], 14); log(`镇上的${p.name}盖好了${who ? '，' + who.name + '一家搬了进来' : ''}${p.kind === 'market' ? `；每 7 天一次集市日，下一次是第 ${MK.nextDay(H, S.day)} 天` : ''}`); if (p.kind === 'market') groundDirty = true;
+    burst(l.x, l.y - 6, 20, ['#fff2a8', '#ffd76a', Wd[4]], 14); log(`镇上的${p.name}盖好了${who ? '，' + who.name + '一家搬了进来' : ''}${p.kind === 'market' ? `；每 7 天一次集市日，下一次是第 ${MK.nextDay(H, S.day)} 天` : ''}`); if (p.kind === 'market' && groundReady) { const q = TN.PLAZA; buildGroundBase([q.x - 26, q.y - 26, q.x + 26, q.y + 26]); } // the square grows
     const lv = HL.prosperity(H); if (lv > lv0) log(`镇子的繁荣度升到 ${lv}（${HL.LV_NAME[lv]}）`); }
   if (S.day - H.paper >= HL.PAPER_EVERY && S.t % 1440 >= WAKE + 60) {
     log(HL.paperText({ day: S.day, built: H.week.built, gifts: H.week.gifts, trade: H.week.trade, lv: HL.prosperity(H), people: TN.NEIGHBOURS.length + HL.residents(H).length }));
@@ -2244,7 +2244,7 @@ function tradeTask() {
     const n = list.length, extra = sum - base; S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n; S.town.trade += extra; if (HL) S.town.hall.week.trade += extra; if (HM) homeTrade(); // v5.9.0: 周婶 gets to know the family
     emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]);
     popText(TN.SHOP_DOOR.x, TN.SHOP_DOOR.y - 8, 26, '+' + sum, '#ffd76a'); burst(TN.SHOP_DOOR.x, TN.SHOP_DOOR.y - 4, 10, ['#ffd76a', '#fff2a8'], 6, 'coin');
-    log(`${F === FARMER ? '' : F.name}在镇上小店卖了 ${n} 件，得 ${sum} 金（比集市多 ${extra} 金）`); } };
+    log(`${F === FARMER ? '' : F.name}在镇上小店卖了 ${n} 件，得 ${sum} 金（比自家摊子多 ${extra} 金）`); } };
 }
 // ---- v5.10.3 集市: every 7th day a grown-up takes the basket to the family's stall on the square (market.js) ----
 const marketH = () => (MK && HL && TN && S.town && S.town.hall ? S.town.hall : null);
