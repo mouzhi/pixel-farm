@@ -458,11 +458,11 @@
     const st = document.createElement('style');
     st.textContent = '#audioBar{position:absolute;right:12px;bottom:52px;display:flex;gap:4px;z-index:2}' +
       '#audioBar button{width:34px;height:30px;padding:0;background-color:#e8c78a;background-repeat:no-repeat;background-position:center;background-size:24px 24px;image-rendering:pixelated}' +
-      '#audioBar button.off{background-color:#b8a07a}';
+      '#audioBar button.off{background-color:#b8a07a}#bottomRight #audioBar{position:static}'; // v5.9.1: rides in the bottom-right buttons when they exist
     document.head.appendChild(st);
     const bar = document.createElement('div'); bar.id = 'audioBar';
     bar.innerHTML = '<button class="pbtn" id="musicBtn" title="音乐" aria-label="音乐"></button><button class="pbtn" id="sfxBtn" title="音效" aria-label="音效"></button>';
-    wrap.appendChild(bar);
+    const host = document.getElementById('bottomRight'); if (host) host.insertBefore(bar, host.firstChild); else wrap.appendChild(bar);
     const paint = () => { for (const k of ['music', 'sfx']) { const b = document.getElementById(k + 'Btn'); b.style.backgroundImage = `url(${IC[k][set[k] ? 0 : 1]})`; b.classList.toggle('off', !set[k]); b.setAttribute('aria-pressed', String(!!set[k])); } };
     bar.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; const k = b.id === 'musicBtn' ? 'music' : 'sfx'; set[k] = !set[k]; persist(); paint(); unlock(); applyVolumes(); });
     paint();

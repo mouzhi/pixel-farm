@@ -196,7 +196,7 @@
     const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, specials, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
     if (key === invKey) return; invKey = key;
     let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i>${meterBar(F.water, S.waterMax)}<span class="k">水壶</span><span class="n">${F.water}/${S.waterMax}</span></div>`;
-    for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0);
+    for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0); if (!n && k !== 'carrot') continue; // v5.9.1: seeds he has none of stay out of the one-row bar
       h += `<div class="slot${n ? '' : ' dim'}" title="${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟">${cropIcon(k)}<span class="k">${SIM.CROPS[k].name}种</span><span class="n">${n}</span></div>`; }
     h += `<div class="slot${F.crops.length ? '' : ' dim'}" title="篮子：装满 ${E.basket} 个就去集市"><i style="background:url(${BASKET});background-size:32px"></i><span class="k">篮子</span><span class="n">${F.crops.length}/${E.basket}</span></div>`;
     if (F.wood || E.axe) { const cap = PFWorld.HOUSE_TIERS[E.house || 0].woodCap; // v5.0: wood is a material kept in the storehouse

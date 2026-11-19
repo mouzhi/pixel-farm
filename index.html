@@ -10,12 +10,12 @@
   #wrap{position:absolute;left:0;top:0}
   canvas#game{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
   /* v5.1.2: HUD chrome is a viewport grid so 第N天 / 日志 / 背包 / 标题 never overlap, including letterboxed laptop sizes */
-  #ui{position:fixed;inset:12px;display:grid;grid-template-columns:minmax(220px,min(380px,32vw)) minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"left mid right" "left mid right" "left inv btmr";gap:8px;pointer-events:none;z-index:2}
+  #ui{position:fixed;inset:12px;display:grid;grid-template-columns:minmax(220px,min(380px,32vw)) minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"left mid right" "left mid right" "left inv inv";gap:8px;pointer-events:none;z-index:2}
   #leftDock{grid-area:left;display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-width:0;max-width:100%;align-self:stretch;z-index:3}
   #leftBottom{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto}
   #rightDock{grid-area:right;display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0;z-index:3}
   #navBtns{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-  #bottomRight{grid-area:btmr;display:flex;gap:4px;align-items:flex-end;justify-content:flex-end;align-self:end}
+  #bottomRight{grid-row:2;grid-column:3;display:flex;flex-wrap:wrap;gap:4px;align-items:flex-end;justify-content:flex-end;align-self:end;justify-self:end;max-width:330px;z-index:2} /* v5.9.1: sits above the toolbar so the toolbar gets the full width */
   #hud{color:#fff6dc;font:600 15px/1.45 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Noto Serif CJK SC",sans-serif;
        background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:0;width:100%;box-sizing:border-box;letter-spacing:.5px;flex:none}
   #hud .row{display:flex;gap:14px;justify-content:space-between}
@@ -44,7 +44,8 @@
   .price{display:inline-flex;flex-direction:column;align-items:stretch;gap:2px;vertical-align:middle}
   #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px;overflow-wrap:anywhere}
   .panel{position:absolute;color:#fff6dc;font:600 13px/1.5 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:rgba(40,28,22,.86);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35)}
-  #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:6px 8px;max-width:100%;box-sizing:border-box}
+  #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding:5px 6px;max-width:100%;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin} /* v5.9.1: one row, never a block in the middle of the view */
+  #inv .slot{flex:none;width:54px;height:52px}#inv .slot .k{font-size:10px;max-width:52px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}#inv .slot .n{font-size:12px}#inv .slot canvas,#inv .slot i{width:28px;height:28px;background-size:28px!important}
   .slot{width:62px;height:58px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
   .slot .n{position:absolute;right:3px;top:1px;font-size:13px;color:#ffd76a;text-shadow:1px 1px 0 #000}
   .slot .k{font-size:11px;font-weight:500;opacity:.8;line-height:1;margin-top:1px}
@@ -93,7 +94,7 @@
   #offline h3{margin:0 0 6px;font-size:16px;color:#ffd76a}
   #minimap{position:relative;right:auto;top:auto;width:224px;height:188px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
   #mapBtn{position:relative}
-  #tools{position:relative;display:flex;gap:4px}#tools[hidden]{display:none}
+  #tools{position:relative;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}#tools .pbtn,#bottomRight>.pbtn{white-space:nowrap}#tools[hidden]{display:none}
   #shop,#menu,#store,#codex{z-index:3}
   #store{position:relative;right:auto;top:auto;bottom:auto;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
@@ -117,7 +118,7 @@
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip .rel{margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:4px}#loveTip .rk{margin-top:3px}#loveTip .rr{display:flex;gap:6px;align-items:center;font-size:12px}#loveTip .rr>span:first-child{min-width:4.5em}#loveTip .rh{color:#e57fa0;letter-spacing:-1px}#loveTip .rh i{color:rgba(255,255,255,.22);font-style:normal}#loveTip .rl{opacity:.75}#loveTip b, #loveVal{color:#ffd76a}
-  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #audioBar,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
   /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
   @media (max-width:720px){
     #shop,#store,#codex,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
