@@ -1,11 +1,12 @@
 // v5.9.x economy curve: plays the real game headless from a fresh farm for N days and records, per game day, income by
 // source, coins, wood, and every unlock. game.js is served with a few one-line counters spliced in (only for this run;
 // the file on disk is untouched) so each sale can be split into crops / fruit / animals / fish / workshop goods / town.
-//   node tools/econ-curve.js [days=90] [casual|growth|idle] [seed=7]   → prints a table, writes $PF_SHOTS/econ_<policy>.json
+//   node tools/econ-curve.js [days=90] [casual|growth|idle|idle-auto] [seed=7]   → prints a table, writes $PF_SHOTS/econ_<policy>.json
 // casual: every game hour, buy the cheapest thing that can be bought right now (shop items and new plots, decorations
 //   only once the purse is 5× their price), mark up to 3 trees a day while wood is short, plant saplings on fixed spots.
 // growth: like casual, but never buys decorations or pets (an upper bound on how fast the farm can grow).
 // idle: never clicks anything; the farmer (and later the family) just works on his own.
+// idle-auto: idle, with 「家人帮忙添置」 turned on (v5.10.1): the family buys one basic thing a day at the stall when there is money to spare.
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 90, POLICY = process.argv[3] || 'casual', SEED = process.argv[4] || '7';
@@ -49,6 +50,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
     const S = __farm.S, SIM = window.PFSim, PL = window.PFPlots, X = window.PFExpand, DC = window.PFDecor; __farm.SAVE.off = true;
     const CAT = t => /^(carrot|cabbage|pumpkin|strawberry|watermelon|wheat)$/.test(t) ? 'crops' : /^(apple|orange)$/.test(t) ? 'fruit' : /^(egg|wool|milk|truffle)$/.test(t) ? 'animals'
       : /^(flour|jam|cheese|honey)$/.test(t) ? 'works' : /^(crucian|carp|grassc|bass|koi|sardine|seabass|snapper|tuna|sword)$/.test(t) ? 'fish' : t === 'woodsell' ? 'wood' : t === 'seeds' ? 'seeds' : 'other';
+    if (POLICY === 'idle-auto') __farm.setAutoBuy(true);
     const E = window.__E = { afk: AFK, day: null, days: [], unlocks: [], seen: {}, policy: POLICY, lastChop: 0 };
     const fresh = () => ({ crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] });
     E.cur = fresh();
@@ -58,7 +60,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       c[CAT(ty)] += g; };
     const unlock = (what, extra) => E.unlocks.push(Object.assign({ day: S.day, what }, extra || {}));
     window.addEventListener('pf:farm', ev => { const d = ev.detail; if (d.type !== 'purchase') return; const k = /^(hay|seeds)$/.test(d.item) ? d.item : /^plot:/.test(d.item) ? 'plots' : 'shop';
-      E.cur.spend[k] = (E.cur.spend[k] || 0) + (d.gold || 0); if (k === 'shop' || k === 'plots') { E.cur.buys.push(d.item + (d.level ? ':' + d.level : '') + (d.mod ? ':' + d.mod : '')); unlock(d.item + (d.level ? ' L' + d.level : ''), { gold: d.gold, wood: d.wood || 0 }); } });
+      E.cur.spend[k] = (E.cur.spend[k] || 0) + (d.gold || 0); if (k === 'shop' || k === 'plots') { E.cur.buys.push(d.item + (d.level ? ':' + d.level : '') + (d.mod ? ':' + d.mod : '') + (d.who === 'auto' ? '(auto)' : '')); unlock(d.item + (d.level ? ' L' + d.level : ''), { gold: d.gold, wood: d.wood || 0, who: d.who }); } });
     E.snap = () => { const FA = __farm.FARMER, fm = S.family, c = E.cur;
       const inc = ['crops', 'fruit', 'animals', 'fish', 'works', 'wood', 'seeds', 'town', 'home', 'chop', 'yard', 'other'].reduce((a, k) => a + c[k], 0);
       return Object.assign(c, { day: S.day, coins: S.coins, earned: S.earned, todayEarn: S.todayEarn, incSum: inc, surprise: S.surpriseGold || 0, wood: FA.wood, woodCap: __farm.woodCap(),
@@ -77,7 +79,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       if (PL && X) for (const id of Object.keys(PLOT_MOD)) { const o = PL.offer(S.plots, id, PLOT_MOD[id], S.coins, FA.wood, S.family); if (o && o.ok) out.push({ kind: 'plot', id, cost: o.cost }); }
       return out.sort((a, b) => a.cost - b.cost); };
     const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]);
-    E.hour = () => { watch(); if (POLICY === 'idle' || (E.afk && S.day > E.afk)) return;
+    E.hour = () => { watch(); if (/^idle/.test(POLICY) || (E.afk && S.day > E.afk)) return;
       for (let guard = 0; guard < 40; guard++) { const o = offers()[0]; if (!o) break;
         const r = o.kind === 'shop' ? __farm.buy(o.id) : X.buyPlot(o.id, PLOT_MOD[o.id]); if (!r || !r.ok) break; }
       const FA = __farm.FARMER, wa = __farm.woodAuto();

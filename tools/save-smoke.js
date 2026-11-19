@@ -69,14 +69,17 @@ async function test(name, fn) {
     const r = await p.evaluate(() => { __farm.advance(30, 10); __farm.saveNow(); return { day: __farm.S.day, notes: __farm.SAVE.notes, raw: localStorage.getItem('mouzhi/pixel-farm:save') }; });
     assert.strictEqual(r.day, 1); assert(r.notes.includes('newer-save')); assert.strictEqual(r.raw, newer);
   });
-  await test('offline gold: 50% rate, 3-day cap, summary shown', async ctx => {
+  await test('offline gold: 50% rate, 3-day cap, summary shown; v5.10.1: 3 days per 24 hours', async ctx => {
     const s = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8'));
     s.stats.dayEarn = [100, 100, 100]; s.savedAt = Date.now() - 2 * 3600 * 1000;
     const p = await open(ctx); await seed(p, { [KEY]: JSON.stringify(s) });
     const r = await p.evaluate(() => ({ coins: __farm.S.coins, off: __farm.SAVE.offline, shown: !document.getElementById('offline').hidden, text: document.getElementById('offline').textContent }));
     assert.strictEqual(r.off.days, 3); assert(r.off.capped); assert.strictEqual(r.coins, s.coins + 300); assert(r.shown, 'summary visible'); assert(/300 金/.test(r.text));
-    // a hidden tab for ~10 minutes of real time (simulated) settles the same way
-    const g = await p.evaluate(() => { const c = __farm.S.coins; const o = __farm.settleOffline(626.67); return __farm.S.coins - c + ':' + o.days; });
+    // v5.10.1: the 3 days used up the 24-hour window, so a hidden tab right after pays nothing (a log line only)
+    const g0 = await p.evaluate(() => { const c = __farm.S.coins; const o = __farm.settleOffline(626.67); return __farm.S.coins - c + ':' + o.days + ':' + o.used; });
+    assert.strictEqual(g0, '0:0:3');
+    // with an empty window, a hidden tab for ~10 minutes of real time (simulated) settles the same way as before
+    const g = await p.evaluate(() => { __farm.S.offlineWin = []; const c = __farm.S.coins; const o = __farm.settleOffline(626.67); return __farm.S.coins - c + ':' + o.days; });
     assert.strictEqual(g, '100:1');
   });
   await test('v5.9.1: a short break (5 minutes) only logs the offline gold, no welcome-back box', async ctx => {
