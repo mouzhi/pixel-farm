@@ -63,6 +63,12 @@ fs.mkdirSync(OUT, { recursive: true });
     for (const id of f.YD.IDS) { let k = 0; while ((id !== 'roof' || k < 1) && f.buy(id).ok) k++; bought[id] = k; } S.autoBuy = auto0;
     const spent = c0 - S.coins; at(7 * 60); dry(); const t0 = S.t; until(() => (S.homeyard.put.mailbox | 0) > 0, 1500); const byFamily = { mailbox: S.homeyard.put.mailbox | 0, min: Math.round(S.t - t0) };
     let guard = 0; while (f.yardTodo() && guard++ < 200) f.yardSetup(f.yardTodo());`;
+  await shot('v5103_yard_shop.png', `(() => { ${helpers} S.coins = 300; f.refreshUI(); document.getElementById('shopBtn').click(); f.refreshUI();
+    const sh = document.getElementById('shop'); const tab = sh.querySelector('[data-tab="yard"]'); if (tab) tab.click(); f.refreshUI();
+    const cards = [...sh.querySelectorAll('.card[data-item]')].map(c => c.dataset.item);
+    S.autoBuy = true; S.coins = 200000; f.FARMER.wood = 400; f.buy('axe'); for (let d = 0; d < 4; d++) nextMorning();
+    return { tab: !!tab, cards, icons: sh.querySelectorAll('.card i').length, auto: f.YD.IDS.filter(id => S.up[id] > 0) }; })()`,
+    r => !r.tab ? 'no 院子 tab' : r.cards.length < 6 || !r.cards.includes('gravel') ? 'cards ' + r.cards : r.auto.length ? 'auto-bought ' + r.auto : null);
   await shot('v5103_yard_day.png', `(() => { ${setup} ${yardAll} at(10 * 60 + 30); dry(); f.advance(1, 10); look(70, 40, 0);
     return { bought, spent, byFamily, put: S.homeyard.put, todo: f.yardTodo() || null, mult: +f.priceMult().toFixed(3), walk: [f.yardWalk(36, 44), f.yardWalk(80, 54), f.yardWalk(40, 80)], clothes: f.clothesOut(),
       ground: f.groundAt(60, 54)[0], props: (f.props || []).filter(q => q.yard).length, slots: [slots0, okSlots()], beds: [f.petBed(false, 0), f.petBed(true, 1)],
