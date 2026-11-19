@@ -5,7 +5,7 @@ const { chromium } = require('playwright-core');
 const ROOT = path.join(__dirname, '..'), VERSION = (fs.readFileSync(path.join(ROOT, 'game.js'), 'utf8').match(/GAME_VERSION = '([^']+)'/) || [])[1], OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
-const only = process.argv[2] || null;
+const only = process.argv[2] || null, SAVE_V = require('../save.js').CURRENT; // the fixture migrates to the current save version
 fs.mkdirSync(OUT, { recursive: true });
 (async () => { await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;
   const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
@@ -105,7 +105,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { v: f.version, sv: s.saveVersion, day: s.clock.day, town: s.town, up: s.upgrades.town, eff: f.S.eff.town, plots: Object.keys(s.plots).length, animals: s.animals.length, later: s2.clock.t > s.clock.t, gateShut: f.TA.state().inProps }; });
     await p.screenshot({ path: path.join(OUT, 'v580_fixture_day59.png') });
     const empty = JSON.stringify({ school: {}, last: {}, skip: {}, mate: { last: 0, day: 0, kid: null, who: 0 }, trade: 0 });
-    const bad = r.v !== VERSION ? 'version' : r.sv !== 14 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.town) !== empty ? 'town not empty' : r.up !== 0 || r.eff ? 'town bought' : !r.gateShut ? 'gate open' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : r.animals !== save.animals.length ? 'animals' : null;
+    const bad = r.v !== VERSION ? 'version' : r.sv !== SAVE_V ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.town) !== empty ? 'town not empty' : r.up !== 0 || r.eff ? 'town bought' : !r.gateShut ? 'gate open' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : r.animals !== save.animals.length ? 'animals' : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'v580_fixture_day59.png', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close();
   }
   if (net.length) fails.push('network: ' + net.slice(0, 3).join(' '));

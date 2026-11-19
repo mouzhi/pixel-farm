@@ -5,7 +5,7 @@ const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), VERSION = (fs.readFileSync(path.join(path.resolve(__dirname, '..'), 'game.js'), 'utf8').match(/GAME_VERSION = '([^']+)'/) || [])[1], OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
-const only = process.argv[2];
+const only = process.argv[2], SAVE_V = require('../save.js').CURRENT; // the fixture migrates to the current save version
 fs.mkdirSync(OUT, { recursive: true });
 (async () => { await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;
   const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
@@ -105,7 +105,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { v: f.version, sv: s.saveVersion, day: s.clock.day, decor: s.decor, plots: Object.keys(s.plots).length, house: s.upgrades.house, placedLater: s2.decor.placed.length, animals: s.animals.length }; });
     await p.screenshot({ path: path.join(OUT, 'v570_fixture_day59.png') });
     const empty = JSON.stringify({ inv: {}, placed: [], orders: [], party: { last: 0, at: 0, tonight: 0, guests: 0 }, got: {}, n: 1, moon: 0 });
-    const bad = r.v !== VERSION ? 'version' : r.sv !== 14 ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.decor) !== empty ? 'decor not empty' : r.placedLater ? 'decor appeared' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : null;
+    const bad = r.v !== VERSION ? 'version' : r.sv !== SAVE_V ? 'saveVersion' : r.day !== save.clock.day ? 'day' : JSON.stringify(r.decor) !== empty ? 'decor not empty' : r.placedLater ? 'decor appeared' : r.plots !== Object.keys(save.plots || {}).length ? 'plots' : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'v570_fixture_day59.png', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close();
   }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

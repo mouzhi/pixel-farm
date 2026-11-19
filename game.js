@@ -1918,7 +1918,8 @@ function decorBookCheck() { // a full page of the book unlocks one piece, once
 const ownGround = (x, y) => { const a = WD.areaAt(x, y); if (a === 'home' || (a && S.eff.regions.includes(a))) return true; const p = PL.plotAt(x, y); return !!(p && S.plots[p.id]); };
 const workBox = (x, y) => [x - 8, y - 6, x + 8, y + 10];            // the building and the ground in front of its door
 const workBlock = (x, y) => [x - 7, y - 5, x + 7, y + 4];
-function thingBox(what, id, x, y) { if (what === 'work') return workBox(x, y); if (what === 'hive') return DC.boxOf(x, y, [3.5, 3.5]); return DC.boxOf(x, y, DC.CATALOG[id].foot); }
+function thingBox(what, id, x, y) { if (what === 'work') return workBox(x, y); if (what === 'home') return [x - 37, y - 9, x + 37, y + 13]; // v5.9.0: the new house's yard (either way round)
+  if (what === 'hive') return DC.boxOf(x, y, [3.5, 3.5]); return DC.boxOf(x, y, DC.CATALOG[id].foot); }
 function thingBlock(what, id, x, y) { if (what === 'work') return workBlock(x, y); if (what === 'decor' && DC.CATALOG[id].block) return DC.boxOf(x, y, DC.CATALOG[id].block); return null; }
 const boxHit = (a, b, pad = 0) => a[0] - pad < b[2] && a[2] + pad > b[0] && a[1] - pad < b[3] && a[3] + pad > b[1];
 const ptIn = (p, b, pad = 0) => p.x > b[0] - pad && p.x < b[2] + pad && p.y > b[1] - pad && p.y < b[3] + pad;
@@ -1984,7 +1985,7 @@ function autoSpot(id) {
   autoCache = { key, spot }; return spot;
 }
 // ---- orders and the carrying jobs ----
-const BUILD_LIKE = q => q.what === 'work' || (q.what === 'decor' && (q.id || decorById(q.ref)) === 'party');
+const BUILD_LIKE = q => q.what === 'work' || q.what === 'home' || (q.what === 'decor' && (q.id || decorById(q.ref)) === 'party');
 function orderThing(op, what, ref, id, x, y, mine) {
   const D = S.decor; D.orders = D.orders.filter(q => !(op === 'move' && q.op === 'move' && q.what === what && q.ref === ref));
   if (D.orders.length >= DC.ORDERS_MAX) return { ok: false, why: '要搬的东西太多了，先等家人搬完一些' };
@@ -1996,12 +1997,14 @@ function thingNow(q) { // where the thing is now (null: gone)
   if (q.what === 'work') { const w = S.works.works[q.ref]; return w && w.at ? PW.workPos(w) : null; }
   if (q.what === 'hive') return PWA.hiveSpots()[q.ref] || null;
   if (q.what === 'spr') return S.works.sprinklers[q.ref] || null;
+  if (q.what === 'home') return (HM && S.home.houses[q.ref]) || null;
   return null; }
-function thingName(q) { if (q.what === 'work') return PW.WORKS[q.ref].name; if (q.what === 'hive') return '蜂箱'; if (q.what === 'spr') return '浇水器'; return DC.CATALOG[q.id || decorById(q.ref)].name; }
+function thingName(q) { if (q.what === 'home') return '新房子'; if (q.what === 'work') return PW.WORKS[q.ref].name; if (q.what === 'hive') return '蜂箱'; if (q.what === 'spr') return '浇水器'; return DC.CATALOG[q.id || decorById(q.ref)].name; }
 function setCarried(q, on) { if (q.what === 'hive' && S.works.hives[q.ref]) S.works.hives[q.ref]._c = on ? 1 : 0; if (q.what === 'spr' && S.works.sprinklers[q.ref]) { S.works.sprinklers[q.ref]._c = on ? 1 : 0; SPR_COVER = null; } }
 function dropOrder(q) { S.decor.orders = S.decor.orders.filter(o => o !== q); setCarried(q, false); for (const a of actors()) if (a._carry === q.u) a._carry = null; autoCache.key = ''; }
 function settle(q) { // put it down at q.x, q.y (checked again: the ground may have changed since the click)
   const id = q.id || (q.what === 'decor' ? decorById(q.ref) : null), skip = q.op === 'move' ? { what: q.what, ref: q.ref } : null;
+  if (q.what === 'home') return homeMoveDone(q);
   let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q);
   if (!r.ok) { dropOrder(q); log(`${thingName(q)}没法放到那里（${r.why}），留在原处`); return false; }
   const x = q.what === 'spr' ? Math.round(q.x * 10) / 10 : r.x, y = q.what === 'spr' ? Math.round(q.y * 10) / 10 : r.y;
@@ -2023,7 +2026,7 @@ function carryDropTask(q) {
     if (settle(q)) { burst(q.x, q.y, 10, [Wd[3], G[4], '#fff2a8'], 8, 'leaf'); log(`${who}${place ? '把' + name + '摆好了' : '把' + name + '搬到了新地方'}`); } F._carry = null; } };
 }
 function buildTask(q) { // workshops and the party area are rebuilt where they go (nobody carries a house)
-  return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在搭${thingName(q)}` : `正在把${thingName(q)}挪过去`, to: { x: q.x - 9, y: q.y + 6 }, dur: q.what === 'work' ? 30 : 20, fx: 'wood', pose: 'hoe', done: () => {
+  return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在搭${thingName(q)}` : `正在把${thingName(q)}挪过去`, to: { x: q.x - 9, y: q.y + 6 }, dur: q.what === 'home' ? HM.HOUSE.build : q.what === 'work' ? 30 : 20, fx: 'wood', pose: 'hoe', done: () => {
     if (!S.decor.orders.includes(q) || !thingNow(q)) return; const name = thingName(q), place = q.op === 'place', who = F === FARMER ? '' : F.name;
     if (settle(q)) { burst(q.x, q.y, 24, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); log(`${who}${place ? '搭好了' + name : '把' + name + '挪到了新地方'}`); } } };
 }
@@ -2165,7 +2168,7 @@ function townDraw(list) {
 var HOME_ON = false;
 const homeRngS = mulberry32(0x40E5A11); // its own stream (the farm's RNG stays where it was)
 const hr = () => homeRngS();
-const homeDayRng = salt => mulberry32(((S.day * 2654435761) ^ salt ^ 0x11E) >>> 0);
+const homeDayRng = salt => mulberry32((Math.imul(S.day, 0x9E3779B1) ^ salt ^ 0x11E) >>> 0); // one roll per day and purpose (the same after a reload)
 const HT = [];      // the little farms' tiles: drawn with the main field, grown overnight here, never on the main board
 const SPOUSES = []; // the married children's partners: they live in the new house and only work there
 const kidName = id => { const k = S.family.kids.find(q => q.id === id); return k ? k.name : '孩子'; };
@@ -2183,9 +2186,9 @@ const homeSave = () => HM.valid({ houses: S.home.houses.map(h => Object.assign({
   rel: S.home.rel, nb: S.home.nb, wed: S.home.wed, help: S.home.help, teen: S.home.teen, earn: S.home.earn });
 const homeFeet = () => S.home.houses.map(h => HM.layout(h).foot);
 // ---- where a new house can go: any free 花甸 / 农田 plot, clear of what already stands there ----
-function homeAvoid() { const out = [];
-  for (const m of movables()) out.push([m.x - Math.max(4, m.r * 0.6), m.y - Math.max(4, m.r * 0.6), m.x + Math.max(4, m.r * 0.6), m.y + Math.max(4, m.r * 0.6)]);
-  for (const f of homeFeet()) out.push(f);
+function homeAvoid(skip) { const out = []; // skip: the house being moved (its own yard and itself are not in the way)
+  for (const m of movables()) if (!(m.what === 'home')) out.push([m.x - Math.max(4, m.r * 0.6), m.y - Math.max(4, m.r * 0.6), m.x + Math.max(4, m.r * 0.6), m.y + Math.max(4, m.r * 0.6)]);
+  S.home.houses.forEach((h, i) => { if (i !== skip) out.push(HM.layout(h).foot); });
   for (const t of S.trees) if (t.stage === 'tree') out.push([t.x - 5, t.y - 4, t.x + 5, t.y + 4]);
   return out; }
 function homeSpot() { const avoid = homeAvoid();
@@ -2209,6 +2212,30 @@ function homeHiveAside(h, p) { // move a hive that stands where the house goes t
   const pl = PL.plotAt(p.x, p.y); if (!pl) return;
   for (const c of DC.ringSpots(p, 40, 4)) { if (!PL.plotAt(c.x, c.y) || PL.plotAt(c.x, c.y).id !== pl.id || homeFeet().some(f => HM.inBox(c, f, 4))) continue;
     if (PWA.hiveSpots().some(q => q && q !== p && Math.hypot(q.x - c.x, q.y - c.y) < 7)) continue; h.x = c.x; h.y = c.y; if (WORKS_ON && PWA.sync) PWA.sync(true); return; }
+}
+// moving it (the shop's 挪东西 mode, like the other pieces): to a bought 花甸 / 农田 with room, one house a plot; the family takes it
+// down and puts it up again there (HM.HOUSE.build minutes), the six tiles, the coop and what grows on them go along
+function homeMoveOk(x, y, ref) {
+  const h = S.home.houses[ref], at = s => HM.layout(Object.assign({}, h, s)).foot;
+  const res = (ok, why, s) => ({ ok, why, x: s ? s.x : x, y: s ? s.y : y, box: s ? at(s) : [x - 22, y - 9, x + 37, y + 13], spot: s || null });
+  if (!h) return res(false, '没有这座新房子');
+  const pl = PL.plotAt(x, y), free = HM.freeSites(S.plots, S.home.houses.filter((q, i) => i !== ref));
+  if (!pl || !free.includes(pl.id)) return res(false, '新房子只能挪到买下的花甸或农田里（一块地一座）');
+  let best = null, bd = 16;
+  for (const s of HM.spotsIn(pl.id, S.plots[pl.id].mod, homeAvoid(ref))) { const d = Math.hypot(s.x - x, s.y - y) + s.m * 0.01; if (d < bd) { bd = d; best = s; } }
+  if (!best) return res(false, '这里放不下新房子和它的小田');
+  const s = { site: pl.id, x: best.x, y: best.y, m: best.m }, f = at(s);
+  if (S.decor.orders.some(q => !(q.what === 'home' && q.ref === ref) && q.what !== 'home' && HM.inBox(q, f, 2))) return res(false, '这里已经约好要放别的了');
+  if (S.home.houses.some((q, i) => i !== ref && HM.boxHit(f, HM.layout(q).foot, 2))) return res(false, '离另一座新房子太近');
+  return res(true, null, s);
+}
+function homeMoveDone(q) {
+  const h = S.home.houses[q.ref], r = homeMoveOk(q.x, q.y, q.ref);
+  if (!h || !r.ok) { dropOrder(q); log(`新房子没法挪到那里（${r.why}），留在原处`); return false; }
+  const from = HM.layout(h).foot; Object.assign(h, { site: r.spot.site, x: r.spot.x, y: r.spot.y, m: r.spot.m }); q.x = h.x; q.y = h.y;
+  for (const w of S.works.hives) { const p = PW.hivePos(w, S.plots, S.eff.regions); if (p && HM.inBox(p, HM.layout(h).foot, 3)) homeHiveAside(w, p); }
+  for (const a of [FARMER, ...S.members, ...SPOUSES]) if (a.task && a.task.kind && /^hs-|^home$/.test(a.task.kind)) { a.task = null; a.path = []; }
+  homeTilesSync(); homeGateKey = ''; dropOrder(q); if (HOME_ON) { HA.sync(true); HA.repaintAt && HA.repaintAt(from); } markNavDirty(); return true;
 }
 const homeBusy = id => S.home.houses.some(h => h.site === id) ? '这块地上有新房子，不能改建' : null;
 // ---- building it: a grown-up goes over and puts it up (about 40 game minutes) ----
@@ -2402,6 +2429,7 @@ function movables() { const out = [];
   for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (w && w.at) { const p = PW.workPos(w); out.push({ what: 'work', ref: id, x: p.x, y: p.y, r: 10 }); } }
   PWA.hiveSpots().forEach((h, i) => { if (h) out.push({ what: 'hive', ref: i, x: h.x, y: h.y, r: 6 }); });
   S.works.sprinklers.forEach((s, i) => out.push({ what: 'spr', ref: i, x: s.x, y: s.y, r: 6 }));
+  if (HM) S.home.houses.forEach((h, i) => out.push({ what: 'home', ref: i, x: h.x, y: h.y, r: 12 })); // v5.9.0
   return out; }
 function movableAt(x, y) { let best = null, bd = 1e9; for (const m of movables()) { const d = Math.hypot(m.x - x, m.y - y); if (d < m.r && d < bd) { bd = d; best = m; } } return best; }
 const invFree = id => (S.decor.inv[id] | 0) - S.decor.orders.filter(q => q.op === 'place' && q.id === id).length;
@@ -2409,6 +2437,7 @@ function decorHover(w) {
   if (INPUT.mode === 'decor') { const r = placeOk(w.x, w.y, 'decor', INPUT.kind, null); return { dec: { box: r.box, ok: r.ok } }; }
   if (INPUT.mode === 'move') { const m = INPUT.mvPick; if (!m) return { dec: null };
     if (m.what === 'spr') { const r = sprinklerSpot(w.x, w.y, m.ref); return { dec: { box: [w.x - 2, w.y - 2, w.x + 2, w.y + 2], ok: r.ok } }; }
+    if (m.what === 'home') { const r = homeMoveOk(w.x, w.y, m.ref); return { dec: { box: r.box, ok: r.ok } }; }
     const r = placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); return { dec: { box: r.box, ok: r.ok } }; }
   return null;
 }
@@ -2418,9 +2447,9 @@ function decorClick(w) {
     const o = orderThing('place', 'decor', null, id, r.x, r.y, true); if (!o.ok) return o;
     say(`标记好了，家人会把${DC.CATALOG[id].name}搬过去`); if (invFree(id) <= 0) setMode(null); return { ok: true }; }
   if (INPUT.mode === 'move') {
-    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱或浇水器（老房子不能挪）' }; INPUT.mvPick = m; say(`选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
+    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器或新房子（老房子不能挪）' }; INPUT.mvPick = m; say(`选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
     const m = INPUT.mvPick; const again = movableAt(w.x, w.y); if (again && again.what === m.what && again.ref === m.ref) { INPUT.mvPick = null; say('取消选择'); return null; }
-    const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
+    const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : m.what === 'home' ? homeMoveOk(w.x, w.y, m.ref) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
     const o = orderThing('move', m.what, m.ref, m.what === 'decor' ? null : null, m.what === 'spr' ? w.x : r.x, m.what === 'spr' ? w.y : r.y, true); if (!o.ok) return o;
     INPUT.mvPick = null; say(`标记好了，家人会把${thingName({ what: m.what, ref: m.ref, id: m.id })}挪过去`); return { ok: true }; }
   return null;
@@ -3672,7 +3701,7 @@ Object.assign(window.__farm, { woodAuto: () => ({ on: WA.canAuto(S.eff), target:
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
   NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
-Object.assign(window.__farm, { HM, HA, HT, SPOUSES, homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id) }); // v5.9.0 test hooks
+Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id) }); // v5.9.0 test hooks
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0

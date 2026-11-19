@@ -91,6 +91,7 @@
     for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) { hz(h.x - 4.5, h.y + HM.HOUSE.hd + 2, 12, 34, 0.9); hz(h.x + 4.5, h.y + HM.HOUSE.hd + 2, 12, 34, 0.9); }
   }
   const inYard = (x, y) => feet().some(({ L }) => x > L.foot[0] - 3 && x < L.foot[2] + 3 && y > L.foot[1] - 3 && y < L.foot[3] + 3);
-  const api = { mount, sync, inYard, ground, blocks, lights, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };
+  const repaintAt = f => { if (X && X.repaint) X.repaint([f[0] - 4, f[1] - 4, f[2] + 4, f[3] + 4]); };
+  const api = { mount, sync, inYard, repaintAt, ground, blocks, lights, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };
   root.PFHomeArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);
