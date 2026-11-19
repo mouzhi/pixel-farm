@@ -99,7 +99,7 @@
 
   // ---------- state ----------
   // inv: { id: n } waiting in the storehouse; placed: [{ u, id, x, y, d }]; orders: [{ u, op, what, ref, id, x, y }]
-  // (op 'place' | 'move'; what 'decor' | 'work' | 'hive' | 'spr'); party: { last, at (day it was set up), tonight, guests }
+  // (op 'place' | 'move'; what 'decor' | 'work' | 'hive' | 'spr' | 'home' (v5.9.0: a new house)); party: { last, at (day it was set up), tonight, guests }
   // got: { id: 1 } pieces granted once (book pages, giant keepsakes); n: the next uid
   const empty = () => ({ inv: {}, placed: [], orders: [], party: { last: 0, at: 0, tonight: 0, guests: 0 }, got: {}, n: 1, moon: 0 });
   const num = (v, d, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
@@ -115,7 +115,7 @@
     const seen = new Set(); for (const p of out.placed) { if (!p.u || seen.has(p.u)) p.u = n++; seen.add(p.u); n = Math.max(n, p.u + 1); }
     if (out.placed.filter(p => p.id === 'party').length > 1) { let k = 0; out.placed = out.placed.filter(p => p.id !== 'party' || k++ === 0); }
     // orders: a carry in progress is not saved half-way (the thing goes back where it was); targets are checked again before use
-    out.orders = (Array.isArray(o.orders) ? o.orders : []).filter(q => q && (q.op === 'place' || q.op === 'move') && ['decor', 'work', 'hive', 'spr'].includes(q.what) && typeof q.x === 'number' && typeof q.y === 'number')
+    out.orders = (Array.isArray(o.orders) ? o.orders : []).filter(q => q && (q.op === 'place' || q.op === 'move') && ['decor', 'work', 'hive', 'spr', 'home'].includes(q.what) && typeof q.x === 'number' && typeof q.y === 'number')
       .slice(0, ORDERS_MAX).map(q => ({ u: n++, op: q.op, what: q.what, ref: typeof q.ref === 'string' || typeof q.ref === 'number' ? q.ref : null, id: CATALOG[q.id] ? q.id : null, x: num(q.x, 0, XY.x[0], XY.x[1]), y: num(q.y, 0, XY.y[0], XY.y[1]), mine: q.mine ? 1 : 0 }))
       .filter(q => q.op === 'move' ? q.ref !== null : !!q.id);
     out.n = n;

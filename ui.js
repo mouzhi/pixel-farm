@@ -26,6 +26,8 @@
   const gr = P ? P.green : ['#1f3a22', '#2e5a2c', '#3f7a32', '#5a9a3a', '#8fd35a', '#c8f08a'], rf = P ? P.roof : ['#4a1c1c', '#7a2a24', '#b8432f', '#d9826a'];
   const ICONS = {
     can: CAN, basket: BASKET,
+    cottage: pixIcon(['', '', '      kk', '     kggk  kk', '    kggggk ks', '   kggggggkks', '  kggggggggk', ' kkkkkkkkkkkk', '  kwwwwwwwwk', '  kwbbwwbbwk', '  kwbbwwbbwk', '  kwwwddwwwk', '  kkkkddkkkk', ' yyyy    yyyy'],
+      { k: ink, g: gr[2], s: '#9a9a92', w: wd[4], b: '#4fa3cf', d: gr[1], y: gr[3] }), // v5.9.0 the new house
     town: pixIcon(['', '      kk', '     krrk', '    krrrrk   kk', '   krrrrrrk krrk', '  kkkkkkkkkkrrrrk', '   kwwwwwwkkkkkkk', '   kwbwwbwk kwwk', '   kwwwwwwk kwdk', '   kwwddwwk kwdk', '   kkkddkkkkkkkk', '  gggg  gggg'],
       { k: ink, r: rf[2], w: wd[5] || wd[4], b: '#4fa3cf', d: wd[1], g: gr[3] }), // v5.8.0 the town
     shoe: pixIcon(['', '', '', '    kkkk', '   kbbbbk', '   kbttbk', '   kbbbbk', '   kbbbbkk', '   kbbbbbbkkk', '  kbbbbbbbbbbk', '  kbtttbbbbbbbk', '  kkkkkkkkkkkkk', '  kdddddddddddk', '   kkkkkkkkkkk'].map(r => r.padEnd(16)),
@@ -209,7 +211,9 @@
           const short = NK ? NK.panelShort(k, S.day) : FA.kidStage(k, S.day);
           const m = S.members.find(q => q.id === k.id);
           const job = !m || m.home ? '在家' : m.away ? '在学校上课' : (m.task ? m.task.label : '歇着');
-          h += `<div class="slot" title="${FA.kidLine(k, S.day)}。${job}"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${k.name}</span><span class="n">${short}</span></div>`;
+          const HS = G.homeStatus ? G.homeStatus().kids.find(q => q.id === k.id) : null, note = HS && HS.note ? HS.note + '。' : ''; // v5.9.0
+          const short2 = HS && HS.married ? '成家' : short;
+          h += `<div class="slot" title="${FA.kidLine(k, S.day)}。${note}${job}"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${k.name}</span><span class="n">${short2}</span></div>`;
         }
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) h += `<div class="slot${nk.room ? ' dim' : ''}" title="${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${nk.name}</span><span class="n">${nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天'}</span></div>`; } }
@@ -254,6 +258,7 @@
   const priceChips = (gold, wood) => `<span class="price">${costChip(gold, 'coin')}${wood ? costChip(wood, 'wood') : ''}</span>`;
   function sectionFor(it, tabId) {
     if (tabId === 'tools' && it.fish) return '钓鱼（开局就有竹竿；海边要先买海边，再买海竿）';
+    if (tabId === 'build' && it.p11) return '新房子（盖在花甸或农田里；孩子成家后搬进去，自己种旁边的小田）';
     if (tabId === 'build' && it.home) return '房子（木材 + 金币；房子越大，能住的家人越多）';
     if (tabId === 'build' && it.lumber) return '伐木（木材不够时，农夫会自己去林场砍树）';
     if (tabId === 'land' && it.p10) return '隔壁镇子（东大道尽头：买下大道、孩子上过一天学之后才能开镇门）';
@@ -604,10 +609,23 @@
   const loveHud = $('loveHud'), loveTip = $('loveTip'), loveIco = $('loveIco');
   if (loveIco) { loveIco.style.backgroundImage = 'url(' + ICONS.heart + ')'; loveIco.style.backgroundRepeat = 'no-repeat'; }
   function placeLoveTip() { if (loveTip) loveTip.style.top = ''; } // v5.1.2: tip sits in the left dock under the HUD, no floating offset
+  // v5.9.0: who the children are close to and the neighbours the family knows (it only grows: school, visits, parties)
+  const hearts5 = v => { const n = Math.max(0, Math.min(5, Math.round((v | 0) / 20))); return '<span class="rh">' + '♥'.repeat(n) + '<i>' + '♥'.repeat(5 - n) + '</i></span>'; };
+  function relHtml(H) {
+    if (!H || (!H.kids.length && !H.nb.length)) return '';
+    let h = '<div class="rel">';
+    for (const k of H.kids) { const top = k.rel.filter(r => r.v > 0).slice(0, k.married ? 0 : 3);
+      if (k.married && k.wed) { h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '')}成家了，住在新房子</div>`; continue; }
+      if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }
+      if (!top.length) continue;
+      h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join(''); }
+    if (H.nb.length) h += '<div class="rk"><b>镇上的人</b></div>' + H.nb.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join('');
+    return h + '</div>';
+  }
   function drawLoveTip() {
     if (!loveTip || loveTip.hidden || !G.loveStatus) return;
     const love = G.loveStatus();
-    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>';
+    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home);
     placeLoveTip();
   }
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };

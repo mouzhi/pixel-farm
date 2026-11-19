@@ -81,7 +81,7 @@ ok('state: empty, valid() repairs junk, keeps good values, counts school days', 
 ok('save: the day-59 manor fixture (v10) migrates to v14: the town unbought, school days counted from today', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v10-day59-manor.json'), 'utf8'));
   const s = SAVE.migrate(JSON.parse(JSON.stringify(raw)));
-  assert.strictEqual(SAVE.CURRENT, 14); assert.strictEqual(s.saveVersion, 14); assert.deepStrictEqual(s.town, TN.empty()); assert.strictEqual(s.upgrades.town, 0);
+  assert.strictEqual(SAVE.CURRENT, 15); assert.strictEqual(s.saveVersion, 15); assert.deepStrictEqual(s.town, TN.empty()); assert.strictEqual(s.upgrades.town, 0);
   for (const k of Object.keys(raw.upgrades)) assert.strictEqual(s.upgrades[k], raw.upgrades[k], k);
   assert.strictEqual(s.coins, raw.coins); assert.strictEqual(s.clock.day, raw.clock.day);
   const v = SAVE.validate(s); assert.deepStrictEqual(v.town, TN.empty());
