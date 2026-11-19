@@ -1,9 +1,10 @@
 // v5.9.x economy curve: plays the real game headless from a fresh farm for N days and records, per game day, income by
 // source, coins, wood, and every unlock. game.js is served with a few one-line counters spliced in (only for this run;
 // the file on disk is untouched) so each sale can be split into crops / fruit / animals / fish / workshop goods / town.
-//   node tools/econ-curve.js [days=90] [casual|idle] [seed=7]   → prints a table, writes $PF_SHOTS/econ_<policy>.json
+//   node tools/econ-curve.js [days=90] [casual|growth|idle] [seed=7]   → prints a table, writes $PF_SHOTS/econ_<policy>.json
 // casual: every game hour, buy the cheapest thing that can be bought right now (shop items and new plots, decorations
-//   only once the purse is 3× their price), mark up to 3 trees a day while wood is short, plant saplings on fixed spots.
+//   only once the purse is 5× their price), mark up to 3 trees a day while wood is short, plant saplings on fixed spots.
+// growth: like casual, but never buys decorations or pets (an upper bound on how fast the farm can grow).
 // idle: never clicks anything; the farmer (and later the family) just works on his own.
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
@@ -61,7 +62,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
     E.snap = () => { const FA = __farm.FARMER, fm = S.family, c = E.cur;
       const inc = ['crops', 'fruit', 'animals', 'fish', 'works', 'wood', 'seeds', 'town', 'home', 'chop', 'yard', 'other'].reduce((a, k) => a + c[k], 0);
       return Object.assign(c, { day: S.day, coins: S.coins, earned: S.earned, todayEarn: S.todayEarn, incSum: inc, surprise: S.surpriseGold || 0, wood: FA.wood, woodCap: __farm.woodCap(),
-        saplings: (FA.saplings.apple | 0) + (FA.saplings.orange | 0), open: __farm.tiles.filter(t => t.open).length, animals: S.animals.length, people: 1 + S.members.length,
+        saplings: (FA.saplings.apple | 0) + (FA.saplings.orange | 0), open: __farm.tiles.filter(t => t.open).length, herd: S.animals.length, people: 1 + S.members.length,
         love: fm.love, kids: fm.kids.length, plots: Object.keys(S.plots || {}).length, ups: Object.values(S.up).reduce((a, b) => a + b, 0), hay: S.hay,
         cottages: S.home ? S.home.houses.length : 0 }); };
     const watch = () => { const fm = S.family, seen = E.seen;
@@ -72,11 +73,11 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       if (S.home) { ev('wedding', (S.home.wed && Object.keys(S.home.wed).length) || (S.home.houses || []).some(h => h.kid)); (S.home.houses || []).forEach((h, i) => ev('cottage' + i + ' lived in', h.kid)); } };
     const offers = () => { const out = [], FA = __farm.FARMER;
       for (const id of SIM.SHOP_IDS) { const o = SIM.offer(S.up, S.coins, id, FA.wood); if (!o || o.maxed || !o.ok) continue;
-        const deco = DC && DC.CATALOG[id]; if (deco && S.coins < o.cost * 3) continue; out.push({ kind: 'shop', id, cost: o.cost }); }
+        const deco = DC && DC.CATALOG[id]; if (deco && (POLICY === 'growth' || S.coins < o.cost * 5)) continue; if (POLICY === 'growth' && /^(cat|dog)$/.test(id)) continue; out.push({ kind: 'shop', id, cost: o.cost }); }
       if (PL && X) for (const id of Object.keys(PLOT_MOD)) { const o = PL.offer(S.plots, id, PLOT_MOD[id], S.coins, FA.wood, S.family); if (o && o.ok) out.push({ kind: 'plot', id, cost: o.cost }); }
       return out.sort((a, b) => a.cost - b.cost); };
     const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]);
-    E.hour = () => { watch(); if (POLICY !== 'casual') return;
+    E.hour = () => { watch(); if (POLICY === 'idle') return;
       for (let guard = 0; guard < 40; guard++) { const o = offers()[0]; if (!o) break;
         const r = o.kind === 'shop' ? __farm.buy(o.id) : X.buyPlot(o.id, PLOT_MOD[o.id]); if (!r || !r.ok) break; }
       const FA = __farm.FARMER, wa = __farm.woodAuto();
@@ -94,7 +95,7 @@ const PLOT_MOD = { play: 'playground', glade: 'meadow', swbank: 'dam', wbank: 'w
       const r = E.snap(); r.day = E.day; r.dayEarn = S.dayEarn[S.dayEarn.length - 1]; E.days.push(r); E.cur = (() => { const c = { crops: 0, fruit: 0, animals: 0, fish: 0, works: 0, wood: 0, seeds: 0, town: 0, townExtra: 0, home: 0, chop: 0, yard: 0, other: 0, spend: {}, buys: [] }; return c; })(); E.day = S.day;
       return r; });
     const sp = Object.entries(row.spend).map(([k, v]) => k + ' ' + v).join(', ');
-    console.log(`d${String(row.day).padStart(3)} earn ${String(row.dayEarn).padStart(6)} coins ${String(row.coins).padStart(7)} wood ${row.wood}/${row.woodCap} crops ${row.crops} fruit ${row.fruit} anim ${row.animals} fish ${row.fish} works ${row.works} town ${row.town} home ${row.home} | spend ${sp} | ${row.buys.join(' ')} | ${Math.round((Date.now() - t0) / 1000)}s`);
+    console.log(`d${String(row.day).padStart(3)} earn ${String(row.dayEarn).padStart(6)} coins ${String(row.coins).padStart(7)} wood ${row.wood}/${row.woodCap} crops ${row.crops} fruit ${row.fruit} anim ${row.animals} herd ${row.herd} fish ${row.fish} works ${row.works} town ${row.town} home ${row.home} | spend ${sp} | ${row.buys.join(' ')} | ${Math.round((Date.now() - t0) / 1000)}s`);
     if (d % 5 === 0 || d === DAYS) { const all = await p.evaluate(() => ({ days: __E.days, unlocks: __E.unlocks, up: __farm.S.up, plots: __farm.S.plots }));
       fs.writeFileSync(path.join(OUT, `econ_${POLICY}.json`), JSON.stringify(Object.assign({ policy: POLICY, seed: SEED, errs }, all))); }
   }
