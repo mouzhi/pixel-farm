@@ -152,7 +152,7 @@
   const emptyDiner = () => ({ lv: 0, menu: 'auto', served: 0, missed: 0, last: 0 });
   const emptyStars = () => ({ avg: 3, last: [] });
   const emptyEarn = () => ({ rooms: 0, meals: 0 });
-  const empty = () => ({ cabins: 0, inn2: 0, guests: [], diner: emptyDiner(), resort: emptyResort(), stars: emptyStars(), earn: emptyEarn(), job: null, walkins: 0 });
+  const empty = () => ({ cabins: 0, inn2: 0, guests: [], diner: emptyDiner(), resort: emptyResort(), stars: emptyStars(), earn: emptyEarn(), job: null, walkins: 0, arrived: 0 });
   function validGuest(g, i, cabins) {
     if (!g || typeof g !== 'object') return null;
     const id = typeof g.id === 'string' && /^g[0-9A-Za-z]{1,12}$/.test(g.id) ? g.id : 'g' + i;
@@ -200,6 +200,7 @@
     out.earn = { rooms: int(e.rooms, 0, 1e12), meals: int(e.meals, 0, 1e12) };
     if (o.job && typeof o.job === 'object' && /^(cabin|diner|kitchen)$/.test(o.job.id)) out.job = { id: o.job.id, day: int(o.job.day, 0, 1e6) };
     out.walkins = int(o.walkins, 0, 99);
+    out.arrived = int(o.arrived, 0, 1e6);
     return out;
   }
 
