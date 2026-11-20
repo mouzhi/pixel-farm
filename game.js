@@ -2355,11 +2355,12 @@ function setCarried(q, on) { if (q.what === 'hive' && S.works.hives[q.ref]) S.wo
 function dropOrder(q) { S.decor.orders = S.decor.orders.filter(o => o !== q); setCarried(q, false); for (const a of actors()) if (a._carry === q.u) a._carry = null; autoCache.key = ''; }
 function settle(q) { // put it down at q.x, q.y (checked again: the ground may have changed since the click)
   const id = q.id || (q.what === 'decor' ? decorById(q.ref) : null), skip = q.op === 'move' ? { what: q.what, ref: q.ref } : null;
+  if (q.op === 'store') return storeDone(q, id); // v5.11.0.2
   if (q.what === 'home') return homeMoveDone(q);
   let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q, !q.mine && q.what === 'decor' && SLT && id !== 'party');
   if (!r.ok) { dropOrder(q); log(`${thingName(q)}没法放到那里（${r.why}），留在原处`); return false; }
   const x = q.what === 'spr' ? Math.round(q.x * 10) / 10 : r.x, y = q.what === 'spr' ? Math.round(q.y * 10) / 10 : r.y;
-  if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
+  if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } if (q.mine && keptOf(id)) { S.decor.kept[id]--; if (!S.decor.kept[id]) delete S.decor.kept[id]; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
     S.decor.placed.push({ u: S.decor.n++, id, x, y, d: S.day }); if (id === 'party') S.decor.party.at = S.day; }
   else if (q.what === 'decor') { const p = S.decor.placed.find(o => o.u === q.ref); if (p) { p.x = x; p.y = y; if (p.id === 'party') S.decor.party.at = Math.max(S.decor.party.at, 1); } }
   else if (q.what === 'work') { const w = S.works.works[q.ref], to = workYardAt(x, y); // v5.10.12: it may go to another 工坊院 (production and goods go with it)
@@ -2370,6 +2371,11 @@ function settle(q) { // put it down at q.x, q.y (checked again: the ground may h
   else if (q.what === 'spr') { const s = S.works.sprinklers[q.ref]; s.x = x; s.y = y; SPR_COVER = null; }
   dropOrder(q); markNavDirty(); DA.sync(true); PWA.sync(true); return true;
 }
+// v5.11.0.2 收回: the piece goes back to the storehouse and is kept there (the family does not set kept pieces down again by themselves)
+const keptOf = id => Math.min((S.decor.kept && S.decor.kept[id]) | 0, (S.decor.inv[id] | 0));
+function storeDone(q, id) { const i = S.decor.placed.findIndex(p => p.u === q.ref); if (i < 0 || !id) { dropOrder(q); return false; }
+  S.decor.placed.splice(i, 1); S.decor.inv[id] = (S.decor.inv[id] | 0) + 1; if (!S.decor.kept) S.decor.kept = {}; S.decor.kept[id] = (S.decor.kept[id] | 0) + 1;
+  dropOrder(q); markNavDirty(); DA.sync(true); return true; }
 function carryPickTask(q) { const at = thingNow(q);
   return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在从仓库拿${thingName(q)}` : `正在去搬${thingName(q)}`, to: { x: at.x - 5, y: at.y + 3 }, dur: 3, pose: 'pull', done: () => {
     if (!S.decor.orders.includes(q) || !thingNow(q)) return; q.st = 1; F._carry = q.u; setCarried(q, true); DA.sync(true); PWA.sync(true); } };
@@ -2377,7 +2383,7 @@ function carryPickTask(q) { const at = thingNow(q);
 function carryDropTask(q) {
   return { kind: 'carry', key: 'dc2:' + q.u, label: `正在把${thingName(q)}搬过去`, to: { x: q.x - 5, y: q.y + 3 }, dur: 4, pose: 'pull', done: () => {
     if (!S.decor.orders.includes(q)) { F._carry = null; return; } const name = thingName(q), place = q.op === 'place', who = F === FARMER ? '' : F.name;
-    if (settle(q)) { burst(q.x, q.y, 10, [Wd[3], G[4], '#fff2a8'], 8, 'leaf'); log(`${who}${place ? '把' + name + '摆好了' : '把' + name + '搬到了新地方'}`); } F._carry = null; } };
+    if (settle(q)) { burst(q.x, q.y, 10, [Wd[3], G[4], '#fff2a8'], 8, 'leaf'); log(`${who}${q.op === 'store' ? '把' + name + '收回了仓库' : place ? '把' + name + '摆好了' : '把' + name + '搬到了新地方'}`); } F._carry = null; } };
 }
 function buildTask(q) { // workshops and the party area are rebuilt where they go (nobody carries a house)
   return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在搭${thingName(q)}` : `正在把${thingName(q)}挪过去`, to: { x: q.x - 9, y: q.y + 6 }, dur: q.what === 'home' ? HM.HOUSE.build : q.what === 'work' ? 30 : 20, fx: 'wood', pose: 'hoe', done: () => {
@@ -2389,7 +2395,7 @@ function decorBoard(post, T) {
   if (F._carry) { const q = D.orders.find(o => o.u === F._carry); if (q) post('carry', 99, { x: q.x - 5, y: q.y + 3 }, () => carryDropTask(q), 'dc2:' + q.u, 'yard'); else F._carry = null; }
   if (T >= 18 * 60) return;
   // the family sets new pieces down by themselves, one at a time
-  if (!D.orders.some(q => !q.mine)) for (const id of Object.keys(D.inv)) { const want = (D.inv[id] | 0) - D.orders.filter(q => q.op === 'place' && q.id === id).length; if (want <= 0) continue;
+  if (!D.orders.some(q => !q.mine)) for (const id of Object.keys(D.inv)) { const want = (D.inv[id] | 0) - keptOf(id) - D.orders.filter(q => q.op === 'place' && q.id === id).length; if (want <= 0) continue;
     const sp = autoSpot(id); if (sp) { orderThing('place', 'decor', null, id, sp.x, sp.y, false); break; } }
   for (const q of D.orders) { if (q.st === 1 || !thingNow(q)) continue;
     const base = q.mine ? 64 : 40 + WAIT_BOOST(dcSince === null ? S.t : dcSince);
@@ -3565,7 +3571,7 @@ function decorCatchUp(pre) {
   for (let guard = 0; guard < 60; guard++) {
     let q = D.orders.find(o => !o.mine && o.op === 'place' && o.what === 'decor');
     if (!q) { if (D.orders.some(o => !o.mine)) break;
-      const id = Object.keys(D.inv).find(k => (D.inv[k] | 0) > 0 && k !== 'party' && autoSpot(k)); if (!id) break;
+      const id = Object.keys(D.inv).find(k => (D.inv[k] | 0) - keptOf(k) > 0 && k !== 'party' && autoSpot(k)); if (!id) break;
       const sp = autoSpot(id), r = orderThing('place', 'decor', null, id, sp.x, sp.y, false); if (!r.ok) break; q = r.q; }
     const name = thingName(q); if (!settle(q)) break; names.push(name); }
   if (names.length) { dcSince = null; const c = {}; names.forEach(n => { c[n] = (c[n] || 0) + 1; });
@@ -3581,7 +3587,9 @@ function movables() { const out = [];
   S.works.sprinklers.forEach((s, i) => out.push({ what: 'spr', ref: i, x: s.x, y: s.y, r: 6 }));
   if (HM) S.home.houses.forEach((h, i) => out.push({ what: 'home', ref: i, x: h.x, y: h.y, r: 12 })); // v5.9.0
   return out; }
-function movableAt(x, y) { let best = null, bd = 1e9; for (const m of movables()) { const d = Math.hypot(m.x - x, m.y - y); if (d < m.r && d < bd) { bd = d; best = m; } } return best; }
+// v5.11.0.2: a touch shell (xhs) can ask for a smallest pick radius in CSS px (TOUCH.pickCss); 0 on the web, so the mouse picks exactly as before
+function pickFloor() { if (!TOUCH.pickCss) return 0; const r = cv.getBoundingClientRect(); return r.width ? TOUCH.pickCss / (RS * r.width / W) : 0; }
+function movableAt(x, y) { let best = null, bd = 1e9; const lo = pickFloor(); for (const m of movables()) { const d = Math.hypot(m.x - x, m.y - y); if (d < Math.max(m.r, lo) && d < bd) { bd = d; best = m; } } return best; }
 const invFree = id => (S.decor.inv[id] | 0) - S.decor.orders.filter(q => q.op === 'place' && q.id === id).length;
 function decorHover(w) {
   if (INPUT.mode === 'decor') { const r = placeOk(w.x, w.y, 'decor', INPUT.kind, null); return { dec: { box: r.box, ok: r.ok } }; }
@@ -4123,24 +4131,48 @@ function waterBox() {
   const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
   return [x0, y0, x1 - x0, y1 - y0];
 }
-function waterGeom(d, bx, by, bw, bh) { // per camera angle: mask, distance to the shore, far row per column, zones
+// v5.11.0.3: the geometry is cached per camera *position* (CX, CY), not only per angle and box. The sea box is clipped to the
+// screen, so once it filled the view the box stopped changing while the camera kept scrolling and the old shoreline (mud lip,
+// foam, depth bands) stayed painted at its old screen rows: a second coastline in the open sea. The open sea also measures its
+// depth bands in world units from the shore (the pond's bands are fractions of the visible water, which slid as the view moved),
+// and the screen edges that clip it are open water, not a bank.
+function waterGeom(d, bx, by, bw, bh, open) { // per camera view: mask, distance to the shore, far row per column, zones
+  const OUT = open ? 1e4 : 1; // what lies outside the box: dry bank round the pond, more sea for the clipped ocean
   const N = bw * bh, mask = new Uint8Array(N), dist = new Float32Array(N); let n = 0, sx = 0, sy = 0, ys = [];
   for (let i = 0; i < N; i++) if (d[i] === WSENT) { mask[i] = 1; n++; sx += i % bw; sy += (i / bw) | 0; ys.push((i / bw) | 0); }
   if (!n) return { bx, by, bw, bh, n: 0, aq: AQ };
   for (let i = 0; i < N; i++) dist[i] = mask[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
-    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : 1, y > 0 ? dist[i - bw] + 1 : 1, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : 1.414, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : 1.414); dist[i] = v; }
+    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : OUT, y > 0 ? dist[i - bw] + 1 : OUT, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : OUT, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : OUT); dist[i] = v; }
   for (let y = bh - 1; y >= 0; y--) for (let x = bw - 1; x >= 0; x--) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
-    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : 1, y < bh - 1 ? dist[i + bw] + 1 : 1, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : 1.414, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : 1.414); dist[i] = v; }
+    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : OUT, y < bh - 1 ? dist[i + bw] + 1 : OUT, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : OUT, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : OUT); dist[i] = v; }
   const far = new Int16Array(bw).fill(-1), near = new Int16Array(bw).fill(-1);
   for (let x = 0; x < bw; x++) for (let y = 0; y < bh; y++) if (mask[y * bw + x]) { if (far[x] < 0) far[x] = y; near[x] = y; }
   ys.sort((a, b) => a - b); const midY = ys[ys.length >> 1], top = ys[0], pondH = ys[ys.length - 1] - top + 1, cx = sx / n, cy = sy / n;
   const along = new Float32Array(N), sky = [], deep = [], damp = [], back = [];
+  const band = open ? seaBands(mask, bx, by, bw, bh) : null; // open sea: 0 near the shore, 1 and 2 further out (world units)
   for (let i = 0; i < N; i++) { const x = i % bw, y = (i / bw) | 0;
-    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if (y - far[x] >= pondH * 0.3 && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
-    if (y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
-  for (let x = 0; x < bw; x++) if (far[x] >= 2 && far[x] < midY) back.push(x);
-  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, tone: new Uint8Array(N), aq: AQ };
+    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if ((band ? band[i] >= 1 : y - far[x] >= pondH * 0.3) && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
+    if (open ? far[x] >= 0 && y >= far[x] : y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
+  for (let x = 0; x < bw; x++) if (far[x] >= 2 && (open ? far[x] < bh - 4 : far[x] < midY)) back.push(x);
+  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, band, open: !!open, tone: new Uint8Array(N), aq: AQ, cX: CX, cY: CY };
+}
+const SEA_B1 = 22, SEA_B2 = 50; // world units past the shoreline where the open sea turns a shade lighter, then lighter again
+let SEA_BAND = null; // one byte per world unit over the sea, built once: the band each spot of open water belongs to
+function seaBandMap() {
+  if (SEA_BAND) return SEA_BAND; const x0 = 150, y0 = 230, w = WORLD.x1 + GM - x0, h = WORLD.y1 + GM - y0, m = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const wx = x0 + i + 0.5, wy = y0 + j + 0.5, s = WD.seaShore(wx);
+    const e = wy - (250 + (s - 250) * 0.45) + (vnoise(wx / 14, wy / 9, 29) - 0.5) * 10; // contours: softer than the shore, a little noise
+    m[j * w + i] = e >= SEA_B2 ? 2 : e >= SEA_B1 ? 1 : 0; }
+  return (SEA_BAND = { x0, y0, w, h, m });
+}
+function seaBands(mask, bx, by, bw, bh) { // depth contours in world space, so they stay put on the map while the camera moves
+  const band = new Uint8Array(bw * bh), B = seaBandMap();
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue;
+    const rx = (bx + x + 0.5 - CX) / RS, ry = (by + y + 0.5 - CY) / (K * RS), wx = rx * CA + ry * SA, wy = -rx * SA + ry * CA;
+    const u = Math.floor(wx - B.x0), v = Math.floor(wy - B.y0);
+    band[i] = u < 0 || v < 0 || u >= B.w ? 0 : v >= B.h ? 2 : B.m[v * B.w + u]; }
+  return band;
 }
 function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip about the foot row, squash to 55%, cut to 3 dark tones
   const { bx, by, bw, bh, mask } = G2;
@@ -4155,12 +4187,12 @@ const pondLeaves = [], pondDecor = [];
 function paintWater(t, box, key) {
   const [bx, by, bw, bh] = box; if (bw <= 0 || bh <= 0) return;
   const img = ctx.getImageData(bx, by, bw, bh), d = new Uint32Array(img.data.buffer);
-  if (!WG[key] || WG[key].aq !== AQ || WG[key].bx !== bx || WG[key].by !== by || WG[key].bw !== bw || WG[key].bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh);
+  const g0 = WG[key]; if (!g0 || g0.aq !== AQ || g0.cX !== CX || g0.cY !== CY || g0.bx !== bx || g0.by !== by || g0.bw !== bw || g0.bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh, key === 'sea');
   const Gm = WG[key]; if (!Gm.n) return;
-  const { mask, dist, far, midY, pondH, along, tone } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
+  const { mask, dist, far, midY, pondH, along, tone, band } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
   // 1 + 2: depth and sky
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
-    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
+    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else if (band) { if (band[i] >= 1) tn = 3; if (band[i] >= 2) tn = 4; } else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
   // 3: reflections of the trees and reeds behind the pond (their current wind pose)
   for (const o of props) { if (!o.tree) continue; const [sx, sy] = proj(o.x, o.y), X = Math.round(sx) - bx, Y = Math.round(sy);
     if (X < -40 || X > bw + 40 || Y < by - 70 || Y > by + bh) continue; const fx = clamp(X, 0, bw - 1); if (far[fx] < 0 || Y - by >= far[fx]) continue;
@@ -4172,7 +4204,7 @@ function paintWater(t, box, key) {
   // 4: shallow edge on the near side, lapping dashes, foam where things stand in the water
   const ring = Math.sin(wph(t, 2)) > 0.35 ? 3 : 2;
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
-    if (dd < 1.5 && y > midY && tone[i] >= 3) tone[i] = 7;
+    if (dd < 1.5 && (Gm.open ? y > far[i % bw] + 2 : y > midY) && tone[i] >= 3) tone[i] = 7;
     if (Math.round(dd) === ring && tone[i] >= 2 && Math.sin(along[i] * 0.55 - wph(t, 2)) + 0.6 * Math.sin(along[i] * 0.23 + 1.3 - wph(t, 1)) > 0.55) tone[i] = 5; }
   for (const s of (key === 'sea' ? SEA_SOLIDS : POND_SOLIDS)) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
     for (let a = 0; a < 6.283; a += 0.12) { const x = Math.round(cx + Math.cos(a) * (s.r + 1)), y = Math.round(cy + Math.sin(a) * (s.r * 0.5 + 1)); if (x < 0 || y < 0 || x >= bw || y >= bh || y < cy) continue;
@@ -4735,7 +4767,27 @@ function clickAt(e) {
   else if (INPUT.mode === 'decor' || INPUT.mode === 'move') r = decorClick(w); // v5.7.0
   if (r && !r.ok && r.why) say(r.why);
   if (r && r.ok) saveNow();
+  return r;
 }
+// v5.11.0.2 hooks for a touch shell (platforms/xhs touch.js): aim the current tool at a screen point (the crosshair) and commit there.
+// The mouse path above is unchanged: pointermove → hoverAt, a click → clickAt. TOUCH.slop: the tap / drag threshold in CSS px (5 = the web's).
+const TOUCH = { slop: 5, pickCss: 0, onTap: null }; // onTap(e, mode) → true: the shell handled the tap (e.g. pans that spot under its crosshair)
+function aimAt(x, y) { // → { mode, ok (null: nothing to say yet), marked (砍树: already marked), pick (挪东西: the picked thing), what (挪东西: the thing under the point) }
+  const e = { clientX: x, clientY: y }; hoverAt(e); const h = INPUT.hover, m = INPUT.mode, out = { mode: m, ok: null, marked: false, pick: INPUT.mvPick || null, what: null };
+  if (!m) return out; const w = toWorld(x, y);
+  if (m === 'chop') { out.ok = !!(h && h.tree); out.marked = !!(h && h.tree && S.orders.some(o => o.type === 'chop' && o.id === h.tree.id)); }
+  else if (m === 'move' && !INPUT.mvPick) { const t = movableAt(w.x, w.y); out.what = t; out.ok = !!t; }
+  else if (h) out.ok = h.dec ? !!h.dec.ok : h.spr ? !!h.spr.ok : 'ok' in h ? !!h.ok : null;
+  return out; }
+function commitAt(x, y) { // the same as a click at (x, y) in the current tool; → { r (null: a pick / unpick step), mode, pick }
+  const r = clickAt({ clientX: x, clientY: y }); return { r: r || null, mode: INPUT.mode, pick: INPUT.mvPick || null }; }
+function canStore(m) { return !!(m && m.what === 'decor' && DC.CATALOG[m.id] && m.id !== 'party'); }
+function storeThing(m) { // 收回: a family member carries a placed decoration back to the storehouse; it stays there (S.decor.kept) until it is placed again by hand
+  if (!canStore(m)) return { ok: false, why: m && m.what === 'decor' ? '派对区不能收回' : '只有装饰能收回仓库' };
+  if (!S.decor.placed.some(p => p.u === m.ref)) return { ok: false, why: '找不到这件装饰了' };
+  S.decor.orders.filter(q => q.what === 'decor' && q.ref === m.ref).forEach(dropOrder);
+  const o = orderThing('store', 'decor', m.ref, m.id, BARN_DOOR.x, BARN_DOOR.y, true); if (!o.ok) return o;
+  if (INPUT.mvPick && INPUT.mvPick.ref === m.ref) INPUT.mvPick = null; say(`标记好了，家人会把${DC.CATALOG[m.id].name}收回仓库`); saveNow(); return { ok: true }; }
 addEventListener('keydown', e => { if (typing(e)) return; if (ROT_KEYS[e.key]) { keyRot = ROT_KEYS[e.key]; e.preventDefault(); }
   if (PAN_KEYS[e.key]) keyPan.add(e.key.toLowerCase());
   if (e.key === 'r' || e.key === 'R') { cam.ta = DEFAULT_A; panTo(HOME_CAM.x, HOME_CAM.y); }
@@ -4746,7 +4798,7 @@ cv.style.touchAction = 'none';
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, rot: e.button === 2 || e.shiftKey, moved: false }; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove', e => { hoverAt(e); if (!drag) return;
-  if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 5) { drag.moved = true; document.body.classList.add('grab'); }
+  if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > TOUCH.slop) { drag.moved = true; document.body.classList.add('grab'); }
   if (drag.moved) { const r = cv.getBoundingClientRect(), k = W / r.width;
     if (drag.rot) cam.ta += (e.clientX - drag.x) * 0.008; else panScreen((e.clientX - drag.x) * k, (e.clientY - drag.y) * k); }
   drag.x = e.clientX; drag.y = e.clientY; });
@@ -4756,7 +4808,7 @@ function takeDoorGift() {
   else log('把门口的树枝收起来了');
   S.doorGift = null;
 }
-const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift && (setCam(), Math.hypot(proj(DOOR.x + 7, DOOR.y + 5)[0] - w.px, proj(DOOR.x + 7, DOOR.y + 5)[1] - w.py) < 12)) takeDoorGift(); else fogTap(w); } } drag = null; document.body.classList.remove('grab'); };
+const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (TOUCH.onTap && TOUCH.onTap(e, INPUT.mode)) { /* v5.11.0.2: the touch shell took this tap */ } else if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift && (setCam(), Math.hypot(proj(DOOR.x + 7, DOOR.y + 5)[0] - w.px, proj(DOOR.x + 7, DOOR.y + 5)[1] - w.py) < 12)) takeDoorGift(); else fogTap(w); } } drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
@@ -4813,7 +4865,7 @@ function cacheBlank() { // the ground is fully painted, and a weed sprite always
 function rebuildCaches(why) {
   for (const [k, m] of STK) { m._ck.delete(k.a); } STK.clear(); stkPx = 0;
   for (const m of ALLM) { m._ck = null; m.secs = new Array(NSEC); m.slices = sliceSet(m, 0); }
-  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = null; buildGroundBase();
+  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = { pond: null, sea: null }; buildGroundBase(); // v5.11.0.3: was null, which paintWater then indexed
   console.warn('[farm] caches rebuilt:', why); window.__farm.rebuilds = (window.__farm.rebuilds || 0) + 1;
   if (cacheBlank()) location.reload(); // hand-drawn sprites were lost too: start fresh
 }
@@ -5145,7 +5197,8 @@ function jumpSpot(id) {
 }
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
-Object.assign(window.__farm, { jumpTo, jumpSpot });
+Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
+Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
 Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); return i < 0 || j < 0 || i >= FG.GW || j >= FG.GH ? 0 : FOG.F[j * FG.GW + i]; } }); // v5.11.0.6 test hooks
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();
