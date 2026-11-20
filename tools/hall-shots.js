@@ -37,11 +37,11 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('v5100_town_open.png', `(() => { ${setup} const ok = openTown(); at(10 * 60); f.advance(3, 10); until(() => (out('n4') || {}).spot === 'hall' && !f.NEIGH.find(q => q.id === 'n4').moving, 300); look(530, 60, 0);
     return { ok, hall: f.TA.state().hall, props: f.props ? f.props.filter(q => q.town === 'board' || q.town === 'mailbox' || q.town === 'cart' || q.town === 'parasol' || q.town === 'crates').length : null, mayor: out('n4'), people: f.NEIGH.length, h: S.town.hall }; })()`,
     r => !r.ok ? 'town not bought' : r.mayor && r.mayor.spot !== 'hall' ? 'mayor ' + JSON.stringify(r.mayor) : !r.mayor ? 'no mayor' : r.people !== 5 ? 'people ' + r.people : r.props !== null && r.props !== 5 ? 'props ' + r.props : null);
-  // 2. the board (shop tab 镇公所): prosperity, nine projects with prices (market and bakery locked until prosperity 2, the workshop, smithy, school and library until 3), gifts from the storehouse and the yard
+  // 2. the board (shop tab 镇公所): prosperity, fifteen projects with prices (market and bakery locked until prosperity 2, the workshop, smithy, school and library until 3), gifts from the storehouse and the yard
   await shot('v5100_board.png', `(() => { ${setup} openTown(); S.decor.inv.lamppost = 2; S.decor.inv.bench = 1; f.refreshUI(); f.openHall(); f.refreshUI();
     const sh = document.getElementById('shop'), tab = sh.querySelector('[data-tab="hall"].on');
     return { tab: !!tab, cards: sh.querySelectorAll('[data-hall^="start:"]').length, enabled: sh.querySelectorAll('[data-hall^="start:"]:not([disabled])').length, give: sh.querySelectorAll('[data-hall^="give:"]').length, txt: sh.textContent.replace(/\\s+/g, ' ').slice(0, 200) }; })()`,
-    r => !r.tab ? 'no hall tab' : r.cards !== 9 || r.enabled !== 3 ? 'cards ' + r.cards + '/' + r.enabled : r.give !== 2 ? 'gift rows ' + r.give : !/繁荣度/.test(r.txt) ? 'no prosperity' : null);
+    r => !r.tab ? 'no hall tab' : r.cards !== 15 || r.enabled !== 3 ? 'cards ' + r.cards + '/' + r.enabled : r.give !== 2 ? 'gift rows ' + r.give : !/繁荣度/.test(r.txt) ? 'no prosperity' : null);
   // 2b. before the town is open there is no hall tab
   await shot('v5100_board_locked.png', `(() => { ${setup} f.refreshUI(); document.getElementById('shopBtn').click(); f.refreshUI(); return { tab: !!document.querySelector('#shop [data-tab="hall"]'), start: f.hallStart('L5') }; })()`,
     r => r.tab ? 'hall tab before the town' : r.start.ok ? 'started before the town' : null);

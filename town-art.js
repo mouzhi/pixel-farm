@@ -323,12 +323,29 @@
       if (y === 26 && x >= 10 && x <= 21 && z >= 17 && z <= 22) return (z === 17 || z === 22 || x === 10 || x === 21) ? Wd[1] : (z === 20 ? '#f6ecd0' : '#2a4e88'); // 书 sign
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.15, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1, fy0: Y0, fy1: Y1 - 1, base: roof, line, ridge: line, trim: Wd[4] });
       if (r === 'fill') return Ac[0]; if (r) return r; return null; });
+    // v5.10.10: 诊所 (style 8) — pale plaster, a green roof, a red cross over the door
+    const clinic = B(W2, D2 + 6, 36, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 16, wall = '#e8eef0', roof = '#2e6b4a', cross = '#c23b2a';
+      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+        if (!(front || side || back)) return Wd[3];
+        if (z === 0) return St[1];
+        if (front && x >= 13 && x <= 17 && z <= 8) return z === 8 ? Wd[2] : (x === 16 && z === 4 ? Ac[1] : Wd[1]);
+        if ((front || back) && z >= 4 && z <= 10 && ((x >= 4 && x <= 9) || (x >= 21 && x <= 26))) return z === 4 || z === 10 || x === 4 || x === 9 || x === 21 || x === 26 ? Wd[1] : Wt[3];
+        if (side && y >= 8 && y <= 17 && z >= 4 && z <= 10 && (y - 8) % 6 < 4) return Wt[3];
+        return z === ZW ? Wd[2] : wall; }
+      if (y === 26 && x >= 11 && x <= 20 && z >= 18 && z <= 26) {
+        if ((z >= 21 && z <= 23) || (x >= 14 && x <= 17 && z >= 19 && z <= 25)) return cross;
+        if (z === 18 || z === 26 || x === 11 || x === 20) return Wd[1];
+        return wall; }
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1, fy0: Y0, fy1: Y1 - 1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[4] });
+      if (r === 'fill') return wall; if (r) return r;
+      if (x >= 24 && x <= 26 && y >= 8 && y <= 10 && z <= 28) return z >= 26 ? St[1] : St[2];
+      return null; });
     const yardFlag = B(6, 6, 28, (x, y, z) => {
       if (x === 2 && y === 2 && z <= 26) return St[3];
       if (z >= 16 && z <= 22 && y === 2 && x >= 3 && x <= 5) return z === 19 ? Ac[0] : Rf[2];
       return null; });
     const yardPost = B(4, 4, 14, (x, y, z) => (x >= 1 && x <= 2 && y >= 1 && y <= 2 && z <= 13) ? (z === 13 ? Rf[2] : Wd[2]) : null);
-    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy, classroom, library], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops, yardFlag, yardPost };
+    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy, classroom, library, clinic], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops, yardFlag, yardPost };
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -378,6 +395,11 @@
     const sports = !!(root.PFSchool && H && root.PFSchool.isDay(H, S.day));
     const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path, sports ? 1 : 0]) : ''; if (!force && k === hallKey) return; hallKey = k;
     for (const q of own.hall) removeFrom(q); own.hall.length = 0; if (!k) return;
+    const CL = root.PFClinic; // v5.10.10: original houses swap to a two-storey (or scaffolding) when rebuilt
+    if (CL) for (const b of TN.BUILDINGS) if (b.kind === 'house') {
+      const prop = own.always.find(q => q.town === b.id); if (!prop) continue;
+      const up = H.job && H.job.id === b.id, done = !!H.built[b.id], style = (CL.HOUSE[b.id] && CL.HOUSE[b.id].style) || 0;
+      prop.m = up ? MD.scaffold : done ? (MD.two[style] || MD.two[0]) : MD.houses[b.roof || 0]; }
     for (const l of HL.LOTS) { const built = !!H.built[l.id], up = H.job && H.job.id === l.id; if (!built && !up) continue;
       own.hall.push(X.addProp(built ? (MD.two[l.style] || MD.two[2]) : MD.scaffold, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id }));
       if (built) { const fy = l.y - l.hd - 3; own.hall.push(X.addProp(MD.flowers, l.x - 10, fy, 0, { xp: 1, town: 'flowers' })); }
