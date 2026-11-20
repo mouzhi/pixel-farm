@@ -77,6 +77,7 @@ html.xhs-mobile #menuBtn,
 html.xhs-mobile #shopBtn,
 html.xhs-mobile #storeBtn,
 html.xhs-mobile #codexBtn,
+html.xhs-mobile #diaryBtn,
 html.xhs-mobile #mapBtn,
 html.xhs-mobile #speed { display: none !important; }
 
@@ -228,7 +229,7 @@ html.xhs-mobile .xhs-ico-follow i { background-position: -144px 0; }
 html.xhs-mobile .xhs-ico-author i { background-position: 0 -48px; }
 html.xhs-mobile .xhs-ico-board i { background-position: -48px -48px; }
 html.xhs-mobile .xhs-ico-note i { background-position: -96px -48px; }
-html.xhs-mobile .xhs-ico-speed i { background-position: -144px -48px; }
+html.xhs-mobile .xhs-ico-diary i { background-position: -144px -48px; } /* 1.2.0：倍速图标那格换成了日记本 */
 /* 全套表 640×256，单元格 128；显示 48px → background-size 240×96 */
 html.xhs-mobile .xhs-ico-music i,
 html.xhs-mobile .xhs-ico-sfx i {
@@ -702,3 +703,30 @@ html.xhs-mobile #career {
 html.xhs-mobile #career[hidden] { display: none !important; }
 html.xhs-mobile #career .copt,
 html.xhs-mobile #career .crow .pbtn { min-height: 44px; }
+
+/* 1.2.0 日记本（网页版 v5.10.13）：羊皮纸配色沿用 diary-ui.js，位置和其它面板一样夹在 HUD 和底栏之间 */
+html.xhs-mobile #diary {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  bottom: auto;
+  width: auto;
+  max-height: calc(100vh - var(--xhs-sheet-top, 160px) - var(--xhs-bottom-clear) - var(--xhs-bar-h) - 8px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 22;
+  border-radius: 0;
+  padding: 10px 12px 12px;
+}
+html.xhs-mobile #diary[hidden] { display: none !important; }
+html.xhs-mobile #diary .shead b { font-size: 18px; }
+html.xhs-mobile #diary .shead .x,
+html.xhs-mobile #diary .ttl .nav { min-width: 44px; min-height: 44px; font-size: 16px; }
+html.xhs-mobile #diary .ttl { font-size: 15px; line-height: 24px; }
+html.xhs-mobile #diary p { font-size: 14px; line-height: 23px; }
+html.xhs-mobile #diary .page { background: repeating-linear-gradient(#f6e7c4 0 22px, #e6cf9e 22px 23px); }
+html.xhs-mobile #diary .days { gap: 6px; }
+html.xhs-mobile #diary .days .pbtn { min-height: 36px; padding: 2px 8px; font-size: 13px; }
+html.xhs-mobile #diary .note { font-size: 12px; }

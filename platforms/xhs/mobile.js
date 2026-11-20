@@ -181,8 +181,34 @@
     return b;
   }
 
+  // 1.2.0（网页版 v5.10.13 日记本）：网页的「日记 K」按钮在手机上隐藏，底栏放一个书本图标。
+  // diary-ui.js 自己在 window pointerdown 里关面板，所以和 sheetIco 一样在按下那一刻记住开/关。
+  function diaryIco() {
+    var b = ico('xhs-btn-diary', 'diary', '日记', function () {
+      var el = doc.getElementById('diary');
+      var wasOpen = b._wasOpen != null ? b._wasOpen : isOpen(el);
+      b._wasOpen = null;
+      var D = root.PFDiaryUI;
+      if (!D) { say('日记还在加载，稍等一下'); return; }
+      if (wasOpen) { D.close(); markIcons(); return; }
+      closeSheets(D.el || el);
+      D.open();
+      markIcons();
+    });
+    function remember() {
+      if (b._wasOpen != null && Date.now() - (b._wasAt || 0) < 600) return;
+      b._wasAt = Date.now();
+      b._wasOpen = isOpen(doc.getElementById('diary'));
+      clearTimeout(b._wasT);
+      b._wasT = setTimeout(function () { b._wasOpen = null; }, 1200);
+    }
+    b.addEventListener('pointerdown', remember);
+    b.addEventListener('touchstart', remember, { passive: true });
+    return b;
+  }
+
   function reparentSheets() {
-    ['shop', 'store', 'codex', 'menu', 'offline', 'loveTip'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'diary', 'menu', 'offline', 'loveTip'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (!el || el.parentNode === doc.body) return;
       if (id === 'codex' && el.closest && el.closest('#xhs-board')) return;
@@ -199,7 +225,7 @@
     if (board && board !== except && P.leaderboard && typeof P.leaderboard.close === 'function') {
       P.leaderboard.close();
     }
-    ['shop', 'store', 'codex', 'menu', 'xhs-board', 'loveTip'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'diary', 'menu', 'xhs-board', 'loveTip'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (el && el !== except) el.hidden = true;
     });
@@ -223,6 +249,8 @@
     if (shopB) shopB.classList.toggle('on', !!(shop && !shop.hidden));
     if (boardB) boardB.classList.toggle('on', !!(board && !board.hidden));
     if (followB) followB.classList.toggle('on', !!P.followFarmer);
+    var diaryB = doc.getElementById('xhs-btn-diary'), diary = doc.getElementById('diary');
+    if (diaryB) diaryB.classList.toggle('on', !!(diary && !diary.hidden));
   }
   P._markTabs = markIcons;
 
@@ -296,6 +324,7 @@
     bar.appendChild(sheetIco('xhs-btn-bag', 'bag', '背包', 'xhs-inv-dock', null));
     bar.appendChild(sheetIco('xhs-btn-store', 'store', '仓库', 'store', 'storeBtn'));
     bar.appendChild(sheetIco('xhs-btn-shop', 'shop', '商店', 'shop', 'shopBtn'));
+    bar.appendChild(diaryIco());
     var follow = ico('xhs-follow', 'follow', '跟随农夫', function () {
       setFollow(!P.followFarmer);
     });

@@ -7,6 +7,8 @@
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const DIST = path.resolve(__dirname, '../platforms/xhs/dist'), OUT = process.env.PF_SHOTS || '/workspace/pf-shots', TAG = process.env.PF_TAG || 'xhs_1120_';
+// the web version this tree carries (index.html cache-buster on game.js)
+const WEB_VER = (fs.readFileSync(path.resolve(__dirname, '../index.html'), 'utf8').match(/game\.js\?v=([\d.]+)/) || [])[1];
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.png': 'image/png', '.webp': 'image/webp', '.jpg': 'image/jpeg', '.json': 'application/json' };
 if (!fs.existsSync(path.join(DIST, 'index.html'))) { console.error('no platforms/xhs/dist: run bash platforms/xhs/pack.sh first'); process.exit(1); }
 const server = http.createServer((req, res) => { const p = path.join(DIST, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
@@ -87,7 +89,7 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
   // 1. first screen: fresh farm, bottom bar (bag / store / shop / follow farmer / follow author / trophy), no speed, no save button
   await shot('start.png', `(() => { ${helpers} f.advance(1, 10); return ui(); })()`, r => r.speed ? 'speed control shown' : r.save ? 'save button shown' : r.bar.length < 4 ? 'bar ' + r.bar : null);
   // 2. the grown farm, following the farmer
-  await shot('farm.png', `(() => { ${grown} const raw = (window.PFPlatform && PFPlatform.store && PFPlatform.store().getItem('mouzhi/pixel-farm:save')) || JSON.stringify(f.snapshot()); return Object.assign(ui(), { day: S.day, town: !!S.town, version: f.version, saveBytes: unescape(encodeURIComponent(raw)).length, snapBytes: unescape(encodeURIComponent(JSON.stringify(f.snapshot()))).length }); })()`, r => r.version !== '5.10.12' ? 'version ' + r.version : !r.town ? 'no town' : r.snapBytes > 65536 ? 'grown farm save is over the 64KB cloud cap: ' + r.snapBytes : null, RICH);
+  await shot('farm.png', `(() => { ${grown} const raw = (window.PFPlatform && PFPlatform.store && PFPlatform.store().getItem('mouzhi/pixel-farm:save')) || JSON.stringify(f.snapshot()); return Object.assign(ui(), { day: S.day, town: !!S.town, version: f.version, saveBytes: unescape(encodeURIComponent(raw)).length, snapBytes: unescape(encodeURIComponent(JSON.stringify(f.snapshot()))).length }); })()`, r => r.version !== WEB_VER ? 'version ' + r.version : !r.town ? 'no town' : r.snapBytes > 65536 ? 'grown farm save is over the 64KB cloud cap: ' + r.snapBytes : null, RICH);
   // 3. the town with the new buildings (market, bakery, smithy, school, library, clinic)
   await shot('town.png', `(() => { ${grown} unfollow(); const c = { x: 520, y: 80 }; look(c.x, c.y, 0);
     return { hall: S.town.hall && Object.keys(S.town.hall).length, center: c }; })()`, null, RICH);
@@ -104,6 +106,15 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
   await shot('trophy_codex.png', `(() => { ${grown} tap('#xhs-btn-board'); return new Promise(res => setTimeout(() => { const b = [...document.querySelectorAll('.xhs-board-sections button')].find(x => /图鉴/.test(x.textContent)); if (b) b.click();
     setTimeout(() => res({ open: !$('xhs-board').hidden, codex: !!document.querySelector('#xhs-board #codex'), items: document.querySelectorAll('#xhs-board #codex .it, #xhs-board #codex [data-key]').length }), 500); }, 500)); })()`,
     r => !r.open || !r.codex ? 'codex not inside the trophy panel' : null, RICH);
+  // v5.10.13 日记本: web 「日记 K」 hidden, book icon in the bottom bar opens the diary sheet between HUD and bar
+  await shot('diary.png', `(() => { ${grown} nextMorning(); at(10 * 60); f.advance(1, 10); tap('#xhs-btn-diary'); f.advance(0.5, 10);
+    const d = $('diary'), web = $('diaryBtn'); return { open: !!d && !d.hidden, lines: d ? d.querySelectorAll('p').length : 0, webBtn: !!web && getComputedStyle(web).display !== 'none', icon: $('xhs-btn-diary').classList.contains('on') }; })()`,
+    r => !r.open ? 'diary closed' : !r.lines ? 'empty diary' : r.webBtn ? 'web 日记 K button shown' : !r.icon ? 'icon not marked on' : null, RICH);
+  // v5.10.13: buying a goldfish in the shop puts it straight into the pond (no 放养 tap; the 1.1.1 player comment)
+  await shot('goldfish_auto.png', `(() => { ${grown} const n0 = S.pondFish.length; tap('#xhs-btn-shop'); f.refreshUI(); const t = [...document.querySelectorAll('#shop .tabs [data-tab]')].find(b => { b.click(); f.refreshUI(); return document.querySelector('#shop [data-buy="goldfish"]'); });
+    tap('#shop [data-buy="goldfish"]'); tap('#xhs-btn-shop'); unfollow(); look(34, 100, 0); f.advance(1, 10);
+    return { before: n0, after: S.pondFish.length, held: (S.ornament && S.ornament.goldfish) || 0, release: !!document.querySelector('#tools [data-m="release"][data-k="goldfish"]') }; })()`,
+    r => r.after !== r.before + 1 ? 'pond ' + r.before + ' -> ' + r.after : r.held ? 'goldfish left in the storehouse' : r.release ? '放养金鱼 button still shown' : null, RICH);
   // 6. the beach resort, and the harvest festival evening in town
   await shot('resort.png', `(() => { ${grown} unfollow(); const L = f.innResortLayout && f.innResortLayout(); look(L && L.coast && L.coast.center ? L.coast.center.x : 272, L && L.coast && L.coast.center ? L.coast.center.y : 236, 0); return { resort: S.inn && S.inn.resort }; })()`, null, RICH);
   await shot('festival.png', `(() => { ${grown}
