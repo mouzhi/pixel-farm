@@ -77,4 +77,14 @@ ok('review: a photo still waiting to be taken is packed with the album (7th fiel
   assert.deepEqual(A.valid(['wedding|90|1100|1|2|kid0|99.<x>.1']).list[0].q, { at: 99, f: '', re: 1 });
   assert(A.remove(b, 'born0') && !A.has(b, 'born0') && !A.remove(b, 'born0'));
 });
+ok('v5.11.0.8 compact saves: a full album (every moment, pending 7th fields too) passes compact() unchanged, round-trips, and the day-72 save stays well under 48KB', () => {
+  let s = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures', 'save-v15-day72-cottage.json'))); s = s.save || s;
+  const v = Save.migrate(s), a = A.empty();
+  for (const m of A.MOMENTS) A.add(a, { id: m.id, d: 999, t: m.id === 'classmate' ? -1 : 1439, x: 1023, y: 1007, w: ['farmer', 'partner', 'kid0', 'kid1'], q: m.id === 'wedding' ? { at: 1438560, f: 'partner', re: 1 } : undefined });
+  v.album = A.pack(a); const c = Save.compact(v);
+  assert.deepEqual(c.album, v.album, 'compact leaves the album strings alone');
+  const back = Save.migrate(JSON.parse(JSON.stringify(c))); assert.deepEqual(back.album, v.album); assert.equal(JSON.stringify(Save.compact(back)), JSON.stringify(c));
+  const ab = Buffer.byteLength(JSON.stringify(v.album)), cb = Buffer.byteLength(JSON.stringify(c)); console.log(`     album ${ab} B (24 moments, worst case), compact day-72 save ${cb} B`);
+  assert(ab < 1500, String(ab)); assert(cb < 48 * 1024, String(cb));
+});
 console.log('album-test:', n, 'ok');
