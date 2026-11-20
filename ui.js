@@ -389,8 +389,18 @@
       (v.stall ? '，海鲜摊已开' : '') + (v.pier ? '，栈桥已铺' : '') + (v.deck ? '，观景台已修好' : '') + '。</div>';
     h += cards(resortIds);
     if (v.diner) {
+      const g = v.garden || {}, last = v.lastMeal || {};
+      const gardenLine = (g.greens | 0) ? `菜园今天能做时蔬 ${g.greens} 份` + ((g.cabbage | 0) ? `，还有卷心菜 ${g.cabbage}` : '') + ((g.carrot | 0) ? `、胡萝卜 ${g.carrot}` : '') + '。' : '';
+      const capLine = (v.cookCap | 0) ? `厨房每天最多做 ${v.cookCap} 份（升厨房会加座位和产量）。` : '';
+      let lastLine = '';
+      if (last.day) {
+        lastLine = `最近一次（第 ${last.day} 天）做了 ${last.served | 0} 份`;
+        if (last.missed) lastLine += `，还差 ${last.missed} 份` + (last.shortNames && last.shortNames.length ? '，缺' + last.shortNames.join('、') : '');
+        lastLine += '。';
+      }
       h += `<div class="sec">菜馆菜单（「我来挑」只上架仓库里做得出的菜；不够的会自动撤掉）</div>`;
-      h += `<div class="card"><div class="ct"><div><b>点菜方式</b> <span class="lv">${v.auto ? '全自动' : '我来挑'}</span></div><div class="d">自动时家人用库存最多的原料做。一天两顿，住客每人两份，集市那天会多来几个散客。</div></div>` +
+      if (capLine || gardenLine || lastLine) h += `<div class="more">${esc(capLine + gardenLine + lastLine)}</div>`;
+      h += `<div class="card"><div class="ct"><div><b>点菜方式</b> <span class="lv">${v.auto ? '全自动' : '我来挑'}</span></div><div class="d">自动时家人用库存最多的原料做，菜园的时蔬会补上差额。一天两顿，住客每人两份，集市那天会多来几个散客。开饭前原料会先留着，不会卖掉。</div></div>` +
         `<div class="cb"><button type="button" class="pbtn" data-inn="mode">${v.auto ? '我来挑' : '改回自动'}</button></div></div>`;
       if (!v.auto) {
         for (const d of v.listed) {
@@ -404,7 +414,7 @@
     }
     if (v.book && v.book.length) {
       h += `<div class="sec">留言本（最近 ${v.book.length} 条）</div>`;
-      for (const b of v.book) h += `<div class="more">第 ${b.day} 天 · ${'★'.repeat(b.s || 3)}${b.note ? ' · ' + esc(b.note) : ''}</div>`;
+      for (const b of v.book) h += `<div class="more">第 ${b.day} 天 · ${'★'.repeat(b.s || 3)}${b.note ? ' · ' + esc(b.note) : ''}${(b.n | 0) > 1 ? '（' + (b.n | 0) + ' 组）' : ''}</div>`;
     }
     return h;
   }
@@ -780,7 +790,7 @@
     const star = '★'.repeat(s) + '☆'.repeat(5 - s);
     let h = '<div class="rel innbook"><div class="rk"><b>民宿留言本</b> <span class="lv">' + star + '</span></div>';
     h += `<div class="rr"><span>今天 ${v.guests && v.guests.length ? v.guests.length + ' 组 / ' + v.people + ' 人' : '还没有客人'}</span><span class="rl">${v.earn.today ? '今日 ' + v.earn.today + ' 金' : '星级 ' + (Math.round(v.stars * 10) / 10)}</span></div>`;
-    if (v.book && v.book.length) for (const b of v.book.slice(0, 5)) h += `<div class="rr"><span>第 ${b.day} 天 ${'★'.repeat(b.s || 3)}</span><span class="rl">${esc(b.note || '')}</span></div>`;
+    if (v.book && v.book.length) for (const b of v.book.slice(0, 5)) h += `<div class="rr"><span>第 ${b.day} 天 ${'★'.repeat(b.s || 3)}${(b.n | 0) > 1 ? '（' + (b.n | 0) + ' 组）' : ''}</span><span class="rl">${esc(b.note || '')}</span></div>`;
     else h += '<div class="rr"><span>还没有留言，客人走时会写几句</span></div>';
     return h + '</div>';
   }

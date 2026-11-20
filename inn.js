@@ -2,6 +2,10 @@
 // Rules only (art in inn-art.js, walking and guests in game.js, the shop / guestbook / 「我来挑」 in ui.js).
 // v5.11.0.5: the lodging moved off the farm plots into the 农家乐区 by the town gate (SITE / AGRI / agriLayout / migrate below);
 // the per-plot layout and INN_PLOTS stay only for old code paths and tests.
+// v5.11.0.12: a maxed kitchen was still writing 「今天的菜不够」 every day. Reviews used the lifetime
+// diner.missed total (and the seafood stall's misses), so one short day poisoned every later note.
+// Meals are also capped by kitchen size, the kitchen garden yields 时蔬, and the guestbook merges
+// same-day lines. Save stays v15: append-only diner.missedLast / servedLast / short / dishLast.
 // A bought flat-ish plot can be zoned 「民宿院」. Up to 4 cabins and one 农家菜馆 go up on it (family builds in a day).
 // v5.10.8: the yard can become a two-storey inn (each cabin hosts one extra group). 东南滩 zones as 「度假村」; the existing
 // beach holds huts, umbrellas, a seafood stall, a guest pier and a sunset deck. Resort guests stay only on the beach.
@@ -30,7 +34,7 @@
   const ON_SCREEN = 8;
   const STAR_BOOST = 0.3; // 经营民宿 / 菜馆
   const FURNISH = 0.15;   // woodshop furniture in the cabins / diner
-  const BOOK_MAX = 10, STARS_MAX = 20;
+  const BOOK_MAX = 10, STARS_MAX = 20, NOTE_MAX = 36;
   const LOOKS = ['innA', 'innB', 'innC', 'innD', 'innE', 'innF'];
   const BEACH_LOOKS = ['beachA', 'beachB', 'beachC', 'beachD', 'beachE', 'beachF'];
   const RESORT_PLOT = 'eshore';
@@ -54,9 +58,17 @@
   const UNIT = {
     cabbage: 30, pumpkin: 85, carrot: 8, strawberry: 30, wheat: 14, apple: 12, orange: 15,
     egg: 10, milk: 35, wool: 60, flour: 60, jam: 80, cheese: 130, honey: 40, fish: 20,
-    sardine: 16, seabass: 28, snapper: 48, tuna: 80, sword: 140, seafish: 16,
+    sardine: 16, seabass: 28, snapper: 48, tuna: 80, sword: 140, seafish: 16, greens: 20,
   };
+  const ITEM_NAME = {
+    cabbage: '卷心菜', pumpkin: '南瓜', carrot: '胡萝卜', strawberry: '草莓', wheat: '小麦',
+    apple: '苹果', orange: '橘子', egg: '鸡蛋', milk: '牛奶', wool: '羊毛', flour: '面粉',
+    jam: '果酱', cheese: '奶酪', honey: '蜂蜜', fish: '鱼', sardine: '沙丁鱼', seabass: '海鲈',
+    snapper: '鲷鱼', tuna: '金枪鱼', sword: '剑鱼', seafish: '海鱼', greens: '菜园青菜',
+  };
+  const itemName = id => ITEM_NAME[id] || id;
   const DISHES = [
+    { id: 'garden_veg', name: '时蔬', need: [{ id: 'greens', n: 1 }], garden: 1 },
     { id: 'cabbage_egg', name: '卷心菜炒蛋', need: [{ id: 'egg', n: 1 }, { id: 'cabbage', n: 1 }] },
     { id: 'pumpkin_pie', name: '南瓜饼', need: [{ id: 'pumpkin', n: 1 }, { id: 'flour', n: 1 }] },
     { id: 'jam_muffin', name: '果酱松饼', need: [{ id: 'flour', n: 1 }, { id: 'jam', n: 1 }, { id: 'milk', n: 1 }] },
@@ -299,13 +311,17 @@
   function validStar(x) {
     if (!x || typeof x !== 'object') return null;
     const s = int(x.s, 1, 5) || 1, day = int(x.day, 1, 1e6);
-    const note = typeof x.note === 'string' ? x.note.slice(0, 24) : '';
-    return { day, s, note };
+    const note = typeof x.note === 'string' ? x.note.slice(0, NOTE_MAX) : '';
+    const rec = { day, s, note };
+    const n = int(x.n, 1, 99);
+    if (n > 1) rec.n = n;
+    return rec;
   }
   function avgOf(last) {
     if (!last || !last.length) return 3;
-    const s = last.reduce((a, x) => a + x.s, 0) / last.length;
-    return Math.round(s * 10) / 10;
+    let s = 0, w = 0;
+    for (const x of last) { const n = Math.max(1, x.n | 0); s += x.s * n; w += n; }
+    return Math.round((s / w) * 10) / 10;
   }
   function valid(v) {
     const o = obj(v), out = empty();
@@ -324,6 +340,15 @@
     const d = obj(o.diner);
     out.diner = { lv: int(d.lv, 0, 1 + KITCHEN.max), menu: validMenu(d.menu, dishSlots({ diner: { lv: int(d.lv, 0, 1 + KITCHEN.max) } }, false)),
       served: int(d.served, 0, 1e9), missed: int(d.missed, 0, 1e9), last: int(d.last, 0, 1e6) };
+    // v5.11.0.12: last service only (reviews must not use the lifetime missed total)
+    const missedLast = int(d.missedLast, 0, 1e9), servedLast = int(d.servedLast, 0, 1e9);
+    if (missedLast) out.diner.missedLast = missedLast;
+    if (servedLast) out.diner.servedLast = servedLast;
+    if (typeof d.dishLast === 'string' && DISH[d.dishLast]) out.diner.dishLast = d.dishLast;
+    if (Array.isArray(d.short)) {
+      const short = d.short.map(id => typeof id === 'string' && (UNIT[id] || id === 'greens') ? id : null).filter(Boolean).slice(0, 4);
+      if (short.length) out.diner.short = short;
+    }
     const st = obj(o.stars);
     const last = (Array.isArray(st.last) ? st.last : []).map(validStar).filter(Boolean).slice(-STARS_MAX);
     out.stars = { avg: last.length ? avgOf(last) : 3, last };
@@ -348,9 +373,27 @@
   };
   const unlocked = (I, staffed) => {
     const n = dishSlots(I, false);
-    const list = DISHES.filter(d => !d.special && !d.stall).slice(0, n);
+    const list = DISHES.filter(d => !d.special && !d.stall && !d.garden).slice(0, n);
     if (staffed) list.push(DISHES.find(d => d.special));
     return list.filter(Boolean);
+  };
+  const GARDEN_DISH = DISHES.find(d => d.garden);
+  // kitchen garden: 时蔬 portions scale with seats (8 / 16 / 24), plus a few cabbages / carrots so
+  // 卷心菜炒蛋 is possible even when the farm plants fruit. Upgrading the kitchen visibly adds plates.
+  const gardenYield = I => {
+    if (!dinerUp(I)) return {};
+    const seats = seatsOf(I), lv = kitchenLv(I);
+    const out = { greens: seats * MEALS_EACH };
+    const cab = 2 + lv * 4; if (cab) out.cabbage = cab;
+    if (lv) out.carrot = lv * 2;
+    return out;
+  };
+  const kitchenCap = I => dinerUp(I) ? seatsOf(I) * (MEALS_EACH + 1) : 0; // 12 / 24 / 36
+  const stockWithGarden = (I, counts) => {
+    const out = Object.assign({}, counts || {});
+    const g = gardenYield(I);
+    for (const k of Object.keys(g)) out[k] = (out[k] | 0) + g[k];
+    return out;
   };
   function cabinCost(n) { return (n | 0) <= 0 ? Object.assign({}, FIRST) : Object.assign({}, NEXT); }
   function offer(I, id) {
@@ -512,6 +555,28 @@
     I.guests = (I.guests || []).concat(add);
     return add;
   }
+  const preferNote = (a, b) => {
+    const A = String(a || ''), B = String(b || '');
+    if (/不够|缺/.test(B) && !/不够|缺/.test(A)) return B;
+    if (/不够|缺/.test(A)) return A;
+    return B || A;
+  };
+  function pushStar(I, rec) {
+    const last = I.stars.last || (I.stars.last = []);
+    const prev = last[last.length - 1];
+    if (prev && (prev.day | 0) === (rec.day | 0)) {
+      const n0 = Math.max(1, prev.n | 0), n1 = Math.max(1, rec.n | 0);
+      const s = int((prev.s * n0 + rec.s * n1) / (n0 + n1), 1, 5) || 3;
+      const note = preferNote(prev.note, rec.note).slice(0, NOTE_MAX);
+      const row = { day: rec.day | 0, s, note };
+      if (n0 + n1 > 1) row.n = n0 + n1;
+      last[last.length - 1] = row;
+    } else {
+      const row = { day: rec.day | 0, s: rec.s, note: rec.note };
+      if ((rec.n | 0) > 1) row.n = rec.n | 0;
+      I.stars.last = last.concat([row]).slice(-STARS_MAX);
+    }
+  }
   function checkOut(I, day, rate) {
     const gone = leaving(I, day); if (!gone.length) return { groups: [], gold: 0, notes: [] };
     const stars = (I.stars && I.stars.avg) || 3;
@@ -521,8 +586,8 @@
       const pay = roomFee(nights, stars);
       gold += pay; I.earn.rooms = (I.earn.rooms | 0) + pay;
       const rated = rate ? rate(g, nights) : { s: 3, note: '' };
-      const rec = { day: day | 0, s: int(rated.s, 1, 5) || 3, note: String(rated.note || '').slice(0, 24) };
-      I.stars.last = (I.stars.last || []).concat([rec]).slice(-STARS_MAX);
+      const rec = { day: day | 0, s: int(rated.s, 1, 5) || 3, note: String(rated.note || '').slice(0, NOTE_MAX) };
+      pushStar(I, rec);
       notes.push(rec);
     }
     I.stars.avg = avgOf(I.stars.last);
@@ -538,44 +603,118 @@
     const picked = I.diner.menu.map(id => DISH[id]).filter(d => d && allow.has(d.id));
     return picked.length ? picked : open;
   }
-  // auto: the dishes whose ingredients the warehouse has most of (skip any we cannot make)
+  // auto: the dishes whose ingredients the warehouse has most of (skip any we cannot make).
+  // 时蔬 is a fallback from the kitchen garden, never picked before a farm dish.
   function autoMenu(I, counts, staffed, priceOf) {
     const open = unlocked(I, staffed);
     const ranked = open.map(d => {
       const have = d.need.reduce((s, x) => s + ((counts[x.id] | 0) / x.n), 0);
       return { d, have, can: canMake(d, counts), pay: dishPay(d, priceOf) };
     }).sort((a, b) => (b.can - a.can) || b.have - a.have || b.pay - a.pay || a.d.id.localeCompare(b.d.id));
-    return ranked.filter(x => x.can).map(x => x.d);
+    const out = ranked.filter(x => x.can).map(x => x.d);
+    if (GARDEN_DISH && dinerUp(I) && canMake(GARDEN_DISH, counts)) out.push(GARDEN_DISH);
+    return out;
   }
   const todayMenu = (I, counts, staffed, priceOf) => {
     const list = I.diner.menu === 'auto' || !Array.isArray(I.diner.menu) ? autoMenu(I, counts, staffed, priceOf) : listed(I, staffed).filter(d => canMake(d, counts));
+    if (GARDEN_DISH && dinerUp(I) && canMake(GARDEN_DISH, counts) && !list.some(d => d.id === GARDEN_DISH.id)) list.push(GARDEN_DISH);
     return list;
   };
   function setMenu(I, v, staffed) {
     I.diner.menu = v === 'auto' || v == null ? 'auto' : validMenu(v, dishSlots(I, staffed));
     return I;
   }
-  // serve up to `want` portions; dishes that run out of stock drop off. returns { gold, n, missed, used }
-  function serve(I, want, counts, staffed, priceOf) {
-    if (!dinerUp(I)) return { gold: 0, n: 0, missed: want | 0, used: [] };
+  // missing ingredients among the unlocked farm dishes (greens are garden-only, not listed)
+  function shortOf(I, counts, staffed) {
+    const stock = counts || {};
+    const miss = {};
+    for (const d of unlocked(I, staffed)) {
+      for (const x of d.need) {
+        const have = haveOf(x.id, stock), lack = x.n - have;
+        if (lack > 0 && x.id !== 'greens') miss[x.id] = Math.max(miss[x.id] | 0, lack);
+      }
+    }
+    return Object.keys(miss).sort((a, b) => miss[b] - miss[a] || a.localeCompare(b)).slice(0, 3);
+  }
+  const shortNote = short => {
+    const ids = (short || []).filter(id => id && id !== 'greens');
+    if (!ids.length) return '今天的菜不够';
+    return ('今天的菜不够，缺' + ids.map(itemName).join('、')).slice(0, NOTE_MAX);
+  };
+  // farm consumption after cooking from farm+garden (garden is used first so leftover crops can still be sold)
+  function farmUsedFrom(initial, final, garden) {
+    const used = {};
+    const ids = new Set(Object.keys(initial || {}).concat(Object.keys(final || {})).concat(Object.keys(garden || {})));
+    for (const id of ids) {
+      if (id === 'greens') continue;
+      const took = Math.max(0, (initial[id] | 0) - (final[id] | 0));
+      const farm = Math.max(0, took - (garden[id] | 0));
+      if (farm) used[id] = farm;
+    }
+    return used;
+  }
+  // dry-run: does not mutate I. `counts` is mutated only for farm-sourced pulls when apply is true.
+  function planServe(I, want, counts, staffed, priceOf, apply) {
+    const empty = { gold: 0, n: 0, missed: want | 0, used: [], short: dinerUp(I) ? shortOf(I, counts, staffed) : [], farmNeed: {} };
+    if (!dinerUp(I)) return empty;
+    const garden = gardenYield(I);
+    const stock = stockWithGarden(I, counts);
+    const initialFarm = Object.assign({}, counts || {});
     let left = want | 0, gold = 0, n = 0; const used = [];
     while (left > 0) {
-      const menu = todayMenu(I, counts, staffed, priceOf);
+      const menu = todayMenu(I, stock, staffed, priceOf);
       if (!menu.length) break;
       const d = menu[0];
-      if (!pullDish(d, counts)) break;
-      const pay = dishPay(d, priceOf);
-      gold += pay; n++; left--; used.push(d.id);
+      if (!pullDish(d, stock)) break;
+      gold += dishPay(d, priceOf); n++; left--; used.push(d.id);
     }
-    I.diner.served = (I.diner.served | 0) + n;
-    I.diner.missed = (I.diner.missed | 0) + left;
-    I.earn.meals = (I.earn.meals | 0) + gold;
-    return { gold, n, missed: left, used };
+    const farmNeed = farmUsedFrom(initialFarm, stock, garden);
+    if (apply) {
+      for (const id of Object.keys(farmNeed)) counts[id] = Math.max(0, (counts[id] | 0) - farmNeed[id]);
+    }
+    const short = left > 0 ? shortOf(I, stock, staffed) : [];
+    return { gold, n, missed: left, used, short, farmNeed };
+  }
+  // serve up to `want` portions; dishes that run out of stock drop off. returns { gold, n, missed, used, short, farmNeed }
+  function serve(I, want, counts, staffed, priceOf) {
+    const r = planServe(I, want, counts, staffed, priceOf, true);
+    I.diner.served = (I.diner.served | 0) + r.n;
+    I.diner.missed = (I.diner.missed | 0) + r.missed;
+    I.diner.missedLast = r.missed;
+    I.diner.servedLast = r.n;
+    if (r.short.length) I.diner.short = r.short.slice(); else delete I.diner.short;
+    const farmDish = r.used.find(id => DISH[id] && !DISH[id].garden) || r.used[0] || null;
+    if (farmDish) I.diner.dishLast = farmDish; else delete I.diner.dishLast;
+    I.earn.meals = (I.earn.meals | 0) + r.gold;
+    return r;
+  }
+  // ingredients to hold back from the stall until today's meals are cooked
+  function reserveNeed(I, want, staffed, counts, priceOf) {
+    if (!dinerUp(I) || !(want > 0)) return {};
+    const r = planServe(I, want, Object.assign({}, counts || {}), staffed, priceOf, false);
+    if (r.n >= (want | 0)) return Object.assign({}, r.farmNeed);
+    // still short: keep every farm ingredient a listed dish might use
+    const need = Object.assign({}, r.farmNeed);
+    for (const d of unlocked(I, staffed)) for (const x of d.need) {
+      if (x.id === 'greens' || x.id === 'seafish') continue;
+      need[x.id] = (need[x.id] | 0) + x.n * Math.max(1, (want - r.n) | 0);
+    }
+    return need;
+  }
+  // reviews at dawn use the last service (yesterday or today), never the lifetime missed total
+  function mealReview(I, day) {
+    const d = I && I.diner;
+    if (!d || !dinerUp(I)) return { missed: 0, served: 0, short: [], dish: null };
+    const last = d.last | 0, d0 = day | 0;
+    if (last !== d0 && last !== d0 - 1) return { missed: 0, served: 0, short: [], dish: null };
+    return { missed: d.missedLast | 0, served: d.servedLast | 0, short: Array.isArray(d.short) ? d.short.slice() : [], dish: d.dishLast || null };
   }
   function mealsWanted(I, day, fest, walkins) {
     const ppl = peopleStay(I, day, 'inn');
     const extra = (walkins | 0) + (fest ? Math.max(4, ppl) : 0);
-    return ppl * MEALS_EACH + extra;
+    const raw = ppl * MEALS_EACH + extra;
+    const cap = kitchenCap(I);
+    return cap ? Math.min(raw, cap) : raw;
   }
   function stallMealsWanted(I, day) {
     return peopleStay(I, day, 'beach') * MEALS_EACH;
@@ -643,7 +782,7 @@
     let note = NOTES.stay[0];
     if (c.sunset) note = NOTES.sunset[0];
     else if (c.fireflies) note = NOTES.firefly[0];
-    else if (c.missed > 0) note = '今天的菜不够';
+    else if (c.missed > 0) note = shortNote(c.short);
     else if (food >= 1 && c.servedDish) {
       const d = DISH[c.servedDish]; note = d && /南瓜/.test(d.name) ? '南瓜饼好吃' : (d && /果酱/.test(d.name) ? '果酱松饼松软' : (d && /炒蛋/.test(d.name) ? '卷心菜炒蛋很香' : (d ? d.name + '好吃' : note)));
     } else if (animals >= 0.8) note = NOTES.animals[0];
@@ -653,7 +792,26 @@
     else if (c.furnish) note = NOTES.furnish[0];
     return { s, note, parts: { animals, tidy, decor, food, magic, furnish } };
   }
-  const book = I => (I.stars && I.stars.last || []).slice(-BOOK_MAX).slice().reverse();
+  // newest first; same-day rows (including old saves with many identical lines) collapse to one
+  function book(I) {
+    const raw = (I.stars && I.stars.last || []).slice().reverse();
+    const out = [];
+    for (const r of raw) {
+      const hit = out.find(x => x.day === r.day);
+      if (hit) {
+        const n0 = Math.max(1, hit.n | 0), n1 = Math.max(1, r.n | 0);
+        hit.n = n0 + n1;
+        hit.s = int((hit.s * n0 + (r.s | 0) * n1) / hit.n, 1, 5) || hit.s;
+        hit.note = preferNote(hit.note, r.note);
+      } else {
+        const row = { day: r.day, s: r.s, note: r.note };
+        if ((r.n | 0) > 1) row.n = r.n | 0;
+        out.push(row);
+        if (out.length >= BOOK_MAX) break;
+      }
+    }
+    return out;
+  }
 
   // ---------- festive days: market day, and later 运动会 / 丰收节 / 灯会 if those flags are set ----------
   const isFest = ctx => !!(ctx && (ctx.market || ctx.sports || ctx.harvest || ctx.lantern || ctx.fest));
@@ -669,15 +827,16 @@
   const api = {
     INN_PLOTS, RESORT_PLOT, PROSPERITY, MAX_CABINS, MAX_HUTS, MAX_PARASOLS, ROOM, FIRST, NEXT, DINER, KITCHEN,
     HUT, PARASOL, SEA_STALL, GUEST_PIER, DECK, INN2, MEAL_MARK, MEALS_EACH, SUNSET, COAST, SEA_FISH,
-    STAY, GROUP, ARRIVE, LEAVE_MORNING, ON_SCREEN, STAR_BOOST, FURNISH, BOOK_MAX, STARS_MAX, LOOKS, BEACH_LOOKS,
-    UNIT, DISHES, DISH, STALL_DISHES, unitOf, dishBase, dishPay, canMake, pullDish, isSeaFish, seaCount, pullSea,
+    STAY, GROUP, ARRIVE, LEAVE_MORNING, ON_SCREEN, STAR_BOOST, FURNISH, BOOK_MAX, STARS_MAX, NOTE_MAX, LOOKS, BEACH_LOOKS,
+    UNIT, ITEM_NAME, itemName, DISHES, DISH, STALL_DISHES, GARDEN_DISH, unitOf, dishBase, dishPay, canMake, pullDish, isSeaFish, seaCount, pullSea,
     starCoef, roomFee, groupsWanted, effectiveStars,
     innPlotOf, resortPlotOf, plotOk, layout, SITE, AGRI, siteOf, anyInn, agriLayout, migrate, resortLayout, isSunset,
     empty, emptyDiner, emptyStars, emptyEarn, emptyResort, valid, validMenu, avgOf,
-    cabinsUp, dinerUp, kitchenLv, seatsOf, dishSlots, unlocked, cabinCost, offer, canStart, start, finish, plotBusy,
+    cabinsUp, dinerUp, kitchenLv, seatsOf, dishSlots, unlocked, gardenYield, kitchenCap, stockWithGarden, cabinCost, offer, canStart, start, finish, plotBusy,
     innRoomsOf, hutsUp, parasolsUp, stallUp, pierUp, deckUp, stayOf, cabinOf,
     hash, freeRooms, freeHuts, staying, stayingStay, leaving, peopleOf, peopleStay, planArrivals, planBeachArrivals, checkIn, checkOut,
     listed, autoMenu, todayMenu, setMenu, serve, serveStall, stallMenu, mealsWanted, stallMealsWanted, walkinsOf,
+    shortOf, shortNote, planServe, reserveNeed, mealReview, pushStar,
     NOTES, rateStay, book, isFest, entryOf,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFInn = api;

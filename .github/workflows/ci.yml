@@ -98,7 +98,8 @@ jobs:
           # v5.11.0.5 农家乐区: its own leg (~11m on CI: recent-b went 11m -> 22m16s with it on run 44703708506; with rain-shots there too it would pass 25m)
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           - group: agrilot
-            scripts: agrilot-shots.js fog-shots.js
+            # v5.11.0.12: restaurant-shots is two shop-panel snaps (~1m); agrilot+fog were ~15m, stays under 25m
+            scripts: agrilot-shots.js fog-shots.js restaurant-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
