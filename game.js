@@ -4079,24 +4079,48 @@ function waterBox() {
   const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
   return [x0, y0, x1 - x0, y1 - y0];
 }
-function waterGeom(d, bx, by, bw, bh) { // per camera angle: mask, distance to the shore, far row per column, zones
+// v5.11.0.3: the geometry is cached per camera *position* (CX, CY), not only per angle and box. The sea box is clipped to the
+// screen, so once it filled the view the box stopped changing while the camera kept scrolling and the old shoreline (mud lip,
+// foam, depth bands) stayed painted at its old screen rows: a second coastline in the open sea. The open sea also measures its
+// depth bands in world units from the shore (the pond's bands are fractions of the visible water, which slid as the view moved),
+// and the screen edges that clip it are open water, not a bank.
+function waterGeom(d, bx, by, bw, bh, open) { // per camera view: mask, distance to the shore, far row per column, zones
+  const OUT = open ? 1e4 : 1; // what lies outside the box: dry bank round the pond, more sea for the clipped ocean
   const N = bw * bh, mask = new Uint8Array(N), dist = new Float32Array(N); let n = 0, sx = 0, sy = 0, ys = [];
   for (let i = 0; i < N; i++) if (d[i] === WSENT) { mask[i] = 1; n++; sx += i % bw; sy += (i / bw) | 0; ys.push((i / bw) | 0); }
   if (!n) return { bx, by, bw, bh, n: 0, aq: AQ };
   for (let i = 0; i < N; i++) dist[i] = mask[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
-    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : 1, y > 0 ? dist[i - bw] + 1 : 1, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : 1.414, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : 1.414); dist[i] = v; }
+    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : OUT, y > 0 ? dist[i - bw] + 1 : OUT, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : OUT, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : OUT); dist[i] = v; }
   for (let y = bh - 1; y >= 0; y--) for (let x = bw - 1; x >= 0; x--) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
-    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : 1, y < bh - 1 ? dist[i + bw] + 1 : 1, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : 1.414, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : 1.414); dist[i] = v; }
+    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : OUT, y < bh - 1 ? dist[i + bw] + 1 : OUT, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : OUT, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : OUT); dist[i] = v; }
   const far = new Int16Array(bw).fill(-1), near = new Int16Array(bw).fill(-1);
   for (let x = 0; x < bw; x++) for (let y = 0; y < bh; y++) if (mask[y * bw + x]) { if (far[x] < 0) far[x] = y; near[x] = y; }
   ys.sort((a, b) => a - b); const midY = ys[ys.length >> 1], top = ys[0], pondH = ys[ys.length - 1] - top + 1, cx = sx / n, cy = sy / n;
   const along = new Float32Array(N), sky = [], deep = [], damp = [], back = [];
+  const band = open ? seaBands(mask, bx, by, bw, bh) : null; // open sea: 0 near the shore, 1 and 2 further out (world units)
   for (let i = 0; i < N; i++) { const x = i % bw, y = (i / bw) | 0;
-    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if (y - far[x] >= pondH * 0.3 && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
-    if (y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
-  for (let x = 0; x < bw; x++) if (far[x] >= 2 && far[x] < midY) back.push(x);
-  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, tone: new Uint8Array(N), aq: AQ };
+    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if ((band ? band[i] >= 1 : y - far[x] >= pondH * 0.3) && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
+    if (open ? far[x] >= 0 && y >= far[x] : y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
+  for (let x = 0; x < bw; x++) if (far[x] >= 2 && (open ? far[x] < bh - 4 : far[x] < midY)) back.push(x);
+  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, band, open: !!open, tone: new Uint8Array(N), aq: AQ, cX: CX, cY: CY };
+}
+const SEA_B1 = 22, SEA_B2 = 50; // world units past the shoreline where the open sea turns a shade lighter, then lighter again
+let SEA_BAND = null; // one byte per world unit over the sea, built once: the band each spot of open water belongs to
+function seaBandMap() {
+  if (SEA_BAND) return SEA_BAND; const x0 = 150, y0 = 230, w = WORLD.x1 + GM - x0, h = WORLD.y1 + GM - y0, m = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const wx = x0 + i + 0.5, wy = y0 + j + 0.5, s = WD.seaShore(wx);
+    const e = wy - (250 + (s - 250) * 0.45) + (vnoise(wx / 14, wy / 9, 29) - 0.5) * 10; // contours: softer than the shore, a little noise
+    m[j * w + i] = e >= SEA_B2 ? 2 : e >= SEA_B1 ? 1 : 0; }
+  return (SEA_BAND = { x0, y0, w, h, m });
+}
+function seaBands(mask, bx, by, bw, bh) { // depth contours in world space, so they stay put on the map while the camera moves
+  const band = new Uint8Array(bw * bh), B = seaBandMap();
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue;
+    const rx = (bx + x + 0.5 - CX) / RS, ry = (by + y + 0.5 - CY) / (K * RS), wx = rx * CA + ry * SA, wy = -rx * SA + ry * CA;
+    const u = Math.floor(wx - B.x0), v = Math.floor(wy - B.y0);
+    band[i] = u < 0 || v < 0 || u >= B.w ? 0 : v >= B.h ? 2 : B.m[v * B.w + u]; }
+  return band;
 }
 function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip about the foot row, squash to 55%, cut to 3 dark tones
   const { bx, by, bw, bh, mask } = G2;
@@ -4108,15 +4132,53 @@ function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip a
       const i = y * bw + X; if (!mask[i]) continue; const tn = RTONE.get(p >>> 0); if (tn !== undefined && tn < tone[i]) tone[i] = tn; } }
 }
 const pondLeaves = [], pondDecor = [];
+const RIPPLE_F = [[1, 0], [2, 1], [3, 1], [5, 2], [6, 3]]; // the pond ripple: 5 frames x 0.2 s (rx, ry in screen px)
+// v5.11.0.4 细雨: the river is part of the ground picture (no tone pass), so its rain hits draw the same ripple ring straight
+// on the canvas, in the pond's ripple tones, no wider than the water around the hit (fmax, measured when the drop was aimed)
+function drawRiverRipples() {
+  if (!WX || !WX.rainHits) return; const H2 = WX.rainHits(); if (!H2.n) return;
+  for (let i = 0; i < H2.n; i++) { const h = H2.a[i]; if (!h.river) continue; const f = Math.floor(h.age / 0.2); if (f < 0 || f > 4 || f > h.fmax) continue;
+    const [sx, sy] = proj(h.x, h.y), cx = Math.round(sx), cy = Math.round(sy); if (cx < -8 || cy < -8 || cx > W + 8 || cy > H + 8) continue; const [rx, ry] = RIPPLE_F[f];
+    ctx.fillStyle = f < 3 ? Ac[0] : Wt[5];
+    for (let a = 0; a < 6.283; a += 0.1) { const dx = Math.round(Math.cos(a) * rx), dy = Math.round(Math.sin(a) * ry); if (f >= 3 && Math.abs(dy) < ry / 2) continue; ctx.fillRect(cx + dx, cy + dy, 1, 1); } }
+}
+// where the next drop lands: a random spot under the screen, inverted onto the ground. Not inside anything tall (it would fall
+// through a roof or a canopy); water says which kind, so the hit becomes a pond / sea ripple or a river ring.
+let rainFoot = null, rainFootAt = -9; const RF_CELL = 32;
+function rainFeet() { // rotated footprints of the tall props (+ a trunk circle for trees) in a 32-unit grid, refreshed once a second
+  if (rainFoot && realT - rainFootAt < 1 && realT >= rainFootAt) return rainFoot; rainFootAt = realT; rainFoot = new Map();
+  const add = (x, y, hw, hd, c, s2) => { const r = hw + hd, e = [x, y, hw, hd, c, s2];
+    for (let cx = Math.floor((x - r) / RF_CELL); cx <= Math.floor((x + r) / RF_CELL); cx++) for (let cy = Math.floor((y - r) / RF_CELL); cy <= Math.floor((y + r) / RF_CELL); cy++) {
+      const k = cx * 4096 + cy; let l = rainFoot.get(k); if (!l) rainFoot.set(k, l = []); l.push(e); } };
+  for (const p of props) { if (p.tree) { add(p.x, p.y, 4.5, 4.5, 1, 0); continue; } const m = p.m; if (!m || (m.h | 0) < 10) continue;
+    const r = p.rot || 0; add(p.x + (m.cx || 0), p.y + (m.cy || 0), m.w / 2 / RS + 1, m.d / 2 / RS + 1, Math.cos(r), Math.sin(r)); }
+  for (const t of S.trees) add(t.x, t.y, 4.5, 4.5, 1, 0);
+  return rainFoot;
+}
+function rainUnder(x, y) { const l = rainFeet().get(Math.floor(x / RF_CELL) * 4096 + Math.floor(y / RF_CELL)); if (!l) return false;
+  for (const [fx, fy, hw, hd, c, s2] of l) { const dx = x - fx, dy = y - fy, u = dx * c + dy * s2, v = -dx * s2 + dy * c; if (Math.abs(u) < hw && Math.abs(v) < hd) return true; } return false; }
+const scr2w = (px, py) => { const rx = (px - CX) / RS, ry = (py - CY) / (K * RS); return [rx * CA + ry * SA, -rx * SA + ry * CA]; };
+function rainPick() {
+  const [x, y] = scr2w(Math.random() * W, Math.random() * (H + 6));
+  if (x < WORLD.x0 || x > WORLD.x1 || y < WORLD.y0 || y > WORLD.y1) return null;
+  if (rainUnder(x, y)) return null;
+  if (groundAt(x, y)[1] !== 'water') return { x, y, water: 0 };
+  const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2;
+  if (e < 1.2 || WD.seaAt(x, y) === 'water') return { x, y, water: 1 };
+  let fmax = -1; // river: the widest ring whose four ends are still water
+  for (let f = 4; f >= 0 && fmax < 0; f--) { const [rx, ry] = RIPPLE_F[f], [sx, sy] = proj(x, y);
+    if ([[rx, 0], [-rx, 0], [0, ry], [0, -ry]].every(([dx, dy]) => { const q = scr2w(sx + dx, sy + dy); return groundAt(q[0], q[1])[1] === 'water'; })) fmax = f; }
+  return { x, y, water: 2, fmax };
+}
 function paintWater(t, box, key) {
   const [bx, by, bw, bh] = box; if (bw <= 0 || bh <= 0) return;
   const img = ctx.getImageData(bx, by, bw, bh), d = new Uint32Array(img.data.buffer);
-  if (!WG[key] || WG[key].aq !== AQ || WG[key].bx !== bx || WG[key].by !== by || WG[key].bw !== bw || WG[key].bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh);
+  const g0 = WG[key]; if (!g0 || g0.aq !== AQ || g0.cX !== CX || g0.cY !== CY || g0.bx !== bx || g0.by !== by || g0.bw !== bw || g0.bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh, key === 'sea');
   const Gm = WG[key]; if (!Gm.n) return;
-  const { mask, dist, far, midY, pondH, along, tone } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
+  const { mask, dist, far, midY, pondH, along, tone, band } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
   // 1 + 2: depth and sky
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
-    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
+    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else if (band) { if (band[i] >= 1) tn = 3; if (band[i] >= 2) tn = 4; } else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
   // 3: reflections of the trees and reeds behind the pond (their current wind pose)
   for (const o of props) { if (!o.tree) continue; const [sx, sy] = proj(o.x, o.y), X = Math.round(sx) - bx, Y = Math.round(sy);
     if (X < -40 || X > bw + 40 || Y < by - 70 || Y > by + bh) continue; const fx = clamp(X, 0, bw - 1); if (far[fx] < 0 || Y - by >= far[fx]) continue;
@@ -4128,7 +4190,7 @@ function paintWater(t, box, key) {
   // 4: shallow edge on the near side, lapping dashes, foam where things stand in the water
   const ring = Math.sin(wph(t, 2)) > 0.35 ? 3 : 2;
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
-    if (dd < 1.5 && y > midY && tone[i] >= 3) tone[i] = 7;
+    if (dd < 1.5 && (Gm.open ? y > far[i % bw] + 2 : y > midY) && tone[i] >= 3) tone[i] = 7;
     if (Math.round(dd) === ring && tone[i] >= 2 && Math.sin(along[i] * 0.55 - wph(t, 2)) + 0.6 * Math.sin(along[i] * 0.23 + 1.3 - wph(t, 1)) > 0.55) tone[i] = 5; }
   for (const s of (key === 'sea' ? SEA_SOLIDS : POND_SOLIDS)) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
     for (let a = 0; a < 6.283; a += 0.12) { const x = Math.round(cx + Math.cos(a) * (s.r + 1)), y = Math.round(cy + Math.sin(a) * (s.r * 0.5 + 1)); if (x < 0 || y < 0 || x >= bw || y >= bh || y < cy) continue;
@@ -4143,17 +4205,16 @@ function paintWater(t, box, key) {
       const w = Math.sin((x + bx) * 0.6 - wph(t, 1) + k * 1.7) + 0.6 * Math.sin((x + bx) * 0.23 + k - wph(t, 1)); if (w > 0.95 && (tone[i] === 0 || tone[i] === 8 || tone[i] === 9)) tone[i] = tone[i] === 9 ? 0 : 1; } }
   // 6: drops, glints, floating leaves, lily pad shadows (new random spots every loop)
   const L = Math.floor(t / WLOOP), lt = t - L * WLOOP, rr = mulberry32(L * 7919 + 13), put = (x, y, tn, minT = 0) => { if (x < 0 || y < 0 || x >= bw || y >= bh) return; const i = y * bw + x; if (mask[i] && tone[i] >= minT) tone[i] = tn; };
-  const ripple = (cx, cy, age) => { const f = Math.floor(age / 0.2); if (f < 0 || f > 4) return; const [rx, ry] = [[1, 0], [2, 1], [3, 1], [5, 2], [6, 3]][f];
+  const ripple = (cx, cy, age) => { const f = Math.floor(age / 0.2); if (f < 0 || f > 4) return; const [rx, ry] = RIPPLE_F[f];
     for (let a = 0; a < 6.283; a += 0.1) { const dx = Math.round(Math.cos(a) * rx), dy = Math.round(Math.sin(a) * ry); if (f >= 3 && Math.abs(dy) < ry / 2) continue; put(cx + dx, cy + dy, f < 3 ? 6 : 5, 1); } };
   const at = arr => { const i = arr[Math.floor(rr() * arr.length)]; return [i % bw, (i / bw) | 0]; };
   if (Gm.sky.length) for (let g = 0; g < 20; g++) { const [x, y] = at(Gm.sky), s0 = rr() * (WLOOP - 0.6), a = (lt - s0) / 0.6; if (a < 0 || a >= 1) continue;
     const xs = a < 0.15 ? [0] : a < 0.3 ? [-1, 0, 1] : a < 0.65 ? [-2, -1, 0, 1, 2] : a < 0.85 ? [-2, -1, 1, 2] : [-2, 2];
     for (const dx of xs) put(x + dx, y, Math.abs(dx) <= (xs.length >= 5 ? 1 : 0) ? 6 : 5, 1); }
   if (Gm.deep.length) { const [x, y] = at(Gm.deep), s0 = rr() * (WLOOP - 1); ripple(x, y, lt - s0); }
-  // v5.4.3: rain uses the pond's own ripples, just more of them and more often
-  if (key === 'pond' && WX && WX.isRaining(S.weather, S.day, S.t) && Gm.deep.length) {
-    for (let g = 0; g < 12; g++) { const [x, y] = at(Gm.deep), s0 = (g * 0.38 + rr() * 0.06) % WLOOP; ripple(x, y, (lt - s0 + WLOOP) % WLOOP); }
-  }
+  // v5.4.3: rain uses the pond's own ripples, just more of them. v5.11.0.4: one ripple where each drop actually lands (pond and sea)
+  if (WX && WX.rainHits) { const H2 = WX.rainHits(); for (let i = 0; i < H2.n; i++) { const h = H2.a[i]; if (h.river) continue;
+    const [sx, sy] = proj(h.x, h.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by; if (cx < 0 || cy < 0 || cx >= bw || cy >= bh || !mask[cy * bw + cx]) continue; ripple(cx, cy, h.age); } }
   // v4.4: asynkimo step 6 also has warm point glints (yellow/white pluses) and falling drips, not only dashes and leaves
   if (Gm.sky.length) for (let g = 0; g < 10; g++) { const [x, y] = at(Gm.sky), s0 = rr() * (WLOOP - 0.45), a = (lt - s0) / 0.45; if (a < 0 || a >= 1) continue;
     pondDecor.push([x + bx, y + by, g % 3 === 0 ? Ac[1] : Ac[0], a > 0.28 && a < 0.7 ? 1 : 0]); }
@@ -4335,7 +4396,7 @@ function render() {
     ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
     if (x1 > x0 && y1 > y0) ctx.drawImage(groundBase, x0, y0, x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); ctx.setTransform(1, 0, 0, 1, 0, 0); }
   tick('ground');
-  waterPass(realT); tick('water');
+  waterPass(realT); drawRiverRipples(); tick('water');
   if (IN && S.inn && IN.deckUp(S.inn) && IN.isSunset(T)) captureSunsetWater();
   else { SUN_WMASK = null; }
   if (WX) WX.drawWet(ctx, proj, RS, { pathSegs, W, H, regionOpen });
@@ -4343,8 +4404,10 @@ function render() {
   const allTiles = HT.length ? tiles.concat(HT) : tiles; // v5.9.0: the little farms' six tiles each
   for (const t of allTiles) if ((t.tilled || t.crop) && onScreen(t.x, t.y, 20)) drawStack(ctx, models.soil[t.watered ? 1 : 0], t.x, t.y, 0, 0);
   for (const d of decals) { const [sx, sy] = proj(d.x, d.y); if (sx < -8 || sx > W + 8 || sy < -4 || sy > H + 12) continue; const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
+  if (WX && WX.drawRainGround) WX.drawRainGround(ctx, proj, W, H); // v5.11.0.4: splashes and wet spots, under everything standing
   tick('soil+decals');
   const list = [];
+  if (WX && WX.eachDrop) WX.eachDrop(d => list.push({ rain: d, x: d.x, y: d.y, flat: 1 })); // falling drops sort with the objects
   for (const p of props) if (onScreen(p.x, p.y, p.tree ? 70 : 50)) list.push(p);
   for (const b of billboards) if (onScreen(b.x, b.y, 30)) list.push(b);
   for (const t of S.trees) if (onScreen(t.x, t.y, 70)) list.push(treeView(t));
@@ -4383,6 +4446,7 @@ function render() {
   if (night < 0.9) applyShadows();
   tick('applyShadows');
   for (const o of list) {
+    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }
     if (o.bb) { drawBillboard(ctx, o); continue; }
     if (o.tree) { drawTree(ctx, o); tick('o.tree'); continue; }
     if (o.ci !== undefined) { drawCrop(ctx, o, poseT); continue; }
@@ -4406,7 +4470,6 @@ function render() {
   if (WX) WX.drawSky(ctx, W, H);
   if (night > 0) lighting(night, T);
   if (INS) INS.draw(ctx, proj, RS);
-  if (WX) WX.drawRain(ctx, W, H);
   if (night > 0.5) for (const f of fireflies) { const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
   for (const p of particles) if (p.text) { const [sx, sy] = proj(p.x, p.y); const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; pixText(p.text, sx, sy - p.z * RS, p.c); if (a < 1) ctx.globalAlpha = 1; }
   tick('fx+light');
@@ -4786,7 +4849,7 @@ function cacheBlank() { // the ground is fully painted, and a weed sprite always
 function rebuildCaches(why) {
   for (const [k, m] of STK) { m._ck.delete(k.a); } STK.clear(); stkPx = 0;
   for (const m of ALLM) { m._ck = null; m.secs = new Array(NSEC); m.slices = sliceSet(m, 0); }
-  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = null; buildGroundBase();
+  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = { pond: null, sea: null }; buildGroundBase(); // v5.11.0.3: was null, which paintWater then indexed
   console.warn('[farm] caches rebuilt:', why); window.__farm.rebuilds = (window.__farm.rebuilds || 0) + 1;
   if (cacheBlank()) location.reload(); // hand-drawn sprites were lost too: start fresh
 }
@@ -4949,11 +5012,12 @@ function applyRainMorning(forced) {
   noteProgress({ sawRain: true });
   return true;
 }
+if (window.__farm) Object.assign(window.__farm, { rainPick: () => rainPick(), rainUnder: (x, y) => rainUnder(x, y) }); // v5.11.0.4: for tools/rain-shots.js
 function tickWeather(dt) {
   const raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
   const wet = WX ? WX.wetness(S.weather, S.day, S.t) : 0;
   const T = S.t % 1440, night = T >= 20 * 60 || T < WAKE;
-  if (WX) WX.tickVisual(dt, { raining, wetness: wet, pond: POND, W, H, pathSegs });
+  if (WX) WX.tickVisual(dt, { raining, wetness: wet, pond: POND, W, H, pathSegs, pick: rainPick });
   if (window.PFAudio && PFAudio.rain) PFAudio.rain(raining);
   if (INS) {
     const evs = INS.tick(dt, {
@@ -5117,7 +5181,7 @@ function jumpSpot(id) {
 }
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) jumpTo(b.dataset.j); }); }
-Object.assign(window.__farm, { jumpTo, jumpSpot });
+Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
 window.__farm.art = { models, pasture: pastureModels, props, stackCanvas, SPR, ALLM }; // v5.11.0.9 test hook: tools/scale-audit.js renders every building beside a grown-up
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);

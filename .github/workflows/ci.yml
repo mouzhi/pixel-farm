@@ -79,7 +79,7 @@ jobs:
             scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
           # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
           - group: home
-            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js
+            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
             scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js
@@ -89,7 +89,13 @@ jobs:
           # v5.11.0: recent-b ran 23m39s (inn 7.4m, resort 7.2m, school 4.6m, clinic 4.3m) on run 44683475759; school -> townscale, clinic -> smoke
           # v5.11.0.5: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
-            scripts: inn-shots.js resort-shots.js agrilot-shots.js
+          # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
+          # v5.11.0.9: agrilot-shots moved to the new `scale` leg so recent-b stays under 25 minutes
+            scripts: inn-shots.js resort-shots.js rain-shots.js
+          # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s), the district / town / farm / seaside shots
+          # with door routes and perf (~7m locally), and agrilot-shots (~5m) from recent-b
+          - group: scale
+            scripts: scale-audit.js scale-shots.js agrilot-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           - group: townscale
             scripts: v5110-shots.js school-shots.js
