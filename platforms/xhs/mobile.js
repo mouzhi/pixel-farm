@@ -113,8 +113,10 @@
     if (P._logToast) return;
     P._logToast = true;
     var lastLine = '';
+    // 1.2.0：pf:say 是对玩家这一下点按的回话（「点家门口的池塘…」「标记了要放进池塘的金鱼」），
+    // 以前和农场日志同级，0.4 秒内就被下一条日志顶掉，手机上等于没说。改成按点按反馈处理。
     root.addEventListener('pf:say', function (e) {
-      if (e && e.detail) toastLog(e.detail);
+      if (e && e.detail) { lastToastSrc = String(e.detail); P.notice(String(e.detail)); }
     });
     function check() {
       var S = root.__farm && __farm.S;
@@ -870,6 +872,43 @@
 
   // 1.1.1：新档 0 金币时商店里每个购买按钮都是 disabled，点了毫无反应（审核看到的就是一屏点不动的按钮）。
   // 改成看起来仍是灰的，但能点：点了提示还差多少金币 / 先买什么，并轻轻抖一下。
+  // 1.2.0：#tools 里的模式按钮（放养金鱼/锦鲤、种树、砍树…）把「接下来点哪里」写在 title 里，
+  // 手机没有悬停，玩家点了按钮看不到任何提示，也不知道要去点池塘（金鱼放不进去的反馈）。
+  // 进入模式时把 title 当提示弹出；放养时池塘不在屏幕里就停止跟随、把镜头移回家门口。
+  var POND_AT = { x: 34, y: 100 }; // game.js POND
+  // 把世界坐标 at 移到屏幕 (tx, ty)：panScreen 吃的是帧缓冲像素，先试推 8px 量出屏幕像素比例。
+  function centerOn(G, at, tx, ty) {
+    var c0 = G.toClient(at.x, at.y);
+    G.panScreen(8, 0);
+    var c1 = G.toClient(at.x, at.y);
+    var k = (c1.x - c0.x) / 8;
+    if (!isFinite(k) || Math.abs(k) < 0.01) return;
+    G.panScreen((tx - c1.x) / k, (ty - c1.y) / k);
+  }
+  function wireToolHints() {
+    var tools = doc.getElementById('tools');
+    if (!tools || tools._xhsHints) return;
+    tools._xhsHints = true;
+    tools.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
+      if (!b) return;
+      var m = b.getAttribute('data-m'), k = b.getAttribute('data-k') || '';
+      var hint = String(b.title || '').replace(/[（(][^）)]*Esc[^）)]*[）)]/g, '').trim();
+      setTimeout(function () {
+        var G = root.__farm;
+        var mode = G && G.input ? G.input : null;
+        if (!mode || mode.mode !== m || (k && mode.kind && mode.kind !== k)) return;
+        if (hint) P.notice(hint);
+        if (m === 'release' && G.toClient) {
+          var c = G.toClient(POND_AT.x, POND_AT.y);
+          var vw = root.innerWidth || 390, vh = root.innerHeight || 844;
+          var off = !c || !(c.x > 30 && c.x < vw - 30 && c.y > 120 && c.y < vh - 160);
+          if (off && G.panScreen) { setFollow(false); centerOn(G, POND_AT, vw * 0.45, vh * 0.5); }
+        }
+      }, 0);
+    });
+  }
+
   function wireShopFeedback() {
     var shop = doc.getElementById('shop');
     if (!shop || shop._xhsShort) return;
@@ -963,6 +1002,7 @@
     if (root.__farm && __farm.fit) __farm.fit();
     compactHud();
     wireLogToast();
+    wireToolHints();
     if (root.visualViewport) {
       visualViewport.addEventListener('resize', function () {
         applyWindowInsets();

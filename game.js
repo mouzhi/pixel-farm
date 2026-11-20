@@ -4947,9 +4947,8 @@ OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); grou
 if (!boot.blocked) saveNow();
 noteLog('boot', logSnap(), { getSave: snapshot });
 if (boot.state) {
-  const skew = Date.now() - boot.state.savedAt;
-  if (skew < -60 * 1000) { /* savedAt in the future: skip offline gold */ }
-  else settleOffline(skew / 1000);
+  const skew = Date.now() - boot.state.savedAt; // savedAt in the future: settleOffline logs it and pays nothing (v5.10.1)
+  settleOffline(skew / 1000);
 }
 setInterval(saveNow, (window.PFPlatform && PFPlatform.saveEveryMs) || 15000);
 let hiddenAt = 0;

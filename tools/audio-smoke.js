@@ -40,7 +40,7 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
   });
   await test('recorded track for the time of day crossfades in, then the generator stops', async () => {
     await p.waitForFunction(() => { const s = PFAudio.state(); return s.mode === 'files' && s.track && s.trackPlays >= 1; }, null, { timeout: 15000 });
-    const s = await p.evaluate(() => PFAudio.state()); assert.ok(s.track.indexOf('assets/audio/' + s.slot + '.mp3') >= 0, s.track + ' / ' + s.slot);
+    const s = await p.evaluate(() => PFAudio.state()); assert.ok(s.track.indexOf('assets/audio/' + s.slot + '.mp3') >= 0 || s.track === 'audio/' + s.slot + '.mp3', s.track + ' / ' + s.slot); // xhs: morning ships in the main package (audio/)
     await p.waitForFunction(() => !PFAudio.state().generating, null, { timeout: 10000 });
   });
   await test('evening on the farm clock switches to the evening track', async () => {
