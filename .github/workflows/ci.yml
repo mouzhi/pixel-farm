@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js diary.js diary-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -62,6 +62,7 @@ jobs:
           node tools/econ-test.js
           node tools/townscale-test.js
           node tools/diary-test.js
+          node tools/album-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -92,7 +93,8 @@ jobs:
             scripts: inn-shots.js resort-shots.js rain-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           - group: townscale
-            scripts: v5110-shots.js school-shots.js
+          # v5.11.0.11: album-shots (~1m locally) joins this leg
+            scripts: v5110-shots.js school-shots.js album-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -32,6 +32,7 @@ const SC = window.PFSchool, LB = window.PFLibrary, CL = window.PFClinic, FV = wi
 const roadBuilt = () => !!(S.plots && S.plots.eroad && S.plots.eroad.mod === 'road');
 const aveWalk = (x, y) => (TN && TN.onAvenue && TN.onAvenue(x, y) && roadBuilt() ? TN.AVENUE.walk : 1);
 const DY = window.PFDiary; // v5.10.13: the family's daily diary (diary.js rules, diary-ui.js panel)
+const ALB = window.PFAlbum; // v5.11.0.11: the photo album (album.js rules, album-ui.js panel)
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
 // ?speed= is a test-only clock multiplier for the tools (tools/soak.js, rec2.js); v5.10.2 keeps it to a local server so players have one speed
@@ -629,6 +630,7 @@ const S = {
   family: FAM.empty(), members: [], // v5.0: 阿禾 and the children (family.js rules); members: the family out working (runtime actors)
   fishFood: 0, ornament: { koi: 0, goldfish: 0 }, pondFish: [], pondFed: 0, // v5.4.0: fish food and ornamental pond fish
   diary: DY ? DY.empty() : null, // v5.10.13: the last 30 days, what each of the family did
+  album: ALB ? ALB.empty() : null, // v5.11.0.11: which story moments have a photo (metadata only)
   weather: (WX && WX.emptyWeather) ? WX.emptyWeather() : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 }, bugNet: 0, // v5.4.3
   codex: BOOK.emptyCodex(), achievements: [], milestones: [], streaks: BOOK.emptyStreaks(),
   doorGift: null, loose: [], dogPlan: null,
@@ -772,7 +774,7 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
   if (AN.KINDS[id]) { const a = S.animals.filter(q => q.kind === id).pop(); log(`一只${AN.KINDS[id].name}住进了${PENS[a ? homeOf(a) : AN.KINDS[id].home].name}`); }
   worksBoughtLog(id);
   if (YD.ITEM[id]) yardBought(id, who); // v5.10.11.1: say who is coming and when, and show where it goes
-  if (id === 'town' && TN) { if (TOWN_ON) TA.sync(true); markNavDirty(); log('镇门打开了：孩子们以后去镇上的学校，镇上的小店收工坊货、蜂蜜和鱼（多给两成）'); burst(TN.GATE.x, TN.GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); }
+  if (id === 'town' && TN) { if (TOWN_ON) TA.sync(true); markNavDirty(); log('镇门打开了：孩子们以后去镇上的学校，镇上的小店收工坊货、蜂蜜和鱼（多给两成）'); burst(TN.GATE.x, TN.GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); albumSnap('towngate', TN.GATE.x, TN.GATE.y + 6, { wait: 0 }); }
   if (DC.CATALOG[id]) log(id === 'party' ? '派对区的桌椅和串灯买好了，家人会找一块空地搭起来' : `${o.item.name}放进了仓库，家人会找地方摆上（也可以用「摆${o.item.name}」自己选地方）`); // v5.7.0
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
   if (PENS[id]) for (let i = yard.length - 1; i >= 0; i--) { const c = yard[i], P = PENS[id]; if (Math.hypot(c.x - P.bld.x, c.y - P.bld.y) < 16 || Math.hypot(c.x - P.trough.x, c.y - P.trough.y) < 10) yard.splice(i, 1); } // builders tidy the spot
@@ -893,7 +895,7 @@ function kidCtx() {
 function finishKidTask(k) {
   if (!k) return k;
   if (k.leave) { if (TN) townSchoolGo(F); k.done = () => { F.away = 'school'; F.x = k.to.x; F.y = k.to.y; log(`${F.name}${townOpen() ? '走进了镇上的学校' : '去上学了'}`); noteProgress({ wentSchool: true }); }; }
-  if (k.toRace) { if (TN) townSchoolGo(F); k.done = () => { F._sports = 1; log(`${F.name}来到操场参加运动会`); noteProgress({ wentSchool: true }); }; }
+  if (k.toRace) { if (TN) townSchoolGo(F); k.done = () => { F._sports = 1; log(`${F.name}来到操场参加运动会`); noteProgress({ wentSchool: true }); albumSnap('sports', Math.round(F.x), Math.round(F.y), { wait: 15, follow: F.id }); }; }
   if (k.toLib) {
     const ex = window.PFKids.schoolExit(kidCtx());
     F.away = null; F.x = ex.to.x; F.y = ex.to.y; F.fx = 1; F.fy = 0;
@@ -962,7 +964,7 @@ function harvestTask(t) {
     const crop = t0.crop, ty = crop.type, c = SIM.CROPS[ty], item = SU.harvestItem(crop), big = !!crop.giant;
     const cx = big ? t0.x + TILE / 2 : t0.x, cy = big ? t0.y + TILE / 2 : t0.y;
     F.crops.push(item); groundDirty = true; diary('h', ty);
-    const ck = BOOK.itemKey(item); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: /rare:/.test(ck), sawGiant: !!item.giant || /giant:/.test(ck), sawGiantPumpkin: item.giant && ty === 'pumpkin' }); }
+    const ck = BOOK.itemKey(item); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: /rare:/.test(ck), sawGiant: !!item.giant || /giant:/.test(ck), sawGiantPumpkin: item.giant && ty === 'pumpkin' }); if (item.giant) albumSnap('giant', Math.round(F.x), Math.round(F.y), { wait: 0, follow: albumId(F) }); }
     burst(cx, cy, big ? 12 : 4, ['#f0a030', '#8fd35a', '#ffffff', '#fff2a8'], big ? 16 : 8, big ? 'spark' : 'harvest');
     popText(cx, cy, 12, big ? '巨大!' : '+1', '#ffffff');
     if (big) decorKeepGiant(ty, cx, cy); // v5.7.0: the first of each kind leaves a keepsake
@@ -1381,14 +1383,14 @@ function overnight() {
   noteLog('closeDay', logSnap());
   noteProgress(); // catch a 2,000-gold day before todayEarn is cleared
   if (DY && S.diary && S.todayEarn > 0) DY.entry(S.diary, S.day).in = S.todayEarn; // v5.10.13: the day's takings go in the diary
-  S.day++; S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
+  S.day++; try { albumBackfill(); } catch (e) {} S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
   let grew = 0; const justRipe = [];
   for (const t of tiles) { // a crop grows one day overnight, only if it was watered that day
     if (t.crop && t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.crop.age++; grew++; const st = SIM.stageOf(t.crop); if (st === 3 && t.crop.stage !== 3) { justRipe.push(t); burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); } t.crop.stage = st; }
     t.watered = false;
   }
   for (const t of SU.rollGlow(justRipe, SIM.ripe, rand)) { const ev = SU.glowToast(t, cropNames()); surpriseNote(ev, t.x, t.y); t.crop.stage = 3; BOOK.record(S.codex, BOOK.keyGlow(t.crop.type), S.day); }
-  for (const t of SU.rollGiant(tiles, SIM.ripe, rand)) { const ev = SU.giantToast(t, cropNames()); surpriseNote(ev, t.x + TILE / 2, t.y + TILE / 2); t.crop.stage = 3; groundDirty = true; BOOK.record(S.codex, BOOK.keyGiant(t.crop.type), S.day); noteProgress({ sawGiant: true, sawGiantPumpkin: t.crop.type === 'pumpkin' }); }
+  for (const t of SU.rollGiant(tiles, SIM.ripe, rand)) { const ev = SU.giantToast(t, cropNames()); surpriseNote(ev, t.x + TILE / 2, t.y + TILE / 2); t.crop.stage = 3; groundDirty = true; BOOK.record(S.codex, BOOK.keyGiant(t.crop.type), S.day); noteProgress({ sawGiant: true, sawGiantPumpkin: t.crop.type === 'pumpkin' }); albumSnap('giant', t.x + TILE / 2, t.y + TILE / 2, { wait: 0 }); }
   let n = 0; const cm = YD.clutterMult(S.homeyard.put); tiles.forEach(t => { const k = t.f === 'home' ? cm : 1; if (t.open && !t.crop && spawnClutter(t, 0.1 * k, 0.14 * k)) n++; }); // v5.10.3: the little fence keeps the home field tidier
   const before = yard.length, add = 2 + Math.floor(yardRng(S.day * 668265263)() * 3); // 2..4, without consuming rand()
   if (yard.length < YARD_CAP) fillYard(yardRng(S.day * 2147483647), Math.min(YARD_CAP, yard.length + add));
@@ -1451,7 +1453,8 @@ function diaryView(day) { // -> { day, title, lines, today, days: [day numbers] 
   const days = S.diary.days.map(e => e.d); if (!days.includes(S.day)) days.push(S.day);
   const d = day && days.includes(day) ? day : S.day, today = d === S.day, L = diaryLook();
   const e = Object.assign(DY.blank(d), S.diary.days.find(x => x.d === d) || {}); if (today) e.in = S.todayEarn | 0;
-  return { day: d, title: DY.title(e, L, today), lines: DY.lines(e, L, today), today, days };
+  const photos = ALB && S.album ? e.ev.filter(c => c.indexOf('photo:') === 0).map(c => c.slice(6)).filter(id => ALB.has(S.album, id)).map(id => ({ id, title: ALB.BY[id].t })) : []; // v5.11.0.11
+  return { day: d, title: DY.title(e, L, today), lines: DY.lines(e, L, today), today, days, photos };
 }
 function driftProducts(prices) { // own stream, so the crops' prices and the farm's random events stay where they were
   const r = mulberry32((S.day * 2246822519) ^ 0x51ED), out = {};
@@ -1520,7 +1523,7 @@ function familyMorning() {
     emit('family', { event: e });
     if (e === 'moved') { log(`阿禾搬进了${WD.HOUSE_TIERS[S.eff.house].name}，从今天起一起经营农场`); log('集市的摊子交给阿禾的爸爸照看'); }
     if (e === 'waiting' && S.day % 3 === 0) log('阿禾在等房子扩建成大木屋，好搬过来一起住');
-    if (e === 'born') { const k = S.family.kids[S.family.kids.length - 1]; log(`家里添了一个宝宝：${k.name}！`); hearts(DOOR.x, DOOR.y, 30); }
+    if (e === 'born') { const k = S.family.kids[S.family.kids.length - 1]; log(`家里添了一个宝宝：${k.name}！`); hearts(DOOR.x, DOOR.y, 30); albumSnap('born' + (S.family.kids.length - 1), null, null, { wait: 90, follow: 'partner' }); }
   }
   let kidStarted = false;
   for (const k of S.family.kids) { const st = FAM.kidStage(k, S.day), was = FAM.kidStage(k, S.day - 1);
@@ -2396,7 +2399,7 @@ function decorTick(dm) {
     if (WX && WX.isRaining(S.weather, S.day, S.t)) { S.decor.party.tonight = 0; log('下雨了，派对改到下回'); }
     else { const n = S.decor.party.guests, a = partyArea(); S.decor.party.last = S.day;
       log(n ? `傍晚一家人在派对区聚在一起，${GUEST_NAME.slice(0, n).join('和')}也来做客` : '傍晚一家人在派对区聚在一起，挂起了串灯');
-      burst(a.x, a.y, 24, [Ac[3], Ac[1], '#fff2a8', Wt[4]], 18, 'spark'); noteProgress({ partyHeld: true });
+      burst(a.x, a.y, 24, [Ac[3], Ac[1], '#fff2a8', Wt[4]], 18, 'spark'); noteProgress({ partyHeld: true }); albumSnap('party', a.x, a.y + 6, { wait: 30 });
       for (let i = 0; i < n; i++) { const seat = partySeat(actors().length + i), e = EAST_IN[0];
         if (guestsOut === S.day) break; // v5.8.0: the town guests are already on their way
         GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: e.x + i * 3, y: e.y + i, fx: -1, fy: 0, pts: EAST_IN.slice(1).concat(routeVia(EAST_IN[EAST_IN.length - 1], seat), [seat]), moving: true, leaving: false }); } } }
@@ -2437,7 +2440,7 @@ function spawnMate(a, ex) {
   const i = S.town.mate.who, open = townOpen(), name = TN.mateName(i, open), back = ex.via.slice().reverse(); if (HM) homeVisit(a, i); // v5.9.0
   VISITORS.push({ id: 'mate', fast: 1, look: TN.MATES[i].look, name, kid: a.id, x: ex.to.x + 3, y: ex.to.y + 2, fx: -1, fy: 0, moving: true, wait: 0, leaving: false, ex,
     pts: back.map(p => ({ x: p.x + 2, y: p.y + 2 })).concat([{ x: DOOR.x + 14, y: DOOR.y + 10 }]), stops: mateStops() });
-  log(`${a.name}放学带着${open ? '同学' + name : '一位同学'}回家玩`); }
+  log(`${a.name}放学带着${open ? '同学' + name : '一位同学'}回家玩`); albumSnap('classmate', Math.round(a.x), Math.round(a.y), { wait: 25, follow: a.id }); }
 function visitorTick(dm) {
   const T = S.t % 1440;
   for (let i = VISITORS.length - 1; i >= 0; i--) { const g = VISITORS[i];
@@ -2565,7 +2568,7 @@ function marketTask() {
     if (M.last !== S.day) { M.last = S.day; M.days++; } M.gold += sum; M.extra += extra; S.town.trade += extra; H.week.trade += extra;
     emit('income', { gold: sum, items: n, source: 'market', by, who: F === FARMER ? 'farmer' : F.id }); for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]);
     popText(at.x, at.y - 10, 26, '+' + sum, '#ffd76a'); burst(at.x, at.y - 6, 12, ['#ffd76a', '#fff2a8'], 6, 'coin');
-    log(`${F === FARMER ? '' : F.name}在集市上卖了 ${n} 件，得 ${sum} 金（比自家摊子多 ${extra} 金${nHot ? `，其中 ${nHot} 件是今天的抢手货${MK.KIND[hot].name}` : ''}）`); } };
+    log(`${F === FARMER ? '' : F.name}在集市上卖了 ${n} 件，得 ${sum} 金（比自家摊子多 ${extra} 金${nHot ? `，其中 ${nHot} 件是今天的抢手货${MK.KIND[hot].name}` : ''}）`);  albumSnap('market', Math.round(F.x), Math.round(F.y), { wait: 0, follow: albumId(F) }); } };
 }
 function marketMorning() { // the first tick of a market day: one line in the log
   const H = marketH(); if (!H || !townOpen()) return; const M = H.market;
@@ -2714,6 +2717,7 @@ function festivalBegin() {
   const gold = FV.grant(H, S.day); if (gold) { S.coins += gold; S.earned = (S.earned | 0) + gold; S.todayEarn = (S.todayEarn | 0) + gold;
     log(`丰收节的长桌宴摆好了，一家人围坐在广场上；镇上送来一份薄礼 ${gold} 金`); const at = FV.TABLE; popText(at.x, at.y - 8, 24, '+' + gold, '#ffd76a'); burst(at.x, at.y - 4, 16, ['#ffd76a', '#fff2a8', Ac[1]], 10, 'spark'); }
   else { st.last = S.day; log('丰收节的长桌宴摆好了，一家人围坐在广场上'); }
+  albumSnap('fest', FV.TABLE.x, FV.TABLE.y + 4, { wait: 45 });
 }
 function sportsOpenNow() { const H = S.town && S.town.hall; return !!(SC && H && townOpen() && SC.open(H, S.day, S.t % 1440)); }
 function sportsTask() { // a grown-up walks over to watch (kids have their own race task)
@@ -3141,7 +3145,7 @@ function innMorning() {
     const add = IN.checkIn(S.inn, S.day, innStarsNow(), innFest());
     S.inn.arrived = S.day;
     const innN = add.filter(g => IN.stayOf(g) !== 'beach').length, beachN = add.length - innN;
-    if (add.length) diaryNote('guests:' + add.length);
+    if (add.length) { diaryNote('guests:' + add.length); albumSnap('inn', null, null, { wait: 150, re: true }); }
     if (add.length) log(`今天预计来 ${add.length} 组客人` + (beachN && innN ? `（民宿 ${innN} 组，海边 ${beachN} 组）` : (beachN ? '住沙滩小屋' : '住民宿')));
   }
   S.inn.earn.today = 0;
@@ -3336,6 +3340,7 @@ function homeMorning() {
     if (!mate) continue;
     st.wed[k.id] = { mate, day: S.day, moved: 0, house: hi };
     const area = partyArea(); if (area) { S.decor.party.tonight = S.day; S.decor.party.guests = 2; partyBegun = 0; }
+    albumSnap('wedding', null, null, { wait: Math.max(0, HM.WED.from + 40 - Math.floor(S.t % 1440)), re: true, follow: k.id });
     log(`${k.name}和${HM.mateName(mate)}走得很近了：今晚${area ? '在派对区' : '在新房子门前'}办婚礼，之后搬进新房子。早上先选一个去向：留家种地、去镇上上班，或在镇上开店`); hearts(DOOR.x, DOOR.y, 30);
     if (CR) careerOffer(k.id);
     return;
@@ -3345,7 +3350,8 @@ function homeMoveIn(kid, now) {
   const w = S.home.wed[kid]; if (!w || w.moved) return; const h = S.home.houses[w.house] || S.home.houses.find(q => q.built && !q.kid); if (!h) return;
   w.moved = S.day; h.kid = kid; w.house = S.home.houses.indexOf(h); spouseSync();
   if (now) { for (const id of HM.NB_IDS) if (townOpen() || S.home.nb[id]) HM.clampAdd(S.home.nb, id, HM.NB.wedding);
-    log(`${kidName(kid)}和${HM.mateName(w.mate)}住进了${PL.plot(h.site).name}的新房子，以后自己种那 6 格小田，偶尔回来帮忙`); noteProgress({ married: true }); }
+    log(`${kidName(kid)}和${HM.mateName(w.mate)}住进了${PL.plot(h.site).name}的新房子，以后自己种那 6 格小田，偶尔回来帮忙`); noteProgress({ married: true });
+    const hd = HM.layout(h).door; albumSnap('newhouse', hd.x, hd.y + 6, { wait: 20 }); }
 }
 function weddingSpot() { const area = partyArea(); if (area) return null; const w = weddingTonight(); if (!w) return null; const h = S.home.houses[w.w.house]; return h ? HM.layout(h).door : null; }
 function weddingSeat(i) { const d = weddingSpot(); if (!d) return null; if (i < 0) return { x: d.x + (i === -1 ? -2 : 2), y: d.y + 2 };
@@ -4680,6 +4686,118 @@ function plantRoom() {
 }
 // v5.0 hook for logs and stats (e.g. playlog.js): window 'pf:farm' events, detail = { type, who, day, t, ... }.
 // type: 'income' (gold, items), 'purchase' (item, gold, wood), 'task' (kind, done by who), 'family' (event). who: 'farmer' | 'partner' | 'kid0' | 'kid1'
+// ---- v5.11.0.11 相册: the first time a story moment happens, a small polaroid of the scene (album.js rules, album-ui.js panel) ----
+// Only metadata goes in the save (S.album); the picture is cut from the frame that was just drawn (or one extra render with the
+// camera on the spot, then one more to put the view back, both inside the same animation frame, so nothing flickers), and kept
+// in its own localStorage key. A photo whose picture is missing is re-staged from the metadata when the album asks for it.
+const albumQ = []; let albumBusy = 0, albumMs = 0;
+const ALBUM_MS = { open: 'open', animal: 'animal', fish: 'fish', met: 'met', moved: 'moved', manor: 'manor' };
+const ALBUM_ACH = { kidwork: 'kidwork', school: 'school', firstrain: 'rain', truecatch: 'rarefish', firstbug: 'bug', firstpark: 'park' };
+const ALBUM_WAIT = { moved: 90, kidwork: 150, open: 0 }; // game minutes to wait so the people are out of the door
+const albumStore = () => { try { return window.localStorage; } catch (e) { return null; } };
+const albumFarm = () => S.createdAt || 0;
+function albumPlace(at) { // a world spot for a moment's place (old saves, re-staging, moments with nobody out)
+  const P2 = (x, y) => ({ x, y });
+  try {
+    if (at === 'home') return P2(HOUSE.x + 4, HOUSE.y + 24); if (at === 'door') return P2(DOOR.x + 6, DOOR.y + 8);
+    if (at === 'house') return P2(HOUSE.x + 2, HOUSE.y + 14); if (at === 'porch') return P2(DOOR.x + 22, DOOR.y + 14);
+    if (at === 'barn') return P2(BARN_DOOR.x, BARN_DOOR.y + 8); if (at === 'pond') return P2(POND.x + 6, POND.y + 4);
+    if (at === 'stall') return P2(STALL_SPOT.x, STALL_SPOT.y); if (at === 'meadow' || at === 'park') return P2(BENCH_SPOT.x, BENCH_SPOT.y - 6);
+    if (at === 'field') { const t = tiles.find(q => q.open && (q.crop || q.tilled)) || tiles.find(q => q.open); return t ? P2(t.x, t.y) : P2(HOME_CAM.x, HOME_CAM.y); }
+    if (at === 'party') { const a = partyArea(); return a ? P2(a.x, a.y + 6) : P2(DOOR.x + 6, DOOR.y + 8); }
+    if (at === 'gate' && TN) return P2(TN.GATE.x, TN.GATE.y + 6);
+    if (at === 'school' && TN) return townOpen() ? P2(TN.SCHOOL_DOOR.x, TN.SCHOOL_DOOR.y + 8) : P2(TN.GATE.x - 10, TN.GATE.y + 6);
+    if (at === 'plaza' && TN) return P2(TN.PLAZA.x, TN.PLAZA.y);
+    if (at === 'track' && SC) return P2(SC.WATCH.x, SC.WATCH.y - 12);
+    if (at === 'feast' && FV) return P2(FV.TABLE.x, FV.TABLE.y + 4);
+    if (at === 'inn') { const L = innLay(); if (L && L.diner) return P2(L.diner.x, L.diner.y + 10); if (TN && TN.AGRI) return P2((TN.AGRI[0] + TN.AGRI[2]) / 2, 70); }
+    if (at === 'wedding') { const s = weddingSpot(); if (s) return P2(s.x, s.y + 4); return albumPlace('party'); }
+    if (at === 'newhouse' && HM) { const h = S.home.houses.find(q => q.built && q.kid) || S.home.houses.find(q => q.built); if (h) { const d = HM.layout(h).door; return P2(d.x, d.y + 6); } }
+  } catch (e) {}
+  return P2(DOOR.x + 6, DOOR.y + 8);
+}
+const albumId = a => (a === FARMER ? 'farmer' : a.id);
+const albumOut = a => a && !a.home && !a.away && !a.sleeping;
+// a live moment: the metadata now, the picture in a frame or two (o: { wait: game minutes, follow: actor id to centre on })
+function albumSnap(id, x, y, o) {
+  if (!ALB || !S.album || !ALB.BY[id] || ALB.has(S.album, id)) return null; o = o || {};
+  if (x == null) { const p = albumPlace(ALB.BY[id].at); x = p.x; y = p.y; }
+  const e = ALB.add(S.album, { id, d: S.day, t: Math.floor(S.t % 1440), x, y, w: [] }); if (!e) return null;
+  albumQ.push({ e, at: S.t + (o.wait == null ? (ALBUM_WAIT[id] || 0) : o.wait), follow: o.follow || null, re: !!o.re });
+  if (DY && S.diary) DY.note(S.diary, S.day, 'photo:' + id);
+  return e;
+}
+// at the end of render(): take one due photo
+function albumFlush() {
+  const i = albumQ.findIndex(q => S.t >= q.at); if (i < 0) return; const q = albumQ.splice(i, 1)[0], e = q.e;
+  if (!ALB.has(S.album, e.id)) return; // a different farm was loaded meanwhile
+  const f = q.follow && (q.follow === 'farmer' ? FARMER : S.members.find(m => m.id === q.follow));
+  if (albumOut(f)) { e.x = Math.round(f.x); e.y = Math.round(f.y); } else if (q.re) { const p = albumPlace(ALB.BY[e.id].at); e.x = Math.round(p.x); e.y = Math.round(p.y); }
+  e.t = Math.floor(S.t % 1440); e.d = S.day;
+  e.w = actors().filter(a => albumOut(a) && Math.abs(a.x - e.x) < 44 && Math.abs(a.y - e.y) < 30).map(albumId).slice(0, 4);
+  const t0 = performance.now(), url = albumShot(e.x, e.y, null); albumMs = performance.now() - t0;
+  if (!url) return; ALB.putThumb(albumStore(), albumFarm(), e.id, url, 0);
+  const c = ALB.caption(e, albumNames());
+  window.dispatchEvent(new CustomEvent('pf:album', { detail: { id: e.id, title: c.title, line: c.line, url, ms: albumMs } }));
+}
+// the PW×PH picture around world (x, y). stage: { who, t } puts those people on the spot at that time of day (re-staged photos)
+function albumShot(x, y, stage) {
+  if (!ALB) return null; const PW = ALB.PW, PH = ALB.PH, c = mkc(PW, PH), g = c.getContext('2d');
+  const box = () => { setCam(); const [sx, sy] = proj(x, y); return [Math.round(sx - PW / 2), Math.round(sy - PH * 0.6)]; };
+  let [x0, y0] = box();
+  if (!stage && x0 >= 0 && y0 >= 0 && x0 + PW <= W && y0 + PH <= H) g.drawImage(cv, x0, y0, PW, PH, 0, 0, PW, PH); // already on screen: just cut it out
+  else {
+    const keep = { x: cam.x, y: cam.y }, T0 = S.t, saved = [];
+    if (stage) { const who = (stage.who || []).map(id => (id === 'farmer' ? FARMER : S.members.find(m => m.id === id))).filter(Boolean);
+      who.forEach((a, i) => { saved.push([a, { x: a.x, y: a.y, home: a.home, away: a.away, sleeping: a.sleeping, fx: a.fx, fy: a.fy, moving: a.moving }]);
+        Object.assign(a, { x: x + (i - (who.length - 1) / 2) * 9, y: y + 2 + (i % 2), home: false, away: null, sleeping: false, fx: 0, fy: 1, moving: false }); });
+      if (stage.t != null) S.t = S.t - (S.t % 1440) + stage.t; }
+    albumBusy = 1;
+    try { cam.x = x; cam.y = y; render(); [x0, y0] = box(); g.drawImage(cv, x0, y0, PW, PH, 0, 0, PW, PH); }
+    finally { S.t = T0; for (const [a, v] of saved) Object.assign(a, v); cam.x = keep.x; cam.y = keep.y; render(); albumBusy = 0; }
+  }
+  try { return c.toDataURL('image/png'); } catch (err) { return null; }
+}
+const ALBUM_STAGE_T = { open: 6 * 60 + 40, moved: 9 * 60 + 30, born0: 17 * 60 + 30, born1: 8 * 60, kidwork: 10 * 60, manor: 15 * 60 + 30, party: 18 * 60 + 40, fest: 18 * 60 + 30, wedding: 18 * 60 + 30, rain: 9 * 60, met: 11 * 60, market: 11 * 60 + 30 };
+function albumRestage(id) { // the album asked for a photo whose picture this device does not have
+  const e = ALB && S.album && ALB.get(S.album, id); if (!e) return null;
+  const m = ALB.BY[id], who = (e.w.length ? e.w : m.who).filter(w => w === 'farmer' || S.members.some(q => q.id === w));
+  const url = albumShot(e.x, e.y, { who, t: e.t >= 0 ? e.t : (ALBUM_STAGE_T[id] || 10 * 60 + 30) }); if (url) ALB.putThumb(albumStore(), albumFarm(), id, url, 1);
+  return url;
+}
+function albumNames() {
+  const k = S.family.kids, w = HM && S.home && S.home.wed ? HM.KID_IDS.map(id => [id, S.home.wed[id]]).find(x => x[1]) : null;
+  return { kid0: k[0] && k[0].name, kid1: k[1] && k[1].name, kid: w ? kidName(w[0]) : '', mate: w && HM.mateName ? HM.mateName(w[1].mate) : '' };
+}
+// what already happened, from the save (old saves before the album, and moments missed while away)
+function albumFacts() {
+  const m = l => Object.fromEntries((l || []).map(u => [u.id, u.day | 0])), H = S.town && S.town.hall, hm = S.home || {};
+  const weds = HM && hm.wed ? HM.KID_IDS.map(k => hm.wed[k]).filter(Boolean) : [], moved = weds.filter(w => w.moved > 0);
+  const giants = (BOOK.GIANT_CROPS || []).map(k => BOOK.entryOf(S.codex, BOOK.keyGiant(k))).filter(Boolean);
+  let market = 0; try { if (MK && H && MK.built(H)) { const d = MK.nextDay(H, (H.built.market | 0) + 1); if (d && d < S.day) market = d; } } catch (e) {}
+  return { ms: m(S.milestones), ach: m(S.achievements), kids: S.family.kids, met: S.family.met | 0, moved: S.family.moved | 0, mate: (S.town && S.town.mate && S.town.mate.last) | 0,
+    town: townOpen(), market, sports: (H && H.school && H.school.last) | 0, fest: (H && H.festival && H.festival.last) | 0,
+    inn: !!(S.inn && ((S.inn.earn && S.inn.earn.rooms > 0) || (S.inn.guests || []).length)), wed: weds.length ? Math.min(...weds.map(w => w.day | 0)) : 0,
+    movedIn: moved.length ? Math.min(...moved.map(w => w.moved)) : 0, giant: giants.length ? Math.min(...giants.map(e => e.firstDay | 0)) : null };
+}
+function albumBackfill() { // silent: re-staged frames for what already happened (no picture yet: the album re-stages it when opened)
+  if (!ALB || !S.album) return 0; let n = 0;
+  for (const f of ALB.due(albumFacts())) { if (ALB.has(S.album, f.id) || f.d >= S.day && f.d > 1) continue; const m = ALB.BY[f.id], p = albumPlace(m.at);
+    if (ALB.add(S.album, { id: f.id, d: f.d, t: -1, x: p.x, y: p.y, w: m.who })) n++; }
+  return n;
+}
+function albumProgress(a, m) { // noteProgress' fresh achievements / milestones that are album moments: the one who did it is in the picture
+  if (!ALB || !S.album) return;
+  const go = id => { const out = F && albumOut(F) ? F : null, e = albumSnap(id, out ? Math.round(out.x) : null, out ? Math.round(out.y) : null, { follow: id === 'moved' ? 'partner' : id === 'kidwork' ? 'kid0' : out ? albumId(out) : null }); return e; };
+  for (const u of m) if (ALBUM_MS[u.id]) go(ALBUM_MS[u.id]);
+  for (const u of a) if (ALBUM_ACH[u.id]) go(ALBUM_ACH[u.id]);
+}
+function albumTick() { if (albumQ.length && groundReady && SPR.ok) try { albumFlush(); } catch (e) { albumBusy = 0; } }
+function albumView() { // -> what the album panel shows
+  if (!ALB || !S.album) return null; const v = ALB.view(S.album, albumNames()), st = albumStore(), farm = albumFarm();
+  for (const s of v.shots) { const t = ALB.thumb(st, farm, s.id); s.url = t ? t.url : null; s.restaged = s.restaged || !!(t && t.restaged); }
+  return v;
+}
 // v5.10.13: the diary counts what the one doing the task (F) did today
 function diary(act, id, n) { if (DY && S.diary) DY.add(S.diary, S.day, act, id, n, F === FARMER ? 'farmer' : F.id); }
 function diaryNote(code) { if (DY && S.diary) DY.note(S.diary, S.day, code); }
@@ -4814,9 +4932,9 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (dt > 0) noteLog('sampleFps', 1 / dt);
-  advance(dt); render(); hud(); requestAnimationFrame(frame);
+  advance(dt); render(); albumTick(); hud(); requestAnimationFrame(frame);
 }
-window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
+window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); albumTick(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); albumTick(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
 { const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
   const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
@@ -4846,7 +4964,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.4';
+const GAME_VERSION = '5.11.0.11';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -4876,6 +4994,7 @@ function noteProgress(extra) {
   const m = BOOK.unlock(S.milestones, BOOK.dueMilestones(ctx)); S.milestones = m.list;
   for (const u of a.fresh) { const def = BOOK.ACH_BY[u.id]; log('成就：' + def.name); say('成就：' + def.name); }
   for (const u of m.fresh) { const def = BOOK.MS_BY[u.id]; log('里程碑：' + def.name); }
+  try { albumProgress(a.fresh, m.fresh); } catch (e) {} // v5.11.0.11
   return a.fresh.length + m.fresh.length;
 }
 function noteShopOpened() { S.streaks = BOOK.noteShopOpen(S.streaks, S.day); }
@@ -4924,6 +5043,7 @@ function snapshot() {
     ...(Object.keys(S.homeyard.put).length || S.homeyard.bday ? { homeyard: YD.valid(S.homeyard) } : {}), // v5.10.3 append-only
     ...(IN ? { inn: IN.valid(S.inn) } : {}), // v5.10.7 append-only
     ...(DY && S.diary ? { diary: DY.valid(S.diary) } : {}), // v5.10.13 append-only
+    ...(ALB && S.album ? { album: ALB.pack(S.album) } : {}), // v5.11.0.11 append-only: a few bytes a photo
   };
 }
 function restore(s) { // s has been migrated and validated by PFSave
@@ -4953,6 +5073,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.catches = (s.catches || []).map(c => Object.assign({}, c)); S.fishGold = 0;
   S.pondFish = (s.pondFish || []).map(f => Object.assign({}, f)); S.pondFed = 0;
   S.diary = DY ? DY.valid(s.diary) : null; // v5.10.13
+  S.album = ALB ? ALB.valid(s.album) : null; albumQ.length = 0; // v5.11.0.11 (old saves: backfilled after the load)
   S.codex = BOOK.validCodex(s.codex); S.achievements = (s.achievements || []).map(u => Object.assign({}, u)); S.milestones = (s.milestones || []).map(u => Object.assign({}, u));
   S.streaks = BOOK.validStreaks(s.streaks); S.doorGift = null; S.loose = []; S.dogPlan = null; planDogDay();
   S.weather = WX && WX.validWeather ? WX.validWeather(s.weather) : (s.weather || { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0 }); S.weather = WX && WX.ensure ? WX.ensure(S.weather, S.day, s.createdAt | 0 || 1) : S.weather; S.bugNet = s.bugNet ? 1 : 0; if (INS && INS.reset) INS.reset();
@@ -5054,11 +5175,12 @@ onMorning = () => { noteLog('syncMorning', logSnap()); saveNow(); };
 const boot = PFSave.read();
 SAVE.notes = boot.notes;
 if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); yardCatchUp('之前买好还没弄完的，家人补上了：'); sprCatchUp('之前买好的浇水器，家人补上了：'); decorCatchUp('之前买好还没摆的，家人补上了：'); pondCatchUp(); } // v5.10.11.1: paid pieces an older version left unbuilt
-else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); }
+else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); albumSnap('open', null, null, { wait: 30, follow: 'farmer' }); } // v5.11.0.11: the album's first photo
 if (WX && WX.ensure) S.weather = WX.ensure(S.weather || WX.emptyWeather(), S.day, (S.createdAt | 0) || 1);
 OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); groundReady = true;
 if (!boot.blocked) saveNow();
 noteLog('boot', logSnap(), { getSave: snapshot });
+if (boot.state) try { albumBackfill(); } catch (e) {} // v5.11.0.11: an old save's story so far, as re-staged frames
 if (boot.state) settleOffline((Date.now() - boot.state.savedAt) / 1000);
 setInterval(saveNow, 15000);
 let hiddenAt = 0;
@@ -5067,6 +5189,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
+Object.assign(window.__farm, { ALB, albumSnap: (id, x, y, o) => albumSnap(id, x, y, o), albumView: () => albumView(), albumRestage: id => albumRestage(id), albumBackfill: () => albumBackfill(), albumFacts: () => albumFacts(), albumPlace: at => albumPlace(at), albumQueue: () => albumQ.length, albumMs: () => albumMs }); // v5.11.0.11
 Object.assign(window.__farm, { snapshot: () => snapshot(), YD, yardTodo: () => yardTodo(), yardWalk: (x, y) => yardWalk(x, y), yardNight: () => yardNight(), clothesOut: () => clothesOut(), petBed: (d, k) => petBed(d, k), yardSetup: id => { const q = yardSetupTask(id); q.done(); }, priceMult: () => YD.stallMult(S.homeyard.put) });
 Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, pondRoom: () => pondRoom(), pondCatchUp: () => pondCatchUp(), DY, diaryView: d => diaryView(d), diaryMorning: () => diaryMorning(), KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,

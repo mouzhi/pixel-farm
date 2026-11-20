@@ -19,6 +19,7 @@
   const YD = (typeof require === 'function' && typeof document === 'undefined') ? require('./yard.js') : root.PFYard; // v5.10.3
   const IN = (typeof require === 'function' && typeof document === 'undefined') ? require('./inn.js') : root.PFInn; // v5.10.7
   const DY = (typeof require === 'function' && typeof document === 'undefined') ? require('./diary.js') : root.PFDiary; // v5.10.13
+  const AL = (typeof require === 'function' && typeof document === 'undefined') ? require('./album.js') : root.PFAlbum; // v5.11.0.11
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -221,6 +222,7 @@
       ...(s.homeyard && YD ? { homeyard: YD.valid(s.homeyard) } : {}), // v5.10.3 append-only: the yard, stall and animal-care things set up
       ...(IN ? { inn: IN.valid(s.inn) } : {}), // v5.10.7 append-only: 民宿 + 农家菜馆 (missing = nothing built)
       ...(s.diary && DY ? { diary: DY.valid(s.diary) } : {}), // v5.10.13 append-only: the last 30 days of the family diary
+      ...(Array.isArray(s.album) && AL ? { album: AL.pack(AL.valid(s.album)) } : {}), // v5.11.0.11 append-only: photo album metadata (a few bytes a photo; pictures live outside the save)
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
