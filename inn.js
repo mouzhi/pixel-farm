@@ -1,5 +1,7 @@
 // v5.10.7 农家乐 I：民宿 + 农家菜馆. v5.10.8 农家乐 II：海边度假村 + 二层客栈.
 // Rules only (art in inn-art.js, walking and guests in game.js, the shop / guestbook / 「我来挑」 in ui.js).
+// v5.11.1: the lodging moved off the farm plots into the 农家乐区 by the town gate (SITE / AGRI / agriLayout / migrate below);
+// the per-plot layout and INN_PLOTS stay only for old code paths and tests.
 // A bought flat-ish plot can be zoned 「民宿院」. Up to 4 cabins and one 农家菜馆 go up on it (family builds in a day).
 // v5.10.8: the yard can become a two-storey inn (each cabin hosts one extra group). 东南滩 zones as 「度假村」; the existing
 // beach holds huts, umbrellas, a seafood stall, a guest pier and a sunset deck. Resort guests stay only on the beach.
