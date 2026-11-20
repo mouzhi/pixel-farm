@@ -117,7 +117,7 @@
   // fixed things on the original farm and first-ring regions (the manor, warehouse, well, pond, pens). Only boxes that
   // actually sit near this site are returned, so an outer plot is unchanged.
   function staticBlocks(id) {
-    const s = siteOf(id); if (!s || !s.rect) return [];
+    const s = siteOf(id); if (!s || !s.rect || s.kind === 'plot') return []; // plots keep the old spotsIn rules (gate / field / barrel)
     const out = [], r = s.rect, add = b => { if (b && b.length === 4 && boxHit(b, r, 8)) out.push(b); };
     const L = NAV.LAYOUT; if (L) {
       const hb = NAV.houseBox && NAV.houseBox(3);
@@ -128,7 +128,8 @@
       add([L.BENCH.x - 5, L.BENCH.y - 3, L.BENCH.x + 5, L.BENCH.y + 3]);
       if (L.POND) add([L.POND.x - L.POND.rx, L.POND.y - L.POND.ry, L.POND.x + L.POND.rx, L.POND.y + L.POND.ry]);
     }
-    if (WD.PENS) for (const k of WD.PEN_IDS) { const P = WD.PENS[k];
+    // only the original four pens (works.js also parks second-pen geometry on a default plot)
+    for (const k of ['coop', 'sty', 'fold', 'shed']) { const P = WD.PENS && WD.PENS[k]; if (!P || !P.bld) continue;
       add([P.bld.x - 9, P.bld.y - 7, P.bld.x + 9, P.bld.y + 7]);
       if (P.roam) add(P.roam); }
     return out;

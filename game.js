@@ -2949,7 +2949,8 @@ function homeMoveOk(x, y, ref) {
   const f = HM.layout(Object.assign({}, h, r.spot)).foot;
   if (S.decor.orders.some(q => !(q.what === 'home' && q.ref === ref) && q.what !== 'home' && HM.inBox(q, f, 2))) return Object.assign({}, r, { ok: false, why: '这里已经约好要放别的了' });
   if (S.home.houses.some((q, i) => i !== ref && HM.boxHit(f, HM.layout(q).foot, 2))) return Object.assign({}, r, { ok: false, why: '离另一座新房子太近' });
-  const L = HM.layout(Object.assign({}, h, r.spot)), g = ensureNav();
+  const L = HM.layout(Object.assign({}, h, r.spot));
+  markNavDirty(); const g = ensureNav(); // a plot just bought in this click must have its gate open
   const gate = (HM.siteOf(r.spot.site) || {}).gate || NAV.LAYOUT.DOOR;
   if (DC && !DC.keepsPaths(g, L.block, entrySpots().concat([L.door, gate]), NAV.LAYOUT.DOOR))
     return Object.assign({}, r, { ok: false, why: '放在这里会把路堵上' });
