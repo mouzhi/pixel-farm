@@ -37,10 +37,11 @@
   const clampAdd = (o, k, n) => { o[k] = Math.min(REL.max, Math.max(0, (o[k] | 0) + n)); return o[k]; };
   const relOf = (st, kid) => (st.rel[kid] || (st.rel[kid] = {}));
   // a school day: everyone in class a little, the day's 同桌 a little more. r: random -> returns the 同桌's id
-  function schoolDay(st, kid, r, open) {
-    const o = relOf(st, kid); for (const id of MATE_IDS) clampAdd(o, id, REL.school);
-    const desk = MATE_IDS[Math.floor(r() * MATE_IDS.length) % MATE_IDS.length]; clampAdd(o, desk, REL.desk);
-    if (open) clampAdd(st.nb, 'n1', NB.teacher); // 林老师 teaches them once they go to the school in town
+  function schoolDay(st, kid, r, open, mul) {
+    const m = mul > 0 ? mul : 1;
+    const o = relOf(st, kid); for (const id of MATE_IDS) clampAdd(o, id, REL.school * m);
+    const desk = MATE_IDS[Math.floor(r() * MATE_IDS.length) % MATE_IDS.length]; clampAdd(o, desk, REL.desk * m);
+    if (open) clampAdd(st.nb, 'n1', NB.teacher * m); // 林老师 teaches them once they go to the school in town; v5.10.9: doubled after the school expansion
     return desk;
   }
   const visit = (st, kid, mate) => clampAdd(relOf(st, kid), mate, REL.visit);

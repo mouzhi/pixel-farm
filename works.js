@@ -57,10 +57,11 @@
     mill: { name: '磨坊', inputs: ['wheat'], need: 2, out: 'flour', mins: 120, inCap: 8, outCap: 6, feed: 2, cost: 5000, wood: 120 },
     jam: { name: '果酱铺', inputs: ['strawberry', 'apple', 'orange'], need: 2, out: 'jam', mins: 180, inCap: 8, outCap: 6, cost: 3500, wood: 80 },
     cheese: { name: '奶酪坊', inputs: ['milk'], need: 2, out: 'cheese', mins: 240, inCap: 6, outCap: 4, cost: 4500, wood: 100 },
+    pie: { name: '苹果派坊', inputs: ['flour', 'apple'], need: 3, out: 'apple_pie', mins: 180, inCap: 8, outCap: 4, cost: 4000, wood: 80, recipe: [{ id: 'flour', n: 1 }, { id: 'apple', n: 2 }], lib: 1 }, // v5.10.9: unlocked at the 书屋
   };
   const WORK_IDS = Object.keys(WORKS);
   // products (fixed prices; the stall buys them like vegetables)
-  const PRODUCTS = { flour: { name: '面粉', price: 60 }, jam: { name: '果酱', price: 80 }, cheese: { name: '奶酪', price: 130 }, honey: { name: '蜂蜜', price: 40 } };
+  const PRODUCTS = { flour: { name: '面粉', price: 60 }, jam: { name: '果酱', price: 80 }, cheese: { name: '奶酪', price: 130 }, honey: { name: '蜂蜜', price: 40 }, apple_pie: { name: '苹果派', price: 140 } };
   const PRODUCT_IDS = Object.keys(PRODUCTS);
   const WHEAT_WANT = 10; // the mill's appetite: growing + carried + waiting wheat below this, and the family plants wheat
   // one step of a shop: a batch finishes, the next starts. -> 1 when a batch finished in this step
@@ -87,6 +88,7 @@
   const hasOrchard = (plots, regions) => (regions || []).includes('orchard') || ownedSorted(plots, 'orchard').length > 0;
   // why a workshop cannot be built yet (null: it can). ctx: { plots, regions, works, cows, fruit }
   function workGate(id, ctx) {
+    if (id === 'pie' && !ctx.library) return '先在镇上盖好书屋，才能学到苹果派的配方';
     if (!freeSlot(ctx.plots, ctx.works)) return ownedSorted(ctx.plots, 'workshop').length ? '工坊院已经盖满了，再把一块新地选成「工坊院」' : '先把一块新地选成「工坊院」';
     if (id === 'jam' && !(hasOrchard(ctx.plots, ctx.regions) && ctx.fruit)) return '先有果园，种过草莓或摘过水果';
     if (id === 'cheese' && !(ctx.cows > 0)) return '先养至少 1 头牛';

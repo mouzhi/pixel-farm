@@ -12,6 +12,8 @@
   const BK = (typeof require === 'function' && typeof document === 'undefined') ? require('./bakery.js') : root.PFBakery; // v5.10.4
   const WS = (typeof require === 'function' && typeof document === 'undefined') ? require('./woodshop.js') : root.PFWoodshop; // v5.10.5
   const SM = (typeof require === 'function' && typeof document === 'undefined') ? require('./smithy.js') : root.PFSmithy; // v5.10.5
+  const SC = (typeof require === 'function' && typeof document === 'undefined') ? require('./school.js') : root.PFSchool; // v5.10.9
+  const LB = (typeof require === 'function' && typeof document === 'undefined') ? require('./library.js') : root.PFLibrary; // v5.10.9
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
   const BOARD = P(HALL.x - 9, HALL.y + HALL.hd + 12);       // the notice board: in front of the hall, beside its path
@@ -26,6 +28,8 @@
     { id: 'L11', x: 546, y: 131, hw: 8, hd: 7, door: P(546, 122), rot: Math.PI, style: 2 },
     { id: 'woodshop', x: 568, y: 130, hw: 7, hd: 7, door: P(568, 123), rot: Math.PI, style: 4 }, // v5.10.5: lot L10, 阿松's workshop (coords live in woodshop.js too)
     { id: 'smithy', x: 606, y: 134, hw: 7, hd: 7, door: P(606, 127), rot: Math.PI, style: 5 }, // v5.10.5: 铁匠阿锤's forge (coords live in smithy.js too)
+    Object.assign({ style: 6 }, SC ? SC.LOT : { id: 'school', x: 618, y: 26, hw: 8, hd: 8, door: P(618, 36), rot: 0 }),
+    Object.assign({ style: 7 }, LB ? LB.LOT : { id: 'library', x: 622, y: 118, hw: 7, hd: 7, door: P(622, 109), rot: Math.PI }),
   ];
   const LOT = Object.fromEntries(LOTS.map(l => [l.id, l]));
   const PROJECTS = [
@@ -40,9 +44,12 @@
     { id: 'woodshop', name: '阿松的木工坊', desc: '阿松在自家南边开坊。仓库木材上限加 400；木头多的时候，他会做成街上的长椅', cost: 20000, wood: 300, lv: 3, kind: 'woodshop' },
     // v5.10.5: the blacksmith (smithy.js): 5 one-time / three-level upgrades at 8k–25k
     { id: 'smithy', name: '铁匠铺', desc: '铁匠阿锤在镇南开铺。一次性升级：浇水器范围、加工坊提速、斧头三级、鱼竿三级、集市手推车', cost: 35000, wood: 100, lv: 3, kind: 'smithy', who: 'n8' },
+    // v5.10.9: 学校扩建 + 书屋 (school.js / library.js): playground, sports day every 14 days, reading after school
+    { id: 'school', name: '学校扩建', desc: '操场和第二间教室。每 14 天一次运动会，孩子们赛跑，家人去看；上学日的好感翻倍', cost: 40000, wood: 200, lv: 3, kind: 'school' },
+    { id: 'library', name: '书屋', desc: '书屋阿宁在东街开馆。孩子放学顺路看书（上学日 +1）；图鉴里还没收集到的条目给出提示；解锁苹果派配方给面包房订单用', cost: 25000, wood: 150, lv: 3, kind: 'library', who: 'n9' },
   ];
   const PROJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
-  const LEVELS = [0, 3, 5];                                 // projects built to reach 繁荣度 1, 2, 3 (v5.10.4: bakery is the 5th; v5.10.5 shops stay at 3 until later versions)
+  const LEVELS = [0, 3, 5, 9];                              // 繁荣度 1, 2, 3, 4 (v5.10.4: bakery is the 5th; v5.10.5 shops stay at 3; v5.10.9 school + library make 9 → 4)
   const LV_NAME = ['', '小镇', '热闹的小镇', '繁华的小镇', '大镇子', '远近闻名'];
   const prosperity = st => { const n = Object.keys((st && st.built) || {}).length; let lv = 1; for (let i = 1; i < LEVELS.length; i++) if (n >= LEVELS[i]) lv = i + 1; return lv; };
   const nextLevelAt = st => { const n = Object.keys((st && st.built) || {}).length; const nx = LEVELS.find(t => t > n); return nx === undefined ? null : { need: nx - n }; };
@@ -50,13 +57,15 @@
   // ---------- the people: 镇长 from the day the town opens, one family per house from the morning after it is done ----------
   const SPOTS = { hall: P(HALL.door.x + 5, HALL.door.y + 4), board: P(BOARD.x + 3, BOARD.y + 5), plaza2: P(TN.PLAZA.x - 14, TN.PLAZA.y - 6),
     street2: P(600, 72), street3: P(478, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17), bakery: BK ? BK.STAND : P(490, 79),
-    woodshop: WS ? WS.STAND : P(576, 139), smithy: SM ? SM.STAND : P(608, 139) };
+    woodshop: WS ? WS.STAND : P(576, 139), smithy: SM ? SM.STAND : P(608, 139),
+    library: LB ? LB.STAND : P(626, 106), yard: SC ? SC.WATCH : P(606, 44) };
   const NEIGHBOURS = [
     { id: 'n4', name: '镇长老顾', look: 'townE', home: 'h5', plan: [[8 * 60 + 30, 12 * 60, 'hall'], [13 * 60, 17 * 60, 'hall'], [17 * 60 + 30, 19 * 60 + 30, 'square']] },
     { id: 'n5', name: '裁缝阿梅', look: 'townF', lot: 'L5', plan: [[8 * 60, 11 * 60, 'plaza2'], [14 * 60, 17 * 60, 'board'], [18 * 60 + 30, 20 * 60 + 30, 'plaza2']] },
     { id: 'n6', name: '邮差阿川', look: 'townG', lot: 'L8', plan: [[8 * 60, 10 * 60, 'street3'], [10 * 60, 12 * 60, 'street2'], [13 * 60, 17 * 60, 'street2']] },
     { id: 'n7', name: '花匠秋姨', look: 'townH', lot: 'L11', plan: [[8 * 60 + 30, 17 * 60 + 30, 'L11shop'], [18 * 60, 20 * 60, 'square']] },
     { id: 'n8', name: '铁匠阿锤', look: 'townI', lot: 'smithy', plan: [[8 * 60, 17 * 60, 'smithy'], [18 * 60, 20 * 60, 'square']] }, // v5.10.5
+    { id: 'n9', name: '书屋阿宁', look: 'townJ', lot: 'library', plan: [[9 * 60, 17 * 60, 'library'], [18 * 60, 20 * 60, 'square']] }, // v5.10.9
   ];
   const doorOf = n => (n.lot ? LOT[n.lot].door : TN.BY_ID[n.home].door);
   // who lives in town now (the mayor always; a family once its house is built)
@@ -84,6 +93,17 @@
     if (!SM || !SM.built(st) || n.id !== 'n8') return null; const t = ((T % 1440) + 1440) % 1440;
     if (t < SMITH_HOURS[0] || t >= SMITH_HOURS[1]) return null;
     return { at: SM.STAND, out: true, spot: 'smithy' }; }
+  const LIB_HOURS = [9 * 60, 17 * 60];
+  function libraryAt(st, n, day, T) {
+    if (!LB || !LB.built(st) || n.id !== 'n9') return null; const t = ((T % 1440) + 1440) % 1440;
+    if (t < LIB_HOURS[0] || t >= LIB_HOURS[1]) return null;
+    return { at: LB.STAND, out: true, spot: 'library' }; }
+  // v5.10.9: on sports day 林老师 officiates on the playground 9:00–15:00 (a house going up still comes first)
+  function sportsAt(st, n, day, T) {
+    if (!SC || !SC.open(st, day, ((T % 1440) + 1440) % 1440)) return null;
+    if (n.id !== 'n1' && n.id !== 'n9') return null;
+    const at = n.id === 'n1' ? (SC.FLAG || SC.WATCH) : SC.WATCH;
+    return { at, out: true, spot: 'yard' }; }
   function neighbourAt(n, T) {
     const t = ((T % 1440) + 1440) % 1440;
     for (const [a, b, s] of n.plan) if (t >= a && t < b) return { at: spotAt(s), out: true, spot: s };
@@ -100,7 +120,7 @@
     if (!(ctx && ctx.open)) return '先把镇子买下来';
     if (st.built[id]) return '已经盖好了';
     if (st.job) return st.job.id === id ? '正在盖' : '一次只盖一座，等' + PROJ[st.job.id].name + '盖好';
-    if (p.lv && prosperity(st) < p.lv) return `繁荣度到 ${p.lv} 才能盖（${p.lv <= 2 ? '先把三座二层房盖好' : '先把集市和面包房盖好'}）`;
+    if (p.lv && prosperity(st) < p.lv) return `繁荣度到 ${p.lv} 才能盖（${p.lv <= 2 ? '先把三座二层房盖好' : p.lv <= 3 ? '先把集市和面包房盖好' : '先把学校和书屋盖好'}）`;
     if ((ctx.coins | 0) < p.cost) return '金币不够';
     if ((ctx.wood | 0) < p.wood) return '木材不够';
     return null;
@@ -155,7 +175,7 @@
   }
 
   // ---------- state (saved inside `town` as `hall`; append-only, old saves start with nothing built) ----------
-  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {}, woodshop: WS ? WS.empty() : {}, smithy: SM ? SM.empty() : {} }); // v5.10.3–v5.10.5
+  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {}, woodshop: WS ? WS.empty() : {}, smithy: SM ? SM.empty() : {}, school: SC ? SC.empty() : {}, library: LB ? LB.empty() : {} }); // v5.10.3–v5.10.9
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
   const DECOR_ID = /^[a-z_]{2,24}$/;
   function valid(v) {
@@ -168,6 +188,8 @@
     if (BK) out.bakery = BK.valid(o.bakery);
     if (WS) out.woodshop = WS.valid(o.woodshop);
     if (SM) out.smithy = SM.valid(o.smithy);
+    if (SC) out.school = SC.valid(o.school);
+    if (LB) out.library = LB.valid(o.library);
     const w = o.week && typeof o.week === 'object' ? o.week : {};
     out.week = { built: Array.isArray(w.built) ? w.built.filter(id => PROJ[id]).slice(0, PROJECTS.length) : [], gifts: int(w.gifts, 0, 99), trade: int(w.trade, 0, 1e9) };
     return out;
@@ -175,6 +197,6 @@
 
   const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, bakeryAt, MARKET_HOURS, BAKERY_HOURS, BUILD_HOURS, siteSpot,
     canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, giftPos, giftRoom, give, PAPER_EVERY, paperText, blocks, empty, valid,
-    woodshopAt, smithyAt, WOOD_HOURS, SMITH_HOURS };
+    woodshopAt, smithyAt, libraryAt, sportsAt, WOOD_HOURS, SMITH_HOURS, LIB_HOURS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHall = api;
 })(typeof window !== 'undefined' ? window : globalThis);

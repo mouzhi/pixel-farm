@@ -220,9 +220,21 @@
     if (!ctx || !ctx.kid || !ctx.actor) return null;
     const st = stageOf(ctx.kid, ctx.day), T = ((ctx.t % 1440) + 1440) % 1440, A = ctx.actor;
     if (st === 'baby') return { kind: 'home', label: '在家', to: ctx.door || { x: A.x, y: A.y }, dur: 30, stayHome: true };
-    // already off the map at school: stay put until it is time to walk back
+    // already at the 书屋 after school (visible; not away): read until libUntil, then walk home
+    if (A._lib) {
+      const until = ctx.libUntil || (returnAt(ctx.kid) + 20);
+      const door = ctx.door ? { x: ctx.door.x + 14, y: ctx.door.y + 10 } : schoolExit(ctx).to;
+      if (T >= until || T < leaveAt(ctx.kid) - 30) {
+        return { kind: 'school-back', label: '从书屋回家', to: door, via: (ctx.libViaHome || []).slice(), keepVia: true, dur: 4, fromLib: true };
+      }
+      return { kind: 'library', label: '在书屋看书', to: ctx.library || { x: A.x, y: A.y }, dur: 8 };
+    }
+    // already off the map at school: stay put until it is time to walk back (or stop at the 书屋)
     if (A.away === 'school') {
       if (T >= returnAt(ctx.kid) || T < leaveAt(ctx.kid) - 30) {
+        if (ctx.library && !ctx.sports && T >= returnAt(ctx.kid)) {
+          return { kind: 'library-go', label: '去书屋看书', to: ctx.library, via: (ctx.libVia || []).slice(), keepVia: true, dur: 4, toLib: true };
+        }
         const ex = schoolExit(ctx);
         return { kind: 'school-back', label: '放学回家', to: ctx.door ? { x: ctx.door.x + 14, y: ctx.door.y + 10 } : ex.to, via: ex.via.slice().reverse(), keepVia: true, dur: 4, comeBack: true };
       }
@@ -230,6 +242,11 @@
     }
     if (goesToSchool(st) && atSchool(ctx.kid, st, T)) {
       const ex = schoolExit(ctx);
+      if (ctx.sports && ctx.race) {
+        const here = A._sports || (ctx.inTown && ctx.inTown(A.x, A.y) && A.x > 520);
+        if (here) return { kind: 'race', label: '运动会赛跑', to: ctx.race, dur: 4 };
+        return { kind: 'school-go', label: '去参加运动会', to: ctx.race, via: ex.via.concat([ex.to]), keepVia: true, dur: 3, toRace: true };
+      }
       return { kind: 'school-go', label: '去上学', to: ex.to, via: ex.via, keepVia: true, dur: 3, leave: true };
     }
     if (st === 'play') return pickPlay(ctx);
