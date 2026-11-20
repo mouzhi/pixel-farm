@@ -181,7 +181,7 @@ const fail = [];
       await p.setViewportSize({ width: 1280, height: 800 });
     }
     const r = await p.evaluate(manual => {
-      const colours = () => { const d = document.getElementById('game').getContext('2d').getImageData(0, 0, 426, 266).data, s = new Set(); for (let i = 0; i < d.length; i += 16) s.add(d[i] << 16 | d[i + 1] << 8 | d[i + 2]); return s.size; };
+      const colours = () => { const d = document.getElementById('game').getContext('2d').getImageData(0, 0, document.getElementById('game').width, document.getElementById('game').height).data, s = new Set(); for (let i = 0; i < d.length; i += 16) s.add(d[i] << 16 | d[i + 1] << 8 | d[i + 2]); return s.size; };
       if (!manual) return { label: __farm.S.label, colours: colours() };
       const out = { colours: [] }; for (const a of [0.22, 1.8, 3.4, 5.0]) { __farm.setAngle(a); __farm.advance(60, 10); out.colours.push(colours()); }
       out.day = __farm.S.day; out.label = __farm.S.label; return out;

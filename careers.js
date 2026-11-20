@@ -155,7 +155,7 @@
       return null;
     }
     if (way === 'inn') {
-      if (!(ctx && ctx.innPlot)) return '先把一块地改建成民宿院，再盖至少一间小木屋或菜馆';
+      if (!(ctx && ctx.innPlot)) return '先开镇门（农家乐区在镇门口），再盖至少一间小木屋或菜馆';
       if (!((ctx.cabins | 0) > 0 || (ctx.diner | 0) > 0)) return '先盖至少一间小木屋或农家菜馆';
       return null;
     }
