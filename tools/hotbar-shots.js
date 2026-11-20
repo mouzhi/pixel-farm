@@ -14,8 +14,8 @@ fs.mkdirSync(OUT, { recursive: true });
 (async () => { await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;
   const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const errs = [], fails = [];
-  async function page(save, pref) {
-    const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } });
+  async function page(save, pref, vp) {
+    const ctx = await b.newContext({ viewport: vp || { width: 1280, height: 800 } });
     const p = await ctx.newPage();
     p.on('pageerror', e => errs.push(String(e))); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
     await p.goto(base + '/index.html?manual'); const ready = () => p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 30000 }); await ready();
@@ -27,7 +27,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // the bar's own box, plus some room above it for the tooltip
   async function shot(p, name, above = 70) {
     const r = await p.evaluate(() => { const e = document.getElementById('inv'); const q = e.getBoundingClientRect(); return { x: q.x, y: q.y, w: q.width, h: q.height }; });
-    const x = Math.max(0, r.x - 40), y = Math.max(0, r.y - above), w = Math.min(1280 - x, r.w + 80), h = Math.min(800 - y, r.h + above + 12);
+    const vp = p.viewportSize(), x = Math.max(0, r.x - 40), y = Math.max(0, r.y - above), w = Math.min(vp.width - x, r.w + 80), h = Math.min(vp.height - y, r.h + above + 12);
     await p.waitForTimeout(150);
     await p.screenshot({ path: path.join(OUT, `hotbar_${TAG}_${name}.png`), clip: { x, y, width: w, height: h } });
     await p.screenshot({ path: path.join(OUT, `hotbar_${TAG}_${name}_full.png`) });
@@ -98,6 +98,29 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.evaluate(() => { const f = __farm, F = f.FARMER; F.saplings.apple = 3; F.saplings.orange = 2; F.crops = ['koi', 'crucian', 'sardine', { type: 'pumpkin', glow: 1 }, { type: 'pumpkin', giant: 1 }, { type: 'egg', rare: 'gold' }]; f.refreshUI(); });
     const r = await p.evaluate(read); await shot(p, 'late_busy');
     check('late_busy', icoBad(r) || (new Set(r.slots.map(s => s.top)).size !== 1 ? 'rows' : null), { w: r.w, slots: r.slots.map(s => s.name + ' ' + s.n + ' ' + s.ico.w + 'x' + s.ico.h) }); await p.context().close(); });
+
+  // 4. v5.11.0.5.2 the canvas follows the window (integer scale): the bar stays one row inside the window, off the minimap, its jump buttons
+  //    (v5.11.0.6 greys the locked ones) and the bottom-right buttons, on a wide screen and in short windows; the tooltip stays on screen
+  const layout = `(() => { const R = id => { const e = document.getElementById(id); if (!e || e.hidden || !e.getClientRects().length) return null; const s = getComputedStyle(e); if (s.display === 'none' || s.visibility === 'hidden') return null; const r = e.getBoundingClientRect(); return r.width && r.height ? { id, x: r.x, y: r.y, r: r.right, b: r.bottom } : null; };
+    const inv = R('inv'), hit = [];
+    for (const id of ['minimap', 'mmJump', 'bottomRight', 'navBtns', 'hud', 'leftBottom', 'titleS', 'audioBar']) { const o = R(id); if (o && !(inv.r <= o.x + 1 || o.r <= inv.x + 1 || inv.b <= o.y + 1 || o.b <= inv.y + 1)) hit.push(id); }
+    const rows = new Set([...document.querySelectorAll('#inv .slot')].map(s => Math.round(s.getBoundingClientRect().top))).size;
+    const cv = document.querySelector('canvas'); const locked = [...document.querySelectorAll('#mmJump button.locked')].map(b => b.dataset.j);
+    return { vw: innerWidth, vh: innerHeight, inv, rows, hit, inView: inv.x >= 0 && inv.y >= 0 && inv.r <= innerWidth + 0.5 && inv.b <= innerHeight + 0.5, cls: document.getElementById('inv').className, canvas: cv ? [cv.width, cv.height] : null, locked }; })()`;
+  for (const vp of [{ width: 1920, height: 1080 }, { width: 1280, height: 600 }, { width: 1024, height: 560 }, { width: 1440, height: 520 }]) {
+    const tag = vp.width + 'x' + vp.height;
+    for (const [nm, save, pref] of [['early', null, ''], ['late_open', LATE, 'open'], ['late_slim', LATE, '']]) {
+      await run('size_' + tag + '_' + nm, async () => { const p = await page(save, pref, vp);
+        if (!save) await p.evaluate(() => { const F = __farm.FARMER; F.bag.carrot = 7; F.bag.cabbage = 3; F.bag.pumpkin = 1; F.bag.strawberry = 2; F.bag.watermelon = 27; __farm.refreshUI(); });
+        const r = await p.evaluate(layout);
+        let tip = null;
+        if (CHECK && nm !== 'late_slim') { const n = await p.locator('#inv .slot').count(), box = await p.locator('#inv .slot').nth(n - 1).boundingBox(); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(200);
+          tip = await p.evaluate(() => { const e = document.getElementById('invTip'); if (!e || e.hidden) return null; const q = e.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth && q.top >= 0; }); }
+        await shot(p, 'size_' + tag + '_' + nm, nm === 'late_slim' ? 30 : 120);
+        check('size ' + tag + ' ' + nm, !r.inView ? 'bar off screen' : r.rows !== 1 ? 'rows ' + r.rows : r.hit.length ? 'overlaps ' + r.hit.join('/') : (tip === false ? 'tooltip off screen' : tip === null && nm !== 'late_slim' && CHECK ? 'no tooltip' : null), Object.assign(r, { tip }));
+        await p.context().close(); });
+    }
+  }
 
   await b.close(); server.close();
   if (errs.length) { console.log('page errors:', errs); fails.push('page errors ' + errs.length); }
