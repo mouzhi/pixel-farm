@@ -315,12 +315,19 @@
     const rec = { day, s, note };
     const n = int(x.n, 1, 99);
     if (n > 1) rec.n = n;
+    // v5.11.0.12: optional sum of stars (append-only) so a same-day 3+3+4 still averages 3.3 after reload
+    const sum = int(x.sum, 1, 5 * 99);
+    if (sum) rec.sum = sum;
     return rec;
   }
   function avgOf(last) {
     if (!last || !last.length) return 3;
     let s = 0, w = 0;
-    for (const x of last) { const n = Math.max(1, x.n | 0); s += x.s * n; w += n; }
+    for (const x of last) {
+      const n = Math.max(1, x.n | 0);
+      s += (x.sum > 0 ? x.sum : x.s * n);
+      w += n;
+    }
     return Math.round((s / w) * 10) / 10;
   }
   function valid(v) {
@@ -566,14 +573,20 @@
     const prev = last[last.length - 1];
     if (prev && (prev.day | 0) === (rec.day | 0)) {
       const n0 = Math.max(1, prev.n | 0), n1 = Math.max(1, rec.n | 0);
-      const s = int((prev.s * n0 + rec.s * n1) / (n0 + n1), 1, 5) || 3;
+      const sum0 = prev.sum > 0 ? prev.sum : prev.s * n0;
+      const sum1 = rec.sum > 0 ? rec.sum : rec.s * n1;
+      const sum = sum0 + sum1, n = n0 + n1;
+      const s = int(sum / n, 1, 5) || 3;
       const note = preferNote(prev.note, rec.note).slice(0, NOTE_MAX);
-      const row = { day: rec.day | 0, s, note };
-      if (n0 + n1 > 1) row.n = n0 + n1;
+      const row = { day: rec.day | 0, s, note, sum };
+      if (n > 1) row.n = n;
       last[last.length - 1] = row;
     } else {
+      const n1 = Math.max(1, rec.n | 0);
+      const sum1 = rec.sum > 0 ? rec.sum : rec.s * n1;
       const row = { day: rec.day | 0, s: rec.s, note: rec.note };
-      if ((rec.n | 0) > 1) row.n = rec.n | 0;
+      if (n1 > 1) row.n = n1;
+      if (n1 > 1 || sum1 !== rec.s) row.sum = sum1;
       I.stars.last = last.concat([row]).slice(-STARS_MAX);
     }
   }
@@ -641,14 +654,15 @@
     if (!ids.length) return '今天的菜不够';
     return ('今天的菜不够，缺' + ids.map(itemName).join('、')).slice(0, NOTE_MAX);
   };
-  // farm consumption after cooking from farm+garden (garden is used first so leftover crops can still be sold)
-  function farmUsedFrom(initial, final, garden) {
+  // farm consumption: `initial` is the farm counts, `final` is the leftover combined (farm+garden) stock
+  // after cooking. Garden is treated as used first, so initial - final is already the farm amount
+  // (do not subtract the garden again — that dropped farm cabbage from reserveNeed / serve).
+  function farmUsedFrom(initial, final) {
     const used = {};
-    const ids = new Set(Object.keys(initial || {}).concat(Object.keys(final || {})).concat(Object.keys(garden || {})));
+    const ids = new Set(Object.keys(initial || {}).concat(Object.keys(final || {})));
     for (const id of ids) {
       if (id === 'greens') continue;
-      const took = Math.max(0, (initial[id] | 0) - (final[id] | 0));
-      const farm = Math.max(0, took - (garden[id] | 0));
+      const farm = Math.max(0, (initial[id] | 0) - (final[id] | 0));
       if (farm) used[id] = farm;
     }
     return used;
@@ -668,7 +682,7 @@
       if (!pullDish(d, stock)) break;
       gold += dishPay(d, priceOf); n++; left--; used.push(d.id);
     }
-    const farmNeed = farmUsedFrom(initialFarm, stock, garden);
+    const farmNeed = farmUsedFrom(initialFarm, stock);
     if (apply) {
       for (const id of Object.keys(farmNeed)) counts[id] = Math.max(0, (counts[id] | 0) - farmNeed[id]);
     }
@@ -800,8 +814,11 @@
       const hit = out.find(x => x.day === r.day);
       if (hit) {
         const n0 = Math.max(1, hit.n | 0), n1 = Math.max(1, r.n | 0);
+        const sum0 = hit.sum > 0 ? hit.sum : hit.s * n0;
+        const sum1 = r.sum > 0 ? r.sum : (r.s | 0) * n1;
         hit.n = n0 + n1;
-        hit.s = int((hit.s * n0 + (r.s | 0) * n1) / hit.n, 1, 5) || hit.s;
+        hit.sum = sum0 + sum1;
+        hit.s = int(hit.sum / hit.n, 1, 5) || hit.s;
         hit.note = preferNote(hit.note, r.note);
       } else {
         const row = { day: r.day, s: r.s, note: r.note };

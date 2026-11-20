@@ -376,5 +376,42 @@ ok('v5.11.0.12: a short sitting names the missing ingredient; valid() keeps last
   assert.ok(!('missedLast' in v0.diner), 'missing last-service fields stay omitted (append-only)');
 });
 
+ok('v5.11.0.12: garden cabbage is used first; farm cabbage is still reserved and deducted', () => {
+  const I = IN.empty(); I.diner.lv = 3;
+  assert.strictEqual(IN.gardenYield(I).cabbage, 10, 'maxed kitchen garden is 10 cabbage');
+  IN.setMenu(I, ['cabbage_egg'], false);
+  const stock = { cabbage: 20, egg: 20 };
+  const need = IN.reserveNeed(I, 12, false, Object.assign({}, stock));
+  assert.strictEqual(need.cabbage, 2, 'reserve the 2 farm cabbages past the garden: ' + JSON.stringify(need));
+  assert.strictEqual(need.egg, 12, 'reserve 12 eggs: ' + JSON.stringify(need));
+  const r = IN.serve(I, 12, stock, false);
+  assert.strictEqual(r.n, 12);
+  assert.strictEqual(r.missed, 0);
+  assert.ok(r.used.every(id => id === 'cabbage_egg'), r.used.join(','));
+  assert.strictEqual(r.farmNeed.cabbage, 2, 'deduct 2 farm cabbages, not 0: ' + JSON.stringify(r.farmNeed));
+  assert.strictEqual(r.farmNeed.egg, 12);
+  assert.strictEqual(stock.cabbage, 18, '18 farm cabbage remain, garden covered 10: ' + stock.cabbage);
+  assert.strictEqual(stock.egg, 8);
+});
+
+ok('v5.11.0.12: same-day 3/3/4 and 4/3/3 both average 3.3 after a reload', () => {
+  const run = order => {
+    const I = IN.empty(); I.cabins = 3;
+    for (const s of order) IN.pushStar(I, { day: 118, s, note: '住得很安静' });
+    I.stars.avg = IN.avgOf(I.stars.last);
+    const loaded = IN.valid(I);
+    return { avg: loaded.stars.avg, row: loaded.stars.last[0], before: I.stars.avg, raw: I.stars.last[0] };
+  };
+  const a = run([3, 3, 4]), b = run([4, 3, 3]);
+  assert.strictEqual(a.avg, 3.3, '3,3,4 -> 3.3, got ' + a.avg + ' row ' + JSON.stringify(a.row));
+  assert.strictEqual(b.avg, 3.3, '4,3,3 -> 3.3, got ' + b.avg + ' row ' + JSON.stringify(b.row));
+  assert.strictEqual(a.before, 3.3);
+  assert.strictEqual(b.before, 3.3);
+  // append-only: a row without sum still averages from s × n
+  const legacy = IN.valid({ cabins: 1, stars: { last: [{ day: 10, s: 4, n: 2, note: '羊好软' }] } });
+  assert.strictEqual(legacy.stars.avg, 4);
+  assert.ok(!('sum' in legacy.stars.last[0]), 'missing sum stays omitted');
+});
+
 console.log('\n' + n + ' tests ok');
 
