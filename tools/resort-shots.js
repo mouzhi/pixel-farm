@@ -39,9 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
     S.coins = Math.max(S.coins, 600000); f.FARMER.wood = 3000;
     for (const id of ['market', 'bakery']) { const r = f.hallStart(id); if (!r.ok) throw new Error(id + ': ' + r.why + ' wood=' + f.FARMER.wood); nextMorning(); at(9 * 60); }
     f.FARMER.wood = Math.max(f.FARMER.wood, 3000); S.coins = Math.max(S.coins, 500000);`;
-  const zoneInn = `let land = f.buyPlot('sbank', 'inn');
-    if (!land.ok && !S.plots.sbank) { land = f.buyPlot('sbank', 'meadow'); }
-    if (S.plots.sbank && S.plots.sbank.mod !== 'inn') { const z = f.rezonePlot('sbank', 'inn'); if (!z.ok) throw new Error('rezone inn: ' + (z.why || z.reason)); }`;
+  const zoneInn = `if (!f.innPlot()) throw new Error('no inn site: the 农家乐区 opens with the town gate (v5.11.0.5), town=' + !!(S.eff && S.eff.town));`;
   const zoneResort = `let land = f.buyPlot('eshore', 'resort');
     if (!land.ok && !S.plots.eshore) { land = f.buyPlot('eshore', 'meadow'); }
     if (S.plots.eshore && S.plots.eshore.mod !== 'resort') { const z = f.rezonePlot('eshore', 'resort'); if (!z.ok) throw new Error('rezone resort: ' + (z.why || z.reason)); }
