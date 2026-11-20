@@ -64,6 +64,7 @@ jobs:
           node tools/diary-test.js
           node tools/save-compact-test.js
           node tools/fog-test.js
+          node tools/kids-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -81,11 +82,11 @@ jobs:
             scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
           # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
           - group: home
-            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js
+            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
           # v5.11.0.8: + rain-shots from recent-b (recent-b ran 24m39s, hall-market 9m44s on run 44743060653)
-          # v5.11.0.13: rain-shots -> scale (hall-market ran 25m01s on run 44760041087; scale 8m54s)
+          # v5.11.0.10: rain-shots back to recent-b (hall-market reached ~24.5m with it; recent-b ~12m on run 44752013174)
             scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
@@ -94,11 +95,11 @@ jobs:
           # v5.11.0.5: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
-            scripts: inn-shots.js resort-shots.js
+            scripts: inn-shots.js resort-shots.js rain-shots.js
           # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s) and the district / town / farm / seaside
           # shots with door routes and perf (~5m on CI)
           - group: scale
-            scripts: scale-audit.js scale-shots.js rain-shots.js
+            scripts: scale-audit.js scale-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale

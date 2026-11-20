@@ -889,14 +889,17 @@
       h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">换个活法</button></div>`; continue; }
       if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }
       if (!top.length) continue;
-      h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join(''); }
+      h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)} ${r.v}</span></div>`).join('');
+      const CLOSE = (window.PFHome && PFHome.REL.close) || 80, b = top[0]; // v5.11.0.10: how far the closest classmate is from a wedding
+      h += `<div class="rr rn"><span>${k.stage === 'teen' ? (b.v >= CLOSE ? `和${esc(b.name)}走得很近了，有空的新房子、晴天傍晚就办婚礼` : `和${esc(b.name)} ${b.v}/${CLOSE}，到 ${CLOSE}「走得很近」就能成家`) : '长成少年以后才谈婚事'}</span></div>`; }
     if (H.nb.length) h += '<div class="rk"><b>镇上的人</b></div>' + H.nb.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join('');
     return h + '</div>';
   }
   function drawLoveTip() {
     if (!loveTip || loveTip.hidden || !G.loveStatus) return;
     const love = G.loveStatus();
-    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home) + innBookHtml();
+    const html = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home) + innBookHtml();
+    if (loveTip._html !== html) { loveTip.innerHTML = html; loveTip._html = html; } // v5.11.0.10: only when it changed, so a click on 换个活法 is not cut by a redraw
     placeLoveTip();
   }
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };

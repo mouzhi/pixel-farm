@@ -3618,7 +3618,7 @@ function homeRestore(s) {
 }
 // the panel lines: who each child is close to, and the neighbours the family knows
 function homeStatus() {
-  const kids = S.family.kids.map(k => ({ id: k.id, name: k.name, note: HM.kidNote(S.home, k.id, k.name), rel: HM.kidRel(S.home, k.id), married: HM.isMarried(S.home, k.id), wed: S.home.wed[k.id] || null, path: CR ? CR.pathOf(S.home, k.id) : null }));
+  const kids = S.family.kids.map(k => ({ id: k.id, name: k.name, stage: FAM.kidStage(k, S.day), note: HM.kidNote(S.home, k.id, k.name), rel: HM.kidRel(S.home, k.id), married: HM.isMarried(S.home, k.id), wed: S.home.wed[k.id] || null, path: CR ? CR.pathOf(S.home, k.id) : null }));
   return { kids, nb: HM.nbRel(S.home), houses: S.home.houses.map(h => ({ site: h.site, name: PL.plot(h.site).name, built: h.built, kid: h.kid })), earn: S.home.earn, wage: S.home.wage || 0, open: townOpen() };
 }
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
@@ -4757,8 +4757,8 @@ function hud() {
   if (document.getElementById('loveLab')) document.getElementById('loveLab').textContent = love.title;
   if (loveFill) loveFill.style.width = (love.moved ? 72 : Math.round(72 * love.love / love.max)) + 'px';
   if (loveHud) { loveHud.title = [love.todayText, love.hint].filter(Boolean).join(' · '); loveHud.classList.toggle('dim', !love.met && !love.moved); }
-  const loveTip = document.getElementById('loveTip');
-  if (loveTip && !loveTip.hidden) loveTip.innerHTML = (love.todayText ? `<div>${love.todayText}</div>` : '') + `<div class="hint">${love.hint}</div>`;
+  // v5.11.0.10: the open heart tip belongs to ui.js (drawLoveTip: hint + each child's classmates + 镇上的人 + 民宿留言本). Rewriting it
+  // here every frame with only the hint wiped the closeness rows a frame after ui.js drew them, so the hearts never stayed on screen.
   document.getElementById('log').innerHTML = S.log.map((s, i) => {
     if (i === 0 && lastCatch && lastCatch.line === s && lastCatch.url) return `<div><img class="log-bug" alt="" src="${lastCatch.url}">${s}</div>`;
     return `<div>${s}</div>`;
