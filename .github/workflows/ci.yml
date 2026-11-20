@@ -54,6 +54,7 @@ jobs:
           node tools/workshop-test.js
           node tools/careers-test.js
           node tools/inn-test.js
+          node tools/resort-test.js
           node tools/econ-test.js
 
   shots:
@@ -76,9 +77,9 @@ jobs:
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
             scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js
-          # bakery 3.0m + workshop 3.7m + careers (cancelled at 4.1m) + inn (never started)
+          # bakery 3.0m + workshop 3.7m + careers + inn + resort-shots (~4m locally)
           - group: recent
-            scripts: bakery-shots.js workshop-shots.js careers-shots.js inn-shots.js
+            scripts: bakery-shots.js workshop-shots.js careers-shots.js inn-shots.js resort-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

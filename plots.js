@@ -27,6 +27,7 @@
     bridge: { name: '石桥', icon: 'bridge', desc: '修好以后家人、羊群和上学的孩子都从桥上过河', now: '桥修好了' },
     trail: { name: '山道', icon: 'trail', desc: '一条弯弯的上山小路，通向山顶的两块地', now: '路障拆掉，能上山了' },
     inn: { name: '民宿院', icon: 'inn', desc: '能盖最多 4 间小木屋和一座农家菜馆，游客会沿东大道来住（商店「农家乐」里买，要繁荣度 3）', now: '先铺好院子和石子路' },
+    resort: { name: '度假村', icon: 'resort', desc: '东南滩改成度假村后，海边能盖沙滩小屋、遮阳伞、海鲜摊、游客栈桥和日落观景台（商店「农家乐」里买，要先买下海边，繁荣度 3）', now: '一条通向沙滩的小路' },
   };
   const MODULE_IDS = Object.keys(MODULES);
   const TERRAIN = { flat: '平地', river: '河边地', slope: '山脚缓坡', high: '山顶高地', across: '河对岸', special: '特殊地块' };
@@ -77,7 +78,7 @@
     { id: 'eroad', name: '东大道', terrain: 'special', special: 'road', rect: [362, 40, 448, 92], gate: P(362, 66), sign: P(358, 56), price: 6500, wood: 30,
       mods: ['road'], desc: '通向隔壁镇子的路，能看见镇子的屋顶' },
     { id: 'eshore', name: '东南滩', terrain: 'flat', rect: [362, 112, 440, 200], gate: P(362, 150), sign: P(358, 140), price: 3000,
-      mods: ['field', 'meadow', 'workshop'], field: { cols: 6, rows: 4 }, desc: '海边上面的一块向阳平地' },
+      mods: ['field', 'meadow', 'workshop', 'resort'], field: { cols: 6, rows: 4 }, desc: '海边上面的一块向阳平地，也可改建成度假村' },
     { id: 'nwslope', name: '北坡·西', terrain: 'slope', rect: [-130, -150, -30, -112], gate: P(-30, -130), sign: P(-26, -140), price: 2800,
       mods: ['woodland', 'orchard', 'pasture'], desc: '山脚下的坡地' },
     { id: 'neslope', name: '北坡·东', terrain: 'slope', rect: [228, -150, 340, -112], gate: P(240, -112), sign: P(252, -108), price: 3000,

@@ -60,7 +60,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const L = Lof();
     return { r, paid, wood, same, cabins: S.inn.cabins, diner: S.inn.diner.lv, job: S.inn.job, auto, lv: f.townLv(), plot: f.innPlot(),
       props: (f.props || []).filter(q => q.inn).length, ver: f.version, yard: L && { x: L.yard.x, y: L.yard.y } }; })()`,
-    r => r.ver !== '5.10.7' ? 'ver ' + r.ver
+    r => r.ver !== '5.10.8' ? 'ver ' + r.ver
       : !r.r || !r.r.ok ? 'start ' + JSON.stringify(r.r)
       : r.paid !== 20000 || r.wood !== 300 ? 'first cabin cost ' + r.paid + '/' + r.wood
       : r.same !== 0 ? 'finished the same day'
@@ -178,7 +178,7 @@ fs.mkdirSync(OUT, { recursive: true });
       : r.cabins < 1 ? 'need a cabin for the option'
       : null);
 
-  // 9. fixtures load: save stays v15, empty inn, version 5.10.7, decorations unchanged
+  // 9. fixtures load: save stays v15, empty inn, version 5.10.8, decorations unchanged
   for (const [fx, fn] of [['day59', 'save-v10-day59-manor.json'], ['day72', 'save-v15-day72-cottage.json']]) {
     const file = path.join(__dirname, 'fixtures', fn); if (!fs.existsSync(file)) continue; const save = readSave(file);
     const want = {}; for (const p0 of (save.decor && save.decor.placed) || []) want[p0.id] = (want[p0.id] || 0) + 1; for (const [k, v] of Object.entries((save.decor && save.decor.inv) || {})) want[k] = (want[k] || 0) + v;
@@ -186,7 +186,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const inn = s.inn || {};
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, cabins: inn.cabins | 0, diner: inn.diner && inn.diner.lv, guests: (inn.guests || []).length, inn2: inn.inn2 | 0, resort: inn.resort, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.7' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.8' ? 'ver ' + r.ver
         : r.cabins !== 0 || (r.diner | 0) !== 0 || r.guests !== 0 ? 'inn not empty ' + JSON.stringify(r)
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
@@ -199,7 +199,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, town: !!(S.eff && S.eff.town), inn: s2.inn && { cabins: s2.inn.cabins, diner: s2.inn.diner && s2.inn.diner.lv }, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.7' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.8' ? 'ver ' + r.ver
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts changed' : null, save);
   }
 
