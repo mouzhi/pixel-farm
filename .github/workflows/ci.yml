@@ -85,7 +85,8 @@ jobs:
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
           # v5.11.0.8: + rain-shots from recent-b (recent-b ran 24m39s, hall-market 9m44s on run 44743060653)
-            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js rain-shots.js
+          # v5.11.0.13: rain-shots -> scale (hall-market ran 25m01s on run 44760041087; scale 8m54s)
+            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
             scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
@@ -97,7 +98,7 @@ jobs:
           # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s) and the district / town / farm / seaside
           # shots with door routes and perf (~5m on CI)
           - group: scale
-            scripts: scale-audit.js scale-shots.js
+            scripts: scale-audit.js scale-shots.js rain-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
