@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js diary.js diary-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fog.js diary.js diary-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -62,6 +62,7 @@ jobs:
           node tools/econ-test.js
           node tools/townscale-test.js
           node tools/diary-test.js
+          node tools/fog-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -77,9 +78,9 @@ jobs:
           # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
           - group: works-town
             scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
-          # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
+          # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m); v5.11.0.6 fog-shots ~3m
           - group: home
-            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js
+            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js fog-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
             scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js
