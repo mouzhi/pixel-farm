@@ -274,8 +274,8 @@ async function test(name, fn) {
     await p.evaluate(() => { __farm.S.coins = 2000; __farm.buy('axe'); __farm.buy('forest'); }); await p.waitForSelector('#tools:not([hidden]) [data-m="chop"]');
     await p.click('#tools [data-m="chop"]'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), 'chop');
     await p.evaluate(() => __farm.panTo(96, -60)); await p.waitForTimeout(100);
-    const tgt = await p.evaluate(() => { const t = __farm.S.trees.find(t => t.kind === 'wild' && t.x > 70 && t.x < 130 && t.y > -80 && t.y < -45); const s = __farm.treeScreen(t.id), c = document.querySelector('canvas').getBoundingClientRect();
-      return { id: t.id, x: c.left + s.x * c.width / 426, y: c.top + s.y * c.height / 266 }; });
+    const tgt = await p.evaluate(() => { const t = __farm.S.trees.find(t => t.kind === 'wild' && t.x > 70 && t.x < 130 && t.y > -80 && t.y < -45); const s = __farm.treeScreen(t.id), cvs = document.querySelector('canvas'), c = cvs.getBoundingClientRect();
+      return { id: t.id, x: c.left + s.x * c.width / cvs.width, y: c.top + s.y * c.height / cvs.height }; });
     await p.mouse.click(tgt.x, tgt.y); const ord = await p.evaluate(() => __farm.S.orders.map(o => o.id));
     assert.deepStrictEqual(ord, [tgt.id]); await p.keyboard.press('Escape'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), null);
     assert.deepStrictEqual(p.errs, []);

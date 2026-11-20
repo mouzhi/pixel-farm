@@ -4,7 +4,9 @@
 (() => {
 // ---------- config ----------
 const VIEW = (new URLSearchParams(location.search).get('view') || '').match(/^(\d+)x(\d+)$/); // v5.5.0: ?view=WxH, wide screenshots only
-const W = VIEW ? Math.min(1600, +VIEW[1]) : 426, H = VIEW ? Math.min(1000, +VIEW[2]) : 266; // low-res framebuffer, integer upscaled (3x on 1280x800)
+const BW = 426, BH = 266; // the reference framebuffer: its whole-number scale on this screen sets the pixel size (3x on 1280x800)
+// v5.11.0.5.2: the framebuffer grows to cover the window at that pixel size (fit), so the picture always fills the screen; ?view=WxH stays fixed for wide screenshots
+let W = VIEW ? Math.min(1600, +VIEW[1]) : BW, H = VIEW ? Math.min(1000, +VIEW[2]) : BH;
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
@@ -470,16 +472,24 @@ function discSway(o, p, poseT, unit) { // one canopy clump; the whole tree share
 const cv = document.getElementById('game'), ctx = cv.getContext('2d', { willReadFrequently: true });
 cv.width = W; cv.height = H;
 const mk = mkc;
-const shMask = new Uint32Array(W * H);
-const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
+let shMask = new Uint32Array(W * H);
+let shC = mk(W, H), sctx = shC.getContext('2d');
+let litC = mk(W, H), lctx = litC.getContext('2d'); let litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
-let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
-function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
-  const dpr = window.devicePixelRatio || 1, vw = Math.floor(innerWidth * dpr), vh = Math.floor(innerHeight * dpr);
-  const base = Math.max(1, Math.floor(Math.min(vw / W, vh / H))), s = base + zoom;
+let zoom = 0; // extra integer zoom steps from the mouse wheel (bigger pixels, so pixels stay square)
+function sizeBuffers(w, h) { // v5.11.0.5.2: the screen-sized buffers follow the framebuffer
+  if (w === W && h === H) return;
+  W = w; H = h; cv.width = W; cv.height = H;
+  shMask = new Uint32Array(W * H); shC = mk(W, H); sctx = shC.getContext('2d');
+  litC = mk(W, H); lctx = litC.getContext('2d'); litImg = lctx.createImageData(W, H); litL = new Float32Array(W * H); litKey = '';
+  [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
+}
+function fit() { // whole multiple of the framebuffer in *device* pixels; the framebuffer is sized to cover the window, so there is no letterbox
+  const dpr = window.devicePixelRatio || 1, vw = Math.max(1, Math.round(innerWidth * dpr)), vh = Math.max(1, Math.round(innerHeight * dpr));
+  const base = Math.max(1, Math.floor(Math.min(vw / BW, vh / BH))), s = base + zoom;
+  if (!VIEW) sizeBuffers(Math.min(1600, Math.ceil(vw / s)), Math.min(1000, Math.ceil(vh / s)));
   const wrap = document.getElementById('wrap'), left = Math.floor((vw - W * s) / 2), top = Math.floor((vh - H * s) / 2);
   wrap.style.left = left / dpr + 'px'; wrap.style.top = top / dpr + 'px';
   cv.style.width = W * s / dpr + 'px'; cv.style.height = H * s / dpr + 'px';
