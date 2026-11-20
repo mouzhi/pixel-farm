@@ -737,7 +737,7 @@ EXCLUDED.md                      没有进仓库的大文件清单
 - 农家菜馆：门 10 → 22（双开门），正面 2.2 → 3.3 人，碰撞块 20 × 12 → 28 × 16，桌子和去门口的小路往南挪一点；厨房升级的木架子搭在东翼上。
 - 海边小屋：门 8 → 19，正面 1.5 → 2.4 人，位置不变。孩子成家的小木屋、磨坊 / 果酱铺 / 奶酪坊：占地和位置都不变，只把墙和门加高。集市摊位、海鲜摊：遮阳棚抬到摊主帽子上面。
 - 都是重新写体素模型（1 体素的细线），不是拉伸旧图；地图不扩大，玩家摆放 / 挪过的东西不动。
-- 测试：`node tools/scale-audit.js`、`node tools/scale-shots.js`（CI 新的 `scale` 组，agrilot-shots 也挪进来，recent-b 留 inn / resort / rain）、`node tools/inn-test.js`。
+- 测试：`node tools/scale-audit.js`、`node tools/scale-shots.js`（CI 新的 `scale` 组）、`node tools/inn-test.js`。
 
 ## v5.11.0.5 农家乐区（计划里的 v5.11.1 农家乐区部分）（存档仍是 v15，追加 `inn.where` / `inn.moved` 和地块的 `free`）
 
