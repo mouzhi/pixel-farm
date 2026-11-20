@@ -62,6 +62,7 @@ jobs:
           node tools/econ-test.js
           node tools/townscale-test.js
           node tools/diary-test.js
+          node tools/save-compact-test.js
           node tools/fog-test.js
 
   shots:
@@ -83,7 +84,8 @@ jobs:
             scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
-            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js
+          # v5.11.0.8: + rain-shots from recent-b (recent-b ran 24m39s, hall-market 9m44s on run 44743060653)
+            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js rain-shots.js
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
             scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
@@ -91,10 +93,11 @@ jobs:
           # v5.11.0.5: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
-            scripts: inn-shots.js resort-shots.js rain-shots.js
+            scripts: inn-shots.js resort-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
+          # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
-            scripts: v5110-shots.js school-shots.js
+            scripts: v5110-shots.js school-shots.js offline-shots.js
           # v5.11.0.5 农家乐区: its own leg (~11m on CI: recent-b went 11m -> 22m16s with it on run 44703708506; with rain-shots there too it would pass 25m)
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           # v5.11.0.7: + hotbar-shots (~1m); agrilot was the lightest leg (5–9m on runs 44727901332 / 44729908140)

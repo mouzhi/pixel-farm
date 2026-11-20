@@ -4958,7 +4958,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.7';
+const GAME_VERSION = '5.11.0.8';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5143,13 +5143,18 @@ function clockText(at, now) {
   const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), diff = Math.round((day(d) - day(n)) / 86400000);
   return (diff <= 0 ? '今天 ' : diff === 1 ? '明天 ' : '') + hm;
 }
+// v5.11.0.8: when the used-up offline allowance comes back. The 24-hour window rolls, so the oldest record frees its days first.
+function offBack(r) {
+  return r.nextPartAt && r.nextPartAt < r.nextFullAt ? `${r.nextPartText} 起恢复 ${r.nextPartDays} 天` : `${r.nextText} 起恢复全部 3 天`;
+}
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; gold, plus a little wood (v5.3.1)
   // v5.10.1: and at most 3 days in any 24 real hours (S.offlineWin); a clock turned back pays nothing and keeps the window
   if (sec < -60) { log('电脑的时钟好像往回调过，这次不算离线收益'); noteLog('event', { type: 'clockBack', sec: Math.round(sec), day: S.day }); return null; }
   const now = Date.now(), r = SIM.offlineSettle(sec, S.dayEarn, S.offlineWin, now); if (!r) return null;
-  S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now);
+  S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now); if (r.nextPartAt) r.nextPartText = clockText(r.nextPartAt, now); // v5.11.0.8: when the first part comes back
+  const T = Math.floor(S.t % 1440); r.day = S.day; r.clock = String(Math.floor(T / 60)).padStart(2, '0') + ':' + String(T % 60).padStart(2, '0'); // v5.11.0.8: the clock stood still (还是第 N 天 HH:MM)
   if (r.limited && r.days <= 0) { // the window is used up: a log line only, no box
-    log(`离开了 ${Math.round(sec / 60)} 分钟；过去 24 小时的 3 天离线收益已经领过，${r.nextText} 以后再算`);
+    log(`离开了 ${Math.round(sec / 60)} 分钟；过去 24 小时的 3 天离线收益已经领过，${offBack(r)}`); // v5.11.0.8: the window rolls (the old 「X 以后再算」 named the time it was full again)
     noteLog('offline', r, logSnap()); SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
   }
   S.coins += r.gold; S.earned += r.gold;
@@ -5157,7 +5162,7 @@ function settleOffline(sec) { // decision: estimate at 50% of the online rate, a
   offlineWood(r); // v5.3.1: the family also chopped a little in 林场
   if (WX && r.days > 0) {
     const off = WX.advanceDays(S.weather || WX.emptyWeather(), S.day, r.days, (S.createdAt | 0) || 1);
-    S.weather = off.weather;
+    S.weather = off.weather; r.wxDays = Math.floor(r.days); // v5.11.0.8: the weather walked these days although the calendar did not
     if (off.rainDays.length) {
       r.rain = true; r.rainDays = off.rainDays.slice();
       for (const tile of tiles) if (tile.crop && tile.open) tile.watered = true;
@@ -5187,7 +5192,7 @@ document.addEventListener('visibilitychange', () => {
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { snapshot: () => snapshot(), YD, yardTodo: () => yardTodo(), yardWalk: (x, y) => yardWalk(x, y), yardNight: () => yardNight(), clothesOut: () => clothesOut(), petBed: (d, k) => petBed(d, k), yardSetup: id => { const q = yardSetupTask(id); q.done(); }, priceMult: () => YD.stallMult(S.homeyard.put) });
-Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, pondRoom: () => pondRoom(), pondCatchUp: () => pondCatchUp(), DY, diaryView: d => diaryView(d), diaryMorning: () => diaryMorning(), KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },

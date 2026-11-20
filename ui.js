@@ -830,14 +830,33 @@
   // ---- offline summary ----
   const dur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} 小时 ${m} 分` : m ? `${m} 分钟` : `${s} 秒`; };
   const OFFLINE_POP_SEC = 600; // v5.9.1: the welcome-back box only after 10 minutes away
+  // v5.11.0.8: say plainly that the game clock stood still and the family worked at half speed (the rules are unchanged)
+  const gold = n => Number(n || 0).toLocaleString('en-US');
+  const paused = r => r.day ? `游戏时间是暂停的：现在还是第 ${r.day} 天 ${r.clock || ''}`.trim() : '游戏时间是暂停的';
+  const wxLine = r => r.wxDays > 0 ? `日历没往前走，只有天气照常过了 ${r.wxDays} 天${r.rain ? '，其间下过小雨，田都湿了' : ''}` : (r.rain ? '离开时下过小雨，田都湿了' : '');
+  // a short break (no box): a small line that floats up under the gold, e.g. 「+4,001 金（离开 4 分钟，时间暂停中）」
+  function offToast(r) {
+    const away = dur(r.awaySec), text = r.gold > 0 ? `+${gold(r.gold)} 金（离开 ${away}，时间暂停中）`
+      : r.limited && r.nextText ? `离开 ${away}，时间暂停中（离线额度 ${G.offBack ? G.offBack(r) : r.nextText + ' 起恢复全部 3 天'}）` : ''; // v5.11.0.8 review: the rolling window frees the oldest days first
+    if (!text) return;
+    let el = $('offToast'); if (!el) { el = document.createElement('div'); el.id = 'offToast'; document.body.appendChild(el); }
+    const c = $('coins'), b = c && c.getBoundingClientRect();
+    el.textContent = text; el.className = '';
+    if (b && b.width) { el.style.left = Math.max(6, Math.min(b.left, innerWidth - 260)) + 'px'; el.style.top = Math.round(b.bottom + 4) + 'px'; }
+    else { el.style.left = '50%'; el.style.top = '64px'; }
+    void el.offsetWidth; el.className = 'show'; clearTimeout(offToast.t); offToast.t = setTimeout(() => { el.className = ''; }, 4200);
+  }
   function showOffline(r) {
-    if (!r || !(r.awaySec >= OFFLINE_POP_SEC) || !(r.days > 0)) return; const box = $('offline'); // v5.9.1: a short break only gets the log line (离线期间赚了…); v5.10.1: so does a used-up 24-hour window
-    const first = r.limited ? `离开了 ${dur(r.awaySec)}，折合 ${r.asked} 天；过去 24 小时已经结算过 ${r.used} 天，这次按 ${r.days} 天算`
-      : `离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}`;
-    box.innerHTML = `<h3>欢迎回来</h3><div>${first}</div>` +
-      (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
+    if (!r) return; if (!(r.awaySec >= OFFLINE_POP_SEC) || !(r.days > 0)) { offToast(r); return; } // v5.9.1: a short break gets no box; v5.11.0.8: but a toast by the gold
+    const box = $('offline');
+    const first = `离开了 ${dur(r.awaySec)}，${paused(r)}`;
+    const second = r.limited ? `家人按在线一半的速度帮你干活；过去 24 小时已经结算过 ${r.used} 天，这次相当于 ${r.days} 天的收入`
+      : `家人按在线一半的速度帮你干活，相当于 ${r.days} 天的收入${r.capped ? '（已到 3 天上限）' : ''}`;
+    const wx = wxLine(r);
+    box.innerHTML = `<h3>欢迎回来</h3><div>${first}</div><div>${second}</div>` +
+      (r.avg > 0 ? `<div>最近日均 ${gold(r.avg)} 金 → 获得 <b style="color:#ffd76a">${gold(r.gold)} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
       (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
-      (r.rain ? `<div>这天下过小雨，田都湿了</div>` : '') +
+      (wx ? `<div class="offwx">${wx}</div>` : '') +
       (r.limited && r.nextText ? `<div class="offnote" style="font-size:11px;opacity:.75">每 24 小时最多结算 3 天离线收益，${r.nextText} 以后再满</div>` : '') +
       `<div class="row" style="justify-content:center;display:flex;margin-top:8px"><button class="pbtn" id="offOk">好的</button></div>`;
     box.hidden = false; $('offOk').onclick = () => { box.hidden = true; };
