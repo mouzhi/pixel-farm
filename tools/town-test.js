@@ -7,12 +7,12 @@ const rng = seed => () => ((seed = (seed * 1103515245 + 12345) >>> 0) / 42949672
 const inAny = (x, y, rs) => rs.some(r => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3]);
 
 ok('map: the strip east of the old edge holds the town; the old map keeps its bounds for its scatter', () => {
-  assert.deepStrictEqual([WD.WORLD.x0, WD.WORLD.y0, WD.WORLD.x1, WD.WORLD.y1], [-256, -208, 640, 384]);
+  assert.deepStrictEqual([WD.WORLD.x0, WD.WORLD.y0, WD.WORLD.x1, WD.WORLD.y1], [-256, -208, 1008, 384]); // v5.11.0: +46 tiles east
   assert.deepStrictEqual([WD.WORLD55.x0, WD.WORLD55.y0, WD.WORLD55.x1, WD.WORLD55.y1], [-256, -208, 448, 384]);
   const R = TN.RECT; assert(R[0] >= WD.WORLD55.x1 && R[2] <= WD.WORLD.x1, 'town inside the strip');
   for (const b of TN.BUILDINGS) { assert(TN.inTown(b.x - b.hw, b.y - b.hd) && TN.inTown(b.x + b.hw, b.y + b.hd), b.id); assert(!WD.seaAt(b.x, b.y + b.hd), b.id + ' dry'); }
   for (const k of Object.keys(TN.STREETS)) assert(WD.ROUTES[k], 'street registered: ' + k);
-  for (let x = 470; x <= 640; x += 10) { assert(Math.abs(PL.ridgeY(x) - PL.ridgeY(470)) < 16, 'the ridge levels off past the old edge ' + x); assert(PL.ridgeY(x) < TN.RECT[1] - 40, 'cliff well north of town'); }
+  for (let x = 470; x <= 1008; x += 10) { assert(Math.abs(PL.ridgeY(x) - PL.ridgeY(470)) < 28, 'the ridge levels off past the old edge ' + x); assert(PL.ridgeY(x) < TN.RECT[1] - (x >= TN.RECT[0] ? 10 : 2), 'cliff north of town ' + x); } // v5.11.0: the bigger town reaches up to the cliff foot
 });
 ok('buildings: no two overlap, doors stand outside on a street or the square and are walkable', () => {
   const B = TN.BUILDINGS, open = TN.blocks(true);
@@ -20,7 +20,7 @@ ok('buildings: no two overlap, doors stand outside on a street or the square and
     assert(Math.abs(a.x - b.x) >= a.hw + b.hw + 2 || Math.abs(a.y - b.y) >= a.hd + b.hd + 2, a.id + '/' + b.id); }
   for (const b of B) assert(!inAny(b.door.x, b.door.y, open), b.id + ' door walkable');
   for (const k of Object.keys(TN.SPOTS)) assert(!inAny(TN.SPOTS[k].x, TN.SPOTS[k].y, open), 'spot ' + k);
-  assert(!inAny(TN.GATE.x + 8, TN.GATE.y, open) && inAny(TN.GATE.x + 8, TN.GATE.y - 30, open), 'the gate gap is the only way in');
+  assert(!inAny(TN.GATE.x + 8, TN.GATE.y, open) && inAny(TN.RECT[0], TN.GATE.y - 30, open) && inAny(TN.GATE.x - 30, TN.GATE.y - 30, open), 'the gate gap is the only way in');
 });
 ok('gate: needs 东大道 as a road and a school day; locked town blocks everything east of the gate', () => {
   assert.strictEqual(TN.gate({ plots: {}, schoolDays: 3 }), '先把东大道买下来（选成「大道」）');

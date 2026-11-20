@@ -8,9 +8,9 @@
   const P = (x, y) => ({ x, y });
   const CAP_BONUS = 400, KEEP = 400, COST = 40, ITEM = 'bench';
   // lot L10: south of 阿松's house (h3 at 568, 108), east of 秋姨 (L11), west of the smithy
-  const LOT = { id: 'woodshop', x: 568, y: 130, hw: 7, hd: 7, door: P(568, 123), rot: Math.PI, style: 4 };
-  const STAND = P(576, 139); // south-east yard, so 阿松 is visible from the usual south camera
-  const PILE = P(566, 138);  // timber stacked in front of the south wall, on the path
+  const LOT = { id: 'woodshop', x: 664, y: 194, hw: 10, hd: 9, door: P(664, 182), rot: Math.PI, style: 4 }; // v5.11.0: 工坊街
+  const STAND = P(682, 200); // the side yard east of the shop, so 阿松 is visible from the usual south camera
+  const PILE = P(682, 190);  // timber stacked in the side yard
   const HOURS = { from: 8 * 60, to: 17 * 60 };
   const built = H => !!(H && H.built && H.built.woodshop);
   const open = (H, T) => built(H) && T >= HOURS.from && T < HOURS.to;

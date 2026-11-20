@@ -9,7 +9,7 @@
   const P = (x, y) => ({ x, y });
   const BONUS = 0.5, FAVOR = 3, HOURS = { from: 8 * 60, to: 16 * 60 };
   // lot L6: between L5 (466, 91) and the market square, door north onto the main street
-  const LOT = { id: 'bakery', x: 483, y: 91, hw: 7, hd: 7, door: P(483, 82), rot: Math.PI, style: 3 };
+  const LOT = { id: 'bakery', x: 626, y: 194, hw: 10, hd: 9, door: P(626, 182), rot: Math.PI, style: 3 }; // v5.11.0: 工坊街
   const STAND = P(LOT.door.x + 5, LOT.door.y - 3); // where 小桃 stands / the family hands the basket over
   const BOARD = P(LOT.door.x - 6, LOT.door.y + 1); // a little order board by the door, kept clear of L5
   const UNIT = { flour: 60, jam: 80, cheese: 130, honey: 40, egg: 10, wool: 60, milk: 35, truffle: 45, apple: 12, orange: 15, strawberry: 30, wheat: 14, apple_pie: 140 };

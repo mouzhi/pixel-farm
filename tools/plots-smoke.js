@@ -32,9 +32,9 @@ async function test(name, fn) {
     const p = await open(ctx);
     const r = await p.evaluate(() => { const f = __farm, PL = f.PL; return { world: f.WORLD, plots: f.S.plots, river: f.groundAt(24, 316)[1], bank: f.groundAt(24, 326)[1], cliff: f.groundAt(100, PL.ridgeY(100) - 2)[1],
       wild: f.groundAt(-80, 160)[1], high: f.groundAt(0, -190)[1], gate: f.plotOffer('glade', 'field').reason, v: f.version, regions: f.S.eff.regions.length }; });
-    assert.deepStrictEqual(r.world, { x0: -256, y0: -208, x1: 640, y1: 384 }); assert.deepStrictEqual(r.plots, {}); // v5.8.0: +24 tiles east for the town
+    assert.deepStrictEqual(r.world, { x0: -256, y0: -208, x1: 1008, y1: 384 }); assert.deepStrictEqual(r.plots, {}); // v5.8.0: +24 tiles east for the town
     assert.strictEqual(r.river, 'water'); assert.strictEqual(r.bank, 'sand'); assert.strictEqual(r.cliff, 'rock'); assert.strictEqual(r.wild, 'wild'); assert.strictEqual(r.high, 'high');
-    assert.strictEqual(r.gate, 'gate'); assert.strictEqual(r.v, '5.10.13'); assert.strictEqual(r.regions, 0);
+    assert.strictEqual(r.gate, 'gate'); assert.strictEqual(r.v, '5.11.0.2'); assert.strictEqual(r.regions, 0);
     await p.keyboard.press('b'); await p.click('#shop [data-tab="land"]');
     const txt = await p.textContent('#shop'); assert(txt.includes('外圈新地块') && txt.includes('阿禾搬来后开放') && txt.includes('林间空地'), txt.slice(0, 200));
     await p.click('#shop [data-plot="glade"]'); const d = await p.textContent('#shop'); assert(d.includes('要先有 2 个人一起干活'));

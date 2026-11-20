@@ -14,14 +14,15 @@
   ];
   const KIND = Object.fromEntries(KINDS.map(k => [k.id, k]));
   // six stalls round the square (the square itself grows from r 15 to r 22 once the market is built)
-  const PLAZA_R = 22;
+  // v5.11.0: the square (centre 650,120, town.js PLAZA) grows to r 36; the stalls stand in a ring round the fountain
+  const PLAZA_R = 36;
   const STALLS = [
-    { id: 's0', x: 500, y: 86, rot: 0, awn: 0, who: 'farm' },   // the family's stall: nearest the gate
-    { id: 's1', x: 498, y: 106, rot: 0, awn: 1, who: 'n0' },    // 周婶
-    { id: 's2', x: 500, y: 124, rot: 0, awn: 2, who: 'n3' },    // 面包师小桃
-    { id: 's3', x: 549, y: 108, rot: 0, awn: 3, who: 'n7' },    // 花匠秋姨 (once L11 is up; else a pedlar)
-    { id: 's4', x: 514, y: 130, rot: 0, awn: 4, who: 'n5' },    // 裁缝阿梅
-    { id: 's5', x: 576, y: 96, rot: 0, awn: 0, who: 'v' },      // a pedlar from out of town
+    { id: 's0', x: 632, y: 100, rot: 0, awn: 0, who: 'farm' },   // the family's stall: nearest the gate
+    { id: 's1', x: 668, y: 100, rot: 0, awn: 1, who: 'n0' },    // 周婶
+    { id: 's2', x: 622, y: 122, rot: 0, awn: 2, who: 'n3' },    // 面包师小桃
+    { id: 's3', x: 678, y: 122, rot: 0, awn: 3, who: 'n7' },    // 花匠秋姨 (once L11 is up; else a pedlar)
+    { id: 's4', x: 636, y: 142, rot: 0, awn: 4, who: 'n5' },    // 裁缝阿梅
+    { id: 's5', x: 664, y: 142, rot: 0, awn: 0, who: 'v' },      // a pedlar from out of town
   ];
   const STALL = Object.fromEntries(STALLS.map(s => [s.id, s]));
   const HW = 5, HD = 3.5;

@@ -7,9 +7,9 @@
   'use strict';
   const P = (x, y) => ({ x, y });
   // south of 小桃's house (h4 at 606, 112), east of the woodshop, inside the town fence
-  const LOT = { id: 'smithy', x: 606, y: 134, hw: 7, hd: 7, door: P(606, 127), rot: Math.PI, style: 5 };
-  const STAND = P(608, 139); // in front of the forge, on the path (east of the anvil; out of the trees)
-  const ANVIL = P(598, 138); // anvil in front of the south wall
+  const LOT = { id: 'smithy', x: 702, y: 194, hw: 10, hd: 9, door: P(702, 182), rot: Math.PI, style: 5 }; // v5.11.0: 工坊街
+  const STAND = P(721, 199); // in the side yard east of the forge, by the anvil
+  const ANVIL = P(720, 190); // the anvil in the side yard
   const HOURS = { from: 8 * 60, to: 17 * 60 };
   const SPR_REACH = 16, SPR_REACH_UP = 24, WORK_SPEED = 1.5, CART_EXTRA = 20;
   const AXE_BONUS = [0, 2, 4, 6], AXE_CUT = [0, 2, 3, 5];
