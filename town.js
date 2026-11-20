@@ -9,12 +9,12 @@
   const P = (x, y) => ({ x, y });
   // ---------- the place ----------
   // v5.11.0: the town moved east and grew (docs/town-scale-plan.md). The map runs to x 1008; between the old gate (440) and
-  // the new one (596) the east road crosses ground kept free for the 农家乐区 (v5.11.1). Buildings are a size up and a lot
+  // the new one (596) the east road crosses ground kept free for the 农家乐区 (v5.11.0.5). Buildings are a size up and a lot
   // taller (doors as tall as a grown-up). Saves keep ids and counts only, so nothing in a save moves.
   const RECT = [600, -96, 984, 212];                       // the town: 384 x 308 world units (was 184 x 166 at 448..632 x -16..150)
   const STRIP = [448, -208, 1008, 384];                    // the strip the map grew by (v5.8.0: 448..640; v5.11.0: to 1008)
   const GATE = P(596, 66);                                 // the town gate, where the east road reaches the town
-  const AGRI = [456, -40, 584, 200];                       // the 农家乐区 (v5.11.1, inn.js AGRI): no trees, no props
+  const AGRI = [456, -40, 584, 200];                       // the 农家乐区 (v5.11.0.5, inn.js AGRI): no trees, no props
   const AVENUE = { y: 66, hw: 5, x0: 362, x1: 980, walk: 1.3 }; // 东大道 + 主街 in stone: people walk 1.3x faster on it
   const SQUARE = [706, 86, 820, 172];                      // 节庆广场: the harvest feast's long table and the lantern ring
   const RESERVED = [                                       // 预留地块: signposted, nothing on them yet
@@ -59,7 +59,7 @@
   }
   // nav: what people may not walk on in the strip. open: the town is bought
   function blocks(open, agri) {
-    // the strip west of the town: only the east road crosses it. v5.11.1: once the 农家乐区 is in use (agri) its ground is
+    // the strip west of the town: only the east road crosses it. v5.11.0.5: once the 农家乐区 is in use (agri) its ground is
     // walkable too (guests, the family running it); the rest of the strip stays wild.
     const out = [];
     if (agri) {

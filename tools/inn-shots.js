@@ -39,7 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const wedMorning = `f.buyPlot('glade', 'meadow'); const cot = f.buy('cottage'); const h = S.home.houses[0]; if (h) { h.built = S.day - 1; h._tiles = null; f.homeTilesSync(); if (f.HA && f.HA.sync) f.HA.sync(true); }
     S.home.rel.kid0 = { m0: 30, m1: 85, m2: 20 }; S.home.nb = Object.assign(S.home.nb || {}, { n3: 60, n2: 10, n8: 5 });
     day(S.day + 1); at(6 * 60 + 20); dry(); f.homeMorning();`;
-  const zoneInn = `if (!f.innPlot()) throw new Error('no inn site: the 农家乐区 opens with the town gate (v5.11.1), town=' + !!(S.eff && S.eff.town));`;
+  const zoneInn = `if (!f.innPlot()) throw new Error('no inn site: the 农家乐区 opens with the town gate (v5.11.0.5), town=' + !!(S.eff && S.eff.town));`;
   const raiseInn = `S.inn.cabins = 4; S.inn.diner.lv = 3; S.inn.job = null; S.inn.arrived = 0; S.inn._morn = 0;
     if (f.IA && f.IA.sync) f.IA.sync(true); f.markNavDirty && f.markNavDirty();`;
   const shot = async (name, fn, check, save) => { if (only && !name.includes(only)) return;
@@ -57,7 +57,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const L = Lof();
     return { r, paid, wood, same, cabins: S.inn.cabins, diner: S.inn.diner.lv, job: S.inn.job, auto, lv: f.townLv(), plot: f.innPlot(),
       props: (f.props || []).filter(q => q.inn).length, ver: f.version, yard: L && { x: L.yard.x, y: L.yard.y } }; })()`,
-    r => r.ver !== '5.11.1' ? 'ver ' + r.ver
+    r => r.ver !== '5.11.0.5' ? 'ver ' + r.ver
       : !r.r || !r.r.ok ? 'start ' + JSON.stringify(r.r)
       : r.paid !== 20000 || r.wood !== 300 ? 'first cabin cost ' + r.paid + '/' + r.wood
       : r.same !== 0 ? 'finished the same day'
@@ -183,7 +183,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const inn = s.inn || {};
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, cabins: inn.cabins | 0, diner: inn.diner && inn.diner.lv, guests: (inn.guests || []).length, inn2: inn.inn2 | 0, resort: inn.resort, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.1' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5' ? 'ver ' + r.ver
         : r.cabins !== 0 || (r.diner | 0) !== 0 || r.guests !== 0 ? 'inn not empty ' + JSON.stringify(r)
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
@@ -196,7 +196,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, town: !!(S.eff && S.eff.town), inn: s2.inn && { cabins: s2.inn.cabins, diner: s2.inn.diner && s2.inn.diner.lv }, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.1' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5' ? 'ver ' + r.ver
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts changed' : null, save);
   }
 

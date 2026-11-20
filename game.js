@@ -1666,7 +1666,7 @@ function groundAt(x, y) { // -> [palette colour, kind]
       if (pd > pw - 0.8) return [St[1], 'dirt']; if (u - cx * 3 < 0.5 || (y + 400) - cy * 3 < 0.5) return [St[2], 'dirt']; // v5.11.0: setts in a running bond (the checkerboard was loud at the new size)
       return [k > 0.75 ? Wd[5] : (k > 0.5 ? St[2] : St[3]), 'dirt']; }
     return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt']; }
-  if (INN_ON) { const o = IA.ground(x, y); if (o) return o; } // v5.10.7: the inn path and the tables (v5.11.1: before the town art, the 农家乐区 is in its strip)
+  if (INN_ON) { const o = IA.ground(x, y); if (o) return o; } // v5.10.7: the inn path and the tables (v5.11.0.5: before the town art, the 农家乐区 is in its strip)
   if (x >= 446 && TA) { const o = TA.ground(x, y); if (o) return o; } // v5.8.0: the town
   if (HOME_ON) { const o = HA.ground(x, y); if (o) return o; } // v5.9.0: the new house's yard
   { const o = XP.ground(x, y, S.plots); if (o) return o; } // v5.5.0: river, cliff, mountain, the ring's plots
@@ -1739,7 +1739,7 @@ for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) c
       const ry = PL.ridgeY(tx); if (ty < ry + 3 && ty > ry - PL.CLIFF - 4) continue;                    // the cliff face
       const hi = ty < ry - PL.CLIFF; if (roll < (hi ? 0.45 : 0.85)) addTree(hi ? treeDefs.pine[Math.floor(pick * 3)] : kinds(), tx, ty); } }
 }
-// v5.11.1: the old map's rim put a few trees on the west edge of the 农家乐区 (their canopies hid the kitchen garden); a pass
+// v5.11.0.5: the old map's rim put a few trees on the west edge of the 农家乐区 (their canopies hid the kitchen garden); a pass
 // afterwards (not a skip inside the loops, so no other tree moves)
 if (TN && TN.AGRI) for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (p.tree && TN.inRect(p.x, p.y, TN.AGRI, 7)) props.splice(i, 1); }
 // region fences (gate segments open when the region is bought), a sign with a padlock at each gate, water barrels
@@ -3003,7 +3003,7 @@ function careerFest() { // market day: the family gathers at a child's shop
 // ---------- v5.10.7: 民宿 + 农家菜馆 (rules in inn.js, art in inn-art.js) ----------
 var INN_ON = false;
 const STAYS = []; // inn guests (not the party GUESTS)
-function innPlot() { return IN && S.inn && IN.siteOf ? IN.siteOf(townOpen(), S.inn) : null; } // v5.11.1: the 农家乐区 by the town gate (no plot is zoned for it any more)
+function innPlot() { return IN && S.inn && IN.siteOf ? IN.siteOf(townOpen(), S.inn) : null; } // v5.11.0.5: the 农家乐区 by the town gate (no plot is zoned for it any more)
 function innLay() { const id = innPlot(); return id ? IN.layout(id) : null; }
 function innStand() {
   const L = innLay(); if (!L) return null;
@@ -3083,8 +3083,8 @@ function innBuy(id) {
   if (INN_ON) IA.sync(true); markNavDirty(); if (typeof saveNow === 'function') saveNow();
   return { ok: true, cost: o.cost, wood: o.wood };
 }
-function innRepaint() { if (IN && IN.AGRI && groundReady) buildGroundBase([IN.AGRI[0] - 4, IN.AGRI[1] - 4, IN.AGRI[2] + 4, IN.AGRI[3] + 4]); } // v5.11.1: the garden and tables appear with the restaurant
-// v5.11.1: an old save's lodging on a zoned 民宿院 plot now stands in the 农家乐区 (counts kept); the plot is an empty yard, rezoned once for free
+function innRepaint() { if (IN && IN.AGRI && groundReady) buildGroundBase([IN.AGRI[0] - 4, IN.AGRI[1] - 4, IN.AGRI[2] + 4, IN.AGRI[3] + 4]); } // v5.11.0.5: the garden and tables appear with the restaurant
+// v5.11.0.5: an old save's lodging on a zoned 民宿院 plot now stands in the 农家乐区 (counts kept); the plot is an empty yard, rezoned once for free
 function innMigrate() {
   if (!IN || !IN.migrate || !S.inn || !S.plots) return null;
   const r = IN.migrate(S.inn, S.plots, S.day);
@@ -3103,7 +3103,7 @@ function innSetMenu(v) {
 function innView() {
   if (!IN) return null;
   const I = S.inn || IN.empty(), plot = innPlot(), L = plot ? IN.layout(plot) : null;
-  const freed = Object.keys(S.plots || {}).filter(id => S.plots[id].mod === 'inn' && S.plots[id].free).map(id => (PL.plot(id) || {}).name || id); // v5.11.1
+  const freed = Object.keys(S.plots || {}).filter(id => S.plots[id].mod === 'inn' && S.plots[id].free).map(id => (PL.plot(id) || {}).name || id); // v5.11.0.5
   const ctx = { plot, lv: townLv(), coins: S.coins, wood: FARMER.wood, coast: !!(S.eff && (S.eff.coast || (S.eff.regions || []).includes('coast'))), resort: IN.resortPlotOf(S.plots) };
   const offers = ['cabin', 'diner', 'kitchen', 'inn2', 'hut', 'parasol', 'stall', 'pier', 'deck'].map(id => {
     const o = IN.offer(I, id), why = IN.canStart(I, id, ctx);
@@ -3586,7 +3586,7 @@ DECOR_ON = true;
 if (YA && YD) { YA.mount({ S, buildModel, addProp, props, stackCanvas, mailProp, mailModel, pens: () => yardPens(), markNavDirty: () => markNavDirty() }); YARD_ON = true; } // v5.10.3
 if (TA) { TA.mount({ S, buildModel, gableY, addProp, props, models, treeDefs, addTree, lampModel: () => PWA.models().lamp, markNavDirty: () => markNavDirty(), xpModels: () => XP.models() }); TOWN_ON = true; } // v5.8.0
 if (HA && HM) { HA.mount({ S, buildModel, gableY, addProp, props, markNavDirty: () => markNavDirty(), repaint: r => { if (groundReady) buildGroundBase(r); } }); HOME_ON = true; } // v5.9.0
-if (IA && IN) { IA.mount({ S, buildModel, gableY, addProp, props, innLay: () => innLay() }); INN_ON = true; } // v5.10.7; v5.11.1 the 农家乐区 layout
+if (IA && IN) { IA.mount({ S, buildModel, gableY, addProp, props, innLay: () => innLay() }); INN_ON = true; } // v5.10.7; v5.11.0.5 the 农家乐区 layout
 
 // animal sprites face right; frames: [step A, step B, head down]. Same palette and outline as the rest of style A.
 const lowerHead = (rows, col, dy) => rows.map((r, y) => r.slice(0, col) + (y - dy >= 0 ? rows[y - dy].slice(col) : '.'.repeat(r.length - col)));
@@ -4799,7 +4799,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.1';
+const GAME_VERSION = '5.11.0.5';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -4896,7 +4896,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.homeyard = YD.valid(s.homeyard); // v5.10.3 (before applyUpgrades: the house model follows the roof and the curtains)
   S.inn = IN ? IN.valid(s.inn) : null; STAYS.length = 0; if (S.inn && (S.inn.guests || []).some(g => g.from === S.day)) S.inn.arrived = S.day; // v5.10.7
   S.plots = PL.validPlots(s.plots); // v5.5.0 (before applyUpgrades: it opens plot fields and puts their modules down)
-  innMigrate(); // v5.11.1
+  innMigrate(); // v5.11.0.5
   S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speedRefund = s.settings.speedRefund | 0; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; S.decorLayout = s.settings.decorLayout | 0; // v5.10.1; v5.10.3/4 decorLayout
   S.offlineWin = (s.offline && Array.isArray(s.offline.win) ? s.offline.win : []).map(w => ({ at: w.at, days: w.days }));
@@ -5105,7 +5105,7 @@ if (MM.el) { window.__farm.onGround = () => { MM.base = null; };
   MM.el.addEventListener('pointerdown', e => { const r = MM.el.getBoundingClientRect(); panTo(WORLD.x0 + (e.clientX - r.left) / r.width * (WORLD.x1 - WORLD.x0), WORLD.y0 + (e.clientY - r.top) / r.height * (WORLD.y1 - WORLD.y0)); minimapDraw(); });
   setInterval(minimapDraw, 250); }
 window.__farm.minimapDraw = minimapDraw;
-// v5.11.0: four jump buttons under the minimap — 家 / 农家乐 / 小镇 / 海边. 农家乐 goes to the 农家乐区 (v5.11.1: the lodging is
+// v5.11.0: four jump buttons under the minimap — 家 / 农家乐 / 小镇 / 海边. 农家乐 goes to the 农家乐区 (v5.11.0.5: the lodging is
 // built there); 海边 to the beach resort plot, else the sea shore (v5.11.2 moves it).
 function jumpSpot(id) {
   if (id === 'home') return { x: HOME_CAM.x, y: HOME_CAM.y };

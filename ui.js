@@ -342,7 +342,7 @@
     const stars = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
     const starTxt = '★'.repeat(stars) + '☆'.repeat(5 - stars);
     let h = '';
-    h += `<div class="sec">农家乐区 · 民宿${v.inn2 ? ' · 二层客栈' : ''}</div>`; // v5.11.1: its own district by the town gate, no plot is rezoned
+    h += `<div class="sec">农家乐区 · 民宿${v.inn2 ? ' · 二层客栈' : ''}</div>`; // v5.11.0.5: its own district by the town gate, no plot is rezoned
     if (!v.plot) h += `<div class="more">农家乐区在镇门口东大道两边，是一块专门的空地，不占家里的地块。先修好东大道、开了镇门，就能在这里盖小木屋和菜馆。</div>`;
     else h += `<div class="more">小木屋、二层客栈、农家菜馆和厨房都盖在镇门口的农家乐区（东大道北边是民宿，南边是菜馆和菜园），不用改建任何地块。小地图下面点「农家乐」就能过去看。</div>`;
     if (v.freed && v.freed.length) h += `<div class="more">民宿已经从「${esc(v.freed.join('、'))}」搬到农家乐区，原来那块地空出来了，可以在「地块」里免费改建一次。</div>`;
@@ -352,7 +352,7 @@
       `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
     const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' };
     if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
-    const label = o => o.name || jobName[o.id] || '农家乐项目'; // v5.11.1: never a raw id (the kitchen card showed "kitchen")
+    const label = o => o.name || jobName[o.id] || '农家乐项目'; // v5.11.0.5: never a raw id (the kitchen card showed "kitchen")
     const desc = o => ({
       cabin: v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。',
       diner: '农家乐区南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜，旁边还有一块菜园。',

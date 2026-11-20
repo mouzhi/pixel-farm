@@ -1,6 +1,6 @@
 // v5.10.7 农家乐 I：民宿 + 农家菜馆. v5.10.8 农家乐 II：海边度假村 + 二层客栈.
 // Rules only (art in inn-art.js, walking and guests in game.js, the shop / guestbook / 「我来挑」 in ui.js).
-// v5.11.1: the lodging moved off the farm plots into the 农家乐区 by the town gate (SITE / AGRI / agriLayout / migrate below);
+// v5.11.0.5: the lodging moved off the farm plots into the 农家乐区 by the town gate (SITE / AGRI / agriLayout / migrate below);
 // the per-plot layout and INN_PLOTS stay only for old code paths and tests.
 // A bought flat-ish plot can be zoned 「民宿院」. Up to 4 cabins and one 农家菜馆 go up on it (family builds in a day).
 // v5.10.8: the yard can become a two-storey inn (each cabin hosts one extra group). 东南滩 zones as 「度假村」; the existing
@@ -117,7 +117,7 @@
     return ids[0] || null;
   };
   const plotOk = id => INN_PLOTS.includes(id);
-  // ---------- v5.11.1: the 农家乐区 (docs/town-scale-plan.md 2.4) ----------
+  // ---------- v5.11.0.5: the 农家乐区 (docs/town-scale-plan.md 2.4) ----------
   // Its own ground by the town gate (town.js AGRI), the east road through the middle. Cabins (and the two-storey inn) stand in
   // a row on the north half, the restaurant with its kitchen, tables, a kitchen garden and a little guest square on the south
   // half. No farm plot is zoned for it any more: once the town gate is open the district is there to build on.
@@ -332,7 +332,7 @@
     if (o.job && typeof o.job === 'object' && ALL_JOBS.test(o.job.id)) out.job = { id: o.job.id, day: int(o.job.day, 0, 1e6) };
     out.walkins = int(o.walkins, 0, 99);
     out.arrived = int(o.arrived, 0, 1e6);
-    if (o.where === SITE) out.where = SITE;      // v5.11.1: the lodging moved from a plot to the 农家乐区 …
+    if (o.where === SITE) out.where = SITE;      // v5.11.0.5: the lodging moved from a plot to the 农家乐区 …
     if (int(o.moved, 1, 1e6)) out.moved = int(o.moved, 1, 1e6); // … on this day (the notice is shown once)
     return out;
   }
@@ -438,7 +438,7 @@
   }
   const plotBusy = (plotId, plots, I) => {
     if (!plotId || !plots || !plots[plotId]) return null;
-    // v5.11.1: the lodging moved to the 农家乐区, so an old 民宿院 plot is an empty yard and never busy
+    // v5.11.0.5: the lodging moved to the 农家乐区, so an old 民宿院 plot is an empty yard and never busy
     if (plots[plotId].mod === 'resort') {
       const r = I && I.resort;
       if ((r && (r.huts || r.parasols || r.stall || r.pier || r.deck)) || (I && I.job && RESORT_JOBS.test(I.job.id))) return '这块地上有度假村，不能改建';
@@ -446,7 +446,7 @@
     return null;
   };
 
-  // ---------- v5.11.1 migration: a save whose lodging stood on a zoned 民宿院 plot ----------
+  // ---------- v5.11.0.5 migration: a save whose lodging stood on a zoned 民宿院 plot ----------
   // Everything (cabins, inn, restaurant + kitchen, a build in progress, guests and their rooms, stars, guestbook, takings) is
   // kept by count and index, so it simply stands in the 农家乐区 now. The old plot stays an empty yard that can be rezoned once
   // for free (plots[id].free = 1). Idempotent: run on every load; `moved` (the day) is set once so the notice shows once.

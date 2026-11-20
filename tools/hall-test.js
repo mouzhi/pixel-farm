@@ -64,7 +64,7 @@ ok('valid(): junk in, a clean hall out; unknown projects and the party table dro
 });
 ok('save: no version bump; every fixture gains an empty hall inside `town`, nothing else changes; a hall round-trips', () => {
   for (const f of fs.readdirSync(path.join(__dirname, 'fixtures')).filter(f => /\.json$/.test(f))) {
-    if (FIX(f).town && FIX(f).town.hall) continue; // v5.11.1: save-v15-inn-resort.json was written after the hall (it has one); this is about older saves
+    if (FIX(f).town && FIX(f).town.hall) continue; // v5.11.0.5: save-v15-inn-resort.json was written after the hall (it has one); this is about older saves
     const s = SAVE.migrate(JSON.parse(JSON.stringify(FIX(f)))); const v = SAVE.validate(s);
     assert.strictEqual(v.saveVersion, SAVE.CURRENT, f); assert.deepStrictEqual(v.town.hall, HL.empty(), f);
     const t = Object.assign({}, v.town); delete t.hall; assert.deepStrictEqual(t, TN.valid(s.town), f + ': the rest of town as before');

@@ -233,7 +233,7 @@
   }
   const CABIN_CY = 1; // model centre sits a little north of the door so the porch hangs south
 
-  function layout() { // v5.11.1: the 农家乐区 (game.js decides when it is open)
+  function layout() { // v5.11.0.5: the 农家乐区 (game.js decides when it is open)
     if (X && X.innLay) return X.innLay();
     const id = IN && S && S.plots ? IN.innPlotOf(S.plots) : null;
     return id ? IN.layout(id) : null;
@@ -393,7 +393,7 @@
       if (dinerUp) {
         for (const tb of L.tables) if (Math.hypot(x - tb.x, y - tb.y) < 5) return [St[3], 'dirt'];
       }
-      // v5.11.1: the district's yard under the cabins, the restaurant's forecourt, the kitchen garden and the guest square
+      // v5.11.0.5: the district's yard under the cabins, the restaurant's forecourt, the kitchen garden and the guest square
       const inR = r => r && x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
       if ((S.inn && S.inn.cabins | 0) > 0 && L.site && x >= 472 && x <= 568 && y >= -6 && y <= 24) return [hash(x, y, 7) > 0.8 ? Wd[3] : Wd[4], 'dirt'];
       if (dinerUp && inR(L.garden)) {

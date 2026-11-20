@@ -26,11 +26,11 @@
     playground: { name: '乐园', icon: 'playground', desc: '滑梯、沙坑（能堆沙堡）和秋千，孩子会自己来玩', now: '滑梯、沙坑和秋千', cost: 800, wood: 40 },
     bridge: { name: '石桥', icon: 'bridge', desc: '修好以后家人、羊群和上学的孩子都从桥上过河', now: '桥修好了' },
     trail: { name: '山道', icon: 'trail', desc: '一条弯弯的上山小路，通向山顶的两块地', now: '路障拆掉，能上山了' },
-    inn: { name: '空院子', icon: 'inn', desc: '以前的民宿院。民宿已经搬到镇门口的农家乐区，这块地空出来了，可以免费改建一次', now: '一片空院子' }, // v5.11.1: legacy only (no plot offers it any more)
+    inn: { name: '空院子', icon: 'inn', desc: '以前的民宿院。民宿已经搬到镇门口的农家乐区，这块地空出来了，可以免费改建一次', now: '一片空院子' }, // v5.11.0.5: legacy only (no plot offers it any more)
     resort: { name: '度假村', icon: 'resort', desc: '东南滩改成度假村后，海边能盖沙滩小屋、遮阳伞、海鲜摊、游客栈桥和日落观景台（商店「农家乐」里买，要先买下海边，繁荣度 3）', now: '一条通向沙滩的小路' },
   };
   const MODULE_IDS = Object.keys(MODULES);
-  // v5.11.1: modules no plot offers any more but an old save may still hold. validPlots keeps them (it would otherwise turn
+  // v5.11.0.5: modules no plot offers any more but an old save may still hold. validPlots keeps them (it would otherwise turn
   // them into the plot's first module); they produce nothing and the plot can be rezoned (free once when `free` is set).
   const LEGACY_MODS = ['inn'];
   const TERRAIN = { flat: '平地', river: '河边地', slope: '山脚缓坡', high: '山顶高地', across: '河对岸', special: '特殊地块' };
@@ -182,7 +182,7 @@
     if (p.special || p.mods.length < 2) return { id, plot: p, mod, ok: false, reason: 'fixed' };
     if (!p.mods.includes(mod)) return { id, plot: p, mod, ok: false, reason: 'module' };
     if (cur.mod === mod) return { id, plot: p, mod, ok: false, reason: 'same' };
-    const free = !!cur.free; // v5.11.1: the old 民宿院 plot is rezoned once for nothing (the module's own setup too)
+    const free = !!cur.free; // v5.11.0.5: the old 民宿院 plot is rezoned once for nothing (the module's own setup too)
     const s = setupOf(p, mod), cost = free ? 0 : round50(p.price * 0.25) + s.cost, w = free ? 0 : 10 + s.wood;
     const out = { id, plot: p, mod, from: cur.mod, cost, wood: w, free, short: Math.max(0, cost - (coins | 0)), shortWood: Math.max(0, w - (wood | 0)) };
     out.ok = !out.short && !out.shortWood; if (!out.ok) out.reason = 'short';
@@ -193,7 +193,7 @@
     const out = {}; if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
     for (const id of PLOT_IDS) { const o = v[id]; if (!o || typeof o !== 'object') continue; const p = BY_ID[id];
       const mod = p.mods.includes(o.mod) || LEGACY_MODS.includes(o.mod) ? o.mod : p.mods[0]; out[id] = { mod, day: Math.max(1, Math.round(+o.day) || 1) };
-      if (o.free && LEGACY_MODS.includes(mod)) out[id].free = 1; } // v5.11.1: one free rezone of an old 民宿院
+      if (o.free && LEGACY_MODS.includes(mod)) out[id].free = 1; } // v5.11.0.5: one free rezone of an old 民宿院
     for (const id of Object.keys(out)) { const p = BY_ID[id]; if (p.needs && !out[p.needs]) delete out[id]; } // never across a river without the bridge
     return out;
   }

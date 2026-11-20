@@ -58,7 +58,7 @@ ok('cabin / restaurant / kitchen prices and the one-day build; prosperity 3 and 
   assert.ok(/先盖农家菜馆/.test(IN.offer(I, 'kitchen').why));
   const poor = { plot: 'glade', lv: 3, coins: 100, wood: 10 };
   assert.strictEqual(IN.canStart(I, 'cabin', { plot: null, lv: 3, coins: 1e6, wood: 999 }), '先开镇门：农家乐区就在镇门口东大道两边，不用改建地块');
-  assert.strictEqual(IN.canStart(I, 'cabin', { site: 'agri', lv: 3, coins: 1e6, wood: 999 }), null, 'v5.11.1: the 农家乐区 is the site');
+  assert.strictEqual(IN.canStart(I, 'cabin', { site: 'agri', lv: 3, coins: 1e6, wood: 999 }), null, 'v5.11.0.5: the 农家乐区 is the site');
   assert.ok(/繁荣度到 3/.test(IN.canStart(I, 'cabin', { plot: 'glade', lv: 2, coins: 1e6, wood: 999 })));
   assert.strictEqual(IN.canStart(I, 'cabin', poor), '金币不够');
   const rich = { plot: 'glade', lv: 3, coins: 1e6, wood: 999 };
@@ -178,7 +178,7 @@ ok('staffed path adds 0.3 stars and a signature dish; furniture from the woodsho
   assert.ok(IN.effectiveStars(I, true, true) > IN.effectiveStars(I, true, false));
 });
 
-ok('v5.11.1: no plot offers 民宿院; the 农家乐区 layout stays inside the district, off the road, and does not overlap', () => {
+ok('v5.11.0.5: no plot offers 民宿院; the 农家乐区 layout stays inside the district, off the road, and does not overlap', () => {
   const TN = require('../town.js');
   assert.deepStrictEqual(IN.AGRI, TN.AGRI, 'inn.js and town.js agree on the district');
   for (const p of PL.PLOTS) assert.ok(!p.mods.includes('inn'), p.id + ' no longer zones 民宿院');
@@ -204,14 +204,14 @@ ok('v5.11.1: no plot offers 民宿院; the 农家乐区 layout stays inside the 
   assert.ok(IN.layout('glade'));
 });
 
-ok('v5.11.1: siteOf — the district opens with the town gate; a save with buildings keeps it', () => {
+ok('v5.11.0.5: siteOf — the district opens with the town gate; a save with buildings keeps it', () => {
   assert.strictEqual(IN.siteOf(false, IN.empty()), null);
   assert.strictEqual(IN.siteOf(true, IN.empty()), 'agri');
   const I = IN.empty(); I.cabins = 1; assert.strictEqual(IN.siteOf(false, I), 'agri');
   const J = IN.empty(); J.job = { id: 'cabin', day: 3 }; assert.strictEqual(IN.siteOf(false, J), 'agri');
 });
 
-ok('v5.11.1: migrate — an old 民宿院 plot keeps every building, frees the plot once, idempotent', () => {
+ok('v5.11.0.5: migrate — an old 民宿院 plot keeps every building, frees the plot once, idempotent', () => {
   const plots = { glade: { mod: 'inn', day: 70 }, sbank: { mod: 'field', day: 40 } };
   const I = IN.valid({ cabins: 3, inn2: 1, diner: { lv: 2, served: 12 }, guests: [{ id: 'g71', look: 'innB', n: 2, room: 4, from: 80, until: 82, at: 700 }],
     stars: { last: [{ day: 79, s: 5, note: '羊好软' }] }, earn: { rooms: 4000, meals: 2500 }, job: { id: 'cabin', day: 80 } });
@@ -236,7 +236,7 @@ ok('v5.11.1: migrate — an old 民宿院 plot keeps every building, frees the p
   const I3 = IN.empty(); assert.deepStrictEqual(IN.migrate(I3, { sbank: { mod: 'field', day: 4 } }, 50), { plots: [], notice: false }); assert.ok(!I3.moved);
 });
 
-ok('v5.11.1: every offer has a Chinese name (the shop cards showed "kitchen" / "inn2")', () => {
+ok('v5.11.0.5: every offer has a Chinese name (the shop cards showed "kitchen" / "inn2")', () => {
   const states = [IN.empty(), (() => { const I = IN.empty(); I.cabins = 4; I.inn2 = 1; I.diner.lv = 3; I.resort = { huts: 4, parasols: 8, stall: 1, pier: 1, deck: 1 }; return I; })(),
     (() => { const I = IN.empty(); I.cabins = 1; I.diner.lv = 1; return I; })()];
   for (const I of states) for (const id of ['cabin', 'diner', 'kitchen', 'inn2', 'hut', 'parasol', 'stall', 'pier', 'deck']) {
