@@ -61,7 +61,7 @@
   const partySeats = c => SEATS.map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy }));
   // Conservative adult silhouette (20 x 26 framebuffer pixels), tested at the normal and nearby camera angles.
   function partyClear(a, b) { const dx = a.x - b.x, dy = a.y - b.y;
-    return [-0.6, 0, 0.25, 0.6].every(t => Math.abs(2 * (dx * Math.cos(t) - dy * Math.sin(t))) >= 20 || Math.abs(1.5 * (dx * Math.sin(t) + dy * Math.cos(t))) >= 26); }
+    return [-0.6, 0, 0.22, 0.25, 0.6].every(t => Math.abs(2 * (dx * Math.cos(t) - dy * Math.sin(t))) >= 20 || Math.abs(1.5 * (dx * Math.sin(t) + dy * Math.cos(t))) >= 26); }
   const POSTS = [[-10.75, -7.25], [10.75, -7.25], [10.75, 7.25], [-10.75, 7.25]]; // the string-light posts
   const partyPosts = c => POSTS.map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy }));
 
@@ -96,6 +96,8 @@
       for (const at of [LAWN_AT, LAWN_GRID]) for (const L of [L0, turn(L0)]) for (const a of at) tries.push([L, a]);
       for (const [L, [ax, ay]] of tries) {
         const x = c.x + ax, y = c.y + ay, box = [x + L.box[0], y + L.box[1], x + L.box[2], y + L.box[3]];
+        const spots = L.spots.map(([dx, dy]) => ({ x: x + dx, y: y + dy }));
+        if (spots.some(p => partySeats(c).some(q => !partyClear(p, q)))) continue;
         if (taken.some(t => boxHit(t, [box[0] - 1, box[1] - 1, box[2] + 1, box[3] + 1])) || !free(box, { x, y })) continue;
         taken.push(box);
         out.push({ kind: L.kind, x, y, box, tall: L.turned ? 1 : 0, spots: L.spots.map(([dx, dy]) => ({ x: x + dx, y: y + dy })), pole: { x: x + L.pole[0], y: y + L.pole[1] }, barrel: L.barrel ? { x: x + L.barrel[0], y: y + L.barrel[1] } : null });

@@ -88,7 +88,7 @@ fs.mkdirSync(OUT, { recursive: true });
       for (const T of [18 * 60 + 30, 19 * 60 + 5, 20 * 60]) { at(T); const plan = f.partyPlan();
         for (const a of crowd) { const key = a === f.FARMER ? 'farmer' : a.id, P = plan[key]; if (!P) return { missing: key, T, capacity: Object.values(plan).filter(Boolean).length };
           Object.assign(a, { x: P.x, y: P.y, home: false, away: false, sleeping: false, moving: false, task: { kind: 'party', rest: true, to: P } }); if (a.pts) a.pts = []; }
-        for (const angle of [-0.6, 0, 0.25, 0.6]) { f.setAngle(angle);
+        for (const angle of [-0.6, 0, 0.22, 0.25, 0.6]) { f.setAngle(angle);
           for (let i = 0; i < 32; i++) { f.setRealT(100 + i * 0.35); f.render(); frames++; const ds = f.partyDraw(); minDrawn = Math.min(minDrawn, ds.length); const occupied = new Map();
             for (const o of ds) { const p = f.proj(o.x, o.y), x0 = Math.round(p[0]) - (o.flip ? SPR.fw - 1 - SPR.ax : SPR.ax), y0 = Math.round(p[1]) - SPR.ay - Math.round(o.z || 0);
               for (const [x, y] of mask(o)) { const k = (x0 + x) + ',' + (y0 + y), prev = occupied.get(k); if (prev && prev !== o.partyKey) { overlap++; if (bad.length < 8) bad.push([T, angle, i, prev, o.partyKey]); } else occupied.set(k, o.partyKey); } }
