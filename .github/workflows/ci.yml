@@ -96,7 +96,8 @@ jobs:
           # v5.11.0.5: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
-            scripts: inn-shots.js resort-shots.js rain-shots.js
+          # v5.11.0.12: rain-shots -> agrilot (recent-b was 24m43s with rain on album run 44777224060; inn+resort stay here)
+            scripts: inn-shots.js resort-shots.js
           # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s) and the district / town / farm / seaside
           # shots with door routes and perf (~5m on CI)
           # v5.11.0.11: + offline-shots and album-shots from townscale (townscale hit 25m13s with them on run 44772874375: v5110 15m, school 5m,
@@ -111,7 +112,10 @@ jobs:
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           # v5.11.0.7: + hotbar-shots (~1m); agrilot was the lightest leg (5–9m on runs 44727901332 / 44729908140)
           - group: agrilot
-            scripts: agrilot-shots.js fog-shots.js hotbar-shots.js
+          # v5.11.0.12: + restaurant-shots (~1m, two shop-panel snaps) and rain-shots from recent-b
+            # (album run 44777224060: agrilot 11m44s with fog+hotbar, recent-b 24m43s with rain;
+            #  expected agrilot ~19–20m with rain+restaurant, >=3m headroom under 25m)
+            scripts: agrilot-shots.js fog-shots.js hotbar-shots.js restaurant-shots.js rain-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

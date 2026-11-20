@@ -2074,11 +2074,26 @@ function sprinklerTick() {
     if (n) { groundDirty = true; s.spray = realT + 2.5; s.wday = S.day; } });
 }
 // workshops: what someone carrying goods would hand in (index flags into the basket), so the stall run keeps them
+function dinerReserveNeed() {
+  if (!IN || !S.inn || !IN.dinerUp(S.inn) || !IN.reserveNeed || S.inn.diner.last === S.day) return null;
+  const fest = innFest();
+  const wantGroups = IN.groupsWanted(innStarsNow(), S.day, fest);
+  const overflow = Math.max(0, wantGroups - (S.inn.cabins | 0));
+  const walk = IN.walkinsOf(fest, overflow, S.day);
+  const want = IN.mealsWanted(S.inn, S.day, fest, walk);
+  if (!(want > 0)) return null;
+  return IN.reserveNeed(S.inn, want, innStaffedNow(), innCounts(), innPay);
+}
 function worksKeep(a) { const keep = new Array(a.crops.length).fill(false); if (a.role && !FAM.canDo(a.role, 'deliver')) return keep;
   for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at) continue; let room = PW.WORKS[id].inCap - w.inp;
     a.crops.forEach((it, i) => { if (room > 0 && !keep[i] && typeof it === 'string' && PW.WORKS[id].inputs.includes(it)) { keep[i] = true; room--; } }); }
   const ord = bakeryTaken(); if (ord) { const need = {}; for (const x of ord.need) need[x.id] = (need[x.id] | 0) + x.n; // v5.10.4: hold the day's order back from the stall
     a.crops.forEach((it, i) => { const ty = typeof it === 'string' ? it : null; if (ty && need[ty] > 0 && !keep[i]) { keep[i] = true; need[ty]--; } }); }
+  const dinerNeed = dinerReserveNeed(); // v5.11.0.12: hold tonight's restaurant ingredients until 11:30, like the bakery
+  if (dinerNeed) a.crops.forEach((it, i) => {
+    const ty = innType(it);
+    if (ty && dinerNeed[ty] > 0 && !keep[i]) { keep[i] = true; dinerNeed[ty]--; }
+  });
   return keep; }
 const worksKeepN = a => worksKeep(a).filter(Boolean).length;
 const workArea = { mill: 'field', jam: 'orchard', cheese: 'animal' };
@@ -3112,7 +3127,13 @@ function innFest() { const H = S.town && S.town.hall; return !!(IN && IN.isFest(
 function innFurnished() { const W = S.town && S.town.hall && S.town.hall.woodshop; return !!(W && ((W.used | 0) > 0 || (W.days | 0) > 0 || (W.made | 0) > 0)); }
 function innStaffedNow() { return !!(CR && S.home && CR.innStaffed(S.home)); }
 function innStarsNow() { return IN && S.inn ? IN.effectiveStars(S.inn, innStaffedNow(), innFurnished()) : 3; }
-function innPay(id) { return id === 'fish' ? (priceOfAny('bass') || IN.UNIT.fish || 20) : priceOfAny(id) || (IN && IN.UNIT[id]) || 1; }
+function innPay(id) {
+  if (id === 'seafish') id = 'sardine';
+  if (id === 'greens') return (IN && IN.UNIT && IN.UNIT.greens) || 20;
+  if (id === 'fish') return (priceOfAny('bass') || (IN && IN.UNIT.fish) || 20);
+  try { const v = priceOfAny(id); if (v) return v; } catch (e) {}
+  return (IN && IN.UNIT && IN.UNIT[id]) || 1;
+}
 function innType(it) {
   const ty = typeof it === 'string' ? it : SU.itemType(it);
   if (!ty) return null;
@@ -3153,15 +3174,15 @@ function innEarn(gold, src, x, y) {
   if (x != null) popText(x, y, 16, '+' + gold, '#ffd76a');
 }
 function innRateCtx() {
-  const missed = S.inn && S.inn.diner ? (S.inn.diner.missed | 0) : 0;
-  const served = S.inn && S.inn.diner && S.inn.diner.last === S.day ? 'ok' : '';
-  const dishes = IN && S.inn ? IN.todayMenu(S.inn, innCounts(), innStaffedNow(), innPay) : [];
+  // v5.11.0.12: use the last service (guests leave in the morning, meals were at 11:30 yesterday),
+  // never the lifetime diner.missed total (that kept writing 「今天的菜不够」 every day after one short day)
+  const rev = IN && S.inn ? IN.mealReview(S.inn, S.day) : { missed: 0, short: [], dish: null };
   return {
     animals: S.animals.map(a => ({ h: a.h })),
     yard: yard.length, yardCap: (typeof YARD_CAP === 'number' ? YARD_CAP : 18),
     decor: (S.decor && S.decor.placed ? S.decor.placed.length : 0) + (S.homeyard && S.homeyard.put ? Object.keys(S.homeyard.put).length : 0),
     flowers: (S.homeyard && S.homeyard.put && (S.homeyard.put.flowerbed | 0)) || 0,
-    missed, diner: !!(S.inn && IN.dinerUp(S.inn)), servedDish: dishes[0] && dishes[0].id,
+    missed: rev.missed, short: rev.short, diner: !!(S.inn && IN.dinerUp(S.inn)), servedDish: rev.dish,
     fireflies: !!(WX && WX.isSummer && WX.isSummer(S.day)),
     sunset: !!(S.inn && S.inn.resort && S.inn.resort.deck), furnish: innFurnished(),
   };
@@ -3209,9 +3230,13 @@ function innView() {
   });
   const staffed = innStaffedNow(), stars = innStarsNow();
   const counts = innCounts();
+  const stock = IN.stockWithGarden ? IN.stockWithGarden(I, counts) : counts;
   const menu = IN.listed(I, staffed);
-  const today = IN.todayMenu(I, counts, staffed, innPay);
+  if (IN.GARDEN_DISH && IN.dinerUp(I) && !menu.some(d => d.id === IN.GARDEN_DISH.id)) menu.push(IN.GARDEN_DISH);
+  const today = IN.todayMenu(I, stock, staffed, innPay);
   const book = IN.book(I);
+  const rev = IN.mealReview ? IN.mealReview(I, S.day) : { missed: I.diner.missed | 0, served: 0, short: [], dish: null };
+  const garden = IN.gardenYield ? IN.gardenYield(I) : {};
   return {
     open: !!(plot || ctx.resort || ctx.coast || (townLv() >= 2 && S.eff && S.eff.town)),
     plot, plotName: L ? L.name : null, town: townOpen(), moved: (I.moved | 0) || 0, freed, cabins: I.cabins | 0, inn2: I.inn2 | 0, diner: I.diner.lv | 0,
@@ -3222,11 +3247,13 @@ function innView() {
     guests: IN.staying(I, S.day), people: IN.peopleOf(I, S.day),
     seats: IN.seatsOf(I), dishes: IN.dishSlots(I, staffed),
     menu: I.diner.menu, auto: I.diner.menu === 'auto' || !Array.isArray(I.diner.menu),
-    listed: menu.map(d => ({ id: d.id, name: d.name, pay: IN.dishPay(d, innPay), need: d.need, special: !!d.special, can: IN.canMake(d, counts) })),
+    listed: menu.map(d => ({ id: d.id, name: d.name, pay: IN.dishPay(d, innPay), need: d.need, special: !!d.special, garden: !!d.garden, can: IN.canMake(d, stock) })),
     today: today.map(d => d.id), book, offers,
     earn: { rooms: I.earn.rooms | 0, meals: I.earn.meals | 0, today: I.earn.today | 0 },
     served: I.diner.served | 0, missed: I.diner.missed | 0, staffed, fest: innFest(),
     walkins: I.walkins | 0,
+    cookCap: IN.kitchenCap ? IN.kitchenCap(I) : 0, garden,
+    lastMeal: { day: I.diner.last | 0, served: rev.served, missed: rev.missed, short: rev.short, shortNames: (rev.short || []).map(id => IN.itemName ? IN.itemName(id) : id), dish: rev.dish },
   };
 }
 function innPayRooms(gold, notes, groups) {
@@ -3241,7 +3268,7 @@ function innMorning() {
   const done = IN.finish(S.inn, S.day);
   if (done === 'cabin') log(`小木屋盖好了，现在有 ${S.inn.cabins} 间`);
   if (done === 'diner') log('农家菜馆开张了，客人可以在院子里吃饭');
-  if (done === 'kitchen') log(`厨房升到了第 ${IN.kitchenLv(S.inn)} 级，能多做两道菜、多摆几张桌子`);
+  if (done === 'kitchen') log(`厨房升到了第 ${IN.kitchenLv(S.inn)} 级，能多做两道菜、多摆几张桌子，每天能做 ${IN.kitchenCap(S.inn)} 份`);
   if (done === 'inn2') log('小木屋都加盖了二层，每间可以再住一组客人');
   if (done === 'hut') log(`沙滩小屋盖好了，现在海边有 ${S.inn.resort.huts} 间`);
   if (done === 'stall') log('海鲜摊开张了，用家里钓的海鱼做海鱼烤和海鲜汤');
@@ -3271,13 +3298,18 @@ function innServeMeals() {
   const counts = innCounts();
   const usedNeed = [];
   const r = IN.serve(S.inn, want, counts, innStaffedNow(), innPay);
-  for (const id of r.used) { const d = IN.DISH[id]; if (d) usedNeed.push(...d.need); }
+  if (r.farmNeed && Object.keys(r.farmNeed).length) {
+    usedNeed.push(...Object.keys(r.farmNeed).map(id => ({ id, n: r.farmNeed[id] })));
+  } else {
+    for (const id of r.used) { const d = IN.DISH[id]; if (d) usedNeed.push(...d.need.filter(x => x.id !== 'greens')); }
+  }
   if (usedNeed.length) innPullNeed(usedNeed);
   S.inn.diner.last = S.day;
   const L = innLay();
   innEarn(r.gold, 'inn-meals', L ? L.diner.door.x : undefined, L ? L.diner.door.y - 8 : undefined);
-  if (r.n) log(`菜馆做了 ${r.n} 份农家菜，收入 ${r.gold} 金` + (r.missed ? `，还有 ${r.missed} 份没料做` : ''));
-  else if (r.missed) log('菜馆今天仓库里的料不够，有客人没吃上');
+  const lack = r.short && r.short.length ? '，缺' + r.short.map(id => IN.itemName(id)).join('、') : '';
+  if (r.n) log(`菜馆做了 ${r.n} 份农家菜，收入 ${r.gold} 金` + (r.missed ? `，还有 ${r.missed} 份没料做` + lack : ''));
+  else if (r.missed) log('菜馆今天仓库里的料不够，有客人没吃上' + lack);
 }
 function innServeStall() {
   if (!IN || !S.inn || !IN.stallUp(S.inn) || (S.inn.resort && S.inn.resort._meal === S.day)) return;
@@ -5086,7 +5118,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.11';
+const GAME_VERSION = '5.11.0.12';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5340,7 +5372,7 @@ Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHo
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
   NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
-Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innRepaint: () => innRepaint(), innMigrate: () => innMigrate(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask(), sunsetFade: T => sunsetFade(T), SC, LB, CL, FV, sportsOpenNow: () => sportsOpenNow(), sportsTask: () => sportsTask(), feastTask: () => feastTask(), festNow: () => festNow(), fairNow: () => fairNow(), sleepAt: () => sleepAt(), libraryRead: a => libraryRead(a) }); // v5.9.0 test hooks; v5.10.6–v5.10.11
+Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), dinerReserveNeed: () => dinerReserveNeed(), innServeMeals: () => innServeMeals(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innRepaint: () => innRepaint(), innMigrate: () => innMigrate(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask(), sunsetFade: T => sunsetFade(T), SC, LB, CL, FV, sportsOpenNow: () => sportsOpenNow(), sportsTask: () => sportsTask(), feastTask: () => feastTask(), festNow: () => festNow(), fairNow: () => fairNow(), sleepAt: () => sleepAt(), libraryRead: a => libraryRead(a) }); // v5.9.0 test hooks; v5.10.6–v5.10.11
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
