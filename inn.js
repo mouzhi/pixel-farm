@@ -129,20 +129,22 @@
   const siteOf = (townOpen, I) => (townOpen || anyInn(I)) ? SITE : null;
   function agriLayout() {
     const [x0, y0, x1, y1] = AGRI, roadY = 66;
-    const cw = 14, cd = 10;
-    const cabins = [482, 506, 534, 558].map((x, i) => ({ i, x, y: 8, hw: cw / 2, hd: cd / 2, door: P(x, 13), rot: 0 }));
-    const diner = { x: 520, y: 104, hw: 10, hd: 6, door: P(520, 110), rot: 0 };
+    // v5.11.0.9 (房子比例): cabins 18 x 13 and the restaurant 28 x 16 world units (they were 14 x 10 and 20 x 12), the same size
+    // class as the v5.11.0 town houses; the cabins spread out so the lane up the middle (x 520) stays clear
+    const cw = 18, cd = 13;
+    const cabins = [476, 500, 540, 564].map((x, i) => ({ i, x, y: 8, hw: cw / 2, hd: cd / 2, door: P(x, 8 + cd / 2), rot: 0 }));
+    const diner = { x: 520, y: 104, hw: 14, hd: 8, door: P(520, 112), rot: 0 };
     const tables = [];
-    for (let i = 0; i < 6; i++) { const col = i % 3, row = (i / 3) | 0; tables.push({ i, x: 510 + col * 10, y: 120 + row * 9, seats: 2 }); }
+    for (let i = 0; i < 6; i++) { const col = i % 3, row = (i / 3) | 0; tables.push({ i, x: 508 + col * 12, y: 123 + row * 10, seats: 2 }); }
     diner.tables = tables;
     diner.stand = P(diner.door.x + 7, diner.door.y + 2);
     // lanes: road -> cabin lane (north), road -> restaurant door (south), restaurant -> guest square
     const paths = [
       [P(520, roadY - 5), P(520, 20)], [P(476, 20), P(564, 20)],
-      [P(544, roadY + 5), P(544, 112), P(526, 112)],
-      [P(544, 112), P(552, 150)],
+      [P(544, roadY + 5), P(544, 116), P(523, 116)],
+      [P(544, 116), P(552, 150)],
     ];
-    const lamps = [P(514, 52), P(526, 30), P(550, 84), P(538, 100)];
+    const lamps = [P(514, 52), P(526, 30), P(550, 84), P(548, 100)];
     const pots = [];
     for (const c of cabins) { pots.push({ x: c.door.x - 5, y: c.door.y + 3 }); pots.push({ x: c.door.x + 5, y: c.door.y + 3 }); lamps.push(P(c.x + c.hw + 2, c.y)); }
     lamps.push(P(diner.x - diner.hw - 2, diner.y)); lamps.push(P(diner.x + diner.hw + 2, diner.y));
@@ -159,7 +161,7 @@
     const pad = 8, ix0 = x0 + pad, iy0 = y0 + pad, ix1 = x1 - pad, iy1 = y1 - pad;
     const nearEast = Math.abs(gate.x - x1) <= Math.abs(gate.x - x0);
     const gateSouth = gate.y >= (y0 + y1) / 2;
-    const dinerW = 20, dinerD = 12, cw = 14, cd = 10, tDepth = 12;
+    const dinerW = 28, dinerD = 16, cw = 18, cd = 13, tDepth = 14; // v5.11.0.9: the bigger cabins and restaurant
     // tables always sit on the south side of the restaurant (the default camera). The restaurant itself
     // stays near the gate; cabins take the opposite side so a tall roof does not sit on a cabin.
     let dinerY = gateSouth ? (iy1 - tDepth - dinerD / 2) : (iy0 + dinerD / 2 + 2);
@@ -243,7 +245,7 @@
     return ids[0] || null;
   }
   function resortLayout() {
-    const hw = 6, hd = 5;
+    const hw = 7, hd = 5; // v5.11.0.9: the huts are a size up (walls 12 x 9)
     const huts = [
       { i: 0, x: 214, y: 228, hw, hd, door: P(214, 233), rot: 0 },
       { i: 1, x: 236, y: 228, hw, hd, door: P(236, 233), rot: 0 },
