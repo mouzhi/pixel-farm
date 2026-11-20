@@ -69,6 +69,19 @@ fs.mkdirSync(OUT, { recursive: true });
       look(560, 230, 0.4); hide(); return { out }; })()`,
     r => { // particles and leaves are drawn over the shade, so a stray bright sample is fine; most must be dark
       const all = r.out.flatMap(o => o[3]), dark = all.filter(v => v <= 0.75).length; return all.length < 20 || dark < all.length * 0.85 ? 'unshaded under ' + JSON.stringify(r.out) : null; });
+  // 3b. v5.11.0.5.2 the framebuffer follows the window: the shade must reach every corner of a big or portrait canvas
+  for (const [name, vp] of [['fog_fill_wide.png', { width: 1920, height: 1080 }], ['fog_fill_tall.png', { width: 600, height: 1000 }]]) {
+    await shot(name, `(() => { ${helpers} at(10 * 60); dry(); look(792, 40, 0); hide(); f.render(); const W = cv.width, H = cv.height;
+        const px = [[3, 3], [W - 4, 3], [3, H - 4], [W - 4, H - 4], [W >> 1, H >> 1], [W >> 2, (H * 3) >> 2]], read = () => px.map(([x, y]) => Array.from(g.getImageData(x, y, 1, 1).data));
+        const on = read(); f.fogSet(false); f.render(); const off = read(); f.fogSet(true); f.fogUpdate(true); f.render();
+        // screen -> world from the (affine) projection, so each sample says whether it should be shaded
+        const [ox, oy] = f.proj(0, 0), [ax, ay] = f.proj(1, 0), [bx, by] = f.proj(0, 1), det = (ax - ox) * (by - oy) - (bx - ox) * (ay - oy);
+        const world = ([x, y]) => { const u = x - ox, v = y - oy; return [(u * (by - oy) - v * (bx - ox)) / det, ((ax - ox) * v - (ay - oy) * u) / det]; };
+        const want = px.map(p => { const [wx, wy] = world(p); return f.fogCell(wx, wy) >= 0.99 ? 'dark' : f.fogCell(wx, wy) === 0 ? 'clear' : 'edge'; });
+        return { W, H, want, r: on.map((c, i) => { const a = c[0] + c[1] + c[2], z = off[i][0] + off[i][1] + off[i][2]; return z ? +(a / z).toFixed(2) : 1; }) }; })()`,
+      r => r.W <= 426 && r.H <= 266 ? 'framebuffer did not grow ' + r.W + 'x' + r.H : !r.want.slice(0, 4).some(w => w === 'dark') ? 'no corner sample inside a district ' + r.want
+        : r.r.some((v, i) => r.want[i] === 'dark' ? v > 0.8 : r.want[i] === 'clear' ? v !== 1 : false) ? 'shade does not match the map ' + r.r + ' ' + r.want : null, null, { viewport: vp });
+  }
   // 4. taps and hover say how to open a district
   await shot('fog_hint.png', `(() => { ${helpers} at(10 * 60); look(792, 40, 0); const tap = f.fogTap(792, 40), farm = f.fogTap(100, 60);
       const r = cv.getBoundingClientRect(); cv.dispatchEvent(new PointerEvent('pointermove', { clientX: r.left + r.width / 2, clientY: r.top + r.height / 2, bubbles: true }));

@@ -4,7 +4,9 @@
 (() => {
 // ---------- config ----------
 const VIEW = (new URLSearchParams(location.search).get('view') || '').match(/^(\d+)x(\d+)$/); // v5.5.0: ?view=WxH, wide screenshots only
-const W = VIEW ? Math.min(1600, +VIEW[1]) : 426, H = VIEW ? Math.min(1000, +VIEW[2]) : 266; // low-res framebuffer, integer upscaled (3x on 1280x800)
+const BW = 426, BH = 266; // the reference framebuffer: its whole-number scale on this screen sets the pixel size (3x on 1280x800)
+// v5.11.0.5.2: the framebuffer grows to cover the window at that pixel size (fit), so the picture always fills the screen; ?view=WxH stays fixed for wide screenshots
+let W = VIEW ? Math.min(1600, +VIEW[1]) : BW, H = VIEW ? Math.min(1000, +VIEW[2]) : BH;
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
@@ -50,7 +52,14 @@ function fogPaint(F, box) {
   if (!FOG.c) { FOG.c = mkc(FG.GW, FG.GH); FOG.img = FOG.c.getContext('2d').createImageData(FG.GW, FG.GH); box = null; }
   FG.paint(F, FOG.img.data, box); const g = FOG.c.getContext('2d');
   if (box) g.putImageData(FOG.img, 0, 0, box[0], box[1], box[2] - box[0], box[3] - box[1]); else g.putImageData(FOG.img, 0, 0);
+  // v5.11.0.6 (variable framebuffer): a tall or wide window sees past the north / east edge of the map, so the shade carries on there:
+  // EDGE cells deep strips made by repeating the outer 4 rows / columns (one dither period, so no seam), plus the corner
+  if (!FOG.eN) { FOG.eN = mkc(FG.GW, FOG_EDGE); FOG.eE = mkc(FOG_EDGE, FG.GH); FOG.eNE = mkc(FOG_EDGE, FOG_EDGE); }
+  const n = FOG.eN.getContext('2d'), e = FOG.eE.getContext('2d'), c = FOG.eNE.getContext('2d'); n.clearRect(0, 0, FG.GW, FOG_EDGE); e.clearRect(0, 0, FOG_EDGE, FG.GH); c.clearRect(0, 0, FOG_EDGE, FOG_EDGE);
+  for (let k = 0; k < FOG_EDGE; k += 4) { n.drawImage(FOG.c, 0, 0, FG.GW, 4, 0, k, FG.GW, 4); e.drawImage(FOG.c, FG.GW - 4, 0, 4, FG.GH, k, 0, 4, FG.GH);
+    for (let m = 0; m < FOG_EDGE; m += 4) c.drawImage(FOG.c, FG.GW - 4, 0, 4, 4, k, m, 4, 4); }
 }
+const FOG_EDGE = 64;
 function fogUpdate(force) {
   if (!FOG.on || !S.eff) return;
   if (force || !FOG.init || realT >= FOG.next || realT < FOG.next - 1) { FOG.next = realT + 0.25;
@@ -82,10 +91,16 @@ function drawFog() {
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
   for (const [px, py] of [[0, 0], [W, 0], [0, H], [W, H]]) { const rx = (px - CX) / RS, ry = (py - CY) / (K * RS), u = (rx * CA + ry * SA - B[0]) / FG.CELL, v = (-rx * SA + ry * CA - B[1]) / FG.CELL;
     x0 = Math.min(x0, u); y0 = Math.min(y0, v); x1 = Math.max(x1, u); y1 = Math.max(y1, v); }
+  const vN = Math.floor(y0) - 1, uE = Math.ceil(x1) + 1; // how far the screen reaches past the north / east edge (in cells)
   x0 = clamp(Math.floor(x0) - 1, 0, FG.GW); y0 = clamp(Math.floor(y0) - 1, 0, FG.GH); x1 = clamp(Math.ceil(x1) + 1, 0, FG.GW); y1 = clamp(Math.ceil(y1) + 1, 0, FG.GH);
-  if (x1 > x0 && y1 > y0) { ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
-    ctx.drawImage(FOG.c, x0, y0, x1 - x0, y1 - y0, (B[0] - GX0) * RS + x0 * s, (B[1] - GY0) * RS + y0 * s, (x1 - x0) * s, (y1 - y0) * s);
-    ctx.setTransform(1, 0, 0, 1, 0, 0); }
+  const ox = (B[0] - GX0) * RS, oy = (B[1] - GY0) * RS;
+  ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
+  if (x1 > x0 && y1 > y0) ctx.drawImage(FOG.c, x0, y0, x1 - x0, y1 - y0, ox + x0 * s, oy + y0 * s, (x1 - x0) * s, (y1 - y0) * s);
+  const E = FOG_EDGE, far = 8 * E; // at most 512 cells out, far more than any window shows
+  if (FOG.eN && x1 > x0) for (let v = 0; v > Math.max(vN, -far); v -= E) ctx.drawImage(FOG.eN, x0, 0, x1 - x0, E, ox + x0 * s, oy + (v - E) * s, (x1 - x0) * s, E * s);
+  if (FOG.eE && y1 > y0) for (let u = FG.GW; u < Math.min(uE, FG.GW + far); u += E) ctx.drawImage(FOG.eE, 0, y0, E, y1 - y0, ox + u * s, oy + y0 * s, E * s, (y1 - y0) * s);
+  if (FOG.eNE && vN < 0 && uE > FG.GW) for (let u = FG.GW; u < Math.min(uE, FG.GW + far); u += E) for (let v = 0; v > Math.max(vN, -far); v -= E) ctx.drawImage(FOG.eNE, ox + u * s, oy + (v - E) * s, E * s, E * s);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
   const bob = Math.round(Math.sin(realT * 2)); // a padlock over each district still shut (the same one the farm's plots wear), 2x
   for (const z of FG.ZONES) { const a = FOG.lockA[z.id] || 0; if (a <= 0.02 || !onScreen(z.label.x, z.label.y, 20)) continue; const [sx, sy] = proj(z.label.x, z.label.y);
     if (a < 1) ctx.globalAlpha = a; ctx.drawImage(LOCK, Math.round(sx) - LOCK.width, Math.round(sy) - 2 * LOCK.height + bob, LOCK.width * 2, LOCK.height * 2); if (a < 1) ctx.globalAlpha = 1; }
@@ -538,16 +553,24 @@ function discSway(o, p, poseT, unit) { // one canopy clump; the whole tree share
 const cv = document.getElementById('game'), ctx = cv.getContext('2d', { willReadFrequently: true });
 cv.width = W; cv.height = H;
 const mk = mkc;
-const shMask = new Uint32Array(W * H);
-const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
+let shMask = new Uint32Array(W * H);
+let shC = mk(W, H), sctx = shC.getContext('2d');
+let litC = mk(W, H), lctx = litC.getContext('2d'); let litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
-let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
-function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
-  const dpr = window.devicePixelRatio || 1, vw = Math.floor(innerWidth * dpr), vh = Math.floor(innerHeight * dpr);
-  const base = Math.max(1, Math.floor(Math.min(vw / W, vh / H))), s = base + zoom;
+let zoom = 0; // extra integer zoom steps from the mouse wheel (bigger pixels, so pixels stay square)
+function sizeBuffers(w, h) { // v5.11.0.5.2: the screen-sized buffers follow the framebuffer
+  if (w === W && h === H) return;
+  W = w; H = h; cv.width = W; cv.height = H;
+  shMask = new Uint32Array(W * H); shC = mk(W, H); sctx = shC.getContext('2d');
+  litC = mk(W, H); lctx = litC.getContext('2d'); litImg = lctx.createImageData(W, H); litL = new Float32Array(W * H); litKey = '';
+  [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
+}
+function fit() { // whole multiple of the framebuffer in *device* pixels; the framebuffer is sized to cover the window, so there is no letterbox
+  const dpr = window.devicePixelRatio || 1, vw = Math.max(1, Math.round(innerWidth * dpr)), vh = Math.max(1, Math.round(innerHeight * dpr));
+  const base = Math.max(1, Math.floor(Math.min(vw / BW, vh / BH))), s = base + zoom;
+  if (!VIEW) sizeBuffers(Math.min(1600, Math.ceil(vw / s)), Math.min(1000, Math.ceil(vh / s)));
   const wrap = document.getElementById('wrap'), left = Math.floor((vw - W * s) / 2), top = Math.floor((vh - H * s) / 2);
   wrap.style.left = left / dpr + 'px'; wrap.style.top = top / dpr + 'px';
   cv.style.width = W * s / dpr + 'px'; cv.style.height = H * s / dpr + 'px';
@@ -5256,6 +5279,6 @@ function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === '
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
-Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); return i < 0 || j < 0 || i >= FG.GW || j >= FG.GH ? 0 : FOG.F[j * FG.GW + i]; } }); // v5.11.0.6 test hooks
+Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); if (i < 0 || j >= FG.GH) return 0; return FOG.F[Math.max(j, 0) * FG.GW + Math.min(i, FG.GW - 1)]; } /* past the north / east edge the shade carries on, as drawn */ }); // v5.11.0.6 test hooks
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();
