@@ -120,7 +120,7 @@
     x_neslope: [P(204, -106), P(240, -106), P(240, -112)],
   };
   // inside a bought road plot the road runs on to the town gate at the map edge
-  const TOWN = { gate: P(440, 66), lane: [P(362, 66), P(440, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
+  const TOWN = { gate: P(596, 66), lane: [P(362, 66), P(596, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
   if (WD) for (const k in ROUTES) if (!WD.ROUTES[k]) WD.ROUTES[k] = ROUTES[k];
 
   // ---------- the grazing meadow behind the sheep fold (a fold upgrade, not a plot) ----------
@@ -147,7 +147,7 @@
     if (riverDist(x, y) < RIVER_HW + BANK + pad * 0.6) return true;
     const ry = ridgeY(x); if (y < ry + 2 + pad * 0.3 && y > ry - CLIFF - 3) return true;
     if (onTrail(x, y, 7 + pad * 0.5)) return true;
-    if (inRect(x, y, [TOWN.gate.x - 10, 40, 460, 92])) return true;
+    if (inRect(x, y, [440, 40, 460, 92])) return true;
     return false;
   }
   // a world point that is outside the old 64 x 50 map

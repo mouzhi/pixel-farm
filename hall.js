@@ -20,19 +20,20 @@
   const HALL = TN.BY_ID.hall;
   const BOARD = P(HALL.x - 9, HALL.y + HALL.hd + 12);       // the notice board: in front of the hall, beside its path
   // street things, first batch (model, x, y, rot): a post box by the hall, a hand cart by the shop, crates, a sun shade on the square
-  const PROPS = [['mailbox', 529, 45, 0], ['cart', 480, 56, 0], ['crates', 506, 58, 0], ['parasol', 536, 146, 0]] /* v5.10.5: the sun shade moved south of L11 so 阿松's workshop can sit behind his house */;
+  const PROPS = [['mailbox', 786, 46, 0], ['cart', 803, 52, 0], ['crates', 833, 52, 0], ['parasol', 616, 162, 0]] /* v5.10.5: the sun shade moved south of L11 so 阿松's workshop can sit behind his house */;
   // ---------- the first batch of projects: three two-storey houses on lots that stood empty ----------
   // lot: centre, half size, door (where people stand), rot (Math.PI: door to the north, onto the street side), style (art)
   const LOTS = [
-    { id: 'L5', x: 466, y: 91, hw: 8, hd: 7, door: P(466, 82), rot: Math.PI, style: 0 },
-    { id: 'bakery', x: 483, y: 91, hw: 7, hd: 7, door: P(483, 82), rot: Math.PI, style: 3 }, // v5.10.4: lot L6, 小桃's shop (coords live in bakery.js too)
-    { id: 'L8', x: 560, y: 87, hw: 8, hd: 7, door: P(560, 78), rot: Math.PI, style: 1 },
-    { id: 'L11', x: 546, y: 131, hw: 8, hd: 7, door: P(546, 122), rot: Math.PI, style: 2 },
-    { id: 'woodshop', x: 568, y: 130, hw: 7, hd: 7, door: P(568, 123), rot: Math.PI, style: 4 }, // v5.10.5: lot L10, 阿松's workshop (coords live in woodshop.js too)
-    { id: 'smithy', x: 606, y: 134, hw: 7, hd: 7, door: P(606, 127), rot: Math.PI, style: 5 }, // v5.10.5: 铁匠阿锤's forge (coords live in smithy.js too)
-    Object.assign({ style: 6 }, SC ? SC.LOT : { id: 'school', x: 618, y: 26, hw: 8, hd: 8, door: P(618, 36), rot: 0 }),
-    Object.assign({ style: 7 }, LB ? LB.LOT : { id: 'library', x: 622, y: 118, hw: 7, hd: 7, door: P(622, 109), rot: Math.PI }),
-    Object.assign({ style: 8 }, CL ? CL.LOT : { id: 'clinic', x: 600, y: 87, hw: 8, hd: 7, door: P(600, 78), rot: Math.PI }),
+    // v5.11.0: the town moved east (town.js); two-storey lots are 20 x 16, the shops 20 x 18
+    { id: 'L5', x: 930, y: -40, hw: 10, hd: 8, door: P(930, -29), rot: 0, style: 0 },
+    Object.assign({ style: 3 }, BK.LOT), // v5.10.4: lot L6, 小桃's shop (bakery.js)
+    { id: 'L8', x: 964, y: -40, hw: 10, hd: 8, door: P(964, -29), rot: 0, style: 1 },
+    { id: 'L11', x: 964, y: 36, hw: 10, hd: 8, door: P(964, 47), rot: 0, style: 2 },
+    Object.assign({ style: 4 }, WS.LOT), // v5.10.5: lot L10, 阿松's workshop (woodshop.js)
+    Object.assign({ style: 5 }, SM.LOT), // v5.10.5: 铁匠阿锤's forge (smithy.js)
+    Object.assign({ style: 6 }, SC.LOT), // v5.10.9: the second classroom (school.js)
+    Object.assign({ style: 7 }, LB.LOT), // v5.10.9: 书屋 (library.js)
+    Object.assign({ style: 8 }, CL.LOT), // v5.10.10: 诊所 (clinic.js)
   ];
   const LOT = Object.fromEntries(LOTS.map(l => [l.id, l]));
   const PROJECTS = [
@@ -61,10 +62,8 @@
 
   // ---------- the people: 镇长 from the day the town opens, one family per house from the morning after it is done ----------
   const SPOTS = { hall: P(HALL.door.x + 5, HALL.door.y + 4), board: P(BOARD.x + 3, BOARD.y + 5), plaza2: P(TN.PLAZA.x - 14, TN.PLAZA.y - 6),
-    street2: P(600, 72), street3: P(478, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17), bakery: BK ? BK.STAND : P(490, 79),
-    woodshop: WS ? WS.STAND : P(576, 139), smithy: SM ? SM.STAND : P(608, 139),
-    library: LB ? LB.STAND : P(626, 106), yard: SC ? SC.WATCH : P(606, 44),
-    clinic: CL ? CL.STAND : P(606, 76) };
+    street2: P(910, 72), street3: P(630, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17), bakery: BK.STAND,
+    woodshop: WS.STAND, smithy: SM.STAND, library: LB.STAND, yard: SC.WATCH, clinic: CL.STAND };
   const NEIGHBOURS = [
     { id: 'n4', name: '镇长老顾', look: 'townE', home: 'h5', plan: [[8 * 60 + 30, 12 * 60, 'hall'], [13 * 60, 17 * 60, 'hall'], [17 * 60 + 30, 19 * 60 + 30, 'square']] },
     { id: 'n5', name: '裁缝阿梅', look: 'townF', lot: 'L5', plan: [[8 * 60, 11 * 60, 'plaza2'], [14 * 60, 17 * 60, 'board'], [18 * 60 + 30, 20 * 60 + 30, 'plaza2']] },

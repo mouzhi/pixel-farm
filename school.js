@@ -7,13 +7,13 @@
   const COST = 40000, WOOD = 200, LV = 3, EVERY = 14;
   const HOURS = { from: 9 * 60, to: 15 * 60 };
   // second classroom: east of the existing school (590, 28, hw 17), still inside the town (RECT right edge 632)
-  const LOT = { id: 'school', x: 618, y: 26, hw: 8, hd: 8, door: P(618, 36), rot: 0, style: 6 };
+  const LOT = { id: 'school', x: 692, y: 32, hw: 12, hd: 11, door: P(692, 46), rot: 0, style: 6 }; // v5.11.0: the town moved east
   // the dirt yard grows east once the project is up (the old yard is town.js SCHOOLYARD [572, 44, 608, 60])
-  const YARD = [572, 38, 628, 64];
-  const TRACK = { cx: 600, cy: 52, rx: 22, ry: 8 }; // a running oval across the yard, in front of both classrooms
-  const BENCHES = [P(586, 42), P(592, 42), P(582, 46)];
-  const WATCH = P(588, 44); // where the family stands to watch
-  const FLAG = P(618, 44);
+  const YARD = [606, -88, 716, 4]; // v5.11.0: the playground behind the school (north of it), reached by the west street
+  const TRACK = { cx: 662, cy: -44, rx: 40, ry: 14 }; // a running oval across the yard
+  const BENCHES = [P(632, -16), P(644, -16), P(656, -16)];
+  const WATCH = P(620, -20); // where the family stands to watch
+  const FLAG = P(708, -4);
   const built = H => !!(H && H.built && H.built.school);
   const isDay = (H, day) => built(H) && (day | 0) > (H.built.school | 0) && (day | 0) % EVERY === 0;
   const nextDay = (H, day) => { if (!built(H)) return null; let d = Math.max((day | 0), (H.built.school | 0) + 1); while (d % EVERY) d++; return d; };

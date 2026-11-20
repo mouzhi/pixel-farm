@@ -14,7 +14,7 @@
   // ---------- ground (one call per ground pixel; cheap rejects first) ----------
   // -> [palette colour, kind] or null (null: the old ground rules decide). plots: S.plots (bought plots and their module)
   // 16-unit buckets: which river / trail segments and plots can touch a cell (ground() runs ~2M times per rebuild)
-  const BK = 16, BX0 = -300, BY0 = -260, BW = 52, BH = 46;
+  const BK = 16, BX0 = -300, BY0 = -260, BW = Math.ceil(((root.PFWorld ? root.PFWorld.WORLD.x1 : 640) + 60 - BX0) / BK), BH = 46; // v5.11.0: BW follows the map (52 -> 86)
   const segD = (px, py, a, b) => { const dx = b.x - a.x, dy = b.y - a.y, l = dx * dx + dy * dy || 1; let t = ((px - a.x) * dx + (py - a.y) * dy) / l; t = t < 0 ? 0 : t > 1 ? 1 : t; return Math.hypot(px - a.x - t * dx, py - a.y - t * dy); };
   const bucket = (lines, pad) => { const out = new Array(BW * BH); for (let k = 0; k < out.length; k++) { const cx = BX0 + (k % BW) * BK, cy = BY0 + Math.floor(k / BW) * BK, segs = [];
       for (const L of lines) for (let i = 0; i < L.length - 1; i++) { const a = L[i], b = L[i + 1]; if (Math.min(a.x, b.x) - pad <= cx + BK && Math.max(a.x, b.x) + pad >= cx && Math.min(a.y, b.y) - pad <= cy + BK && Math.max(a.y, b.y) + pad >= cy) segs.push([a, b]); }

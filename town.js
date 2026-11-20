@@ -8,25 +8,41 @@
 (function (root) {
   const P = (x, y) => ({ x, y });
   // ---------- the place ----------
-  const RECT = [448, -16, 632, 150];                       // the town (inside the new east strip 448..640)
-  const STRIP = [448, -208, 640, 384];                     // the strip the map grew by
-  const GATE = P(440, 66);                                 // the gate at the end of 东大道 (the old one, now with a town behind it)
+  // v5.11.0: the town moved east and grew (docs/town-scale-plan.md). The map runs to x 1008; between the old gate (440) and
+  // the new one (596) the east road crosses ground kept free for the 农家乐区 (v5.11.1). Buildings are a size up and a lot
+  // taller (doors as tall as a grown-up). Saves keep ids and counts only, so nothing in a save moves.
+  const RECT = [600, -96, 984, 212];                       // the town: 384 x 308 world units (was 184 x 166 at 448..632 x -16..150)
+  const STRIP = [448, -208, 1008, 384];                    // the strip the map grew by (v5.8.0: 448..640; v5.11.0: to 1008)
+  const GATE = P(596, 66);                                 // the town gate, where the east road reaches the town
+  const AGRI = [456, -40, 584, 200];                       // kept clear for the 农家乐区 (v5.11.1): no trees, no props
+  const AVENUE = { y: 66, hw: 5, x0: 362, x1: 980, walk: 1.3 }; // 东大道 + 主街 in stone: people walk 1.3x faster on it
+  const SQUARE = [706, 86, 820, 172];                      // 节庆广场: the harvest feast's long table and the lantern ring
+  const RESERVED = [                                       // 预留地块: signposted, nothing on them yet
+    { id: 'R1', rect: [732, -88, 830, -26] }, { id: 'R2', rect: [900, 84, 976, 166] },
+    { id: 'R3', rect: [800, 186, 880, 208] }, { id: 'R4', rect: [900, 186, 976, 208] }];
   // streets are routes: painted as dirt and walked like the farm lanes
-  const STREETS = { t_main: [P(436, 66), P(626, 66)], t_north: [P(540, 66), P(540, 52)], t_south: [P(524, 66), P(524, 132)], t_school: [P(590, 66), P(590, 46)], t_shop: [P(492, 66), P(492, 52)], t_hall: [P(518, 66), P(518, 44)], t_bake: [P(483, 66), P(483, 82)], t_wood: [P(524, 132), P(568, 132), P(568, 123)], t_smith: [P(524, 132), P(606, 132), P(606, 127)], t_L2: [P(468, 66), P(468, 59)], t_L3: [P(560, 66), P(560, 43)], t_lib: [P(606, 132), P(622, 132), P(622, 109)], t_clinic: [P(600, 66), P(600, 78)] }; // t_hall: v5.10.0; t_bake: v5.10.4; t_wood / t_smith: v5.10.5; t_L2 / t_L3: v5.10.6; t_lib: v5.10.9; t_clinic: v5.10.10
+  const STREETS = { t_main: [P(436, 66), P(980, 66)], t_west: [P(606, 66), P(606, -12)], t_mid: [P(696, 66), P(696, 176)], t_east: [P(838, 66), P(838, -14)],
+    t_east2: [P(838, 66), P(838, 176)], t_lane: [P(838, -14), P(980, -14)], t_works: [P(606, 176), P(980, 176)], t_works0: [P(606, 66), P(606, 176)],
+    t_school: [P(642, 66), P(642, 46)], t_shop: [P(818, 66), P(818, 46)], t_hall: [P(768, 66), P(768, 43)],
+    t_h1: [P(862, -14), P(862, -30)], t_h5: [P(896, -14), P(896, -30)], t_L5: [P(930, -14), P(930, -29)], t_L8: [P(964, -14), P(964, -29)],
+    t_h2: [P(862, 66), P(862, 46)], t_h3: [P(896, 66), P(896, 46)], t_h4: [P(930, 66), P(930, 46)], t_L11: [P(964, 66), P(964, 47)],
+    t_bake: [P(626, 176), P(626, 182)], t_wood: [P(664, 176), P(664, 182)], t_smith: [P(702, 176), P(702, 182)],
+    t_class: [P(692, 66), P(692, 46)], t_lib: [P(726, 66), P(726, 46)], t_clinic: [P(870, 66), P(870, 98)] };
   // buildings: centre, half size (world units, 8 = one farm tile), door (where people stand), rot (0: door to the south)
   const BUILDINGS = [
-    { id: 'shop', name: '镇上小店', kind: 'shop', x: 492, y: 36, hw: 13, hd: 8, door: P(492, 50), rot: 0 },
-    { id: 'school', name: '学校', kind: 'school', x: 590, y: 28, hw: 17, hd: 10, door: P(590, 44), rot: 0 },
-    { id: 'h1', name: '林老师家', kind: 'house', x: 540, y: 34, hw: 6, hd: 5, door: P(540, 44), rot: 0, roof: 1 },
-    { id: 'h2', name: '周婶家', kind: 'house', x: 486, y: 106, hw: 6, hd: 5, door: P(486, 96), rot: Math.PI, roof: 0 },
-    { id: 'h3', name: '阿松家', kind: 'house', x: 568, y: 108, hw: 6, hd: 5, door: P(568, 98), rot: Math.PI, roof: 2 },
-    { id: 'h4', name: '小桃家', kind: 'house', x: 606, y: 112, hw: 6, hd: 5, door: P(606, 102), rot: Math.PI, roof: 0 },
-    { id: 'h5', name: '镇长家', kind: 'house', x: 460, y: 20, hw: 6, hd: 5, door: P(460, 30), rot: 0, roof: 2 },
-    { id: 'hall', name: '镇公所', kind: 'hall', x: 518, y: 28, hw: 10, hd: 8, door: P(518, 40), rot: 0 }, // v5.10.0: the notice board is by its door (hall.js)
+    { id: 'shop', name: '镇上小店', kind: 'shop', x: 818, y: 32, hw: 18, hd: 11, door: P(818, 46), rot: 0 },
+    { id: 'school', name: '学校', kind: 'school', x: 642, y: 30, hw: 23, hd: 13, door: P(642, 46), rot: 0 },
+    { id: 'h1', name: '林老师家', kind: 'house', x: 862, y: -40, hw: 9, hd: 7, door: P(862, -30), rot: 0, roof: 1 },
+    { id: 'h2', name: '周婶家', kind: 'house', x: 862, y: 36, hw: 9, hd: 7, door: P(862, 46), rot: 0, roof: 0 },
+    { id: 'h3', name: '阿松家', kind: 'house', x: 896, y: 36, hw: 9, hd: 7, door: P(896, 46), rot: 0, roof: 2 },
+    { id: 'h4', name: '小桃家', kind: 'house', x: 930, y: 36, hw: 9, hd: 7, door: P(930, 46), rot: 0, roof: 0 },
+    { id: 'h5', name: '镇长家', kind: 'house', x: 896, y: -40, hw: 9, hd: 7, door: P(896, -30), rot: 0, roof: 2 },
+    { id: 'hall', name: '镇公所', kind: 'hall', x: 768, y: 28, hw: 15, hd: 12, door: P(768, 43), rot: 0 }, // v5.10.0: the notice board is by its door (hall.js)
   ];
   const BY_ID = Object.fromEntries(BUILDINGS.map(b => [b.id, b]));
-  const PLAZA = { x: 524, y: 98, r: 15 };                  // a cobbled square with a fountain where the south street meets
-  const SCHOOLYARD = [572, 44, 608, 60];
+  const PLAZA = { x: 650, y: 120, r: 24 };                 // a cobbled square with a fountain (the market makes it r 36, market.js)
+  const SCHOOLYARD = [606, -88, 716, 4];
+  const TREES = [[842, -84], [882, -72], [920, -86], [958, -72], [725, -60], [725, -22], [881, 0], [933, 0], [959, 0], [829, 121], [855, 150], [881, 165], [686, 143], [621, 154], [855, 88]]; // v5.11.0: shade on the town's grass (off streets, roofs, squares and the reserved lots)
   const SCHOOL_DOOR = BY_ID.school.door, SHOP_DOOR = BY_ID.shop.door;
   const inRect = (x, y, r, pad = 0) => x >= r[0] - pad && x <= r[2] + pad && y >= r[1] - pad && y <= r[3] + pad;
   const inTown = (x, y, pad = 0) => inRect(x, y, RECT, pad);
@@ -43,13 +59,16 @@
   }
   // nav: what people may not walk on in the strip. open: the town is bought
   function blocks(open) {
-    if (!open) return [[GATE.x + 2, STRIP[1], STRIP[2], STRIP[3]]];
-    const out = [[STRIP[0], STRIP[1], STRIP[2], RECT[1]], [STRIP[0], RECT[3], STRIP[2], STRIP[3]], [RECT[2], RECT[1], STRIP[2], RECT[3]],
-      [STRIP[0] - 2, RECT[1], STRIP[0] + 2, GATE.y - 8], [STRIP[0] - 2, GATE.y + 8, STRIP[0] + 2, RECT[3]]];
+    // the strip west of the town: only the east road crosses it (the 农家乐区 ground stays empty until v5.11.1)
+    const out = [[STRIP[0], STRIP[1], RECT[0] - 2, GATE.y - 8], [STRIP[0], GATE.y + 8, RECT[0] - 2, STRIP[3]]];
+    if (!open) { out.push([GATE.x + 2, STRIP[1], STRIP[2], STRIP[3]]); return out; }
+    out.push([RECT[0] - 2, STRIP[1], STRIP[2], RECT[1]], [RECT[0] - 2, RECT[3], STRIP[2], STRIP[3]], [RECT[2], RECT[1], STRIP[2], RECT[3]],
+      [RECT[0] - 2, RECT[1], RECT[0] + 2, GATE.y - 8], [RECT[0] - 2, GATE.y + 8, RECT[0] + 2, RECT[3]]);
     for (const b of BUILDINGS) out.push([b.x - b.hw, b.y - b.hd, b.x + b.hw, b.y + b.hd]);
-    out.push([PLAZA.x - 4, PLAZA.y - 3, PLAZA.x + 4, PLAZA.y + 3]); // the fountain
+    out.push([PLAZA.x - 6, PLAZA.y - 5, PLAZA.x + 6, PLAZA.y + 5]); // the fountain (v5.11.0: 13 units across)
     return out;
   }
+  const onAvenue = (x, y) => x >= AVENUE.x0 && x <= AVENUE.x1 && Math.abs(y - AVENUE.y) <= AVENUE.hw;
 
   // ---------- school ----------
   // where the walk to school goes. ctx: { regions, plots, open (town bought) } -> { to, via, inTown }
@@ -59,7 +78,7 @@
     if (!regions.includes('east')) return { to: P(224, 66), via: FARM_VIA.concat([P(224, 66)]), inTown: false };
     const road = plots.eroad && plots.eroad.mod === 'road';
     if (!road) return { to: P(356, 66), via: FARM_VIA.concat([P(280, 66), P(340, 66), P(356, 66)]), inTown: false };
-    const along = FARM_VIA.concat([P(280, 66), P(352, 66), P(362, 66), P(400, 66), P(GATE.x - 2, 66)]);
+    const along = FARM_VIA.concat([P(280, 66), P(352, 66), P(362, 66), P(400, 66), P(440, 66), P(520, 66), P(GATE.x - 2, 66)]);
     if (!(ctx && ctx.open)) return { to: P(GATE.x - 2, 66), via: along, inTown: false };
     return { to: SCHOOL_DOOR, via: along.concat([P(GATE.x + 10, 66), P(SCHOOL_DOOR.x, 66), SCHOOL_DOOR]), inTown: true };
   }
@@ -87,7 +106,7 @@
     { id: 'n2', name: '木匠阿松', look: 'guestA', home: 'h3', plan: [[8 * 60, 11 * 60, 'plaza'], [11 * 60, 16 * 60, 'street'], [16 * 60, 17 * 60, 'shop']] }, // home by 17:00: the party guests are the same people
     { id: 'n3', name: '面包师小桃', look: 'guestB', home: 'h4', plan: [[9 * 60, 12 * 60, 'shop'], [13 * 60, 17 * 60, 'plaza']] },
   ];
-  const SPOTS = { shop: P(SHOP_DOOR.x + 5, SHOP_DOOR.y + 3), schoolgate: P(SCHOOL_DOOR.x - 6, SCHOOL_DOOR.y + 4), plaza: P(PLAZA.x + 12, PLAZA.y + 10), street: P(560, 72), bench: P(PLAZA.x - 10, PLAZA.y + 18) }; // bench: by the square's bench (v5.9.1)
+  const SPOTS = { shop: P(SHOP_DOOR.x + 6, SHOP_DOOR.y + 4), schoolgate: P(SCHOOL_DOOR.x - 8, SCHOOL_DOOR.y + 5), plaza: P(PLAZA.x + 16, PLAZA.y + 14), street: P(884, 72), bench: P(PLAZA.x - 14, PLAZA.y + 22) }; // bench: by the square's bench (v5.9.1)
   // -> { at: {x, y}, out: true when they are out of the house }
   function neighbourAt(n, T) {
     const t = ((T % 1440) + 1440) % 1440, home = BY_ID[n.home].door;
@@ -96,7 +115,7 @@
   }
 
   // ---------- lights at night (v5.9.1): the street lamps, and windows while people are up ----------
-  const LAMPS = [P(470, 72), P(516, 60), P(560, 72), P(612, 60), P(530, 120)];
+  const LAMPS = [P(612, 74), P(709, 59), P(748, 59), P(793, 59), P(879, 59), P(947, 59), P(704, 74), P(830, 74), P(910, 74), P(976, 74), P(620, 168), P(684, 168), P(846, 168), P(960, 168), P(846, -8), P(913, -8)];
   const LIT = { lamps: [17 * 60 + 30, 6 * 60 + 30], homes: [17 * 60 + 30, 22 * 60 + 30], shop: [17 * 60 + 30, 19 * 60] };
   // -> [{ x, y, z, r, s }] for game.js's lighting pass at time T (minutes)
   function lightsAt(T) {
@@ -133,7 +152,7 @@
 
   // the streets join the farm's routes (ground paints them as dirt, the nav grid prefers them, no trees grow on them)
   if (root.PFWorld && root.PFWorld.ROUTES) for (const k in STREETS) if (!root.PFWorld.ROUTES[k]) root.PFWorld.ROUTES[k] = STREETS[k];
-  const api = { RECT, STRIP, GATE, STREETS, BUILDINGS, BY_ID, PLAZA, SCHOOLYARD, SCHOOL_DOOR, SHOP_DOOR, inTown, inStrip, inRect, PRICE, gate, blocks,
+  const api = { RECT, STRIP, GATE, AGRI, AVENUE, SQUARE, RESERVED, TREES, onAvenue, STREETS, BUILDINGS, BY_ID, PLAZA, SCHOOLYARD, SCHOOL_DOOR, SHOP_DOOR, inTown, inStrip, inRect, PRICE, gate, blocks,
     FARM_VIA, schoolRoute, SKIP, skipSchool, MATES, MATE, mateToday, mateName, NEIGHBOURS, SPOTS, neighbourAt, LAMPS, LIT, lightsAt, TRADE, tradeable, tradePrice, empty, valid, schoolDays };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFTown = api;
 })(typeof window !== 'undefined' ? window : globalThis);

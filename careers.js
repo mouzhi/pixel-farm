@@ -32,13 +32,13 @@
   // empty lots from the town plan (L2 between the little shop and 镇长's garden, L3 between 林老师 and the school).
   // L4 / L9 / L12 stay reserved for the school yard, the clinic and the library.
   const LOTS = [
-    { id: 'L2', x: 468, y: 53, hw: 6, hd: 6, door: P(468, 59), rot: 0, style: 6 },
-    { id: 'L3', x: 560, y: 36, hw: 7, hd: 7, door: P(560, 43), rot: 0, style: 7 },
+    { id: 'L2', x: 740, y: 194, hw: 9, hd: 8, door: P(740, 183), rot: Math.PI, style: 6 }, // v5.11.0: 工坊街
+    { id: 'L3', x: 778, y: 194, hw: 9, hd: 8, door: P(778, 183), rot: Math.PI, style: 7 },
   ];
   const LOT = Object.fromEntries(LOTS.map(l => [l.id, l]));
   const STREETS = {
-    t_L2: [P(468, 66), P(468, 59)],
-    t_L3: [P(560, 66), P(560, 43)],
+    t_L2: [P(740, 176), P(740, 183)],
+    t_L3: [P(778, 176), P(778, 183)],
   };
 
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
@@ -334,9 +334,9 @@
   const shouldLeave = T => { const t = ((T % 1440) + 1440) % 1440; return t >= WORK.leave && t < WORK.homeBy; };
   function standOf(at) {
     const BK = root.PFBakery, WS = root.PFWoodshop, SM = root.PFSmithy;
-    if (at === 'bakery') return (BK && BK.STAND) || P(490, 79);
-    if (at === 'wood') return (WS && WS.STAND) || P(576, 139);
-    if (at === 'smith') return (SM && SM.STAND) || P(608, 139);
+    if (at === 'bakery') return (BK && BK.STAND) || P(631, 179);
+    if (at === 'wood') return (WS && WS.STAND) || P(682, 200);
+    if (at === 'smith') return (SM && SM.STAND) || P(721, 199);
     const l = LOT[at]; return l ? P(l.door.x, l.door.y + (l.rot === Math.PI ? -1 : 1)) : null;
   }
   const doorOf = at => { const l = LOT[at]; return l ? l.door : standOf(at); };

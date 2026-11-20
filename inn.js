@@ -607,7 +607,7 @@
   // ---------- entry from the east avenue ----------
   // town open: the town gate at the end of the east road; otherwise the east-road plot's gate (or the lane at x 362, y 66).
   function entryOf(plots, townOpen) {
-    if (townOpen) return P(440, 66);
+    if (townOpen) return P(596, 66); // v5.11.0: the town gate moved east (town.js GATE)
     if (plots && plots.eroad) return P(362, 66);
     return P(352, 66);
   }
