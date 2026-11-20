@@ -751,6 +751,6 @@ EXCLUDED.md                      没有进仓库的大文件清单
 ## v5.11.0.2 触屏钩子（只给小红书版用；网页版鼠标操作不变，存档仍是 v15，追加可选的 `decor.kept`）
 
 - 给小红书手机外壳（`platforms/xhs/touch.js`）用的钩子：`__farm.aimAt(x, y)` 把当前工具对准屏幕上一点（准星）并返回能不能放、砍树是否已标记、挪东西准星下是什么；`__farm.commitAt(x, y)` 等于在那一点点一下，返回结果。
-- `__farm.setTouch({ slop, pickCss })`：点按/拖动阈值（网页默认 5px，手机外壳设 10px）和最小选取半径（网页 0，手机外壳 22px）。网页版不调用，行为和 v5.11.0 一样。
+- `__farm.setTouch({ slop, pickCss, onTap })`：onTap 返回 true 时这次点按由外壳处理（比如把那一点移到准星下），不再当成点地图；点按/拖动阈值（网页默认 5px，手机外壳设 10px）和最小选取半径（网页 0，手机外壳 22px）。网页版不调用，行为和 v5.11.0 一样。
 - 「收回」：`__farm.storeThing(pick)` 让家人把摆好的装饰搬回仓库（派对区、加工坊、蜂箱、浇水器、房子不能收回）。收回的装饰记在 `decor.kept`，家人不会再自己拿出去摆，玩家亲手摆出去时扣掉。存档里只有用过才会出现这个字段；`decor.orders` 多了 `op: 'store'`。
 - 测试：`node tools/touchhooks-shots.js`（CI home 组）：桌面默认值和鼠标点按/拖动不变、aimAt/commitAt 与点按一致、10px 阈值放过手指抖动、22px 选取半径、收回后过夜不被摆回、手摆用掉 kept、两个存档样例照常读入。

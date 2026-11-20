@@ -35,7 +35,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { v: window.GAME_VERSION_TEXT || document.title, touch: f.setTouch(), id: t.t.id, x: t.c.x, y: t.c.y - 20 }; })()`);
     await p.mouse.move(r.x, r.y); await p.mouse.down(); await p.mouse.move(r.x + 6, r.y); await p.mouse.up(); r.dragMarked = await p.evaluate(id => __farm.S.orders.some(o => o.id === id), r.id);
     await p.mouse.click(r.x, r.y); r.clickMarked = await p.evaluate(id => __farm.S.orders.some(o => o.id === id), r.id); return r; },
-    r => r.touch.slop !== 5 || r.touch.pickCss !== 0 ? 'defaults ' + JSON.stringify(r.touch) : r.dragMarked ? 'a 6px drag marked' : !r.clickMarked ? 'click did not mark' : !r.v.includes(VERSION) ? 'version ' + r.v : null);
+    r => r.touch.slop !== 5 || r.touch.pickCss !== 0 || r.touch.onTap ? 'defaults ' + JSON.stringify(r.touch) : r.dragMarked ? 'a 6px drag marked' : !r.clickMarked ? 'click did not mark' : !r.v.includes(VERSION) ? 'version ' + r.v : null);
 
   // 2. aimAt / commitAt in 砍树, 种树 and 摆装饰 agree with what a click does; slop 10 lets a 7 px finger wobble through as a tap
   await shot('aim_commit.png', { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, null, async p => {
@@ -53,10 +53,11 @@ fs.mkdirSync(OUT, { recursive: true });
     const [x, y, id] = r.tree; const cdp = await p.context().newCDPSession(p);
     const tap = async () => { await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + 7, y }] }); await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] }); await p.waitForTimeout(100); };
     const marked = () => p.evaluate(id => __farm.S.orders.some(o => o.type === 'chop' && o.id === id), id);
-    await tap(); r.wobble5 = await marked(); await p.evaluate(() => __farm.setTouch({ slop: 10 })); await tap(); r.wobble10 = await marked(); return r; },
+    await tap(); r.wobble5 = await marked(); await p.evaluate(() => __farm.setTouch({ slop: 10 })); await tap(); r.wobble10 = await marked();
+    await p.evaluate(() => { window.__taps = 0; __farm.setTouch({ onTap: () => { window.__taps++; return true; } }); }); await tap(); r.onTapTook = await p.evaluate(() => window.__taps); r.onTapKept = await marked(); await p.evaluate(() => __farm.setTouch({ onTap: null })); return r; },
     r => !r.a0.ok || r.a0.marked ? 'aim before ' + JSON.stringify(r.a0) : !r.c0.ok || r.c0.removed ? 'commit ' + JSON.stringify(r.c0) : !r.a1.marked ? 'not shown as marked' : !r.c1.removed ? 'second commit did not unmark'
       : r.miss.ok !== false ? 'miss ' + JSON.stringify(r.miss) : !r.plantGood || !r.plantGood.ok ? 'plant good ' + JSON.stringify(r.plantGood) : !r.plantBad || r.plantBad.ok ? 'plant bad ' + JSON.stringify(r.plantBad)
-      : !r.decor || !r.decor.ok ? 'decor ' + JSON.stringify(r.decor) : r.wobble5 ? '7px wobble counted at slop 5' : !r.wobble10 ? '7px wobble lost at slop 10' : null);
+      : !r.decor || !r.decor.ok ? 'decor ' + JSON.stringify(r.decor) : r.wobble5 ? '7px wobble counted at slop 5' : !r.wobble10 ? '7px wobble lost at slop 10' : r.onTapTook !== 1 || !r.onTapKept ? 'onTap did not take the tap ' + r.onTapTook : null);
 
   // 3. pick floor: a point 16 CSS px off a bench misses at pickCss 0 and picks it at 22; aimAt names it; commitAt picks and unpicks
   // 4. 收回: the family carries it to the storehouse; it stays there over nights (not set down again), and placing it by hand uses the kept piece

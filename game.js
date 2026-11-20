@@ -4690,7 +4690,7 @@ function clickAt(e) {
 }
 // v5.11.0.2 hooks for a touch shell (platforms/xhs touch.js): aim the current tool at a screen point (the crosshair) and commit there.
 // The mouse path above is unchanged: pointermove → hoverAt, a click → clickAt. TOUCH.slop: the tap / drag threshold in CSS px (5 = the web's).
-const TOUCH = { slop: 5, pickCss: 0 };
+const TOUCH = { slop: 5, pickCss: 0, onTap: null }; // onTap(e, mode) → true: the shell handled the tap (e.g. pans that spot under its crosshair)
 function aimAt(x, y) { // → { mode, ok (null: nothing to say yet), marked (砍树: already marked), pick (挪东西: the picked thing), what (挪东西: the thing under the point) }
   const e = { clientX: x, clientY: y }; hoverAt(e); const h = INPUT.hover, m = INPUT.mode, out = { mode: m, ok: null, marked: false, pick: INPUT.mvPick || null, what: null };
   if (!m) return out; const w = toWorld(x, y);
@@ -4730,7 +4730,7 @@ function takeDoorGift() {
   else log('把门口的树枝收起来了');
   S.doorGift = null;
 }
-const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift) { const [sx, sy] = (setCam(), proj(DOOR.x + 7, DOOR.y + 5)); if (Math.hypot(sx - w.px, sy - w.py) < 12) takeDoorGift(); } } } drag = null; document.body.classList.remove('grab'); };
+const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (TOUCH.onTap && TOUCH.onTap(e, INPUT.mode)) { /* v5.11.0.2: the touch shell took this tap */ } else if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift) { const [sx, sy] = (setCam(), proj(DOOR.x + 7, DOOR.y + 5)); if (Math.hypot(sx - w.px, sy - w.py) < 12) takeDoorGift(); } } } drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
@@ -5155,6 +5155,6 @@ function jumpSpot(id) {
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) jumpTo(b.dataset.j); }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot });
-Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); return Object.assign({}, TOUCH); } }); // v5.11.0.2
+Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();
