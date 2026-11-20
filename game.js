@@ -86,11 +86,7 @@ function fogUpdate(force) {
 function fogRepaint() { if (!FOG.dirty) return; FOG.dirty = false; const box = FOG.box; FOG.box = null;
   if (FOG.fading) { FOG.F = FG.blend(FOG.from, FOG.to, FOG.e || 0, FOG.buf, FOG.fbox); fogPaint(FOG.F, FOG.fbox); } else fogPaint(FOG.F, box); }
 function drawFog() {
-  if (!FOG.on) return;
-  // v5.11.0.11 相册: a photo taken while a district's shade is lifting (镇门打开 is shot the moment the gate opens) shows it lifted;
-  // the next normal frame repaints the fade from where it was
-  if (albumBusy && FOG.fading && FOG.to) { FOG.dirty = false; fogPaint(FOG.to, FOG.fbox); FOG.dirty = true; } else fogRepaint();
-  if (!FOG.c || FOG.empty) return;
+  if (!FOG.on) return; fogRepaint(); if (!FOG.c || FOG.empty) return;
   const [gx, gy] = proj(GX0, GY0), B = FG.BOUNDS, s = FG.CELL * RS;
   // only the cells under the screen (like the ground): invert the four corners into fog cells, one cell of margin
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -4848,7 +4844,10 @@ function albumSnap(id, x, y, o) {
 }
 // at the end of render(): take one due photo
 function albumFlush() {
-  const i = albumQ.findIndex(q => S.t >= q.at); if (i < 0) return; const q = albumQ.splice(i, 1)[0], e = q.e;
+  const i = albumQ.findIndex(q => S.t >= q.at); if (i < 0) return;
+  // v5.11.0.6 fog: while a district's shade is lifting (镇门打开 is due the moment the gate opens) wait the 1.2 s for it to finish, so the
+  // photo shows it open and its cost never lands on a fade frame; a lock that changed this frame starts its fade now (not up to 0.25 s later)
+  if (FOG.on) { fogUpdate(true); if (FOG.fading) return; } const q = albumQ.splice(i, 1)[0], e = q.e;
   if (ALB.get(S.album, e.id) !== e) return; // a different farm was loaded meanwhile
   delete e.q;
   const f = q.follow && (q.follow === 'farmer' ? FARMER : S.members.find(m => m.id === q.follow));
@@ -4863,10 +4862,9 @@ function albumFlush() {
 // the PW×PH picture around world (x, y). stage: { who, t } puts those people on the spot at that time of day (re-staged photos)
 function albumShot(x, y, stage) {
   if (!ALB) return null; const PW = ALB.PW, PH = ALB.PH, c = mkc(PW, PH), g = c.getContext('2d');
-  if (FOG.on) fogUpdate(true); // v5.11.0.6 fog: a lock that changed this frame (镇门打开) starts its fade now, so the photo shows it lifted
   const box = () => { setCam(); const [sx, sy] = proj(x, y); return [Math.round(sx - PW / 2), Math.round(sy - PH * 0.6)]; };
   let [x0, y0] = box();
-  if (!stage && !FOG.fading && x0 >= 0 && y0 >= 0 && x0 + PW <= W && y0 + PH <= H) g.drawImage(cv, x0, y0, PW, PH, 0, 0, PW, PH); // already on screen: just cut it out
+  if (!stage && x0 >= 0 && y0 >= 0 && x0 + PW <= W && y0 + PH <= H) g.drawImage(cv, x0, y0, PW, PH, 0, 0, PW, PH); // already on screen: just cut it out
   else {
     const keep = { x: cam.x, y: cam.y }, T0 = S.t, saved = [];
     if (stage) { const who = (stage.who || []).map(id => (id === 'farmer' ? FARMER : S.members.find(m => m.id === id))).filter(Boolean);

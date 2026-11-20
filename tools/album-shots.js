@@ -176,7 +176,8 @@ fs.mkdirSync(OUT, { recursive: true });
     delete r.url; return r; },
     r => Object.entries(r.out).filter(([, v]) => !v || v.sd < 12).map(([k]) => k).join() ? 'flat / missing frames ' + JSON.stringify(r.out) : r.inn.roofTop <= 0 ? 'diner roof cut at the top (first roof row ' + r.inn.roofTop + ')' : null);
 
-  // 12. fog (v5.11.0.6): 「镇门打开」 is shot the moment the gate opens, while the town's shade is still lifting; the photo shows it lifted
+  // 12. fog (v5.11.0.6): 「镇门打开」 is due the moment the gate opens, while the town's shade is still lifting; the photo waits for the
+  //     1.2 s fade (its cost never lands on a fade frame) and shows the town open
   //     (lum: the frame's mean brightness under the shade, in the photo, and with no shade at all; other districts may stay shaded)
   await shot('towngate_fog.png', null, save72, async p => p.evaluate(async () => { const f = __farm, S = f.S; S.coins = 1e8; f.FARMER.wood = 1e4;
     f.buyPlot('eroad', 'road'); S.town.school.kid0 = Math.max(1, S.town.school.kid0 | 0); f.render(); await new Promise(z => setTimeout(z, 1600)); f.render(); // the road's own fade first
@@ -184,10 +185,11 @@ fs.mkdirSync(OUT, { recursive: true });
     const lum = async u => { const im = new Image(); im.src = u; await im.decode(); const c = document.createElement('canvas'); c.width = 160; c.height = 110; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
       const d = g.getImageData(0, 0, 160, 110).data; let s = 0; for (let k = 0; k < d.length; k += 4) s += (d[k] + d[k + 1] + d[k + 2]) / 3; return Math.round(s / (d.length / 4)); };
     const P = f.albumPlace('gate'), shut = await lum(f.albumShot(P.x, P.y, { who: ['farmer'], t: 630 }));
-    const r = f.buy('town'); f.render(); const v = f.albumView().shots.find(x => x.id === 'towngate'); if (!r.ok || !v || !v.url) return { error: 'buy ' + JSON.stringify(r) + ' photo ' + !!(v && v.url) };
+    const r = f.buy('town'); f.render(); const held = f.fog().fading && !f.albumView().shots.some(x => x.id === 'towngate' && x.url); // not under the fade
+    for (let i = 0; i < 40 && f.albumQueue(); i++) f.advance(0.1, 10); const v = f.albumView().shots.find(x => x.id === 'towngate'); if (!r.ok || !v || !v.url) return { error: 'buy ' + JSON.stringify(r) + ' photo ' + !!(v && v.url) };
     const live = await lum(v.url), fading = f.fog().fading; f.fogSet(false); f.render(); const open = await lum(f.albumShot(P.x, P.y, { who: ['farmer'], t: 630 })); f.fogSet(true); // no shade at all
-    return { shut, live, open, fading }; }),
-    r => r.live < r.shut + (r.open - r.shut) * 0.6 ? `photo under the lifting shade: lum shut ${r.shut} live ${r.live} open ${r.open}` : null);
+    return { shut, live, open, held, fading }; }),
+    r => !r.held ? 'photo taken while the shade was still lifting' : r.live < r.shut + (r.open - r.shut) * 0.6 ? `photo under the lifting shade: lum shut ${r.shut} live ${r.live} open ${r.open}` : null);
 
   await b.close(); server.close();
   const real = errs.filter(e => !/favicon|404/.test(e)); if (real.length) { console.log('page errors:', real.slice(0, 5)); fails.push('page errors'); }
