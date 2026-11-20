@@ -84,7 +84,8 @@ jobs:
             scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
-            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js
+          # v5.11.0.8: + rain-shots from recent-b (recent-b ran 24m39s, hall-market 9m44s on run 44743060653)
+            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js rain-shots.js
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
             scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
@@ -92,7 +93,7 @@ jobs:
           # v5.11.0.5: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
-            scripts: inn-shots.js resort-shots.js rain-shots.js
+            scripts: inn-shots.js resort-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
