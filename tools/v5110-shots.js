@@ -110,8 +110,10 @@ fs.mkdirSync(OUT, { recursive: true });
   // 7. mobile portrait (390 x 844, as on 小红书): the town, the HUD and the minimap buttons fit
   await shot('v5110_mobile.png', `(() => { ${setup} ${toLv4} at(11 * 60); const mm = document.getElementById('minimap'); mm.hidden = false; look(700, 60, 0); f.minimapDraw();
     const vw = innerWidth, over = [...document.querySelectorAll('#mmJump button, #minimap')].filter(e => { const q = e.getBoundingClientRect(); return q.right > vw + 1 || q.left < -1; }).length, wrap = [...document.querySelectorAll('#mmJump button')].filter(e => e.getBoundingClientRect().height > 30).length;
-    return { vw, over, wrap, mm: Math.round(mm.getBoundingClientRect().width) }; })()`,
-    r => r.over ? 'off screen ' + r.over : r.wrap ? 'jump buttons wrap ' + r.wrap : null, null, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
+    const hit = (a, b) => { const p = a.getBoundingClientRect(), q = b.getBoundingClientRect(); return p.width && q.width && p.left < q.right && q.left < p.right && p.top < q.bottom && q.top < p.bottom; };
+    const dy = document.getElementById('diaryBtn'), clash = dy ? [mm, ...document.querySelectorAll('#mmJump button, #navBtns button')].filter(e => e !== dy && hit(dy, e)).length : -1; // v5.10.13's 日记 K sits in the same right-hand dock
+    return { vw, over, wrap, clash, mm: Math.round(mm.getBoundingClientRect().width) }; })()`,
+    r => r.over ? 'off screen ' + r.over : r.wrap ? 'jump buttons wrap ' + r.wrap : r.clash ? 'diary button overlaps ' + r.clash : null, null, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
   // 8. routes: from the farm to every door in town, nobody walks through a building; the kid's school walk on the new avenue
   await shot('v5110_routes.png', `(() => { ${setup} ${toLv4} ${allHouses} at(9 * 60); f.ensureNav();
     const TN = window.PFTown, HLm = window.PFHall, CRm = window.PFCareers, rects = [...TN.BUILDINGS, ...HLm.LOTS, ...CRm.LOTS].map(b => ({ id: b.id, r: [b.x - b.hw + 0.6, b.y - b.hd + 0.6, b.x + b.hw - 0.6, b.y + b.hd - 0.6], door: b.door }));
