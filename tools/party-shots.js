@@ -36,6 +36,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const box = document.getElementById('offline'); if (box) box.hidden = true;`;
   const shot = async (name, fn, check) => { if (only && !name.includes(only)) return;
     const p = await page('?manual'); let r; try { r = await p.evaluate(fn); } catch (e) { r = { error: String(e).slice(0, 400) }; }
+    // Two ordinary mouse-wheel zoom steps: native integer-pixel scale, not an enlarged/cropped image.
+    await p.evaluate(() => { const c = document.querySelector('canvas'); for (let i = 0; i < 2; i++) c.dispatchEvent(new WheelEvent('wheel', { deltaY: -100, bubbles: true })); __farm.render(); });
     await p.waitForTimeout(300); await p.screenshot({ path: path.join(OUT, name + '.png') });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
 
