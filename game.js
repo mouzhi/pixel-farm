@@ -4,7 +4,9 @@
 (() => {
 // ---------- config ----------
 const VIEW = (new URLSearchParams(location.search).get('view') || '').match(/^(\d+)x(\d+)$/); // v5.5.0: ?view=WxH, wide screenshots only
-const W = VIEW ? Math.min(1600, +VIEW[1]) : 426, H = VIEW ? Math.min(1000, +VIEW[2]) : 266; // low-res framebuffer, integer upscaled (3x on 1280x800)
+const BW = 426, BH = 266; // the reference framebuffer: its whole-number scale on this screen sets the pixel size (3x on 1280x800)
+// v5.11.0.5.2: the framebuffer grows to cover the window at that pixel size (fit), so the picture always fills the screen; ?view=WxH stays fixed for wide screenshots
+let W = VIEW ? Math.min(1600, +VIEW[1]) : BW, H = VIEW ? Math.min(1000, +VIEW[2]) : BH;
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
@@ -372,7 +374,7 @@ function leafSprite(r, ramp, seed, inside, berries, sh = 0) { // sh: how deep in
   }
   g.putImageData(img, 0, 0); o = { c, rx, ry }; discC.set(key, o); return o;
 }
-function pineTier(r, th, ramp, seed) { // v5.11.0.5.1: one fir tier, a pointed cone of needles th px tall from its tip to its drooping skirt
+function pineTier(r, th, ramp, seed) { // v5.11.0.5.3: one fir tier, a pointed cone of needles th px tall from its tip to its drooping skirt
   // Row 0 is the tip, row th the skirt line (the tier's anchor). Each tier reaches well up behind the tier above, so the stack reads
   // as one fir: green to the tip, no trunk between the tiers. Lit from the upper left, deep shade on the right and under the skirt.
   const key = 'P' + r + '|' + th + ramp + seed; let o = discC.get(key); if (o) return o;
@@ -424,7 +426,7 @@ function birchDef(seed, sc = 1) {
     discs.push({ ox: Math.cos(a) * rad + lean * cz0 * 0.5, oy: Math.sin(a) * rad * 0.8, cz: cz0 + zz * 12 * sc, r: Math.round(4 + r() * 2), ramp: 'birch', seed: (seed + i) % 6, sh: zz > 0.2 ? 0 : 1 }); }
   return finishTree({ kind: 'birch', parts, discs, push: 0.7, period: 4.8, damp: 1.05, h: Math.ceil(cz0 + 14 * sc + 10) }, cz0, 9 * sc);
 }
-function pineDef(seed, ramp = 'pine', sc = 1) { // v5.11.0.5.1: a fir. A short trunk stub under overlapping cone tiers, foliage to the tip
+function pineDef(seed, ramp = 'pine', sc = 1) { // v5.11.0.5.3: a fir. A short trunk stub under overlapping cone tiers, foliage to the tip
   const r = mulberry32(seed), parts = [], discs = [], H = Math.round((62 + r() * 16) * sc), n = 5 + Math.floor(r() * 2), R0 = (16 + r() * 4) * sc;
   const base = Math.round(3 * sc), step = (H - 2 - base) / (n + 0.9), th = Math.round(step * 1.9);
   parts.push(part([-2, 2, -2, 2, 0, base + 3], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? (z === 0 ? Wd[0] : Wd[1]) : null)); // hidden above the skirt
@@ -472,16 +474,24 @@ function discSway(o, p, poseT, unit) { // one canopy clump; the whole tree share
 const cv = document.getElementById('game'), ctx = cv.getContext('2d', { willReadFrequently: true });
 cv.width = W; cv.height = H;
 const mk = mkc;
-const shMask = new Uint32Array(W * H);
-const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
+let shMask = new Uint32Array(W * H);
+let shC = mk(W, H), sctx = shC.getContext('2d');
+let litC = mk(W, H), lctx = litC.getContext('2d'); let litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
-let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
-function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
-  const dpr = window.devicePixelRatio || 1, vw = Math.floor(innerWidth * dpr), vh = Math.floor(innerHeight * dpr);
-  const base = Math.max(1, Math.floor(Math.min(vw / W, vh / H))), s = base + zoom;
+let zoom = 0; // extra integer zoom steps from the mouse wheel (bigger pixels, so pixels stay square)
+function sizeBuffers(w, h) { // v5.11.0.5.2: the screen-sized buffers follow the framebuffer
+  if (w === W && h === H) return;
+  W = w; H = h; cv.width = W; cv.height = H;
+  shMask = new Uint32Array(W * H); shC = mk(W, H); sctx = shC.getContext('2d');
+  litC = mk(W, H); lctx = litC.getContext('2d'); litImg = lctx.createImageData(W, H); litL = new Float32Array(W * H); litKey = '';
+  [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
+}
+function fit() { // whole multiple of the framebuffer in *device* pixels; the framebuffer is sized to cover the window, so there is no letterbox
+  const dpr = window.devicePixelRatio || 1, vw = Math.max(1, Math.round(innerWidth * dpr)), vh = Math.max(1, Math.round(innerHeight * dpr));
+  const base = Math.max(1, Math.floor(Math.min(vw / BW, vh / BH))), s = base + zoom;
+  if (!VIEW) sizeBuffers(Math.min(1600, Math.ceil(vw / s)), Math.min(1000, Math.ceil(vh / s)));
   const wrap = document.getElementById('wrap'), left = Math.floor((vw - W * s) / 2), top = Math.floor((vh - H * s) / 2);
   wrap.style.left = left / dpr + 'px'; wrap.style.top = top / dpr + 'px';
   cv.style.width = W * s / dpr + 'px'; cv.style.height = H * s / dpr + 'px';
@@ -4864,7 +4874,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.5.1';
+const GAME_VERSION = '5.11.0.5.3';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5014,7 +5024,7 @@ function applyRainMorning(forced) {
   noteProgress({ sawRain: true });
   return true;
 }
-// v5.11.0.5.1: tools/pine-shots.js renders one tree on its own (its cached sprite at the current angle) and reads its pixels
+// v5.11.0.5.3: tools/pine-shots.js renders one tree on its own (its cached sprite at the current angle) and reads its pixels
 if (window.__farm) Object.assign(window.__farm, { treeDefs, treeImage: (def, x = 0, y = 0, poseT = 0, lean = 0) => { setCam(); const o = { tree: def, x, y, lean, tick: 0 }, k = treeCache(o, poseT);
   const trunk = new Set(), leaf = new Set(); for (const c of Wd) trunk.add(u32(c)); for (const c of G) { leaf.add(u32(c)); leaf.add(OUTL.get(u32(c))); } leaf.delete(INK0); // ink outlines count as neither
   for (const c of trunk) leaf.delete(c); const cls = Array.from(k.d32, v => !(v >>> 24) ? 0 : trunk.has(v) ? 2 : leaf.has(v) ? 1 : 3);

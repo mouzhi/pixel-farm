@@ -39,7 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
     S.coins = Math.max(S.coins, 600000); f.FARMER.wood = 3000;
     for (const id of ['market', 'bakery']) { const r = f.hallStart(id); if (!r.ok) throw new Error(id + ': ' + r.why + ' wood=' + f.FARMER.wood); nextMorning(); at(9 * 60); }
     f.FARMER.wood = Math.max(f.FARMER.wood, 3000); S.coins = Math.max(S.coins, 500000);`;
-  const zoneInn = `if (!f.innPlot()) throw new Error('no inn site: the 农家乐区 opens with the town gate (v5.11.0.5.1), town=' + !!(S.eff && S.eff.town));`;
+  const zoneInn = `if (!f.innPlot()) throw new Error('no inn site: the 农家乐区 opens with the town gate (v5.11.0.5), town=' + !!(S.eff && S.eff.town));`;
   const zoneResort = `let land = f.buyPlot('eshore', 'resort');
     if (!land.ok && !S.plots.eshore) { land = f.buyPlot('eshore', 'meadow'); }
     if (S.plots.eshore && S.plots.eshore.mod !== 'resort') { const z = f.rezonePlot('eshore', 'resort'); if (!z.ok) throw new Error('rezone resort: ' + (z.why || z.reason)); }
@@ -78,7 +78,7 @@ fs.mkdirSync(OUT, { recursive: true });
       pier: S.inn.resort.pier, deck: S.inn.resort.deck, stays: (f.STAYS || []).filter(g => g.stay === 'beach').length,
       looks, auto, ver: f.version, props: (f.props || []).filter(q => q.hut != null || q.parasol != null || q.stall || q.deck || q.pier).length,
       lv: f.townLv() }; })()`,
-    r => r.ver !== '5.11.0.5.1' ? 'ver ' + r.ver
+    r => r.ver !== '5.11.0.5.3' ? 'ver ' + r.ver
       : !r.r || !r.r.ok ? 'start hut ' + JSON.stringify(r.r)
       : r.paid !== 15000 || r.wood !== 200 ? 'hut cost ' + r.paid + '/' + r.wood
       : r.same !== 0 ? 'finished the same day'
@@ -201,7 +201,7 @@ fs.mkdirSync(OUT, { recursive: true });
       : r.inn2 !== 1 ? 'not finished'
       : r.rooms !== 8 ? 'rooms ' + r.rooms
       : r.props < 1 ? 'no two-storey prop'
-      : r.ver !== '5.11.0.5.1' ? 'ver ' + r.ver
+      : r.ver !== '5.11.0.5.3' ? 'ver ' + r.ver
       : null);
 
   await shot('v5108_inn2_night.png', `(() => { ${setup} ${readyTown} ${zoneInn} ${raiseInn2}
@@ -221,7 +221,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of (S.decor && S.decor.placed) || []) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries((S.decor && S.decor.inv) || {})) c[k] = (c[k] || 0) + v;
       const I = s.inn || {};
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, inn2: I.inn2 | 0, huts: I.resort && I.resort.huts | 0, guests: (I.guests || []).length, counts: c }; })()`,
-      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.1' ? 'ver ' + r.ver
+      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.3' ? 'ver ' + r.ver
         : r.inn2 !== 0 || r.huts !== 0 || r.guests !== 0 ? 'inn not empty ' + JSON.stringify(r)
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, src);
   }
@@ -234,7 +234,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, inn: s2.inn && { cabins: s2.inn.cabins | 0, inn2: s2.inn.inn2 | 0, huts: s2.inn.resort && s2.inn.resort.huts | 0 }, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.1' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.3' ? 'ver ' + r.ver
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts changed' : null, save);
   }
 

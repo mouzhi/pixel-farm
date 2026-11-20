@@ -1,4 +1,4 @@
-// Screenshots + browser checks for v5.11.0.5.1 (农家乐区: the lodging gets its own district by the town gate, no plot is rezoned):
+// Screenshots + browser checks for v5.11.0.5 (农家乐区: the lodging gets its own district by the town gate, no plot is rezoned):
 //   node tools/agrilot-shots.js [name-filter]        writes /workspace/pf-shots/agrilot_*.png (PF_SHOTS to change)
 //   node tools/agrilot-shots.js --make-fixture       rewrites tools/fixtures/save-v15-inn-resort.json (a synthetic v5.11.0-style
 //                                                    save: 民宿院 on 林间空地, 3 cabins, two-storey, restaurant + kitchen, guests,
@@ -64,7 +64,7 @@ fs.mkdirSync(OUT, { recursive: true });
   if (MAKE) {
     const p = await page(null);
     const save = await p.evaluate(`(() => { ${legacy} const s = f.snapshot(); if (s.version) s.version = '5.11.0.1'; return s; })()`);
-    if (save.inn.where || save.inn.moved || save.plots.glade.free) throw new Error('fixture is not a pre-v5.11.0.5.1 save');
+    if (save.inn.where || save.inn.moved || save.plots.glade.free) throw new Error('fixture is not a pre-v5.11.0.5 save');
     fs.writeFileSync(FIXTURE, JSON.stringify(save, null, 1) + '\n');
     console.log('wrote', FIXTURE, 'day', save.clock.day, 'plots', JSON.stringify(save.plots), 'inn', JSON.stringify({ c: save.inn.cabins, i: save.inn.inn2, d: save.inn.diner.lv, g: save.inn.guests.length, r: save.inn.resort }));
     console.log('errors', errs); if (errs.length) process.exitCode = 1; await b.close(); server.close(); return;
@@ -152,7 +152,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { got: { cabins: I.cabins, inn2: I.inn2, diner: I.diner.lv, served: I.diner.served, guests: I.guests.map(g => g.id + ':' + g.room).join(), stars: I.stars.last.length, earn: I.earn.rooms + I.earn.meals, huts: I.resort.huts, parasols: I.resort.parasols },
         site: f.innPlot(), where: s.inn.where, moved: s.inn.moved, plot: s.plots.glade, resort: s.plots.eshore, notice: /民宿搬到镇门口的农家乐区/.test(logTxt), offer: o && { ok: o.ok, cost: o.cost, wood: o.wood, free: o.free },
         props: (f.props || []).filter(q => q.inn && q.cabin != null).length, sv: s.saveVersion, ver: f.version }; })()`,
-      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.1' ? 'ver ' + r.ver
+      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.3' ? 'ver ' + r.ver
         : JSON.stringify(r.got) !== JSON.stringify(want) ? 'lost progress ' + JSON.stringify(r.got) + ' want ' + JSON.stringify(want)
         : r.site !== 'agri' || r.where !== 'agri' || !r.moved ? 'not moved ' + JSON.stringify(r)
         : !r.plot || r.plot.mod !== 'inn' || r.plot.free !== 1 ? 'plot ' + JSON.stringify(r.plot)

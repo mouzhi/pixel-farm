@@ -1,4 +1,4 @@
-// v5.11.0.4.2: the pine is a fir again: foliage to the tip, no trunk between the tiers.  node tools/pine-shots.js [name-filter]
+// v5.11.0.5.3: the pine is a fir again: foliage to the tip, no trunk between the tiers.  node tools/pine-shots.js [name-filter]
 //   writes /workspace/pf-shots/pine_*.png (PF_SHOTS to change, PF_TAG to prefix the names); exits 1 on a page error or a failed check
 // A player saw the pine as "a trunk skewered through pancakes": the trunk stack ran up to H-6, above the tiny cap tier, and each
 // flat tier only reached a few px above its own centre, so the trunk showed between the tiers and stuck out of the top.
