@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js diary.js diary-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js diary.js diary-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -59,6 +59,7 @@ jobs:
           node tools/clinic-test.js
           node tools/festival-test.js
           node tools/econ-test.js
+          node tools/townscale-test.js
           node tools/diary-test.js
 
   shots:
@@ -71,7 +72,7 @@ jobs:
         include:
           # ~7.5m on run 44622565450 (save-smoke alone was 5.0m)
           - group: smoke
-            scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js
+            scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js clinic-shots.js
           # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
           - group: works-town
             scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
@@ -84,8 +85,12 @@ jobs:
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
             scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
+          # v5.11.0: recent-b ran 23m39s (inn 7.4m, resort 7.2m, school 4.6m, clinic 4.3m) on run 44683475759; school -> townscale, clinic -> smoke
           - group: recent-b
-            scripts: inn-shots.js resort-shots.js school-shots.js clinic-shots.js
+            scripts: inn-shots.js resort-shots.js
+          # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
+          - group: townscale
+            scripts: v5110-shots.js school-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

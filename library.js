@@ -8,9 +8,9 @@
   const COST = 25000, WOOD = 150, LV = 3, FAVOR = 1;
   const HOURS = { from: 14 * 60, to: 17 * 60 }; // after school, before supper
   // lot L12: east of 小桃家 (606, 112) and north-east of the smithy (606, 134), inside the town (RECT right edge 632)
-  const LOT = { id: 'library', x: 622, y: 118, hw: 7, hd: 7, door: P(622, 109), rot: Math.PI, style: 7 };
-  const STAND = P(LOT.door.x + 4, LOT.door.y - 3); // where 阿宁 stands / a child reads
-  const BOARD = P(LOT.door.x - 6, LOT.door.y + 1); // a little hint board by the door
+  const LOT = { id: 'library', x: 726, y: 34, hw: 10, hd: 9, door: P(726, 46), rot: 0, style: 7 }; // v5.11.0: next to the school
+  const STAND = P(LOT.door.x + 5, LOT.door.y + 1); // where 阿宁 stands / a child reads
+  const BOARD = P(LOT.door.x - 7, LOT.door.y + 1); // a little hint board by the door
   const built = H => !!(H && H.built && H.built.library);
   const open = (H, T) => built(H) && T >= HOURS.from && T < HOURS.to;
   // 加工坊配方 unlocked with the bookshop; bakery.js adds these templates once the shop is up

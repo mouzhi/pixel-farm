@@ -42,7 +42,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const lock0 = (f.hallView().projects.find(p => p.id === 'school') || {}).why;
     const c0 = S.coins, w0 = f.FARMER.wood, r = f.hallStart('school'); if (!r.ok) return { r, lock0, built: S.town.hall.built, job: S.town.hall.job };
     const paid = c0 - S.coins, wood = w0 - f.FARMER.wood;
-    nextMorning(); at(10 * 60); f.advance(2, 10); look(600, 36, -0.15); hide();
+    nextMorning(); at(10 * 60); f.advance(2, 10); look(668, 20, 0); hide();
     const v = f.hallView();
     return { lock0, r, paid, wood, built: S.town.hall.built.school, lv: v.lv, next: v.next, classroom: !!(f.TA.state && f.TA.state().hall), log: S.events.map(e => e.msg).filter(m => /学校|操场|教室/.test(m)).slice(0, 4) }; })()`,
     r => !r.r || !r.r.ok ? 'start ' + JSON.stringify(r.r) : r.paid !== 40000 || r.wood !== 200 ? 'cost ' + r.paid + '/' + r.wood : !r.built ? 'not built' : r.lv !== 3 ? 'lv ' + r.lv : null);
@@ -50,7 +50,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 2. the playground: the oval track, flag, posts and benches east of the school
   await shot('v5109_playground.png', `(() => { ${setup} ${shops}
     const r = f.hallStart('school'); if (!r.ok) return { r };
-    nextMorning(); at(11 * 60); dry(); f.advance(2, 10); look(600, 52, -0.15); hide();
+    nextMorning(); at(11 * 60); dry(); f.advance(2, 10); look(662, -30, 0); hide();
     const v = f.hallView();
     return { built: !!S.town.hall.built.school, sports: v.school && v.school.sports, next: v.school && v.school.next, yard: f.SC && f.SC.YARD, flag: f.SC && f.SC.FLAG, t: S.t % 1440 }; })()`,
     r => !r.built ? 'not built' : !r.yard ? 'no yard' : r.sports ? 'not a regular day' : !r.next ? 'no next sports day' : null);
@@ -63,7 +63,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const paid = c0 - S.coins, wood = w0 - f.FARMER.wood;
     nextMorning(); at(10 * 60); f.advance(2, 10);
     until(() => { const n = f.NEIGH.find(q => q.id === 'n9'); return n && n.out && n.spot === 'library' && !n.moving; }, 800);
-    look(614, 108, 0); hide();
+    look(726, 40, 0); hide();
     const v = f.hallView(), ning = out('n9');
     return { r, paid, wood, built: S.town.hall.built.library, lv: v.lv, hints: (v.library && v.library.hints || []).map(q => q.id), ning, log: S.events.map(e => e.msg).filter(m => /书屋|图书馆/.test(m)).slice(0, 4) }; })()`,
     r => !r.r || !r.r.ok ? 'start ' + JSON.stringify(r.r) : r.paid !== 25000 || r.wood !== 150 ? 'cost ' + r.paid + '/' + r.wood : !r.built ? 'not built' : r.lv !== 4 ? 'lv ' + r.lv : !r.ning || r.ning.spot !== 'library' ? '阿宁 ' + JSON.stringify(r.ning) : null);
@@ -89,7 +89,7 @@ fs.mkdirSync(OUT, { recursive: true });
       });
       f.advance(1, 10);
     }
-    look(600, 52, -0.15); hide();
+    look(662, -30, 0); hide();
     const v = f.hallView(), lin = out('n1');
     const kids = f.actors().filter(q => q.id && /^kid/.test(q.id)).map(q => ({ id: q.id, kind: q.task && q.task.kind, sports: !!q._sports, away: q.away, x: Math.round(q.x), y: Math.round(q.y), hold: q.hold, hat: q.hat }));
     const watch = f.actors().filter(q => q.task && /运动会|操场/.test(q.task.label || '')).map(q => q.name || q.id);
@@ -102,7 +102,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await shot(`v5109_fixture_${fx}.png`, `(() => { ${helpers} const s = f.snapshot(); f.advance(2, 10); look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, school: s2.town.hall.school, library: s2.town.hall.library, hall: s2.town.hall.built }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.13' ? 'ver ' + r.ver : !r.school || r.school.last !== 0 ? 'school ' + JSON.stringify(r.school) : !r.library || r.library.days !== 0 ? 'library ' + JSON.stringify(r.library) : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0' ? 'ver ' + r.ver : !r.school || r.school.last !== 0 ? 'school ' + JSON.stringify(r.school) : !r.library || r.library.days !== 0 ? 'library ' + JSON.stringify(r.library) : null, save);
   }
 
   // 6. (local only) the real save and the friend's save load without errors
@@ -110,10 +110,10 @@ fs.mkdirSync(OUT, { recursive: true });
     const save = readSave(file), tag = file === REAL ? 'realsave' : 'friendsave';
     await shot(`v5109_${tag}.png`, `(() => { ${helpers} const s = f.snapshot(); f.advance(3, 10);
       const town = !!(S.eff && S.eff.town);
-      if (town) { f.setAngle(0); f.panTo(600, 80); f.advance(0.3, 10); } else look(96, 60, 0);
+      if (town) { f.setAngle(0); f.panTo(668, 30); f.advance(0.3, 10); } else look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, school: s2.town.hall.school, library: s2.town.hall.library, coins: s.coins }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.13' ? 'ver ' + r.ver : !r.school || !r.library ? 'missing hall fields' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0' ? 'ver ' + r.ver : !r.school || !r.library ? 'missing hall fields' : null, save);
   }
 
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

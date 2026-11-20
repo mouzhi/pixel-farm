@@ -28,6 +28,9 @@ const HM = window.PFHome, HA = window.PFHomeArt; // v5.9.0 phase 11: closeness, 
 const CR = window.PFCareers; // v5.10.6: 成家后的出路 (careers.js rules; walking here, art in town-art.js)
 const IN = window.PFInn, IA = window.PFInnArt; // v5.10.7: 民宿 + 农家菜馆; v5.10.8: 海边度假村 + 二层客栈
 const SC = window.PFSchool, LB = window.PFLibrary, CL = window.PFClinic, FV = window.PFFestival; // v5.10.9–v5.10.11
+// v5.11.0: 东大道 and the town's main street are laid in stone once the road is bought: everyone walks 1.3x faster on them
+const roadBuilt = () => !!(S.plots && S.plots.eroad && S.plots.eroad.mod === 'road');
+const aveWalk = (x, y) => (TN && TN.onAvenue && TN.onAvenue(x, y) && roadBuilt() ? TN.AVENUE.walk : 1);
 const DY = window.PFDiary; // v5.10.13: the family's daily diary (diary.js rules, diary-ui.js panel)
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
 const Q = new URLSearchParams(location.search);
@@ -724,6 +727,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { const dirty = XP.dirtyRect(OPEN_REGIONS, S.eff.regions); OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(dirty); } // v5.5.0: a plot only repaints its own patch
   if (typeof syncLumberProps === 'function') syncLumberProps();
+  syncAvenue();
   if (S.works && S.works.works) worksRestock(); // v5.10.12: stored workshops go back up once a yard has room
   XP.sync(); if (WORKS_ON) PWA.sync(); if (INN_ON) IA.sync(); SPR_COVER = null;
   markNavDirty();
@@ -1652,11 +1656,15 @@ function groundAt(x, y) { // -> [palette colour, kind]
   if (pd < 6 && (S.homeyard.put.gravel || S.homeyard.put.flag)) { const pv = YD.paveAt(S.homeyard.put, x, y, 3.3 + wob * 0.25); // v5.10.3: the paved pieces
     if (pv === 'flag') { const u = Math.floor((x + (Math.floor(y / 2.5) % 2) * 1.5) / 3), gx = (x + (Math.floor(y / 2.5) % 2) * 1.5) % 3, gy = y % 2.5; return [gx < 0.5 || gy < 0.5 ? St[1] : (u + Math.floor(y / 2.5)) % 3 ? St[2] : St[3], 'dirt']; }
     if (pv === 'gravel') { const v = vnoise(x * 1.7, y * 1.7, 23); return [v > 0.7 ? St[3] : v > 0.4 ? St[2] : v > 0.2 ? Wd[3] : St[1], 'dirt']; } }
+  if (x >= 356 && TN && TN.onAvenue(x, y) && roadBuilt() && (x < TN.GATE.x + 2 || (S.eff && S.eff.town))) { // v5.11.0: the stone avenue
+    const dy = y - TN.AVENUE.y + TN.AVENUE.hw, edge = dy < 0.9 || dy > 2 * TN.AVENUE.hw - 0.9; if (edge) return [St[1], 'dirt']; // kerb stones
+    const row = Math.floor(dy / 2.5), u = x + (row & 1) * 2.5, gx = Math.floor(u / 5), jx = u - gx * 5, jy = dy - row * 2.5; // running bond, 5 x 2.5 setts
+    if (jx < 0.5 || jy < 0.5) return [St[2], 'dirt']; const k = vnoise(gx, row, 5); return [k > 0.72 ? Wd[5] : (k > 0.45 ? St[2] : St[3]), 'dirt']; }
   if (pd < pw || yd < 0) {
     if (yd >= 0 && x >= 446 && TN && TN.inTown(x, y) && HL && HL.paved && S.town && HL.paved(S.town.hall)) { // v5.10.10: 路面铺石板
-      const cx = Math.floor((x + 400) / 3), cy = Math.floor((y + 400) / 3), k = vnoise(cx, cy, 5);
-      const edge = pd > pw - 0.8;
-      return [edge ? St[1] : ((cx + cy) % 2 ? (k > 0.5 ? St[3] : St[2]) : (k > 0.7 ? St[2] : St[3])), 'dirt']; }
+      const u = x + 400 + (Math.floor((y + 400) / 3) & 1) * 1.5, cx = Math.floor(u / 3), cy = Math.floor((y + 400) / 3), k = vnoise(cx, cy, 5);
+      if (pd > pw - 0.8) return [St[1], 'dirt']; if (u - cx * 3 < 0.5 || (y + 400) - cy * 3 < 0.5) return [St[2], 'dirt']; // v5.11.0: setts in a running bond (the checkerboard was loud at the new size)
+      return [k > 0.75 ? Wd[5] : (k > 0.5 ? St[2] : St[3]), 'dirt']; }
     return [(pd > pw - 0.6 && yd > -0.6) ? Wd[3] : Wd[4], 'dirt']; }
   if (x >= 446 && TA) { const o = TA.ground(x, y); if (o) return o; } // v5.8.0: the town
   if (HOME_ON) { const o = HA.ground(x, y); if (o) return o; } // v5.9.0: the new house's yard
@@ -1686,6 +1694,9 @@ function buildGroundBase(r) { // one ground pixel per screen pixel (world unit =
   if (window.__farm && window.__farm.onGround) window.__farm.onGround(); // the minimap copies it
 }
 function buildGround() { groundDirty = false; }
+let aveKey = null; // v5.11.0: the stone avenue and the paved town repaint when the road is bought, the town opens or the streets are paved
+function syncAvenue() { if (!TN || !TN.AVENUE) return; const k = [roadBuilt(), !!(S.eff && S.eff.town), !!(HL && HL.paved && S.town && HL.paved(S.town.hall))].join();
+  if (k === aveKey) return; const first = aveKey === null; aveKey = k; if (!first && groundReady) buildGroundBase([356, TN.RECT[1] - 4, TN.RECT[2] + 4, TN.RECT[3] + 4]); }
 // decals: grass tufts, flowers, pebbles; placed in the world but drawn upright, like billboards lying on the ground
 const decals = [];
 { const r = mulberry32(777), blocked = (x, y) => { const k = groundAt(x, y)[1];
@@ -1724,7 +1735,7 @@ for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) c
   if (TN && WORLD.x1 > WORLD55.x1) { const fs = mulberry32(5151);
     for (let y = WORLD.y0 - 8; y <= WORLD.y1 + 14; y += 16) for (let x = WORLD55.x1 + 14; x <= WORLD.x1 + 10; x += 17) {
       const tx = x + (fs() - 0.5) * 8 + ((Math.round(y / 16) & 1) ? 8 : 0), ty = y + (fs() - 0.5) * 6, roll = fs(), pick = fs();
-      if (TN.inTown(tx, ty, 9) || WD.seaAt(tx, ty) || nearRoute(tx, ty, 12) || WD.seaShore(tx) - ty < 14) continue;
+      if (TN.inTown(tx, ty, 9) || (TN.AGRI && TN.inRect(tx, ty, TN.AGRI, 4)) || WD.seaAt(tx, ty) || nearRoute(tx, ty, 12) || WD.seaShore(tx) - ty < 14) continue; // v5.11.0: the 农家乐区 ground stays clear
       const ry = PL.ridgeY(tx); if (ty < ry + 3 && ty > ry - PL.CLIFF - 4) continue;                    // the cliff face
       const hi = ty < ry - PL.CLIFF; if (roll < (hi ? 0.45 : 0.85)) addTree(hi ? treeDefs.pine[Math.floor(pick * 3)] : kinds(), tx, ty); } }
 }
@@ -2081,7 +2092,7 @@ function yardGate(id, have) {
   return null;
 }
 const yardTodo = () => YD.IDS.find(id => { const k = S.homeyard.put[id] | 0; return (S.up[id] | 0) > k && k < YD.room(id, yardCtx()); });
-const yardWalk = (x, y) => { const put = S.homeyard.put; return put.gravel || put.flag ? YD.walkMult(YD.paveAt(put, x, y)) : 1; };
+const yardWalk = (x, y) => { const put = S.homeyard.put; return (put.gravel || put.flag ? YD.walkMult(YD.paveAt(put, x, y)) : 1) * aveWalk(x, y); };
 const clothesOut = () => { const T = S.t % 1440; return !!S.homeyard.put.clothesline && T >= 8 * 60 && T < 17 * 60 && !(WX && WX.isRaining(S.weather, S.day, S.t)); };
 function yardStand(id, n) { // where the one setting it up stands
   if (id === 'curtains' || id === 'roof' || id === 'lantern') return { x: DOOR.x - 3, y: DOOR.y + 5 };
@@ -2349,10 +2360,10 @@ function guestStep(g, dm) {
   if (!g.pts.length) return;
   const t = g.pts[0], dx = t.x - g.x, dy = t.y - g.y, d = Math.hypot(dx, dy);
   if (d < 0.5) { g.pts.shift(); g.moving = !!g.pts.length; return; }
-  const st = Math.min(d, WALK * (g.fast ? 1.1 : 0.85) * dm); g.x += dx / d * st; g.y += dy / d * st; g.fx = dx / d; g.fy = dy / d; g.moving = true; g.walkPhase = (g.walkPhase || 0) + st;
+  const st = Math.min(d, WALK * (g.fast ? 1.1 : 0.85) * aveWalk(g.x, g.y) * dm); g.x += dx / d * st; g.y += dy / d * st; g.fx = dx / d; g.fy = dy / d; g.moving = true; g.walkPhase = (g.walkPhase || 0) + st;
 }
 let guestsOut = 0; // v5.8.0: the day the town guests set out (they walk over from their houses, so they leave before the party starts)
-const GUEST_WALK = 90;
+const GUEST_WALK = 120; // v5.11.0: the town is farther east (was 90)
 // v5.10.3: an old save's pieces were set down anywhere; once, on load, they are put on their kinds' spots (counts kept: what does not fit goes to the storehouse)
 const DECOR_LAYOUT = 2; // v5.10.4: wider lamp spacing along the field and by 阿禾's stall (1 was the first tidy-up)
 function decorRelayout() {
@@ -2469,7 +2480,7 @@ function hallTick() {
   if (done) { const p = HL.PROJ[done], l = HL.LOT[done] || TN.PLAZA, who = HL.NEIGHBOURS.find(n => n.id === p.who); H.week.built.push(done); markNavDirty(); if (TOWN_ON) TA.sync(true);
     burst(l.x, l.y - 6, 20, ['#fff2a8', '#ffd76a', Wd[4]], 14); log(`镇上的${p.name}盖好了${who ? '，' + who.name + '一家搬了进来' : ''}${p.kind === 'market' ? `；每 7 天一次集市日，下一次是第 ${MK.nextDay(H, S.day)} 天` : p.kind === 'bakery' ? '；订单板挂出来了，小桃每天要两单货，按单多付五成' : p.kind === 'woodshop' ? '；仓库能多放 400 份木材，阿松会把多的木头做成街上的长椅' : p.kind === 'smithy' ? '；铺子里可以升级浇水器、加工坊、斧头、鱼竿和集市手推车' : p.kind === 'school' ? `；操场和第二间教室启用了，每 14 天一次运动会，下一次是第 ${SC.nextDay(H, S.day)} 天，上学日的好感翻倍` : p.kind === 'library' ? '；孩子放学会顺路去看书，图鉴里还没收集到的条目会给出提示，面包房也能订苹果派了' : p.kind === 'clinic' ? '；动物和猫狗心情的下限更高，苏大夫每月会来家里做体检' : p.kind === 'rebuild' ? '' : ''}`); if ((p.kind === 'market' || p.kind === 'school' || (CL && CL.paved(H))) && groundReady) { const q = (CL && CL.paved(H)) ? TN.RECT : p.kind === 'school' && SC ? SC.YARD : [TN.PLAZA.x - 26, TN.PLAZA.y - 26, TN.PLAZA.x + 26, TN.PLAZA.y + 26]; buildGroundBase(q); if (CL && CL.paved(H) && p.kind !== 'market') log('镇子的路面铺上了石板，繁荣度升到了 5'); }
     if (p.kind === 'woodshop' || p.kind === 'smithy') applyUpgrades();
-    const lv = HL.prosperity(H); if (lv > lv0) log(`镇子的繁荣度升到 ${lv}（${HL.LV_NAME[lv]}）`); }
+    const lv = HL.prosperity(H); if (lv > lv0) log(`镇子的繁荣度升到 ${lv}（${HL.LV_NAME[lv]}）`); syncAvenue(); }
   if (S.day - H.paper >= HL.PAPER_EVERY && S.t % 1440 >= WAKE + 60) {
     log(HL.paperText({ day: S.day, built: H.week.built, gifts: H.week.gifts, trade: H.week.trade, lv: townLv(), people: TN.NEIGHBOURS.length + HL.residents(H).length }));
     H.paper = S.day; H.week = { built: [], gifts: 0, trade: 0 }; }
@@ -4743,7 +4754,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.10.13';
+const GAME_VERSION = '5.11.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5018,12 +5029,17 @@ function minimapBase() {
   g.imageSmoothingEnabled = true; g.drawImage(groundBase, (WORLD.x0 - GX0) * RS, (WORLD.y0 - GY0) * RS, (WORLD.x1 - WORLD.x0) * RS, (WORLD.y1 - WORLD.y0) * RS, 0, 0, w, h);
   const P = (x, y) => [(x - WORLD.x0) * MM.s, (y - WORLD.y0) * MM.s];
   g.fillStyle = G[0]; for (const p of props) if (p.tree) { const [x, y] = P(p.x, p.y); g.fillRect(Math.round(x) - 1, Math.round(y) - 1, 3, 3); }
-  for (const p of props) if (p.big) { const [x, y] = P(p.x, p.y); g.fillStyle = p.house ? Rf[2] : Wd[2]; g.fillRect(Math.round(x) - 5, Math.round(y) - 4, 10, 8); }
+  for (const p of props) if (p.big) { const [x, y] = P(p.x, p.y), hw = p.town && p.m ? Math.max(3, p.m.w * MM.s / 4) : 5, hd = p.town && p.m ? Math.max(3, p.m.d * MM.s / 4) : 4; // v5.11.0: town roofs at their real size
+    g.fillStyle = p.house ? Rf[2] : Wd[2]; g.fillRect(Math.round(x - hw), Math.round(y - hd), Math.round(2 * hw), Math.round(2 * hd)); }
   for (const r of WD.REGIONS) if (!regionOpen(r.id)) { const [x0, y0] = P(r.rect[0], r.rect[1]), [x1, y1] = P(r.rect[2], r.rect[3]);
     g.fillStyle = 'rgba(20,14,10,0.45)'; g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeStyle = '#e8c78a'; g.setLineDash([3, 2]); g.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1); g.setLineDash([]);
     g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
     fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
   XP.minimap(g, P, fillCoinPrice); // v5.5.0: the ring's plots
+  if (TN && TN.AGRI) { g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; // v5.11.0: the town's name and the reserved 农家乐区
+    const [ax0, ay0] = P(TN.AGRI[0], TN.AGRI[1]), [ax1, ay1] = P(TN.AGRI[2], TN.AGRI[3]); g.strokeStyle = 'rgba(255,246,220,0.55)'; g.setLineDash([3, 3]); g.strokeRect(ax0 + 0.5, ay0 + 0.5, ax1 - ax0 - 1, ay1 - ay0 - 1); g.setLineDash([]);
+    g.fillStyle = 'rgba(255,246,220,0.8)'; g.fillText('农家乐区 · 预留', (ax0 + ax1) / 2, (ay0 + ay1) / 2);
+    const [tx, ty] = P((TN.RECT[0] + TN.RECT[2]) / 2, TN.RECT[1] + 10); g.fillStyle = '#fff6dc'; g.fillText(S.eff && S.eff.town ? '小镇' : '小镇 · 未开放', tx, ty); }
 }
 function minimapDraw() {
   if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
@@ -5043,5 +5059,18 @@ if (MM.el) { window.__farm.onGround = () => { MM.base = null; };
   MM.el.addEventListener('pointerdown', e => { const r = MM.el.getBoundingClientRect(); panTo(WORLD.x0 + (e.clientX - r.left) / r.width * (WORLD.x1 - WORLD.x0), WORLD.y0 + (e.clientY - r.top) / r.height * (WORLD.y1 - WORLD.y0)); minimapDraw(); });
   setInterval(minimapDraw, 250); }
 window.__farm.minimapDraw = minimapDraw;
+// v5.11.0: four jump buttons under the minimap — 家 / 农家乐 / 小镇 / 海边. 农家乐 and 海边 go where they are today (the inn yard if
+// one is zoned, else the 农家乐区 kept east of the avenue; the beach resort plot, else the sea shore); v5.11.1/2 move them.
+function jumpSpot(id) {
+  if (id === 'home') return { x: HOME_CAM.x, y: HOME_CAM.y };
+  if (id === 'town') return { x: (TN.RECT[0] + TN.RECT[2]) / 2 - 20, y: TN.AVENUE.y + 24 };
+  if (id === 'agri') { const L = innLay(); if (L) return { x: (L.rect[0] + L.rect[2]) / 2, y: (L.rect[1] + L.rect[3]) / 2 };
+    return { x: (TN.AGRI[0] + TN.AGRI[2]) / 2, y: (TN.AGRI[1] + TN.AGRI[3]) / 2 }; }
+  if (id === 'beach') { const r = PL.plot(IN ? IN.RESORT_PLOT || 'eshore' : 'eshore').rect; return { x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2 + 20 }; }
+  return null;
+}
+function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
+{ const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) jumpTo(b.dataset.j); }); }
+Object.assign(window.__farm, { jumpTo, jumpSpot });
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();

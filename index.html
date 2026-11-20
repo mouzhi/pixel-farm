@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.10.13</title>
+<title>像素堆叠 · 放置农场 v5.11.0</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -104,7 +104,9 @@
   #career .cwhy{color:#ffb39a;font-size:12px}
   #career .crow{display:flex;justify-content:center;gap:8px;margin-top:8px}
   #loveTip .cchg{margin-top:4px}
-  #minimap{position:relative;right:auto;top:auto;width:224px;height:188px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
+  #minimap{position:relative;right:auto;top:auto;width:min(272px,calc(100vw - 24px));height:auto;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
+  #mmJump{display:flex;gap:4px;justify-content:flex-end;margin-top:-4px}#mmJump .pbtn{padding:2px 8px;font-size:12px}#minimap[hidden]+#mmJump{display:none} /* v5.11.0: 家 / 农家乐 / 小镇 / 海边 */
+  #mmJump .pbtn{white-space:nowrap}@media (max-width:720px){#minimap{width:min(240px,calc(100vw - 140px))}#mmJump{gap:3px}#mmJump .pbtn{padding:1px 5px;font-size:11px}}
   #mapBtn{position:relative}
   #tools{position:relative;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}#tools .pbtn,#bottomRight>.pbtn{white-space:nowrap}#tools .pbtn.full{background:#b8a07a}#tools[hidden]{display:none}
   #shop,#menu,#store,#codex{z-index:3}
@@ -130,7 +132,7 @@
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip .rel{margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:4px}#loveTip .rk{margin-top:3px}#loveTip .rr{display:flex;gap:6px;align-items:center;font-size:12px}#loveTip .rr>span:first-child{min-width:4.5em}#loveTip .rh{color:#e57fa0;letter-spacing:-1px}#loveTip .rh i{color:rgba(255,255,255,.22);font-style:normal}#loveTip .rl{opacity:.75}#loveTip b, #loveVal{color:#ffd76a}
-  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #tools,#ui #audioBar,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #diaryBtn,#ui #diary,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #mmJump,#ui #tools,#ui #audioBar,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #diaryBtn,#ui #diary,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
   /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
   @media (max-width:720px){
     #shop,#store,#codex,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
@@ -192,7 +194,7 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.10.13 · 日记本<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.11.0 · 小镇扩建<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
@@ -202,8 +204,9 @@
       <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
       <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
     </div>
-    <div id="titleS"><span class="n">放置农场 </span>v5.10.13<span class="s"> · 日记本</span></div>
+    <div id="titleS"><span class="n">放置农场 </span>v5.11.0<span class="s"> · 小镇扩建</span></div>
     <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
+    <div id="mmJump"><button class="pbtn" data-j="home" title="回家（R）">家</button><button class="pbtn" data-j="agri" title="农家乐">农家乐</button><button class="pbtn" data-j="town" title="小镇">小镇</button><button class="pbtn" data-j="beach" title="海边">海边</button></div>
     <div id="shop" class="panel" hidden></div>
     <div id="store" class="panel" hidden></div>
     <div id="codex" class="panel" hidden></div>
@@ -219,55 +222,56 @@
 <div id="offline" class="panel" hidden></div>
 <div id="career" class="panel" hidden></div>
 <div id="say" class="panel" hidden></div>
-<script src="assets/palette.js?v=5.10.13"></script>
-<script src="assets/sprites.js?v=5.10.13"></script>
-<script src="assets/family_sprites.js?v=5.10.13"></script>
-<script src="decor.js?v=5.10.13"></script>
-<script src="town.js?v=5.10.13"></script>
-<script src="slots.js?v=5.10.13"></script>
-<script src="yard.js?v=5.10.13"></script>
-<script src="market.js?v=5.10.13"></script>
-<script src="bakery.js?v=5.10.13"></script>
-<script src="woodshop.js?v=5.10.13"></script>
-<script src="smithy.js?v=5.10.13"></script>
-<script src="school.js?v=5.10.13"></script>
-<script src="library.js?v=5.10.13"></script>
-<script src="clinic.js?v=5.10.13"></script>
-<script src="festival.js?v=5.10.13"></script>
-<script src="hall.js?v=5.10.13"></script>
-<script src="careers.js?v=5.10.13"></script>
-<script src="home.js?v=5.10.13"></script>
-<script src="sim.js?v=5.10.13"></script>
-<script src="world.js?v=5.10.13"></script>
-<script src="plots.js?v=5.10.13"></script>
-<script src="inn.js?v=5.10.13"></script>
-<script src="inn-art.js?v=5.10.13"></script>
-<script src="wood.js?v=5.10.13"></script>
-<script src="path.js?v=5.10.13"></script>
-<script src="animals.js?v=5.10.13"></script>
-<script src="works.js?v=5.10.13"></script>
-<script src="fish.js?v=5.10.13"></script>
-<script src="kids.js?v=5.10.13"></script>
-<script src="family.js?v=5.10.13"></script>
-<script src="surprise.js?v=5.10.13"></script>
-<script src="weather.js?v=5.10.13"></script>
-<script src="insects.js?v=5.10.13"></script>
-<script src="codex.js?v=5.10.13"></script>
-  <script src="codex_icons.js?v=5.10.13"></script>
-<script src="diary.js?v=5.10.13"></script>
-<script src="save.js?v=5.10.13"></script>
-<script src="playlog.js?v=5.10.13"></script>
-<script src="fx.js?v=5.10.13"></script>
-<script src="expansion.js?v=5.10.13"></script>
-<script src="works-art.js?v=5.10.13"></script>
-<script src="decor-art.js?v=5.10.13"></script>
-<script src="yard-art.js?v=5.10.13"></script>
-<script src="home-art.js?v=5.10.13"></script>
-<script src="town-art.js?v=5.10.13"></script>
-<script src="game.js?v=5.10.13"></script>
-<script src="ui.js?v=5.10.13"></script>
-<script src="plots-ui.js?v=5.10.13"></script>
-<script src="diary-ui.js?v=5.10.13"></script>
-<script src="audio.js?v=5.10.13"></script>
+<script src="assets/palette.js?v=5.11.0"></script>
+<script src="assets/sprites.js?v=5.11.0"></script>
+<script src="assets/family_sprites.js?v=5.11.0"></script>
+<script src="decor.js?v=5.11.0"></script>
+<script src="town.js?v=5.11.0"></script>
+<script src="slots.js?v=5.11.0"></script>
+<script src="yard.js?v=5.11.0"></script>
+<script src="market.js?v=5.11.0"></script>
+<script src="bakery.js?v=5.11.0"></script>
+<script src="woodshop.js?v=5.11.0"></script>
+<script src="smithy.js?v=5.11.0"></script>
+<script src="school.js?v=5.11.0"></script>
+<script src="library.js?v=5.11.0"></script>
+<script src="clinic.js?v=5.11.0"></script>
+<script src="festival.js?v=5.11.0"></script>
+<script src="hall.js?v=5.11.0"></script>
+<script src="careers.js?v=5.11.0"></script>
+<script src="home.js?v=5.11.0"></script>
+<script src="sim.js?v=5.11.0"></script>
+<script src="world.js?v=5.11.0"></script>
+<script src="plots.js?v=5.11.0"></script>
+<script src="inn.js?v=5.11.0"></script>
+<script src="inn-art.js?v=5.11.0"></script>
+<script src="wood.js?v=5.11.0"></script>
+<script src="path.js?v=5.11.0"></script>
+<script src="animals.js?v=5.11.0"></script>
+<script src="works.js?v=5.11.0"></script>
+<script src="fish.js?v=5.11.0"></script>
+<script src="kids.js?v=5.11.0"></script>
+<script src="family.js?v=5.11.0"></script>
+<script src="surprise.js?v=5.11.0"></script>
+<script src="weather.js?v=5.11.0"></script>
+<script src="insects.js?v=5.11.0"></script>
+<script src="codex.js?v=5.11.0"></script>
+  <script src="codex_icons.js?v=5.11.0"></script>
+<script src="diary.js?v=5.11.0"></script>
+<script src="save.js?v=5.11.0"></script>
+<script src="playlog.js?v=5.11.0"></script>
+<script src="fx.js?v=5.11.0"></script>
+<script src="expansion.js?v=5.11.0"></script>
+<script src="works-art.js?v=5.11.0"></script>
+<script src="decor-art.js?v=5.11.0"></script>
+<script src="yard-art.js?v=5.11.0"></script>
+<script src="home-art.js?v=5.11.0"></script>
+<script src="town-bldg.js?v=5.11.0"></script>
+<script src="town-art.js?v=5.11.0"></script>
+<script src="game.js?v=5.11.0"></script>
+<script src="ui.js?v=5.11.0"></script>
+<script src="plots-ui.js?v=5.11.0"></script>
+<script src="diary-ui.js?v=5.11.0"></script>
+<script src="audio.js?v=5.11.0"></script>
 </body>
 </html>

@@ -34,7 +34,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 600)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
 
   // 1. the town just opened: 镇公所 next to the shop, its notice board, a post box, a cart, crates, a sun shade; 镇长 at the hall door
-  await shot('v5100_town_open.png', `(() => { ${setup} const ok = openTown(); at(10 * 60); f.advance(3, 10); until(() => (out('n4') || {}).spot === 'hall' && !f.NEIGH.find(q => q.id === 'n4').moving, 300); look(530, 60, 0);
+  await shot('v5100_town_open.png', `(() => { ${setup} const ok = openTown(); at(10 * 60); f.advance(3, 10); until(() => (out('n4') || {}).spot === 'hall' && !f.NEIGH.find(q => q.id === 'n4').moving, 300); look(768, 50, 0);
     return { ok, hall: f.TA.state().hall, props: f.props ? f.props.filter(q => q.town === 'board' || q.town === 'mailbox' || q.town === 'cart' || q.town === 'parasol' || q.town === 'crates').length : null, mayor: out('n4'), people: f.NEIGH.length, h: S.town.hall }; })()`,
     r => !r.ok ? 'town not bought' : r.mayor && r.mayor.spot !== 'hall' ? 'mayor ' + JSON.stringify(r.mayor) : !r.mayor ? 'no mayor' : r.people !== 5 ? 'people ' + r.people : r.props !== null && r.props !== 5 ? 'props ' + r.props : null);
   // 2. the board (shop tab 镇公所): prosperity, fifteen projects with prices (market and bakery locked until prosperity 2, the workshop, smithy, school and library until 3), gifts from the storehouse and the yard
@@ -48,13 +48,13 @@ fs.mkdirSync(OUT, { recursive: true });
   // 3. a project starts: paid for, scaffolding on the lot, 阿松 on site during the day
   await shot('v5100_scaffold.png', `(() => { ${setup} openTown(); at(9 * 60); const c0 = S.coins, w0 = f.FARMER.wood;
     document.getElementById('shopBtn').click(); f.openHall(); f.refreshUI(); document.querySelector('#shop [data-hall="start:L5"]').click(); document.getElementById('shopBtn').click();
-    at(11 * 60); f.advance(2, 10); until(() => (out('n2') || {}).spot === 'site:L5' && !f.NEIGH.find(q => q.id === 'n2').moving, 400); look(470, 90, 0);
+    at(11 * 60); f.advance(2, 10); until(() => (out('n2') || {}).spot === 'site:L5' && !f.NEIGH.find(q => q.id === 'n2').moving, 400); look(940, -20, 0);
     return { job: S.town.hall.job, paid: c0 - S.coins, wood: w0 - f.FARMER.wood, hall: f.TA.state().hall, builder: out('n2'), log: S.events.map(e => e.msg).filter(m => /开工/.test(m)).slice(0, 1) }; })()`,
     r => !r.job || r.job.id !== 'L5' ? 'no job' : r.paid !== 8000 || r.wood !== 120 ? 'paid ' + r.paid + '/' + r.wood : r.hall !== 1 ? 'scaffold props ' + r.hall : !r.builder || r.builder.spot !== 'site:L5' ? 'builder ' + JSON.stringify(r.builder) : !r.log.length ? 'no log' : null);
   // 4. all three built (one a night), prosperity 2, the new families out on the street in the afternoon
   await shot('v5100_three_houses.png', `(() => { ${setup} openTown(); at(9 * 60);
     const seen = []; for (const id of ['L5', 'L8', 'L11']) { const r = f.hallStart(id); seen.push(r.ok); nextMorning(); at(9 * 60); }
-    at(15 * 60 + 30); f.advance(2, 10); until(() => f.NEIGH.filter(q => q.out && !q.moving).length >= 6, 600); look(530, 100, 0);
+    at(15 * 60 + 30); f.advance(2, 10); until(() => f.NEIGH.filter(q => q.out && !q.moving).length >= 6, 600); look(900, 10, 0);
     const v = f.hallView();
     return { seen, built: Object.keys(S.town.hall.built), lv: v.lv, people: v.people, out: f.NEIGH.filter(q => q.out).map(q => q.name + ':' + q.spot), hall: f.TA.state().hall, log: S.events.map(e => e.msg).filter(m => /盖好了|繁荣度/.test(m)) }; })()`,
     r => r.seen.some(x => !x) ? 'start failed ' + r.seen : r.built.length !== 3 ? 'built ' + r.built : r.lv !== 2 ? 'prosperity ' + r.lv : r.people !== 8 ? 'people ' + r.people : r.out.length < 6 ? 'out ' + r.out.length : !r.log.some(m => /繁荣度升到 2/.test(m)) ? 'no level-up log' : null);
@@ -62,14 +62,14 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('v5100_gifts_night.png', `(() => { ${setup} openTown(); for (const id of ['L5', 'L8']) { f.hallStart(id); nextMorning(); }
     S.decor.inv.lamppost = 3; S.decor.inv.stonelamp = 1; S.decor.inv.bench = 1; S.decor.inv.party = 1; const res = [];
     for (const id of ['lamppost', 'lamppost', 'lamppost', 'stonelamp', 'bench', 'party']) res.push(f.hallGive(id).ok);
-    at(20 * 60 + 15); f.advance(1, 10); look(540, 72, 0);
+    at(20 * 60 + 15); f.advance(1, 10); look(780, 60, 0);
     const L = HLL => HLL.lightsAt(S.town.hall, S.t, window.PFDecor.CATALOG).length;
     return { res, gifts: S.town.hall.gifts, inv: S.decor.inv, lights: L(f.HL), hall: f.TA.state().hall }; })()`,
     r => r.res.join() !== 'true,true,true,true,true,false' ? 'give ' + r.res : r.gifts.length !== 5 ? 'gifts ' + r.gifts : r.lights !== 4 + 2 + 1 ? 'lights ' + r.lights : (r.inv.lamppost | 0) !== 0 || r.inv.party !== 1 ? 'inv ' + JSON.stringify(r.inv) : null);
   // 6. a gift from the yard (a crowded yard gets a little room back); and the weekly paper in the log
   await shot('v5100_paper.png', `(() => { ${setup} openTown(); at(9 * 60); f.advance(1, 10); S.decor.placed.push({ u: 900, id: 'lamppost', x: 120, y: 90, d: S.day }); const n0 = S.decor.placed.length;
     const r = f.hallGive('lamppost', 900), n1 = S.decor.placed.length; f.hallStart('L5'); const d0 = S.day; for (let i = 0; i < 8; i++) nextMorning(); at(8 * 60); f.advance(1, 10);
-    const paper = S.events.map(e => e.msg).filter(m => /镇子小报/.test(m)); look(470, 80, 0);
+    const paper = S.events.map(e => e.msg).filter(m => /镇子小报/.test(m)); look(780, 60, 0);
     return { yard: r.ok, placed: n0 - n1, gifts: S.town.hall.gifts, paper: paper.slice(0, 2), days: S.day - d0 }; })()`,
     r => !r.yard || r.placed !== 1 || r.gifts.length !== 1 ? 'yard gift ' + JSON.stringify(r) : !r.paper.length ? 'no paper' : !/木构二层小楼盖好了/.test(r.paper[r.paper.length - 1]) || !/1 件装饰/.test(r.paper[r.paper.length - 1]) ? 'paper text ' + r.paper : null);
   // 7. the fixtures: day 59 (town not bought) and day 72 (the cottage) load with an empty hall, no tab, nothing else changed
@@ -81,6 +81,6 @@ fs.mkdirSync(OUT, { recursive: true });
   // 8. (local only) the player's own save, with the town open: the board and the town at noon
   const REAL = process.env.PF_REAL_SAVE;
   if (REAL && fs.existsSync(REAL)) { const save = readSave(REAL);
-    await shot('v5100_realsave.png', `(() => { const f = __farm, S = f.S; const s = f.snapshot(); at0 = 0; f.advance(5, 10); f.setAngle(0); f.panTo(540, 70); f.advance(0.3, 10);
+    await shot('v5100_realsave.png', `(() => { const f = __farm, S = f.S; const s = f.snapshot(); at0 = 0; f.advance(5, 10); f.setAngle(0); f.panTo(780, 70); f.advance(0.3, 10);
       return { day: s.clock.day, town: !!(S.eff && S.eff.town), hall: S.town.hall, view: f.hallView() && f.hallView().projects.map(p => p.id + ':' + (p.why || 'ok')) }; })()`, r => r.day !== save.clock.day ? 'day' : null, save); }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

@@ -5,7 +5,8 @@
 'use strict';
 (function (root) {
   const TILE = 8;
-  const WORLD = { x0: -256, y0: -208, x1: 640, y1: 384 };           // v5.8.0: +24 tiles east for the town (town.js); everything west of 448 is unchanged
+  const WORLD = { x0: -256, y0: -208, x1: 1008, y1: 384 };           // v5.11.0: +46 tiles east (158 x 74): the town moved east and grew (town.js)
+  const WORLD58 = { x0: -256, y0: -208, x1: 640, y1: 384 };           // v5.8.0: +24 tiles east for the town (town.js); everything west of 448 is unchanged
   const WORLD55 = { x0: -256, y0: -208, x1: 448, y1: 384 };         // the v5.5.0 map: its scattered decals and forest keep their old random layout
             // v5.5.0: 88 x 74 tiles (was 64 x 50, -160..352 x -112..288); old coordinates did not move, the ring is plots.js
   const HOME = { x0: 0, y0: 0, x1: 192, y1: 128 };                  // the original farm
