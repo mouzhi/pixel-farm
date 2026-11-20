@@ -101,8 +101,9 @@ jobs:
           # v5.11.0.5 农家乐区: its own leg (~11m on CI: recent-b went 11m -> 22m16s with it on run 44703708506; with rain-shots there too it would pass 25m)
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           # v5.11.0.7: + hotbar-shots (~1m); agrilot was the lightest leg (5–9m on runs 44727901332 / 44729908140)
+          # v5.11.0.13: fog-shots -> fog2-shots (the opaque cloud; ~4m locally, like the old one)
           - group: agrilot
-            scripts: agrilot-shots.js fog-shots.js hotbar-shots.js
+            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

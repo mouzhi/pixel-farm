@@ -96,9 +96,10 @@ function fogRepaint() { if (!FOG.dirty) return; FOG.dirty = false; const box = F
 function fogHid(x, y) {
   if (!FOG.on || FOG.empty || !FOG.A) return false; const B = FG.BOUNDS, i = Math.min(FG.GW - 1, Math.floor((x - B[0]) / FG.CELL)), j = Math.max(0, Math.floor((y - B[1]) / FG.CELL));
   return i >= 0 && j < FG.GH && FOG.A[j * FG.GW + i] >= FG.HIDE; }
+const fogSkip = (x, y) => !FOG.peek && fogHid(x, y); // what the renderer leaves out (FOG.peek: a test hook draws it anyway, under the cloud)
 const FOG_DRIFT = { body: [1.1, 0.35], wisp: [2.4, -0.8] }; // cells per second: the bank creeps east, the wisps a little faster and north
 function drawFog() {
-  if (!FOG.on) return; fogRepaint(); if (!FOG.c || FOG.empty) return;
+  if (!FOG.on || FOG.veil) return; fogRepaint(); if (!FOG.c || FOG.empty) return;
   const [gx, gy] = proj(GX0, GY0), B = FG.BOUNDS, s = FG.CELL * RS;
   // only the cells under the screen (like the ground): invert the four corners into fog cells, one cell of margin
   let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
@@ -108,7 +109,7 @@ function drawFog() {
   x0 = clamp(uW, 0, FG.GW); y0 = clamp(vN, 0, FG.GH); x1 = clamp(uE, 0, FG.GW); y1 = clamp(vS, 0, FG.GH);
   if (uE <= 0 || uW >= FG.GW + 8 * FOG_EDGE || vS <= -8 * FOG_EDGE || vN >= FG.GH) return; // the bank is off screen
   const ox = (B[0] - GX0) * RS, oy = (B[1] - GY0) * RS, tx = Math.round(gx), ty = Math.round(gy);
-  const db = FOG_DRIFT.body, dw = FOG_DRIFT.wisp, q = v => Math.floor(realT * v * 2) / 2; // half-cell steps: one screen pixel at a time
+  const db = FOG_DRIFT.body, dw = FOG_DRIFT.wisp, tc = FOG.clock != null ? FOG.clock : realT, q = v => Math.floor(tc * v * 2) / 2; // half-cell steps: one screen pixel at a time
   const key = [tx, ty, CA, SA, W, H, FOG.ver, q(db[0]), q(db[1]), q(dw[0]), q(dw[1])].join();
   if (!FOG.scr || FOG.scr.width !== W || FOG.scr.height !== H) { FOG.scr = mkc(W, H); FOG.scrKey = ''; }
   if (key !== FOG.scrKey) { FOG.scrKey = key; const g = FOG.scr.getContext('2d'), T = fogTex(); g.imageSmoothingEnabled = false;
@@ -132,7 +133,7 @@ function drawFog() {
 }
 // the minimap's bank: the same mask, filled with the cloud tile (still: the minimap redraws 4x a second), made when the mask changes
 function fogMinimap() {
-  if (!FOG.on || !FOG.c || FOG.empty) return null; if (FOG.mmC && FOG.mmVer === FOG.ver) return FOG.mmC;
+  if (!FOG.on || FOG.veil || !FOG.c || FOG.empty) return null; if (FOG.mmC && FOG.mmVer === FOG.ver) return FOG.mmC;
   const c = FOG.mmC = FOG.mmC || mkc(FG.GW, FG.GH), g = c.getContext('2d'); FOG.mmVer = FOG.ver;
   g.globalCompositeOperation = 'source-over'; g.clearRect(0, 0, FG.GW, FG.GH); g.drawImage(FOG.c, 0, 0);
   g.globalCompositeOperation = 'source-in'; g.fillStyle = g.createPattern(fogTex().body, 'repeat'); g.fillRect(0, 0, FG.GW, FG.GH); g.globalCompositeOperation = 'source-over';
@@ -3115,7 +3116,7 @@ function careerSigns() { // a name board over the child's shop door
   if (!CR || !S.town || !S.town.lots || !S.home) return;
   ctx.font = '600 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
   for (const id of Object.keys(S.town.lots)) { const kid = S.town.lots[id], p = CR.pathOf(S.home, kid), l = CR.LOT[id]; if (!l || !CR.shopReady(p, S.day)) continue;
-    if (fogHid(l.door.x, l.door.y)) continue; const name = CR.shopName(kidName(kid), p.kind), [sx, sy] = proj(l.door.x, l.door.y); if (sx < -40 || sx > W + 40 || sy < -20 || sy > H + 40) continue;
+    if (fogSkip(l.door.x, l.door.y)) continue; const name = CR.shopName(kidName(kid), p.kind), [sx, sy] = proj(l.door.x, l.door.y); if (sx < -40 || sx > W + 40 || sy < -20 || sy > H + 40) continue;
     const tw = ctx.measureText(name).width; ctx.fillStyle = 'rgba(26,18,14,0.72)'; ctx.fillRect(Math.round(sx - tw / 2 - 4), Math.round(sy - 54), Math.round(tw + 8), 14);
     ctx.fillStyle = '#fff6dc'; ctx.fillText(name, Math.round(sx), Math.round(sy - 42)); }
 }
@@ -4561,7 +4562,7 @@ function render() {
   const selling = F.task && F.task.to === STALL_SPOT && !F.moving && !F.home;
   if (!shopOpen(T)) list.push({ spr: CLOSED, x: STALL.x, y: STALL_SPOT.y + 1, lift: 13 }); // v5.0: gone home; a little 'closed' board on the counter
   else list.push({ bb: 1, x: KEEPER.x, y: KEEPER.y, sheet: S.family.moved ? famSheet('father') || undefined : undefined, row: selling && SPR.rows.keeper_wave !== undefined ? 'keeper_wave' : 'keeper', fr: selling ? Math.floor(realT * 5) : (Math.floor(realT * 0.8) % 5 === 4 ? 1 : 0), flip: false });
-  if (FOG.on && !FOG.empty) { let n = 0; for (const o of list) if (o.rain || !fogHid(o.x, o.y)) list[n++] = o; list.length = n; } // v5.11.0.13: nothing under the cloud is drawn
+  if (FOG.on && !FOG.empty && !FOG.peek) { let n = 0; for (const o of list) if (o.rain || !fogHid(o.x, o.y)) list[n++] = o; FOG.hidN = list.length - n; list.length = n; } else FOG.hidN = 0; // v5.11.0.13: nothing under the cloud is drawn
   for (const o of list) o.depth = proj(o.x, o.y + (o.dy || 0))[2] + (o.bb ? 0.3 : 0);
   list.sort((a, b) => a.depth - b.depth);
   // shadows: one mask, then the ground under it steps one palette shade darker
@@ -4582,14 +4583,14 @@ function render() {
   }
   tick('objects');
   fogUpdate(); drawFog(); tick('fog');
-  if (farmerD && !fogHid(farmerD.x, farmerD.y)) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
-  for (const d of familyD) if (!fogHid(d.x, d.y)) drawBillboard(ctx, d, 0.35);
+  if (farmerD && !fogSkip(farmerD.x, farmerD.y)) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
+  for (const d of familyD) if (!fogSkip(d.x, d.y)) drawBillboard(ctx, d, 0.35);
   drawMarks(); tick('marks');
   careerSigns();
   if (window.PF_FX) PF_FX.draw(ctx, proj, RS);
-  for (const p of particles) { if (p.text || fogHid(p.x, p.y)) continue; const [sx, sy] = proj(p.x, p.y); if (p.spr) { const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; ctx.drawImage(p.spr, Math.round(sx) - (p.spr.width >> 1), Math.round(sy - p.z * RS) - p.spr.height); if (a < 1) ctx.globalAlpha = 1; continue; } ctx.fillStyle = p.c;
+  for (const p of particles) { if (p.text || fogSkip(p.x, p.y)) continue; const [sx, sy] = proj(p.x, p.y); if (p.spr) { const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; ctx.drawImage(p.spr, Math.round(sx) - (p.spr.width >> 1), Math.round(sy - p.z * RS) - p.spr.height); if (a < 1) ctx.globalAlpha = 1; continue; } ctx.fillStyle = p.c;
     if (p.kind === 'heart') { const hx = Math.round(sx), hy = Math.round(sy - p.z * RS); ctx.fillRect(hx - 2, hy, 2, 1); ctx.fillRect(hx + 1, hy, 2, 1); ctx.fillRect(hx - 2, hy + 1, 5, 1); ctx.fillRect(hx - 1, hy + 2, 3, 1); ctx.fillRect(hx, hy + 3, 1, 1); continue; } const s = p.kind === 'smoke' ? 3 : 2; ctx.fillRect(Math.round(sx), Math.round(sy - p.z * RS), s, s); }
-  for (const l of leaves) { if (fogHid(l.x, l.y)) continue; const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
+  for (const l of leaves) { if (fogSkip(l.x, l.y)) continue; const [sx, sy] = proj(l.x, l.y); ctx.fillStyle = l.c; ctx.fillRect(Math.round(sx + Math.sin(l.ph) * 3), Math.round(sy - l.z), 2, 1); }
   drawPondLeaves();
   drawPondFish();
   drawFishing();
@@ -4598,8 +4599,8 @@ function render() {
   if (WX) WX.drawSky(ctx, W, H);
   if (night > 0) lighting(night, T);
   if (INS) INS.draw(ctx, proj, RS);
-  if (night > 0.5) for (const f of fireflies) { if (fogHid(f.x, f.y)) continue; const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
-  for (const p of particles) if (p.text && !fogHid(p.x, p.y)) { const [sx, sy] = proj(p.x, p.y); const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; pixText(p.text, sx, sy - p.z * RS, p.c); if (a < 1) ctx.globalAlpha = 1; }
+  if (night > 0.5) for (const f of fireflies) { if (fogSkip(f.x, f.y)) continue; const [sx, sy] = proj(f.x, f.y); if (Math.sin(realT * 3 + f.ph) > 0.2) { ctx.fillStyle = '#f6f29a'; ctx.fillRect(Math.round(sx), Math.round(sy - f.z * RS), 1, 1); } }
+  for (const p of particles) if (p.text && !fogSkip(p.x, p.y)) { const [sx, sy] = proj(p.x, p.y); const a = p.fade ? Math.max(0, Math.min(1, p.life / 0.4)) : 1; if (a < 1) ctx.globalAlpha = a; pixText(p.text, sx, sy - p.z * RS, p.c); if (a < 1) ctx.globalAlpha = 1; }
   tick('fx+light');
   if (F.sleeping || (F.home && night > 0.7)) {
     const [sx, sy] = proj(HOUSE.x + 8, HOUSE.y - 5);
@@ -4687,7 +4688,7 @@ function drawTree(c, o) {
 }
 function lighting(night, T) {
   const lights = [];
-  const hz = (x, y, z, r, s = 1) => { if (fogHid(x, y)) return; /* v5.11.0.13: no window glows through the cloud */ const [sx, sy] = proj(x, y); lights.push([sx, sy - z, r, s]); };
+  const hz = (x, y, z, r, s = 1) => { if (fogSkip(x, y)) return; /* v5.11.0.13: no window glows through the cloud */ const [sx, sy] = proj(x, y); lights.push([sx, sy - z, r, s]); };
   if (T >= 17 * 60 + 30 || T < WAKE + 30) { hz(HOUSE.x - 8.5, HOUSE.y + 10.5, 17, 46); hz(HOUSE.x + 8.5, HOUSE.y + 10.5, 17, 46); hz(HOUSE.x - 13, HOUSE.y, 17, 34); }
   hz(STALL.x, STALL.y, 30, 40, 0.8); hz(BARN_DOOR.x, BARN_DOOR.y, 16, 26, 0.6); hz(WELL.x, WELL.y, 14, 20, 0.5);
   if (!F.home) hz(F.x, F.y, 14, 40);
@@ -5290,10 +5291,10 @@ function minimapBase() {
     fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
   XP.minimap(g, P, fillCoinPrice); // v5.5.0: the ring's plots
   if (FOG.on) fogRepaint(); { const fc = fogMinimap(); if (fc) { const B = FG.BOUNDS, [bx, by] = P(B[0], B[1]); g.imageSmoothingEnabled = true; g.drawImage(fc, bx, by, FG.GW * FG.CELL * MM.s, FG.GH * FG.CELL * MM.s); } } // v5.11.0.13: the same opaque bank
-  if (TN && TN.AGRI) { g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; // v5.11.0: the town's name and the reserved 农家乐区
-    const [ax0, ay0] = P(TN.AGRI[0], TN.AGRI[1]), [ax1, ay1] = P(TN.AGRI[2], TN.AGRI[3]); g.strokeStyle = 'rgba(255,246,220,0.55)'; g.setLineDash([3, 3]); g.strokeRect(ax0 + 0.5, ay0 + 0.5, ax1 - ax0 - 1, ay1 - ay0 - 1); g.setLineDash([]);
-    g.fillStyle = 'rgba(255,246,220,0.8)'; g.fillText(FOG.shut && FOG.shut.agri ? '农家乐区 · 待解锁' : innPlot() ? '农家乐区' : '农家乐区 · 开镇门后可建', (ax0 + ax1) / 2, (ay0 + ay1) / 2);
-    const [tx, ty] = P((TN.RECT[0] + TN.RECT[2]) / 2, TN.RECT[1] + 10); g.fillStyle = '#fff6dc'; g.fillText(S.eff && S.eff.town ? '小镇' : '小镇 · 待解锁', tx, ty); }
+  if (TN && TN.AGRI) { const shutA = FOG.on && FOG.shut && FOG.shut.agri, shutT = FOG.on && FOG.shut && FOG.shut.town; /* v5.11.0.13: dark ink on the pale cloud */ g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; // v5.11.0: the town's name and the reserved 农家乐区
+    const [ax0, ay0] = P(TN.AGRI[0], TN.AGRI[1]), [ax1, ay1] = P(TN.AGRI[2], TN.AGRI[3]); if (!shutA) { g.strokeStyle = 'rgba(255,246,220,0.55)'; g.setLineDash([3, 3]); g.strokeRect(ax0 + 0.5, ay0 + 0.5, ax1 - ax0 - 1, ay1 - ay0 - 1); g.setLineDash([]); }
+    g.fillStyle = shutA ? 'rgba(62,63,76,0.85)' : 'rgba(255,246,220,0.8)'; g.fillText(FOG.shut && FOG.shut.agri ? '农家乐区 · 待解锁' : innPlot() ? '农家乐区' : '农家乐区 · 开镇门后可建', (ax0 + ax1) / 2, (ay0 + ay1) / 2);
+    const [tx, ty] = P((TN.RECT[0] + TN.RECT[2]) / 2, TN.RECT[1] + 10); g.fillStyle = shutT ? 'rgba(62,63,76,0.85)' : '#fff6dc'; g.fillText(S.eff && S.eff.town ? '小镇' : '小镇 · 待解锁', tx, ty); }
 }
 function minimapDraw() {
   if (!MM.el || MM.el.offsetParent === null) return; if (FOG.mmDirty) { FOG.mmDirty = false; MM.base = null; } if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
@@ -5327,6 +5328,7 @@ function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === '
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
-Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); }, fogHid: (x, y) => fogHid(x, y), fogAlpha: (x, y) => { if (!FOG.A) return 0; const B = FG.BOUNDS, i = Math.min(FG.GW - 1, Math.floor((x - B[0]) / FG.CELL)), j = Math.max(0, Math.floor((y - B[1]) / FG.CELL)); return i < 0 || j >= FG.GH ? 0 : FOG.A[j * FG.GW + i] / 255; }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); if (i < 0 || j >= FG.GH) return 0; return FOG.F[Math.max(j, 0) * FG.GW + Math.min(i, FG.GW - 1)]; } /* past the north / east edge the shade carries on, as drawn */ }); // v5.11.0.6 test hooks
+Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); MM.base = null; }, fogHid: (x, y) => fogHid(x, y), fogVeil: on => { FOG.veil = !!on; MM.base = null; }, fogPeek: on => { FOG.peek = !!on; FOG.scrKey = ''; }, fogClock: t => { FOG.clock = t == null ? null : +t; }, fogHidden: () => FOG.hidN | 0,
+  fogScribble: () => { const g = groundBase.getContext('2d'), B = FG.BOUNDS; if (!FOG.unscr) FOG.unscr = g.getImageData(0, 0, GW, GH); g.save(); for (let i = 0; i < 40; i++) { g.fillStyle = i % 2 ? '#ff00ff' : '#00ffff'; g.fillRect((B[0] - GX0) * RS + i * 30, (B[1] - GY0) * RS, 14, (B[3] - B[1]) * RS); } g.restore(); MM.base = null; }, fogUnscribble: () => { if (FOG.unscr) { groundBase.getContext('2d').putImageData(FOG.unscr, 0, 0); FOG.unscr = null; MM.base = null; } }, fogAlpha: (x, y) => { if (!FOG.A) return 0; const B = FG.BOUNDS, i = Math.min(FG.GW - 1, Math.floor((x - B[0]) / FG.CELL)), j = Math.max(0, Math.floor((y - B[1]) / FG.CELL)); return i < 0 || j >= FG.GH ? 0 : FOG.A[j * FG.GW + i] / 255; }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); if (i < 0 || j >= FG.GH) return 0; return FOG.F[Math.max(j, 0) * FG.GW + Math.min(i, FG.GW - 1)]; } /* past the north / east edge the shade carries on, as drawn */ }); // v5.11.0.6 test hooks
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();

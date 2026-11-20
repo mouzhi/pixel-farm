@@ -25,11 +25,11 @@
     { id: 'town', name: '小镇', rect: [SPLIT, BOUNDS[1], BOUNDS[2], BOUNDS[3]], label: P(792, 8) },
   ];
   const ZONE_IDS = ZONES.map(z => z.id);
-  const FEATHER = 14;           // world units of dithered edge
+  const FEATHER = 20;           // world units of dithered edge
   const WOBBLE = 10;            // world units the west edge wanders
   const FADE = 1.7;             // seconds for the cloud to roll back once a district opens (REVEAL)
   const REVEAL = FADE;
-  const EDGE_NOISE = 0.42;      // how much the rim billows (field units)
+  const EDGE_NOISE = 0.55;      // how much the rim billows (field units)
   const HIDE = 128;             // cell alpha (0..255) from which things standing there are not drawn
   // the cloud's colours, all from the palette: stone ramp for the body, the cream accent for sunlit tops
   const CLOUD = ['#666a73', '#9a9ea0', '#cfd0c6', '#f6ecd0'];
@@ -107,7 +107,7 @@
       RN[j * GW + i] = Math.min(1, Math.max(0, (vnoise(x, y, 28, 1 << 20, 11) * 0.75 + vnoise(x, y, 7, 1 << 20, 12) * 0.25 - 0.18) / 0.64)); }
     return RN; }
   function edgeNoise() { if (EN) return EN; EN = new Float32Array(GW * GH);
-    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const x = BOUNDS[0] + i, y = BOUNDS[1] + j; EN[j * GW + i] = vnoise(x, y, 6, 1 << 20, 21) * 0.65 + vnoise(x, y, 2.5, 1 << 20, 22) * 0.35 - 0.5; }
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) { const x = BOUNDS[0] + i, y = BOUNDS[1] + j; EN[j * GW + i] = vnoise(x, y, 15, 1 << 20, 21) * 0.55 + vnoise(x, y, 6, 1 << 20, 23) * 0.3 + vnoise(x, y, 2.5, 1 << 20, 22) * 0.15 - 0.5; }
     return EN; }
   // a reveal step: the old field rolling back into the new one. t 0..1; each cell clears at its own moment (revealOrder), so
   // the bank breaks into drifting patches instead of fading as one sheet. A district that stays shut keeps its field (max).
@@ -126,7 +126,8 @@
     return i1 < 0 ? null : [i0, j0, i1 + 1, j1 + 1];
   }
   // field -> how solid the cloud is per cell (0..1): the feather, pushed about by a little noise so the rim billows
-  const level = (v, n) => { if (v <= 0) return 0; const e = v + EDGE_NOISE * n; return e <= 0.25 ? 0 : e >= 0.75 ? 1 : (e - 0.25) / 0.5; };
+  const level = (v, n) => { if (v <= 0) return 0; if (v >= 1) return 1; const e = v + EDGE_NOISE * n * 4 * v * (1 - v); // the noise never reaches the solid inside or the clear outside
+    return e <= 0.18 ? 0 : e >= 0.82 ? 1 : (e - 0.18) / 0.64; };
   // field -> mask bytes (RGBA, white, alpha 0 or 255: the cloud is opaque wherever it is drawn) and, if asked, the 0..255 level
   // per cell (game.js: things standing where it is >= HIDE are not drawn). Ordered dither on the world grid: the pixel-art rim.
   const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -137,18 +138,23 @@
         u32[k] = a > 0 && a * 16 > BAYER[row + (i & 3)] + 0.5 ? 0xffffffff : 0; } }
     return px;
   }
-  // the cloud tile, size x size (tileable), RGBA bytes. kind 'body': opaque, the bank itself (stone shadows under billows, grey
-  // body, pale tops, cream where the sun catches a crest; lit from the top left like the rest of the game). 'wisp': sparse
-  // transparent puffs that drift over the body at another speed, so the bank seems to move in depth.
+  // the cloud tile, size x size (tileable), RGBA bytes: a heap of round puffs, like the game's tree clumps. Each pixel takes the
+  // puff on top there and is lit as a dome from the top left (the game's light): cream crests, pale body, grey undersides, the
+  // darkest grey only in the creases between puffs. kind 'body' covers the tile; 'wisp' is a few loose small puffs (the rest
+  // transparent) that drift over the body at another speed, so the bank seems to move in depth.
   const hex = c => [parseInt(c.slice(1, 3), 16), parseInt(c.slice(3, 5), 16), parseInt(c.slice(5, 7), 16)];
   function cloudTex(size, kind) {
-    const S = size || 128, out = new Uint8ClampedArray(S * S * 4), C = CLOUD.map(hex), wisp = kind === 'wisp', seed = wisp ? 40 : 30;
-    const f = (x, y) => vnoise(x, y, S / 4, 4, seed) * 0.55 + vnoise(x, y, S / 8, 8, seed + 1) * 0.3 + vnoise(x, y, S / 16, 16, seed + 2) * 0.15;
-    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) {
-      const v = f(x, y), lit = v - f(x + 2, y + 2), d = BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.47, k = (y * S + x) * 4;
-      let c;
-      if (wisp) { if (v + d * 0.12 < 0.6) { out[k + 3] = 0; continue; } c = lit > 0.012 ? 3 : 2; }
-      else { const q = v + lit * 2.2 + d * 0.07; c = q < 0.38 ? 0 : q < 0.53 ? 1 : q < 0.68 ? 2 : 3; }
+    const S = size || 128, out = new Uint8ClampedArray(S * S * 4), C = CLOUD.map(hex), wisp = kind === 'wisp';
+    let seed = wisp ? 977 : 331; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const puffs = []; const n = wisp ? 9 : Math.round(S * S / 230);
+    for (let i = 0; i < n; i++) puffs.push(wisp ? { x: rnd() * S, y: rnd() * S, r: 4 + rnd() * 6, z: rnd() } : { x: rnd() * S, y: rnd() * S, r: 8 + rnd() * 13, z: rnd() });
+    puffs.sort((p, q) => p.z - q.z); // later = higher
+    for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { const k = (y * S + x) * 4; let top = null, dx = 0, dy = 0, h = -1;
+      for (const p of puffs) { let ex = x + 0.5 - p.x, ey = y + 0.5 - p.y; ex -= Math.round(ex / S) * S; ey -= Math.round(ey / S) * S; const q = (ex * ex + ey * ey) / (p.r * p.r);
+        if (q < 1) { top = p; dx = ex / p.r; dy = ey / p.r; h = 1 - q; } } // the last (highest) puff covering the pixel wins
+      if (!top) { if (wisp) { out[k + 3] = 0; continue; } const c = C[1]; out[k] = c[0]; out[k + 1] = c[1]; out[k + 2] = c[2]; out[k + 3] = 255; continue; }
+      const d = (BAYER[(y & 3) * 4 + (x & 3)] / 16 - 0.47) * 0.12, lit = -(dx + dy) * 0.7071 + 0.45 * Math.sqrt(h) - 0.2 + d;
+      const c = wisp ? (lit > 0.05 ? 3 : 2) : lit > 0.42 ? 3 : lit > -0.2 ? 2 : 1; // (the darkest grey drew hard little lines on puff rims: left out)
       out[k] = C[c][0]; out[k + 1] = C[c][1]; out[k + 2] = C[c][2]; out[k + 3] = 255; }
     return out;
   }
