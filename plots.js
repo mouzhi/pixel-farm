@@ -22,7 +22,7 @@
     woodland: { name: '林地', icon: 'forest', desc: '种上一片会再生的树，砍了会长回来', now: '一片会长回来的树（最多 10 棵）' },
     workshop: { name: '工坊院', icon: 'workshop', desc: '平整的空院子，能盖三座加工坊：磨坊、果酱铺、奶酪坊（商店「工坊」里买）', now: '先铺好院子' },
     dam: { name: '动力坝', icon: 'dam', desc: '河边的水车。在商店「工坊」里修好以后转起来，给农场供电', now: '河边立起一架水车，修好以后转起来' },
-    road: { name: '大道', icon: 'road', desc: '通向隔壁镇子的大路，孩子以后上学走这里', now: '路修通到镇口（镇子第 10 阶段开放）' },
+    road: { name: '大道', icon: 'road', desc: '通向隔壁镇子的大路，孩子以后上学走这里', now: '路修通到镇口；镇门还关着，孩子上过一天学后在「地块」里开镇门' },
     playground: { name: '乐园', icon: 'playground', desc: '滑梯、沙坑（能堆沙堡）和秋千，孩子会自己来玩', now: '滑梯、沙坑和秋千', cost: 800, wood: 40 },
     bridge: { name: '石桥', icon: 'bridge', desc: '修好以后家人、羊群和上学的孩子都从桥上过河', now: '桥修好了' },
     trail: { name: '山道', icon: 'trail', desc: '一条弯弯的上山小路，通向山顶的两块地', now: '路障拆掉，能上山了' },

@@ -764,6 +764,7 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
   if (id === 'fence') log('给每个动物棚子围上了木篱笆，动物们每晚更开心');
   if (AN.KINDS[id]) { const a = S.animals.filter(q => q.kind === id).pop(); log(`一只${AN.KINDS[id].name}住进了${PENS[a ? homeOf(a) : AN.KINDS[id].home].name}`); }
   worksBoughtLog(id);
+  if (YD.ITEM[id]) yardBought(id, who); // v5.10.11.1: say who is coming and when, and show where it goes
   if (id === 'town' && TN) { if (TOWN_ON) TA.sync(true); markNavDirty(); log('镇门打开了：孩子们以后去镇上的学校，镇上的小店收工坊货、蜂蜜和鱼（多给两成）'); burst(TN.GATE.x, TN.GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); }
   if (DC.CATALOG[id]) log(id === 'party' ? '派对区的桌椅和串灯买好了，家人会找一块空地搭起来' : `${o.item.name}放进了仓库，家人会找地方摆上（也可以用「摆${o.item.name}」自己选地方）`); // v5.7.0
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
@@ -1380,6 +1381,7 @@ function overnight() {
     if (n || pets) log(`诊所的苏大夫来家里做了每月体检${n ? '，' + n + ' 只动物心情好了一些' : ''}${pets ? '，还看看了家里的猫和狗' : ''}`); }
   worksNight(); // v5.6.0: honey, the lamps' orchard, the herded sheep
   decorNight(); // v5.7.0: a full book page leaves a piece
+  yardCatchUp('天亮前家人赶完了活：'); sprCatchUp(); decorCatchUp('天亮前家人把'); // v5.10.11.1: nothing paid for waits past one night
   yardNight(); // v5.10.3: the flower beds' extra honey, the morning letter
   for (const p of PETS_LIVE) p.patted = 0;
   const cats = (S.eff.pets || {}).cat || 0; if (cats) { const g = SU.catGifts(cats * AN.CAT_SEEDS, rand); for (const k of CROP_IDS) if (g.add[k]) S.store[k] = (S.store[k] || 0) + g.add[k];
@@ -1877,6 +1879,10 @@ var SPR_COVER = null; // per sprinkler: the tiles it waters (rebuilt when one is
 const sprReach = () => (S.eff && S.eff.sprReach) || (PW.SPRINKLER && PW.SPRINKLER.reach) || 16;
 const sprCover = () => SPR_COVER || (SPR_COVER = PW.coveredBy(S.works.sprinklers, tiles, sprReach()));
 function sprinklerNext() { return S.eff.sprinkler > S.works.sprinklers.length ? PW.nextSpot(fieldList(), tiles, S.works.sprinklers, sprReach()) : null; }
+function sprCatchUp(pre) { // v5.10.11.1: sprinklers bought but not yet put in go in overnight
+  let n = 0; for (let sp = sprinklerNext(); sp && S.eff.sprinkler > S.works.sprinklers.length && n < 64; sp = sprinklerNext()) { S.works.sprinklers.push({ x: sp.x, y: sp.y }); n++; }
+  if (n) { SPR_COVER = null; sprSince = null; log(`${pre || '天亮前家人'}在田边装好了 ${n} 台浇水器（${S.works.sprinklers.length}/${S.eff.sprinkler}）`); noteProgress(); }
+  return n; }
 function installTask(sp) {
   return { kind: 'install', key: 'spr:install', label: '正在田边装浇水器', to: { x: sp.x - 4, y: sp.y + 2 }, dur: 14, pose: 'pull', done: () => {
     if (!(S.eff.sprinkler > S.works.sprinklers.length)) return; S.works.sprinklers.push({ x: sp.x, y: sp.y }); SPR_COVER = null;
@@ -1920,7 +1926,8 @@ const wheatShort = () => S.eff.mill && S.works.works.mill ? Math.max(0, PW.WHEAT
 const wheatPick = () => (S.eff.mill && F.bag.wheat > 0 && wheatHave() - (F.bag.wheat || 0) - (S.store.wheat || 0) < PW.WHEAT_WANT) ? 'wheat' : null;
 function worksBoard(post, T) {
   const W = S.works, space = BASK() - F.crops.length;
-  if (T < 18 * 60) { const sp = sprinklerNext(); if (sp) post('install', 66, { x: sp.x - 4, y: sp.y + 2 }, () => installTask(sp), 'spr:install', 'field'); }
+  const spr = S.eff.sprinkler > S.works.sprinklers.length; if (!spr) sprSince = null; else if (sprSince === null) sprSince = S.t; // v5.10.11.1: it climbs while it waits
+  if (T < 18 * 60 && spr) { const sp = sprinklerNext(); if (sp) post('install', 66 + WAIT_BOOST(sprSince), { x: sp.x - 4, y: sp.y + 2 }, () => installTask(sp), 'spr:install', 'field'); }
   const keep = worksKeep(F);
   for (const id of PW.WORK_IDS) { const w = W.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], door = PWA.doorOf(id);
     const carry = F.crops.filter((it, i) => keep[i] && def.inputs.includes(it)).length;
@@ -2014,9 +2021,15 @@ function yardStand(id, n) { // where the one setting it up stands
   if (id === 'vegfence') { const f = YD.FENCE[n] || YD.FENCE[0]; return f.rot ? { x: f.x + (f.x > 96 ? 3 : -3), y: f.y } : { x: f.x, y: f.y + (f.y < 70 ? -3 : 3) }; }
   return { x: p.x, y: p.y + 5 };
 }
+// v5.10.11.1: a bought piece used to wait at priority 42, below almost every farm chore, so on a busy farm (a family, pens,
+// workshops) the gravel or flagstones could sit unbuilt for a week while the gold was gone. Now it starts at 66 (like a
+// sprinkler) and climbs while it waits (WAIT_BOOST); whatever is still not done at night is finished before morning.
+let yardSince = null, sprSince = null, dcSince = null; // S.t when the oldest unbuilt purchase was noticed (in memory: the night catches up the rest)
+const WAIT_BOOST = since => Math.min(40, Math.max(0, S.t - since) / 60 * 15); // +15 an hour, up to +40 (above the harvest)
 function yardBoard(post, T) {
+  const id0 = yardTodo(); if (!id0) yardSince = null; else if (yardSince === null) yardSince = S.t;
   if (T >= 18 * 60 || T < WAKE) return;
-  const id = yardTodo(); if (id) { const at = yardStand(id, S.homeyard.put[id] | 0); if (at) post('setup', 42, at, () => yardSetupTask(id), 'yard:setup'); }
+  const id = id0; if (id) { const at = yardStand(id, S.homeyard.put[id] | 0); if (at) post('setup', 66 + WAIT_BOOST(yardSince), at, () => yardSetupTask(id), 'yard:setup'); }
   const h = S.homeyard; if (h.put.brush && h.bday !== S.day && T < 17 * 60 && S.animals.length) {
     const a = S.animals.reduce((b, q) => (q.h | 0) < (b.h | 0) ? q : b, S.animals[0]); post('brush', 24, animalSpot(a), () => brushTask(a), 'yard:brush'); }
 }
@@ -2027,8 +2040,23 @@ function yardSetupTask(id) {
     const put = S.homeyard.put, want = Math.min(S.up[id] | 0, YD.room(id, yardCtx())), k = put[id] | 0; if (k >= want) return;
     put[id] = k + (YARD_MANY[id] ? Math.min(4, want - k) : 1); yardDone(id, k, put[id]); } };
 }
+// v5.10.11.1: finish every bought-but-unbuilt yard piece at once (overnight, and once when a save loads: older versions
+// could leave paid pieces unbuilt for days). Returns how many kinds were finished.
+function yardCatchUp(pre) {
+  let n = 0;
+  for (const id of YD.IDS) { const put = S.homeyard.put, k = put[id] | 0, want = Math.min(S.up[id] | 0, YD.room(id, yardCtx())); if (k >= want) continue;
+    put[id] = want; yardDone(id, k, want, pre); n++; }
+  if (n) { yardSince = null; markNavDirty(); }
+  return n;
+}
+function yardBought(id, who) {
+  const it = YD.ITEM[id], k = S.homeyard.put[id] | 0, room = YD.room(id, yardCtx()); if (yardSince === null) yardSince = S.t;
+  const T = S.t % 1440, late = T >= 18 * 60 || T < WAKE, verb = YARD_MANY[id] ? '铺' : it.kind === 'care' ? '放' : '装';
+  const msg = k >= room ? `${it.name}买好了，${yardGate(id, k) || '等有地方了家人再弄'}` : late ? `${it.name}买好了，天黑了，家人夜里赶一赶，明天早上就能看到` : `${it.name}买好了，家人今天就去${verb}，最晚明天早上弄好`;
+  log(msg); if (who === 'player') { say(msg); const P = YD.spotOf(id, Math.min(k, it.max - 1), yardPens()); if (P) panTo(P.x, P.y); }
+}
 const ROOF_NAMES = ['红', '绿', '蓝', '青灰'];
-function yardDone(id, from, to) {
+function yardDone(id, from, to, pre) {
   const it = YD.ITEM[id], P = YD.spotOf(id, from, yardPens()) || { x: DOOR.x, y: DOOR.y + 6 }, love = { awning: 5, vase: 3 }[id];
   const text = { gravel: `门口铺好了 ${to - from} 段石子小路（${to}/${it.max}），走在上面快一点`, flag: `小路换上了 ${to - from} 段石板（${to}/${it.max}）`,
     vegfence: `家门口的田边围上了 ${to - from} 段小栅栏（${to}/${it.max}）`, mailbox: '门口换上了新信箱', clothesline: '屋后拉好了晾衣绳，晴天就能晾衣服',
@@ -2036,7 +2064,7 @@ function yardDone(id, from, to) {
     awning: '阿禾的小摊搭上了遮阳棚', scale: '小摊上换了一杆新秤', sign: '小摊边立起了木招牌', vase: '摊子上插了一瓶花', straw: '鸡舍里铺上了干稻草',
     catbed: '屋檐下放好了一个猫窝', doghouse: '院子里搭好了一个小狗屋', brush: '谷仓门口挂好了刷子，以后每天给一只动物梳梳毛',
     saltlick: `${(PENS[YD.LICK_PENS.filter(k => yardPens()[k])[from]] || {}).name || '棚子'}里放好了一块盐砖` }[id];
-  if (love) { const fam = S.family; fam.love = Math.min(FAM.LOVE_MAX, fam.love + love); hearts(STALL.x, STALL.y - 4, 10); log(`${text}，阿禾很高兴（好感 +${love}）`); } else log(text);
+  if (love) { const fam = S.family; fam.love = Math.min(FAM.LOVE_MAX, fam.love + love); hearts(STALL.x, STALL.y - 4, 10); log(`${pre || ''}${text}，阿禾很高兴（好感 +${love}）`); } else log((pre || '') + text);
   if (id === 'roof' || id === 'curtains') { houseTierShown = ''; setHouseTier(S.eff.house || 0); }
   if ((id === 'gravel' || id === 'flag') && groundReady) for (let i = from; i < to; i++) { const q = YD.PIECES[i]; buildGroundBase([Math.min(q[0], q[2]) - 6, Math.min(q[1], q[3]) - 6, Math.max(q[0], q[2]) + 6, Math.max(q[1], q[3]) + 6]); }
   burst(P.x, P.y, 10, [Wd[4], '#fff2a8'], 8, 'wood'); if (YARD_ON) YA.sync(true, clothesOut());
@@ -2203,15 +2231,16 @@ function buildTask(q) { // workshops and the party area are rebuilt where they g
     if (settle(q)) { burst(q.x, q.y, 24, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); log(`${who}${place ? '搭好了' + name : '把' + name + '挪到了新地方'}`); } } };
 }
 function decorBoard(post, T) {
-  const D = S.decor;
+  const D = S.decor; if (!D.orders.some(q => !q.mine)) dcSince = null; else if (dcSince === null) dcSince = S.t; // v5.10.11.1: the family's own placing climbs while it waits
   if (F._carry) { const q = D.orders.find(o => o.u === F._carry); if (q) post('carry', 99, { x: q.x - 5, y: q.y + 3 }, () => carryDropTask(q), 'dc2:' + q.u, 'yard'); else F._carry = null; }
   if (T >= 18 * 60) return;
   // the family sets new pieces down by themselves, one at a time
   if (!D.orders.some(q => !q.mine)) for (const id of Object.keys(D.inv)) { const want = (D.inv[id] | 0) - D.orders.filter(q => q.op === 'place' && q.id === id).length; if (want <= 0) continue;
     const sp = autoSpot(id); if (sp) { orderThing('place', 'decor', null, id, sp.x, sp.y, false); break; } }
   for (const q of D.orders) { if (q.st === 1 || !thingNow(q)) continue;
-    if (BUILD_LIKE(q)) post('carry', q.mine ? 64 : 40, { x: q.x - 9, y: q.y + 6 }, () => buildTask(q), 'dc:' + q.u, 'yard');
-    else { const at = thingNow(q); post('carry', q.mine ? 64 : 40, { x: at.x - 5, y: at.y + 3 }, () => carryPickTask(q), 'dc:' + q.u, 'yard'); } }
+    const base = q.mine ? 64 : 40 + WAIT_BOOST(dcSince === null ? S.t : dcSince);
+    if (BUILD_LIKE(q)) post('carry', base, { x: q.x - 9, y: q.y + 6 }, () => buildTask(q), 'dc:' + q.u, 'yard');
+    else { const at = thingNow(q); post('carry', base, { x: at.x - 5, y: at.y + 3 }, () => carryPickTask(q), 'dc:' + q.u, 'yard'); } }
 }
 // ---- the party: an evening now and then (decided in the morning), the family and maybe a guest or two from the next town ----
 const partyArea = () => S.decor.placed.find(p => p.id === 'party') || null;
@@ -3373,6 +3402,21 @@ function decorFrame() {
     const at = actors().filter(a => a.task && a.task.kind === 'party' && !a.moving).concat(GUESTS.filter(g => !g.moving)); if (at.length) { const a = at[Math.floor(Math.random() * at.length)]; hearts(a.x, a.y, 22); } }
 }
 function decorNight() { decorBookCheck(); }
+// v5.10.11.1: decorations the family places on its own (bought in the shop, 「家人会找地方摆上」) used to wait at priority 40
+// and could sit in the storehouse for days on a busy farm; overnight (and once on load) they go on their tidy slots.
+// Only the family's own place orders: the player's own moves stay theirs. What has no free slot stays in the storehouse.
+function decorCatchUp(pre) {
+  const D = S.decor, names = [];
+  for (let guard = 0; guard < 60; guard++) {
+    let q = D.orders.find(o => !o.mine && o.op === 'place' && o.what === 'decor');
+    if (!q) { if (D.orders.some(o => !o.mine)) break;
+      const id = Object.keys(D.inv).find(k => (D.inv[k] | 0) > 0 && k !== 'party' && autoSpot(k)); if (!id) break;
+      const sp = autoSpot(id), r = orderThing('place', 'decor', null, id, sp.x, sp.y, false); if (!r.ok) break; q = r.q; }
+    const name = thingName(q); if (!settle(q)) break; names.push(name); }
+  if (names.length) { dcSince = null; const c = {}; names.forEach(n => { c[n] = (c[n] || 0) + 1; });
+    log(`${pre}${Object.keys(c).map(n => c[n] > 1 ? n + ' ' + c[n] + ' 件' : n).join('、')}摆好了`); }
+  return names.length;
+}
 const decorBusy = id => { const r = PL.plot(id) && PL.plot(id).rect; return r && S.decor.placed.some(p => WD.inRect(p.x, p.y, r)) ? '地块上摆着装饰，先把它们挪走' : null; };
 // ---- the toolbar: 「摆…」 places one from the storehouse, 「挪东西」 picks a thing and then its new spot ----
 function movables() { const out = [];
@@ -4600,7 +4644,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.10.11';
+const GAME_VERSION = '5.10.11.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -4804,7 +4848,7 @@ function settleOffline(sec) { // decision: estimate at 50% of the online rate, a
 onMorning = () => { noteLog('syncMorning', logSnap()); saveNow(); };
 const boot = PFSave.read();
 SAVE.notes = boot.notes;
-if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); }
+if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); yardCatchUp('之前买好还没弄完的，家人补上了：'); sprCatchUp('之前买好的浇水器，家人补上了：'); decorCatchUp('之前买好还没摆的，家人补上了：'); } // v5.10.11.1: paid pieces an older version left unbuilt
 else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); }
 if (WX && WX.ensure) S.weather = WX.ensure(S.weather || WX.emptyWeather(), S.day, (S.createdAt | 0) || 1);
 OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); groundReady = true;

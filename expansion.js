@@ -269,6 +269,7 @@
     pay(o); S.plots[id] = { mod: o.mod, day: S.day };
     const p = o.plot, M = PL.MODULES[o.mod];
     X.log(`买下了「${p.name}」（${o.cost} 金${o.wood ? ' + ' + o.wood + ' 木材' : ''}），做成${M.name}`);
+    if (o.mod === 'road' && !(S.eff && S.eff.town)) X.log('大道修通到了镇口（东边那条土路）；镇门还关着，孩子上过一天学后，可以在商店「地块」里开镇门'); // v5.10.11.1: say where the road is and what is next
     X.popText(X.FARMER.x, X.FARMER.y, 22, '-' + o.cost, '#ffd76a'); X.burst(p.sign.x, p.sign.y, 14, ['#ffd76a', '#fff2a8', '#ffffff'], 14, 'spark');
     X.emit('purchase', { item: 'plot:' + id, mod: o.mod, gold: o.cost, wood: o.wood, who: 'player' });
     X.applyUpgrades(); X.saveNow(); return Object.assign({}, o, { ok: true });
