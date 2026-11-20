@@ -1,7 +1,7 @@
 // 像素农场 · 第 11 阶段（v5.9.0）：好感、成家分户与新房子（纯数据和纯函数；浏览器里是 window.PFHome，Node 里可以 require 做单元测试）
 // Children slowly get close to their classmates (school days, a classmate coming home, parties); the family gets to know the
 // town's neighbours (the teacher, the shopkeeper, the party guests). Nobody gives gifts or picks anything: it only grows.
-// A grown child who is close to someone, once a new house stands on a bought 花甸 / 农田 plot, marries on a fine evening and
+// A grown child who is close to someone, once a new house stands on a bought 花甸 / 农田 plot (or, once moved, on a bought first-ring field such as 东田), marries on a fine evening and
 // moves out. The couple farms the six tiles and keeps the two hens beside their house by themselves, and now and then the
 // child comes back for an hour to help on the main farm (at most twice a day). Art: home-art.js; wiring: game.js.
 'use strict';
@@ -10,6 +10,10 @@
   const NODE = typeof require === 'function' && typeof document === 'undefined';
   const PLm = NODE ? require('./plots.js') : null, plots = () => PLm || root.PFPlots;
   const PL = new Proxy({}, { get: (_, k) => plots()[k] });
+  const WDm = NODE ? require('./world.js') : null, world = () => WDm || root.PFWorld;
+  const WD = new Proxy({}, { get: (_, k) => world()[k] });
+  const NAVm = NODE ? require('./path.js') : null, pathApi = () => NAVm || root.PFPath;
+  const NAV = new Proxy({}, { get: (_, k) => pathApi()[k] });
   const TN = root.PFTown || (NODE ? require('./town.js') : null);
   const careers = () => root.PFCareers || (NODE ? require('./careers.js') : null);
   const hallNb = () => (root.PFHall || (NODE ? require('./hall.js') : null) || {}).NEIGHBOURS || [];
@@ -78,23 +82,126 @@
   }
   const boxHit = (a, b, pad = 0) => a[0] - pad < b[2] && a[2] + pad > b[0] && a[1] - pad < b[3] && a[3] + pad > b[1];
   const inBox = (p, b, pad = 0) => p.x > b[0] - pad && p.x < b[2] + pad && p.y > b[1] - pad && p.y < b[3] + pad;
-  // where a house can go in plot `id` (bought as `mod`): inside the fence, clear of its gate, its 农田 block (if it is a field),
-  // its water barrel and anything in `avoid` (boxes). Nearest the plot's middle first. -> [{ x, y, m }]
+  // a house site: an outer 花甸 / 农田 plot, or the original farm / a bought first-ring region (林场, 东田, …)
+  const HOME_FIELD = { c0: 9, r0: 7, cols: 6, rows: 4 }; // = game.js FIELD
+  const isRegionId = id => !!(WD.REGION_IDS && WD.REGION_IDS.includes(id));
+  const isHomeSite = id => id === 'home' || isRegionId(id) || PL.isPlotId(id);
+  function siteOf(id) {
+    if (id === 'home') {
+      const H = WD.HOME, L = NAV.LAYOUT || {};
+      return { id: 'home', name: '家里', kind: 'home', rect: [H.x0, H.y0, H.x1, H.y1], gate: L.DOOR, barrel: L.WELL, field: HOME_FIELD };
+    }
+    const p = PL.plot(id); if (p) return { id: p.id, name: p.name, kind: 'plot', rect: p.rect, gate: p.gate, barrel: p.barrel, field: p.field, wheel: p.wheel };
+    const r = WD.region && WD.region(id);
+    return r ? { id: r.id, name: r.name, kind: 'region', rect: r.rect, gate: r.gate, barrel: r.barrel, field: r.field || null } : null;
+  }
+  const siteName = id => { const s = siteOf(id); return s ? s.name : '这块地'; };
+  const siteRect = id => { const s = siteOf(id); return s ? s.rect : null; };
+  function siteAt(x, y) {
+    const H = WD.HOME; if (H && WD.inRect(x, y, [H.x0, H.y0, H.x1, H.y1])) return 'home';
+    const p = PL.plotAt(x, y); if (p) return p.id;
+    if (WD.REGIONS) for (const r of WD.REGIONS) if (WD.inRect(x, y, r.rect)) return r.id;
+    return null;
+  }
+  const siteOwned = (id, plots, regions) => id === 'home' || (isRegionId(id) ? (regions || []).includes(id) : !!(plots && plots[id]));
+  function siteAllowsHouse(id, plots) {
+    if (id === 'home' || isRegionId(id)) return true;
+    const p = PL.plot(id), q = plots && plots[id];
+    return !!(p && q && !p.special && PL.HOMESTEAD.mods.includes(q.mod) && PL.HOMESTEAD.terrains.includes(p.terrain));
+  }
+  function fieldBox(id, mod) {
+    const s = siteOf(id); if (!s || !s.field) return null;
+    if (s.kind === 'plot' && mod !== 'field') return null;
+    const f = s.field; return [f.c0 * 8 - 1, f.r0 * 8 - 1, (f.c0 + f.cols) * 8 + 1, (f.r0 + f.rows) * 8 + 1];
+  }
+  // fixed things on the original farm and first-ring regions (the manor, warehouse, well, pond, pens). Only boxes that
+  // actually sit near this site are returned, so an outer plot is unchanged.
+  function staticBlocks(id) {
+    const s = siteOf(id); if (!s || !s.rect || s.kind === 'plot') return []; // plots keep the old spotsIn rules (gate / field / barrel)
+    const out = [], r = s.rect, add = b => { if (b && b.length === 4 && boxHit(b, r, 8)) out.push(b); };
+    const L = NAV.LAYOUT; if (L) {
+      const hb = NAV.houseBox && NAV.houseBox(3);
+      if (hb) add([hb.x0, hb.y0, hb.x1, hb.y1]);
+      add([L.BARN.x - 14.5, L.BARN.y - 11.5, L.BARN.x + 14.5, L.BARN.y + 11.5]);
+      add([L.WELL.x - 6, L.WELL.y - 6, L.WELL.x + 6, L.WELL.y + 6]);
+      add([L.STALL.x - 11, L.STALL.y - 6.5, L.STALL.x + 11, L.STALL.y + 6.5]);
+      add([L.BENCH.x - 5, L.BENCH.y - 3, L.BENCH.x + 5, L.BENCH.y + 3]);
+      if (L.POND) add([L.POND.x - L.POND.rx, L.POND.y - L.POND.ry, L.POND.x + L.POND.rx, L.POND.y + L.POND.ry]);
+    }
+    // only the original four pens (works.js also parks second-pen geometry on a default plot)
+    for (const k of ['coop', 'sty', 'fold', 'shed']) { const P = WD.PENS && WD.PENS[k]; if (!P || !P.bld) continue;
+      add([P.bld.x - 9, P.bld.y - 7, P.bld.x + 9, P.bld.y + 7]);
+      if (P.roam) add(P.roam); }
+    return out;
+  }
+  function wetAt(x, y) {
+    if (WD.seaAt && WD.seaAt(x, y) === 'water') return 'water';
+    if (PL.terrainAt && PL.terrainAt(x, y) === 'river') return 'river';
+    return null;
+  }
+  function outsideWhy(x, y) {
+    const w = wetAt(x, y); if (w === 'water') return '这里是水，不能放房子'; if (w === 'river') return '这里是河，不能放房子';
+    const p = PL.plotAt(x, y); if (p && p.special === 'road') return '这里是路，不能放房子';
+    if (NAV.pathDist && NAV.pathDist(x, y, null) < 6) return '这里是路，不能放房子';
+    return '新房子只能挪到买下的花甸、农田，或家里已买下的地里（一块地一座）';
+  }
+  function blockWhy(x, y, id, mod, avoid) {
+    const foot = layout({ x, y, m: 0 }).foot, field = fieldBox(id, mod), s = siteOf(id);
+    if (field && (boxHit(foot, field) || (s && WD.inRect && WD.inRect(x, y, field)))) return '会压到农田，换一块空草地';
+    if (s && s.gate && inBox(s.gate, foot, 12)) return '会挡住大门';
+    if (s && s.barrel && inBox(s.barrel, foot, 6)) return '会压到水桶';
+    const L = NAV.LAYOUT;
+    if (L && L.WELL && inBox(L.WELL, foot, 8)) return '会压到水井';
+    if (L && L.BARN && inBox(L.BARN, foot, 16)) return '会压到仓库';
+    const w = wetAt(x, y); if (w === 'water') return '这里是水，不能放房子'; if (w === 'river') return '这里是河，不能放房子';
+    if (NAV.pathDist && NAV.pathDist(x, y, null) < 8) return '放在这里会把路堵住';
+    if ((avoid || []).some(b => boxHit(foot, b, 1))) return '这里有树或别的东西占着，放不下新房子和它的小田';
+    if (s && s.rect && (foot[0] < s.rect[0] + 4 || foot[2] > s.rect[2] - 4 || foot[1] < s.rect[1] + 3 || foot[3] > s.rect[3] - 3))
+      return '这块地太窄，放不下新房子和它的小田';
+    return '这里放不下新房子和它的小田';
+  }
+  // where a house can go in site `id` (a plot bought as `mod`, or a first-ring region / 家里): inside the fence,
+  // clear of its gate, its 农田 block, its water barrel and anything in `avoid` (boxes). Nearest the middle first.
   function spotsIn(id, mod, avoid) {
-    const p = PL.plot(id); if (!p) return [];
-    const [X0, Y0, X1, Y1] = p.rect, out = [], cx = (X0 + X1) / 2, cy = (Y0 + Y1) / 2;
-    const field = mod === 'field' && p.field ? [p.field.c0 * 8 - 1, p.field.r0 * 8 - 1, (p.field.c0 + p.field.cols) * 8 + 1, (p.field.r0 + p.field.rows) * 8 + 1] : null;
+    const s = siteOf(id); if (!s || !s.rect) return [];
+    const [X0, Y0, X1, Y1] = s.rect, out = [], cx = (X0 + X1) / 2, cy = (Y0 + Y1) / 2;
+    const field = fieldBox(id, mod), extra = staticBlocks(id);
     for (let y = Math.ceil((Y0 + 10) / 4) * 4; y <= Y1 - 14; y += 4) for (let x = Math.ceil((X0 + 6) / 4) * 4; x <= X1 - 6; x += 4) for (const m of [0, 1]) {
       const L = layout({ x, y, m }), f = L.foot;
       if (f[0] < X0 + 4 || f[2] > X1 - 4 || f[1] < Y0 + 3 || f[3] > Y1 - 3) continue;
-      if (p.gate && inBox(p.gate, f, 12)) continue;
+      if (s.gate && inBox(s.gate, f, 12)) continue;
       if (field && boxHit(f, field)) continue;
-      if (p.barrel && inBox(p.barrel, f, 5)) continue;
-      if (p.wheel && inBox(p.wheel, f, 10)) continue;
+      if (s.barrel && inBox(s.barrel, f, 5)) continue;
+      if (s.wheel && inBox(s.wheel, f, 10)) continue;
+      if (extra.some(b => boxHit(f, b, 1))) continue;
       if ((avoid || []).some(b => boxHit(f, b, 1))) continue;
+      if (wetAt(x, y) || wetAt(f[0], f[1]) || wetAt(f[2], f[3])) continue;
       out.push({ x, y, m, d: Math.hypot(x + (m ? -7 : 7) - cx, y + 2 - cy) });
     }
     return out.sort((a, b) => a.d - b.d || a.m - b.m);
+  }
+  // click (x, y) while moving house `h`. ctx: { plots, regions, houses (the others), avoid }
+  // the shop still only *buys* onto 花甸 / 农田 plots; this is what 挪东西 accepts.
+  function moveOk(x, y, h, ctx) {
+    ctx = ctx || {};
+    const res = (ok, why, s) => ({ ok, why, x: s ? s.x : x, y: s ? s.y : y, box: s ? layout(Object.assign({}, h, s)).foot : [x - 22, y - 9, x + 37, y + 13], spot: s || null });
+    if (!h) return res(false, '没有这座新房子');
+    const id = siteAt(x, y);
+    if (!id) return res(false, outsideWhy(x, y));
+    if (!siteOwned(id, ctx.plots, ctx.regions)) return res(false, `还没买下${siteName(id)}，不能在这里放房子`);
+    if (!siteAllowsHouse(id, ctx.plots)) {
+      const p = PL.plot(id), q = ctx.plots && ctx.plots[id];
+      if (p && p.special === 'road') return res(false, '这里是路，不能放房子');
+      if (p && q && q.mod && PL.MODULES[q.mod]) return res(false, `${siteName(id)}现在是${PL.MODULES[q.mod].name}，新房子要花甸或农田`);
+      return res(false, '新房子只能挪到买下的花甸、农田，或家里已买下的地里（一块地一座）');
+    }
+    if ((ctx.houses || []).some(q => q.site === id)) return res(false, `${siteName(id)}已经有一座新房子了（一块地一座）`);
+    const s0 = siteOf(id), mod = (ctx.plots && ctx.plots[id] && ctx.plots[id].mod) || (s0 && s0.field ? 'field' : 'meadow');
+    const avoid = ctx.avoid || [];
+    let best = null, bd = 16;
+    for (const s of spotsIn(id, mod, avoid)) { const d = Math.hypot(s.x - x, s.y - y) + s.m * 0.01; if (d < bd) { bd = d; best = s; } }
+    if (!best) return res(false, blockWhy(x, y, id, mod, avoid.concat(staticBlocks(id))));
+    return res(true, null, { site: id, x: best.x, y: best.y, m: best.m });
   }
   // plots that can take a house now: bought 花甸 / 农田 on flat ground (phase 7 hook) without a house already
   const freeSites = (plots, houses) => PL.homesteadSites(plots).filter(id => !(houses || []).some(h => h.site === id))
@@ -152,9 +259,9 @@
   function valid(v) {
     const o = obj(v), out = empty();
     const sites = new Set();
-    out.houses = (Array.isArray(o.houses) ? o.houses : []).filter(h => h && PL.isPlotId(h.site) && typeof h.x === 'number' && typeof h.y === 'number')
+    out.houses = (Array.isArray(o.houses) ? o.houses : []).filter(h => h && isHomeSite(h.site) && typeof h.x === 'number' && typeof h.y === 'number')
       .filter(h => !sites.has(h.site) && sites.add(h.site)).slice(0, HOUSE.levels.length).map(h => {
-        const p = PL.plot(h.site), r = p.rect;
+        const r = siteRect(h.site);
         const tiles = (Array.isArray(h.tiles) ? h.tiles : []).slice(0, HS.tiles).map(validTile); while (tiles.length < HS.tiles) tiles.push(emptyTile());
         return { site: h.site, x: num(h.x, (r[0] + r[2]) / 2, r[0], r[2]), y: num(h.y, (r[1] + r[3]) / 2, r[1], r[3]), m: h.m ? 1 : 0, d: int(h.d, 1, 1, 1e6), built: int(h.built, 0, 0, 1e6),
           kid: KID_IDS.includes(h.kid) ? h.kid : null, tiles, eggs: int(h.eggs, 0, 0, 1e6), hens: int(h.hens, HENS, 0, HENS) }; });
@@ -194,6 +301,7 @@
 
   const api = { HS, REL, NB, LEVELS, levelOf, MATE_IDS, NB_IDS, KID_IDS, PREF, schoolDay, visit, best, taken, mateIndex, mateName, nbName, clampAdd,
     HOUSE, TILE_AT, GARDEN, HENS, layout, boxHit, inBox, spotsIn, freeSites, SITE_HINT, houseGate, WED, wedReady, isMarried, houseOf, TEEN, teenVisit,
-    HELP, helpNow, empty, emptyTile, valid, kidRel, nbRel, kidNote };
+    HELP, helpNow, empty, emptyTile, valid, kidRel, nbRel, kidNote,
+    HOME_FIELD, isHomeSite, isRegionId, siteOf, siteName, siteRect, siteAt, siteOwned, siteAllowsHouse, fieldBox, staticBlocks, moveOk };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHome = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -103,7 +103,9 @@ jobs:
           # v5.11.0.11: + offline-shots and album-shots from townscale (townscale hit 25m13s with them on run 44772874375: v5110 15m, school 5m,
           # offline 2.5m, album 2.6m; scale was 6.5m)
           - group: scale
-            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js rain-shots.js
+          # v5.11.0.13: + rain-shots from agrilot (scale was 9m41s on run 44782373476; rain ~7m → ~17m)
+          # v5.11.0.14: + housemove-shots (~1–2m locally; expected ~18–19m, >=3m headroom under 25m)
+            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js rain-shots.js housemove-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
