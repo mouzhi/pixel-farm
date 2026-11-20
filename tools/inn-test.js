@@ -268,6 +268,29 @@ ok('guestbook keeps the last 10 notes, stars the last 20', () => {
   assert.strictEqual(I.stars.last.length, 20);
 });
 
+ok('v5.11.0.9: the bigger buildings still leave lanes, fixed decor slots and tables clear (no map expansion)', () => {
+  const L = IN.layout('agri'), boxes = L.cabins.map(c => [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1])
+    .concat([[L.diner.x - L.diner.hw, L.diner.y - L.diner.hd, L.diner.x + L.diner.hw, L.diner.y + L.diner.hd - 1]]);
+  assert.deepStrictEqual(IN.AGRI, [456, -40, 584, 200], 'the same district, no map expansion');
+  for (const c of L.cabins) { assert.strictEqual(c.hw, 9); assert.strictEqual(c.hd, 6.5); assert.strictEqual(c.door.y, c.y + c.hd); }
+  assert.strictEqual(L.diner.hw, 14); assert.strictEqual(L.diner.hd, 8);
+  const inBox = (x, y, b, pad) => x > b[0] - pad && x < b[2] + pad && y > b[1] - pad && y < b[3] + pad;
+  for (const path of L.paths) for (let i = 0; i < path.length - 1; i++) for (let t = 0; t <= 1; t += 0.02) {
+    const a = path[i], z = path[i + 1], x = a.x + t * (z.x - a.x), y = a.y + t * (z.y - a.y);
+    for (const b of boxes) assert.ok(!inBox(x, y, b, 1), 'a building on the path ' + [x, y]);
+  }
+  for (const tb of L.tables) for (const b of boxes) assert.ok(!inBox(tb.x, tb.y, b, 4), 'a table in a building');
+  for (const d of L.pots.concat(L.lamps, [L.board])) for (const b of boxes) assert.ok(!inBox(d.x, d.y, b, 0), 'a decor slot in a building');
+  // the bigger beach huts keep the same slots: every door stays in front, no umbrella / stall on the new footprint
+  const R = IN.resortLayout(); assert.deepStrictEqual(R.huts.map(c => [c.x, c.y]), [[214, 228], [236, 228], [310, 228], [332, 228]]);
+  for (const c of R.huts) {
+    assert.strictEqual(c.hw, 7); assert.strictEqual(c.hd, 5); assert.strictEqual(c.door.y, c.y + c.hd);
+    const b = [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1];
+    for (const p of R.parasols) assert.ok(!inBox(p.x, p.y, b, 2), 'an umbrella in a hut');
+    assert.ok(!inBox(R.stall.x, R.stall.y, b, 4), 'the stall in a hut');
+  }
+});
+
 ok('v5.11.0.12: kitchen garden and cap grow with upgrades; a maxed kitchen covers a full inn', () => {
   const I = IN.empty(); I.diner.lv = 1;
   assert.strictEqual(IN.seatsOf(I), 4);

@@ -182,4 +182,15 @@ ok('nearbyInsect forwards kind to __insects.nearest so chase prefers butterflies
   delete globalThis.__insects;
 });
 
+ok('v5.11.0.10: a helper floor is a minimum, not a cap: a kid floored at helper still grows into teen (少年 comes after 帮工)', () => {
+  // the shape of a v5.4.3-migrated save: floored helper at age 5 on day 63, born day 58
+  const k = kid(58, { id: 'kid1', name: '小米', floor: 'helper' });
+  assert.strictEqual(K.stageOf(k, 63), 'helper');       // floored up from play
+  assert.strictEqual(K.stageOf(k, 100), 'helper');      // age 42, the last helper day
+  assert.strictEqual(K.stageOf(k, 101), 'teen');        // age 43
+  assert.strictEqual(K.panelShort(k, 114), '少年');
+  assert.strictEqual(K.panelText(k, 114), '少年 · 第 14 天');
+  assert(K.STAGE_ORDER ? K.STAGE_ORDER.indexOf('teen') > K.STAGE_ORDER.indexOf('helper') : true);
+});
+
 console.log(n + ' tests ok');
