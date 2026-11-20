@@ -102,7 +102,6 @@
   // three rounds: until 18:40 everyone sits down to eat (most arrive by about 18:15), then two rounds of about an hour in
   // which people swap round (table, dance floor, rug); the children keep to the ball lawn and come to the table in round 1
   const PHASES = [PARTY.from, PARTY.from + 70, PARTY.from + 125, PARTY.to];
-  const PHASE = 55;
   const partyPhase = T => (T >= PHASES[2] ? 2 : T >= PHASES[1] ? 1 : 0);
   const phaseEnd = T => PHASES[partyPhase(T) + 1];
   const phaseStart = T => PHASES[partyPhase(T)];
@@ -192,6 +191,6 @@
   }
 
   const api = { CATALOG, IDS, SHOP_IDS, LAMP_IDS, INV_MAX, PLACED_MAX, ORDERS_MAX, DROPS, rollDrop, GIANT_KEEP, SET_UNLOCK, pageDone,
-    PARTY, special, partyTonight, guestCount, partyOn, partySeats, partyPosts, LAWN, LAWN_AT, partyLawn, PHASES, PHASE, partyPhase, phaseEnd, phaseStart, partyPlan, boxOf, cellsOf, onGrass, reach, keepsPaths, ringSpots, empty, valid };
+    PARTY, special, partyTonight, guestCount, partyOn, partySeats, partyPosts, LAWN, LAWN_AT, partyLawn, PHASES, partyPhase, phaseEnd, phaseStart, partyPlan, boxOf, cellsOf, onGrass, reach, keepsPaths, ringSpots, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFDecor = api;
 })(typeof window !== 'undefined' ? window : globalThis);

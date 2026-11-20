@@ -54,7 +54,7 @@
       if ((x <= 1 || x >= 24) && (y === 1 || y === 2) && z <= 18) return z === 18 ? Wd[4] : Wd[2];
       return null; });
     // 派对区: a long table with a cloth and food, two benches, four posts for the lights (strung by the overlay)
-    // v5.11.0.15: the table and benches run almost post to post (four places a side, decor.js SEATS); the plates are drawn by game.js
+    // v5.11.0.15: the table and benches run almost post to post (staggered places, decor.js SEATS); the plates are drawn by game.js
     const party = B(44, 30, 22, (x, y, z) => {
       if ((x <= 1 || x >= 42) && (y <= 1 || y >= 28) && z <= 20) return z === 20 ? Wd[4] : Wd[2];
       const tx = x >= 4 && x <= 39, ty = y >= 11 && y <= 18;

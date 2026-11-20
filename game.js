@@ -2499,7 +2499,6 @@ function partyMorning() {
 let partyBegun = 0; const GUESTS = [];
 const GUEST_LOOK = ['guestA', 'guestB'], GUEST_NAME = ['镇上的木匠阿松', '镇上的面包师小桃'];
 const EAST_IN = [{ x: 224, y: 66 }, { x: 216, y: 66 }, { x: 176, y: 66 }, { x: 176, y: 54 }, { x: 158, y: 54 }];
-function partySeat(i) { const s = DC.partySeats(partyArea()), order = [1, 3, 4, 0, 2]; return s[order[i % s.length]]; }
 // ---- v5.11.0.15: everyone at the party gets their own place (decor.js partyPlan): the table, and on free grass next to the
 // area a dance floor, a picnic rug and a ball lawn for the children. Who came is kept in memory in the order they turned up
 // (nothing is saved); every hour they swap round, and while they stand there they eat, toast, dance, chat or play (drawn only).
@@ -2508,7 +2507,7 @@ const partyKeyOf = a => (a === FARMER ? 'farmer' : String(a.id));
 let partyReg = { day: -1, keys: [], kid: {} }, partyLawnC = { key: '', lawn: [], extra: [] }, partyPlanC = { key: '', plan: {} };
 function partyLawnNow() {
   const a = partyArea(); if (!a) return { lawn: [], extra: [] };
-  const key = [S.day, a.x, a.y].join('|'); if (partyLawnC.key === key) return partyLawnC;
+  ensureNav(); const key = [S.day, a.x, a.y, navVer].join('|'); if (partyLawnC.key === key) return partyLawnC;
   partyLawnC = Object.assign({ key }, lawnAt(a)); partyPlanC.key = ''; return partyLawnC;
 }
 let lawnSeen = { v: -1, seen: null };
@@ -3049,11 +3048,10 @@ function homeParty(T) { // the party has begun: the guests who came get to know 
   if (partyBegun !== S.day || homePartyNoted === S.day) return; homePartyNoted = S.day;
   for (const g of GUESTS) { if (g.look === 'guestA') HM.clampAdd(S.home.nb, 'n2', HM.NB.party); if (g.look === 'guestB') HM.clampAdd(S.home.nb, 'n3', HM.NB.party); }
   if (WX && WX.isRaining(S.weather, S.day, S.t)) return;
-  let n = 0;
   for (const k of S.family.kids) { if (FAM.kidStage(k, S.day) !== 'teen' || HM.isMarried(S.home, k.id)) continue;
     const b = HM.best(S.home, k.id); if (!b || b.v < HM.REL.friend) continue; HM.clampAdd(HM.KID_IDS.includes(k.id) ? (S.home.rel[k.id] || (S.home.rel[k.id] = {})) : {}, b.id, HM.REL.party);
     const w = weddingTonight(); if (w && w.w.mate === b.id) continue; // the bride or groom comes on their own
-    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); n++; if (!seat || GUESTS.some(g => g.id === 'f' + i)) continue;
+    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); if (!seat || GUESTS.some(g => g.id === 'f' + i)) continue;
     GUESTS.push({ id: 'f' + i, look: TN.MATES[i].look, x: from.x, y: from.y, fx: -1, fy: 0, pts: routeVia(from, seat).concat([seat]), moving: true, leaving: false, home: townOpen() ? from : null, fast: 1, friend: 1 });
     log(`${k.name}的好朋友${HM.mateName(b.id)}也来参加派对`); }
 }
@@ -5433,7 +5431,7 @@ function restore(s) { // s has been migrated and validated by PFSave
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
   S.town = Object.assign(TN.valid(s.town), { hall: HL ? HL.valid(s.town && s.town.hall) : undefined }); VISITORS.length = 0; NEIGH.length = 0; guestsOut = 0; // v5.8.0
   if (YARD_ON) { YA.sync(true, clothesOut()); if (groundReady) buildGroundBase([20, 30, 170, 66]); }
-  S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; if (DECOR_ON) DA.sync(true); if (INN_ON) IA.sync(true); markNavDirty(); // v5.7.0; v5.10.7 inn
+  S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; partyReg = { day: -1, keys: [], kid: {} }; partyLawnC.key = ''; partyPlanC.key = ''; if (DECOR_ON) DA.sync(true); if (INN_ON) IA.sync(true); markNavDirty(); // v5.7.0; v5.10.7 inn
   if (HM) homeRestore(s); // v5.9.0 (after the family: a married child wakes at the new house)
   S.log = s.log.slice(); S.label = FARMER.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
   refundSpeed();
