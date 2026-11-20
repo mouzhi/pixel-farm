@@ -37,7 +37,7 @@ async function test(name, fn) {
       const snap = __farm.snapshot();
       return { version: __farm.version, saveVersion: snap.saveVersion, hasPlaylogInSave: 'playlog' in snap, logSchema: log && log.schema, days: log && log.days.length, ev: log && log.events[0] && log.events[0].type, keys: Object.keys(localStorage).sort() };
     });
-    assert.match(r.version, /^\d+\.\d+(\.\d+){0,3}$/); // v5.10.11.1: a hotfix adds a fourth part; v5.11.0.4.1 a fifth
+    assert.match(r.version, /^\d+\.\d+(\.\d+){0,3}$/); // v5.10.11.1: a hotfix adds a fourth part; v5.11.0.5.2 a fifth
     assert.strictEqual(r.saveVersion, SAVE_CURRENT); // the log never bumps saveVersion
     assert.strictEqual(r.hasPlaylogInSave, false);
     assert.strictEqual(r.logSchema, 1);

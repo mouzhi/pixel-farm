@@ -1,4 +1,4 @@
-// v5.11.0.4.1: the game canvas covers the whole window at every size and DPR (no letterbox), with whole-number pixel scale.
+// v5.11.0.5.2: the game canvas covers the whole window at every size and DPR (no letterbox), with whole-number pixel scale.
 //   node tools/fill-shots.js [outdir]     (default $PF_SHOTS or /workspace/pf-shots; shots fill_<w>x<h>@<dpr>.png; exits 1 on any failure)
 // Env: CHROME=/path/to/chrome (default /usr/bin/google-chrome)
 const http = require('http'), fs = require('fs'), path = require('path');

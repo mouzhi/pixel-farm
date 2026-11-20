@@ -6,7 +6,7 @@ const { chromium } = require('playwright-core');
 const ROOT = path.join(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
-const only = process.argv[2] || null, PERF_ONLY = !!process.env.PF_RAIN_PERF_ONLY, VER = '5.11.0.4.1';
+const only = process.argv[2] || null, PERF_ONLY = !!process.env.PF_RAIN_PERF_ONLY, VER = (require('fs').readFileSync(require('path').join(__dirname, '..', 'game.js'), 'utf8').match(/GAME_VERSION = '([^']+)'/) || [])[1]; // v5.11.0.5: follow game.js
 fs.mkdirSync(OUT, { recursive: true });
 (async () => { await new Promise(r => server.listen(0, '127.0.0.1', r)); const base = `http://127.0.0.1:${server.address().port}`;
   const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });

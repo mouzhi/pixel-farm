@@ -63,11 +63,12 @@
     const busy = G.plotBusy && G.plotBusy(id); if (busy) return out + `<div class="d">${esc(busy)}</div>`; // v5.6.0
     const crops = G.tiles.filter(t => t.f === id && t.crop).length, trees = G.S.trees.filter(t => t.id.startsWith('x' + id) && t.stage === 'tree').length;
     const wsNote = G.worksVacateNote && G.worksVacateNote(id); if (wsNote) out += `<div class="d ws-note">${esc(wsNote)}</div>`; // v5.10.12
-    out += `<div class="sec">改建成别的（地价的四分之一 + 10 木材${own.mod === 'field' && crops ? `；地里 ${crops} 棵庄稼按现价卖掉，没熟的退种子钱` : ''}${own.mod === 'woodland' && trees ? `；${trees} 棵树砍成木材` : ''}）</div>`;
+    if (own.free) out += `<div class="d">民宿已经搬到镇门口的农家乐区，这块地空出来了：这次改建不要钱。</div>`; // v5.11.0.5
+    out += own.free ? `<div class="sec">改建成别的（免费一次）</div>` : `<div class="sec">改建成别的（地价的四分之一 + 10 木材${own.mod === 'field' && crops ? `；地里 ${crops} 棵庄稼按现价卖掉，没熟的退种子钱` : ''}${own.mod === 'woodland' && trees ? `；${trees} 棵树砍成木材` : ''}）</div>`;
     for (const mod of p.mods) { if (mod === own.mod) continue; const o = PL.rezoneOffer(S.plots, id, mod, S.coins, G.F.wood), M = PL.MODULES[mod];
       const short = o.reason === 'short' ? `<span class="short"><span class="lab">还差</span><span class="price">${o.short ? h.costChip(o.short, 'coin') : ''}${o.shortWood ? h.costChip(o.shortWood, 'wood') : ''}</span></span>` : '';
       out += `<div class="card" data-item="mod:${mod}">${icon(mod)}<div class="ct"><div><b>改成${esc(M.name)}</b> <span class="lv">${esc(M.now)}</span></div><div class="d">${esc(M.desc)}</div></div>` +
-        `<div class="cb"><button class="pbtn" data-pzone="${id}:${mod}"${o.ok ? '' : ' disabled'}>${h.priceChips(o.cost, o.wood)}</button>${short}</div></div>`; }
+        `<div class="cb"><button class="pbtn" data-pzone="${id}:${mod}"${o.ok ? '' : ' disabled'}>${o.free ? '免费' : h.priceChips(o.cost, o.wood)}</button>${short}</div></div>`; }
     return out;
   }
   // locked plots get a label over their sign, like the old regions; a click opens their page in the shop
