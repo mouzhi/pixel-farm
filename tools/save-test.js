@@ -2,6 +2,7 @@
 // Every saveVersion keeps a fixture in tools/fixtures/save-v<N>*.json; all of them must migrate to the current version.
 const assert = require('assert'), fs = require('fs'), path = require('path');
 const SAVE = require('../save.js'), SIM = require('../sim.js'), WD = require('../world.js'), AN = require('../animals.js'), FS = require('../fish.js'), FAM = require('../family.js'), CX = require('../codex.js');
+const IN = require('../inn.js');
 const FIX = path.join(__dirname, 'fixtures');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 class Mem { constructor(o = {}) { this.m = new Map(Object.entries(o)); } get length() { return this.m.size; } key(i) { return [...this.m.keys()][i]; }
@@ -17,7 +18,7 @@ for (const f of fixtures) ok(`fixture ${f} migrates to v${SAVE.CURRENT}`, () => 
 });
 ok('minimal (older) v1 save gets defaults', () => {
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
-  assert.strictEqual(s.inventory.waterMax, 4); assert.deepStrictEqual(s.prices, { carrot: 1, cabbage: 1, pumpkin: 1, strawberry: 1, watermelon: 1, egg: 1, wool: 1, milk: 1, truffle: 1 }); assert.deepStrictEqual(s.stats.dayEarn, []);
+  assert.strictEqual(s.inventory.waterMax, 4); assert.deepStrictEqual(s.prices, { carrot: 1, cabbage: 1, pumpkin: 1, strawberry: 1, watermelon: 1, egg: 1, wool: 1, milk: 1, truffle: 1, wheat: 1 }); assert.deepStrictEqual(s.stats.dayEarn, []);
 });
 ok('write keeps the previous good save as :bak', () => {
   const m = new Mem(), a = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-minimal.json'), 'utf8')));
@@ -46,10 +47,10 @@ ok('reset keeps one copy of the old save', () => {
   const m = new Mem({ [SAVE.KEY]: 'x', [SAVE.BAK]: 'y' }); SAVE.reset(m);
   assert.strictEqual(m.getItem(SAVE.KEY), null); assert.strictEqual(m.getItem(SAVE.BAK), null); assert([...m.m.keys()].some(k => k.startsWith(SAVE.PREFIX + 'reset:')));
 });
-ok('v1 -> current: nothing bought, 1x speed, farm and gold kept, yard left to seed', () => {
+ok('v1 -> current: nothing bought, one game speed, farm and gold kept, yard left to seed', () => {
   const v1 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), s = SAVE.migrate(v1);
   assert.strictEqual(v1.saveVersion, 1); assert.strictEqual(s.saveVersion, SAVE.CURRENT);
-  assert.deepStrictEqual(s.upgrades, SIM.emptyUpgrades()); assert.deepStrictEqual(s.settings, { speed: 1 });
+  assert.deepStrictEqual(s.upgrades, Object.assign(SIM.emptyUpgrades(), { speed: 0 })); assert.deepStrictEqual(s.settings, { speed: 1, speedRefund: 0, autoBuy: false, autoDay: 0, autoN: 0 }); assert.deepStrictEqual(s.offline, { win: [] });
   assert.strictEqual(s.coins, v1.coins); assert.strictEqual(s.clock.day, v1.clock.day); assert.strictEqual(s.tiles.length, v1.tiles.length);
   assert.deepStrictEqual(s.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]), v1.tiles.map(t => [t.open, t.tilled, t.crop && t.crop.type]));
   assert.strictEqual(s.inventory.store.carrot, v1.inventory.store.carrot); assert.strictEqual(s.inventory.store.watermelon, 0);
@@ -67,7 +68,7 @@ ok('v2 -> current: bought levels kept, missing yard stays unset, junk yard items
 });
 ok('v2 keeps bought levels and rejects junk', () => {
   const v2 = SAVE.migrate(Object.assign(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')), { saveVersion: 2, upgrades: { can: 2, speed: 1, bogus: 5, hoe: -3 }, settings: { speed: 3 } }));
-  assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1);
+  assert.strictEqual(v2.upgrades.can, 2); assert.strictEqual(v2.upgrades.speed, 1); assert.strictEqual(v2.upgrades.hoe, 0); assert(!('bogus' in v2.upgrades)); assert.strictEqual(v2.settings.speed, 1); // v5.10.2: the legacy speed level is kept so the game can refund it
 });
 ok('v3 -> current: regions and axe not bought, trees rebuilt, orders empty, tiles on the home field, yard kept', () => {
   const v2 = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v3-day4.json'), 'utf8')), s = SAVE.migrate(v2);
@@ -175,7 +176,7 @@ ok('animals: each kind is gated by its region and its building; coop is a home b
   up.sty = 1; up.fold = 1; up.shed = 1; up.coop = 1; for (const id of ['chicken', 'pig', 'sheep', 'cow']) assert(SIM.offer(up, 1e5, id).ok, id);
   const cost = id => SIM.shopItem(id).levels.map(l => l.cost);
   assert.deepStrictEqual([cost('coop'), cost('sty'), cost('fold'), cost('shed')], [[300], [500], [900], [1500]]);
-  assert.deepStrictEqual([cost('chicken').length, cost('pig').length, cost('sheep').length, cost('cow').length], [6, 3, 3, 3]);
+  assert.deepStrictEqual([cost('chicken').length, cost('pig').length, cost('sheep').length, cost('cow').length], [12, 6, 6, 6]);
   for (const id of ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog']) { const c = cost(id); assert(c.every((v, i) => !i || v > c[i - 1]), id); }
   up.chicken = 2; up.cow = 1; up.pig = 1; assert.deepStrictEqual(SIM.effects(up).animals, { chicken: 2, sheep: 0, cow: 1, pig: 1 });
   assert.deepStrictEqual(SAVE.PRODUCT_IDS, AN.PRODUCT_IDS); assert.deepStrictEqual(SAVE.ANIMAL_IDS, AN.KIND_IDS); assert.deepStrictEqual(SAVE.PEN_IDS, AN.PEN_IDS); assert.deepStrictEqual(AN.PEN_IDS, WD.PEN_IDS);
@@ -256,7 +257,7 @@ ok('map: regions sit outside the farm and each other, gates on their edge, route
     const w = WD.WORLD; assert(x0 > w.x0 && y0 > w.y0 && x1 < w.x1 && y1 < w.y1);
     const rt = WD.ROUTES[r.id], end = rt[rt.length - 1]; assert.deepStrictEqual([end.x, end.y], [g.x, g.y]); assert.strictEqual(WD.areaAt(r.center.x, r.center.y), r.id); }
   assert.strictEqual(WD.areaAt(96, 64), 'home'); assert.strictEqual(WD.areaAt(-150, 200), null);
-  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '64x50');
+  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '112x74'); // v5.5.0: the ring adds 12 tiles each side east-west and 12 north-south; v5.8.0: the town strip adds 24 more east
   const coast = WD.region('coast'); assert.strictEqual(WD.areaAt(coast.center.x, coast.center.y), 'coast');
   assert.strictEqual(WD.areaAt(coast.fish.stand.x, coast.fish.stand.y), 'coast'); // the pier is in r.water, still area 'coast'
   assert.strictEqual(WD.seaAt(280, 278), 'water');
@@ -296,7 +297,7 @@ ok('chop drops: about 60% of chops drop something; fruit, flower, rare seed, coi
     if (y.drop === 'coins') assert(y.gold >= 10 && y.gold <= 30); }
   for (const d of WD.DROPS) assert(Math.abs(n[d.id] / N - d.p) < 0.02, d.id); assert(Math.abs(n.none / N - 0.4) < 0.02);
 });
-ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS, SIM.SHOP_IDS); });
+ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS.filter(k => k !== 'speed'), SIM.SHOP_IDS); }); // v5.10.2: save.js keeps the legacy speed level to refund it
 ok('shop tabs cover every item once', () => {
   const ids = SIM.SHOP_TABS.flatMap(t => t.ids);
   assert.deepStrictEqual(ids.slice().sort(), SIM.SHOP_IDS.slice().sort());
@@ -305,14 +306,20 @@ ok('shop tabs cover every item once', () => {
 });
 ok('shop: costs, short amount, max level', () => {
   const o = SIM.offer({}, 50, 'can'); assert.strictEqual(o.cost, 80); assert.strictEqual(o.ok, false); assert.strictEqual(o.short, 30);
-  assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ speed: 2 }, 1e9, 'speed').maxed, true);
-  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; for (let i = 1; i < L.length; i++) assert(L[i].cost > L[i - 1].cost, id + ' gets dearer'); }
+  assert.strictEqual(SIM.offer({}, 80, 'can').ok, true); assert.strictEqual(SIM.offer({ can: 4 }, 1e9, 'can').maxed, true);
+  assert(!SIM.SHOP_IDS.includes('speed'), 'v5.10.2: no game speed in the shop'); assert(!SIM.SHOP_TABS.some(t => t.ids.includes('speed')));
+  for (const id of SIM.SHOP_IDS) { const L = SIM.shopItem(id).levels; const flat = (SIM.shopItem(id).p8 && (id === 'sprinkler' || id === 'hive')) || SIM.shopItem(id).flat; for (let i = 1; i < L.length; i++) assert(id === 'roof' ? L[i].cost <= L[i - 1].cost /* v5.10.3: a later roof colour is cheaper */ : flat ? L[i].cost === L[i - 1].cost : L[i].cost > L[i - 1].cost, id + ' gets dearer'); } // v5.6.0: sprinklers and hives are a flat price each
+});
+ok('v5.10.2: a bought 2x / 4x is refunded once (600 / 3600), settings keep only speed 1 and the refund', () => {
+  assert.deepStrictEqual([0, 1, 2, 3, -1, 'x'].map(SIM.speedRefund), [0, 600, 3600, 3600, 0, 0]);
+  const v = SAVE.validate(Object.assign(SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day59-manor.json'), 'utf8'))), { settings: { speed: 4, speedRefund: 3600.4 } }));
+  assert.strictEqual(v.upgrades.speed, 2); assert.deepStrictEqual([v.settings.speed, v.settings.speedRefund], [1, 3600]);
 });
 ok('shop effects: base and fully upgraded', () => {
-  const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.speedMax, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, 1, false]);
+  const b = SIM.effects({}); assert.deepStrictEqual([b.waterMax, b.walk, b.basket, b.till3], [SIM.WATER_MAX0, 1, SIM.BASKET, false]); assert(!('speedMax' in b));
   assert.deepStrictEqual(b.crops, ['carrot', 'cabbage', 'pumpkin']);
   const max = {}; for (const id of SIM.SHOP_IDS) max[id] = SIM.shopItem(id).levels.length; const m = SIM.effects(max);
-  assert.deepStrictEqual([m.waterMax, m.water3, m.walk, m.basket, m.speedMax, m.till3, m.tillDur], [40, true, 1.962, 40, 4, true, 2]); // 1.8 boots × 1.09 from three dogs
+  assert.deepStrictEqual([m.waterMax, m.water3, m.walk, m.basket, m.till3, m.tillDur], [40, true, 1.962, 40, true, 2]); // 1.8 boots × 1.09 from three dogs
   assert.deepStrictEqual(m.crops, SIM.IDS);
   assert.deepStrictEqual([0, 1, 2, 3].map(SIM.homeOpenCount), [12, 16, 20, 24]);
 });
@@ -444,7 +451,7 @@ ok('v9 -> v10: empty book is filled from catches and basket rares, streaks start
   v9.inventory = Object.assign({}, v9.inventory, { basket: ['carp', { type: 'egg', rare: 'gold' }] });
   v9.coins = 50; v9.stats = Object.assign({}, v9.stats, { earned: 80 });
   const s = SAVE.migrate(v9);
-  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert.strictEqual(s.inventory.fishFood, 0); assert.deepStrictEqual(s.inventory.ornament, { koi: 0, goldfish: 0 });
   assert.deepStrictEqual(s.pondFish, []);
   assert(s.codex.entries['fish:crucian'] && s.codex.entries['fish:koi'] && s.codex.entries['fish:carp']);
@@ -480,7 +487,7 @@ ok('v10 append-only: missing weather and bug net get defaults; insect book keys 
   delete raw.weather; delete raw.bugNet;
   raw.codex = { entries: { 'bug:white': { firstDay: 4, count: 2 }, 'fish:koi': { firstDay: 2, count: 1 } } };
   const s = SAVE.validate(SAVE.migrate(raw));
-  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert.strictEqual(s.bugNet, 0);
   assert.ok(s.weather);
   assert.strictEqual(s.weather.rained, 0);
@@ -500,15 +507,37 @@ ok('v10 validate keeps a scheduled shower and a bought net', () => {
   assert.strictEqual(s.bugNet, 1);
 });
 
-ok('v10 keeps weather, bugNet and kids growth fields together (no version bump)', () => {
+ok('v10 keeps weather, bugNet and kids growth fields together through the v11 migration', () => {
   const raw = Object.assign({}, JSON.parse(fs.readFileSync(path.join(FIX, 'save-v10-day4.json'), 'utf8')));
   raw.weather = { nextDay: 12, start: 600, dur: 180, lastDay: 4, rained: 1, nextStart: 700, nextDur: 120 };
   raw.bugNet = 1;
   raw.family = { moved: 1, kidGrowth: 1, kids: [{ id: 'kid0', name: '小豆', born: 0, floor: 'helper' }] };
   const s = SAVE.validate(SAVE.migrate(raw));
-  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert.strictEqual(s.bugNet, 1);
   assert.strictEqual(s.weather.nextDay, 12);
   assert.strictEqual(s.family.kidGrowth, 1);
   assert.strictEqual(s.family.kids[0].floor, 'helper');
 });
+
+ok('v15 old save gets an empty inn; a filled inn round-trips (append-only, saveVersion stays 15)', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v15-day72-cottage.json'), 'utf8'));
+  const s = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(s.saveVersion, 15);
+  assert.deepStrictEqual(s.inn.cabins, 0);
+  assert.strictEqual(s.inn.diner.lv, 0);
+  assert.deepStrictEqual(s.inn.guests, []);
+  assert.strictEqual(s.inn.stars.avg, 3);
+  assert.deepStrictEqual(s.inn.earn, { rooms: 0, meals: 0 });
+  const filled = Object.assign({}, raw, { inn: { cabins: 2, guests: [{ id: 'g11', look: 'innC', n: 2, room: 1, from: 70, until: 72, at: 700 }], diner: { lv: 2, menu: 'auto', served: 40 }, stars: { last: [{ day: 70, s: 4, note: '羊好软' }] }, earn: { rooms: 900, meals: 1600 } } });
+  const t2 = SAVE.validate(SAVE.migrate(filled));
+  assert.strictEqual(t2.saveVersion, 15);
+  assert.strictEqual(t2.inn.cabins, 2);
+  assert.strictEqual(t2.inn.guests[0].look, 'innC');
+  assert.strictEqual(t2.inn.diner.lv, 2);
+  assert.strictEqual(t2.inn.stars.avg, 4);
+  assert.strictEqual(t2.inn.earn.rooms, 900);
+  const again = SAVE.validate(JSON.parse(JSON.stringify(t2)));
+  assert.deepStrictEqual(again.inn, t2.inn);
+});
+

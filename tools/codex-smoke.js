@@ -25,13 +25,13 @@ async function test(name, fn) {
   await new Promise(r => server.listen(0, '127.0.0.1', r)); base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
 
-  await test('version 5.4.7 and a fresh save is v10 with an empty book', async ctx => {
+  await test('version 5.10.9 and a fresh save is v15 with an empty book', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const s = __farm.snapshot();
       return { v: __farm.version, sv: s.saveVersion, entries: Object.keys(s.codex.entries).length, food: s.inventory.fishFood, pond: (s.pondFish || []).length, btn: !!document.getElementById('codexBtn') };
     });
-    assert.strictEqual(r.v, '5.4.7'); assert.strictEqual(r.sv, 10); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
+    assert.strictEqual(r.v, '5.10.13'); assert.strictEqual(r.sv, 15); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
     assert.deepStrictEqual(p.errs, []);
   });
 
@@ -113,26 +113,19 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs, []);
   });
 
-  await test('buying fish food and a goldfish, then releasing it, fills the pond and unlocks 锦鲤附体', async ctx => {
+  await test('buying fish food and a goldfish: the goldfish swims straight into the pond (v5.10.13) and unlocks 锦鲤附体', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => {
       const f = __farm, S = f.S;
       S.coins = 500;
       const food = f.buy('fishfood'), gf = f.buy('goldfish');
-      const rel = f.orderRelease('goldfish');
-      // skip walking: finish the release as if a family member had arrived
-      const o = S.orders.find(q => q.type === 'release');
-      S.t = 10 * 60; f.FARMER.home = false;
-      // dump the fish in directly (the order path is also exercised by orderRelease)
-      const placed = f.placePondFish('goldfish');
-      S.orders = S.orders.filter(q => q !== o);
-      S.ornament.goldfish = Math.max(0, (S.ornament.goldfish || 1) - 1);
-      f.noteProgress({ pondCount: S.pondFish.length });
+      const rel = f.orderRelease('goldfish'); // nothing left to release by hand
       const snap = f.snapshot();
-      return { food: food.ok, gf: gf.ok, rel: rel.ok, pond: S.pondFish.length, kind: placed && placed.kind, ach: (snap.achievements || []).map(u => u.id), foodN: snap.inventory.fishFood, sv: snap.saveVersion };
+      return { food: food.ok, gf: gf.ok, stocked: gf.stocked, rel: rel.ok, held: S.ornament.goldfish, orders: S.orders.length, pond: S.pondFish.length, kind: S.pondFish[0] && S.pondFish[0].kind, ach: (snap.achievements || []).map(u => u.id), foodN: snap.inventory.fishFood, sv: snap.saveVersion };
     });
-    assert(r.food && r.gf && r.rel);
-    assert.strictEqual(r.pond, 1); assert.strictEqual(r.kind, 'goldfish'); assert.strictEqual(r.foodN, 1); assert.strictEqual(r.sv, 10);
+    assert(r.food && r.gf && r.stocked && !r.rel, JSON.stringify(r));
+    assert.strictEqual(r.held, 0); assert.strictEqual(r.orders, 0);
+    assert.strictEqual(r.pond, 1); assert.strictEqual(r.kind, 'goldfish'); assert.strictEqual(r.foodN, 1); assert.strictEqual(r.sv, 15);
     assert(r.ach.includes('ornamental'), '锦鲤附体 ' + r.ach.join(','));
     assert.deepStrictEqual(p.errs, []);
   });
@@ -213,7 +206,7 @@ async function test(name, fn) {
       const s = __farm.snapshot();
       return { sv: s.saveVersion, v: __farm.version, bass: !!(s.codex.entries && s.codex.entries['fish:bass']), sword: !!(s.codex.entries && s.codex.entries['fish:sword']), food: s.inventory.fishFood, coins: s.coins };
     });
-    assert.strictEqual(r.sv, 10); assert.strictEqual(r.v, '5.4.7'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
+    assert.strictEqual(r.sv, 15); assert.strictEqual(r.v, '5.10.13'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
     assert.deepStrictEqual(p.errs, []);
     await p.close();
   });

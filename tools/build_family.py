@@ -127,8 +127,53 @@ LOOKS = {  # body colours (same as the old runtime swap); the head keeps its col
 }
 HAT_ROWS = 5  # children keep the straw hat; its band (template rows 0-4) takes the shirt colour like before
 
+# v5.8.1: the school walk. The same children without the straw hat (a short brown mop of hair instead) and with a red school
+# backpack. Hair rows are in the frame's own coordinates for the template head position (dx 0, dy 4), cleared from row 4 down
+# to the last listed row and redrawn; the face below is the farmer's, untouched.
+# E hair  G hair shade  A ink
+KHAIR = {
+ 'front': {7: '..........AAAAAAAA..........', 8: '........AAEEEEEEEEAA........', 9: '.......AEEEGEEEEGEEEA.......',
+           10: '.......AEEEEEEEEEEEEA.......', 11: '.......AEEFFEEFFEFEEA.......'},
+ 'side':  {7: '..........AAAAAA............', 8: '.........AEEEEEEAA..........', 9: '........AEEEGEEEEEA.........',
+           10: '........AEEEEEEEEEEA........', 11: '........AEGEEECCCBCA........'},
+ 'back':  {7: '..........AAAAAAAA..........', 8: '........AAEEEEEEEEAA........', 9: '.......AEEEEGEEEEGEEA.......',
+           10: '.......AEEGEEEEEEEEEA.......', 11: '.......AEEEEEGEEEEEEA.......', 12: '........AEEEEEEEEEEA........',
+           13: '........AGEEEEEEEEGA........', 14: '.........AGGEEEEGGA.........'},
+}
+# the backpack in the child's FINAL rows (after the game drops body rows 18-23 and moves the top down by 6): final row f is sheet
+# row f - 6 above 24 and row f from 24 on. R red  S red shade  T flap  Y buckle
+CUT = 6
+KPACK = {
+ 'front': {21: '........AR........RA........', 22: '........AR........RA........', 23: '...........S....S...........'},
+ 'side':  {20: '.....AAAA...................', 21: '....ATTTRA..................', 22: '....ASTTRA..................', 23: '....ARRYRA..................',
+           24: '....ARRRSA..................', 25: '....ASSSSA..................', 26: '.....AAAA...................'},
+ 'back':  {20: '..........AAAAAAAA..........', 21: '.........ATTTTTTTTA.........', 22: '.........ASTTYYTTSA.........', 23: '.........ARRRRRRRSA.........',
+           24: '.........ARRRRRRRSA.........', 25: '.........ASSSSSSSSA.........', 26: '..........AAAAAAAA..........'},
+}
+KC = {'A': '#1c1626', 'E': '#8a5530', 'G': '#5e3524', 'C': '#ecc27c', 'B': '#d3984c', 'F': '#f2c29a', 'R': '#a8432e', 'S': '#7a2c24', 'T': '#cf6a3c', 'Y': '#f2cf55'}
+for d in KHAIR:
+    for r in list(KHAIR[d].values()) + list(KPACK[d].values()): assert len(r) == 28, (d, r, len(r))
+
+def school(put, f, d, dx, dy, occ):
+    """hat off, hair on, backpack on (children only; the face and body keep the colours already put)"""
+    ox, oy = dx - 0, dy - 4
+    last = max(KHAIR[d])
+    for y in range(4, last + 1):                      # the hat goes: clear the head's top rows across the frame
+        for x in range(FW):
+            p = (x + ox, y + oy)
+            if p in occ: continue
+            put(p[0], p[1], (0, 0, 0, 0))
+    for y, r in KHAIR[d].items():
+        for x, ch in enumerate(r):
+            if ch != '.' and (x + ox, y + oy) not in occ: put(x + ox, y + oy, rgba(KC[ch]))
+    for fy, r in KPACK[d].items():
+        y = fy - CUT if fy < 24 else fy
+        for x, ch in enumerate(r):
+            if ch != '.': put(x + ox, y + oy, rgba(KC[ch]))
+
 def build(look):
-    out = SHEET.copy(); px = out.load(); m = LOOKS[look]
+    base = look.replace('_school', '')
+    out = SHEET.copy(); px = out.load(); m = LOOKS[base]
     for row in FARMER_ROWS:
         ri = ROWS.index(row); d = DIR.get(row, 'side')
         for fr in range(FRAMES.get(row, 4)):
@@ -141,9 +186,11 @@ def build(look):
             put = lambda x, y, c: (0 <= x < FW and 0 <= y < FH) and px.__setitem__((fr * FW + x, ri * FH + y), c)
             for (x, y), v in f.items():
                 h = hexc(v); head = not body((x, y))
-                if look == 'partner' and head: continue  # her own head goes in below
+                if look == 'partner' and head: continue
+                if look.endswith('_school') and head and (y - dy) < 3: continue  # the hat's crown (its band rows go below)  # her own head goes in below
                 if head and look != 'partner' and (y - dy) >= HAT_ROWS: put(x, y, v); continue  # face and hair: untouched
                 put(x, y, rgba(m[h]) if h in m else v)
+            if look.endswith('_school'): school(put, f, d, dx, dy, occ)
             if look == 'partner':
                 for ty, r in enumerate(AHE[d]):
                     for tx, ch in enumerate(r):
@@ -154,7 +201,7 @@ def build(look):
     return out
 
 def main():
-    sheets = {k: build(k) for k in LOOKS}
+    sheets = {k: build(k) for k in list(LOOKS) + ['kid0_school', 'kid1_school']}
     js = ['// v5.3 family sheets (阿禾 with her own head, children recoloured body-only), built by tools/build_family.py from assets/sprites.js. Do not edit by hand.',
           'window.PF_FAMILY_SPRITES = {']
     for k, im in sheets.items():
@@ -163,7 +210,7 @@ def main():
     js.append('};\n')
     open(os.path.join(ROOT, 'assets', 'family_sprites.js'), 'w', encoding='utf8').write('\n'.join(js))
     if '--preview' in sys.argv:
-        o = sys.argv[sys.argv.index('--preview') + 1]; n = len(LOOKS) + 1
+        o = sys.argv[sys.argv.index('--preview') + 1]; n = len(sheets) + 1
         bg = Image.new('RGBA', ((SHEET.width + 4) * n, SHEET.height), (120, 170, 90, 255))
         for i, im in enumerate([SHEET] + list(sheets.values())): bg.alpha_composite(im, ((SHEET.width + 4) * i, 0))
         bg.resize((bg.width * 4, bg.height * 4), Image.NEAREST).save(o)

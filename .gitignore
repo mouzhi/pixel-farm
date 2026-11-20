@@ -6,7 +6,7 @@ shots/
 preview*.gif
 *.gif
 *.zip
-node_modules/
+node_modules
 raw/
 frames/
 *.raw.png

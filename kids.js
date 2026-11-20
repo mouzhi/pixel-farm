@@ -185,6 +185,11 @@
       const skip = { x: door.x + 18 + (ctx.rng ? (ctx.rng() * 24 - 8) : 10), y: door.y + 16 + (ctx.rng ? (ctx.rng() * 16 - 4) : 8) };
       out.push({ kind: 'play-skip', label: '在院子里跑来跑去', at: skip, dur: 7 });
     }
+    // v5.5.0: a playground plot (滑梯 / 沙坑 / 秋千) — ctx.playSpots: [{ kind, x, y, stand: { x, y } }]
+    const PLAY_AT = { slide: ['play-slide', '在乐园滑滑梯', 10, null], sandbox: ['play-sandbox', '在沙坑里堆沙堡', 16, 'pull'], swing: ['play-swing', '在乐园荡秋千', 12, null] };
+    if (ctx.playSpots) for (const sp of ctx.playSpots) { const d = PLAY_AT[sp.kind]; if (!d || !sp.stand) continue;
+      if (!inPlayBounds(sp.stand.x, sp.stand.y, ctx)) continue;
+      out.push({ kind: d[0], label: d[1], at: { x: sp.stand.x, y: sp.stand.y }, dur: d[2], pose: d[3] || undefined, spot: sp }); }
     out.push({ kind: 'play-yard', label: '在房子旁边玩', at: { x: door.x + 14, y: door.y + 10 }, dur: 12 });
     return out.filter(t => t.at && (t.kind === 'play-yard' || t.kind === 'play-skip' || t.kind === 'play-pond' || inPlayBounds(t.at.x, t.at.y, ctx)));
   }
@@ -197,6 +202,7 @@
   }
   // east-road school walk: follow the existing east route, then step off the current map's east edge (phase 7 has no town yet)
   function schoolExit(ctx) {
+    if (ctx && ctx.school) return ctx.school; // v5.8.0: the game passes town.js's route (the road, the town gate, the school)
     const world = ctx.world || { x1: 352 };
     const gate = { x: 216, y: 66 };
     const edge = { x: (world.x1 != null ? world.x1 : 352) + 12, y: 66 };
@@ -214,9 +220,21 @@
     if (!ctx || !ctx.kid || !ctx.actor) return null;
     const st = stageOf(ctx.kid, ctx.day), T = ((ctx.t % 1440) + 1440) % 1440, A = ctx.actor;
     if (st === 'baby') return { kind: 'home', label: '在家', to: ctx.door || { x: A.x, y: A.y }, dur: 30, stayHome: true };
-    // already off the map at school: stay put until it is time to walk back
+    // already at the 书屋 after school (visible; not away): read until libUntil, then walk home
+    if (A._lib) {
+      const until = ctx.libUntil || (returnAt(ctx.kid) + 20);
+      const door = ctx.door ? { x: ctx.door.x + 14, y: ctx.door.y + 10 } : schoolExit(ctx).to;
+      if (T >= until || T < leaveAt(ctx.kid) - 30) {
+        return { kind: 'school-back', label: '从书屋回家', to: door, via: (ctx.libViaHome || []).slice(), keepVia: true, dur: 4, fromLib: true };
+      }
+      return { kind: 'library', label: '在书屋看书', to: ctx.library || { x: A.x, y: A.y }, dur: 8 };
+    }
+    // already off the map at school: stay put until it is time to walk back (or stop at the 书屋)
     if (A.away === 'school') {
       if (T >= returnAt(ctx.kid) || T < leaveAt(ctx.kid) - 30) {
+        if (ctx.library && !ctx.sports && T >= returnAt(ctx.kid)) {
+          return { kind: 'library-go', label: '去书屋看书', to: ctx.library, via: (ctx.libVia || []).slice(), keepVia: true, dur: 4, toLib: true };
+        }
         const ex = schoolExit(ctx);
         return { kind: 'school-back', label: '放学回家', to: ctx.door ? { x: ctx.door.x + 14, y: ctx.door.y + 10 } : ex.to, via: ex.via.slice().reverse(), keepVia: true, dur: 4, comeBack: true };
       }
@@ -224,6 +242,11 @@
     }
     if (goesToSchool(st) && atSchool(ctx.kid, st, T)) {
       const ex = schoolExit(ctx);
+      if (ctx.sports && ctx.race) {
+        const here = A._sports || (ctx.inTown && ctx.inTown(A.x, A.y) && A.x > 520);
+        if (here) return { kind: 'race', label: '运动会赛跑', to: ctx.race, dur: 4 };
+        return { kind: 'school-go', label: '去参加运动会', to: ctx.race, via: ex.via.concat([ex.to]), keepVia: true, dur: 3, toRace: true };
+      }
       return { kind: 'school-go', label: '去上学', to: ex.to, via: ex.via, keepVia: true, dur: 3, leave: true };
     }
     if (st === 'play') return pickPlay(ctx);

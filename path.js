@@ -5,6 +5,7 @@
 'use strict';
 (function (root) {
   const WD = root.PFWorld || (typeof require === 'function' ? require('./world.js') : null);
+  const PL = root.PFPlots || (typeof require === 'function' ? require('./plots.js') : null); // v5.5.0: river, cliff, the new plots' fences
   const CELL = 4;                               // world units per nav cell (half a farm tile; fences sit on cell centres)
   const BLOCKED = 0;
   const DIRT = 5;
@@ -128,11 +129,22 @@
     return pd;
   }
 
+  // the same segments pathDist measures, rasterised one bounding box at a time (v5.5.0: the bigger map made the full scan slow)
+  function dirtSegs(openRegions) {
+    const out = LAYOUT.PATH_SEGS.slice();
+    if (WD) for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) out.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
+    const lanes = LAYOUT.LANES; for (const k in lanes) { if (openRegions && !openRegions.includes(k)) continue; for (const s of lanes[k]) out.push(s); }
+    return out;
+  }
   function paintDirt(g, openRegions) {
-    for (let j = 0; j < g.h; j++) for (let i = 0; i < g.w; i++) {
-      if (g.cost[idx(g, i, j)] === BLOCKED) continue;
-      const [x, y] = worldOf(g, i, j);
-      if (pathDist(x, y, openRegions) < 5) g.cost[idx(g, i, j)] = DIRT;
+    const R = 5;
+    for (const s of dirtSegs(openRegions)) {
+      const [i0, j0] = cellOf(g, Math.min(s[0], s[2]) - R, Math.min(s[1], s[3]) - R), [i1, j1] = cellOf(g, Math.max(s[0], s[2]) + R, Math.max(s[1], s[3]) + R);
+      for (let j = Math.max(0, j0); j <= Math.min(g.h - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(g.w - 1, i1); i++) {
+        const k = idx(g, i, j); if (g.cost[k] === BLOCKED || g.cost[k] === DIRT) continue;
+        const [x, y] = worldOf(g, i, j);
+        if (segDist(x, y, s[0], s[1], s[2], s[3]) < R) g.cost[k] = DIRT;
+      }
     }
   }
 
@@ -179,7 +191,7 @@
     for (const b of (opts && opts.blocks) || []) paintBox(g, b[0], b[1], b[2], b[3], BLOCKED); // v5.3.1: e.g. the lumber hut
     const pens = (opts && opts.pens) || {};
     if (WD) for (const k of WD.PEN_IDS) if (pens[k]) {
-      const P = WD.PENS[k], [hx, hy] = PEN_FOOT[k] || [6, 5];
+      const P = WD.PENS[k], [hx, hy] = PEN_FOOT[k] || PEN_FOOT[P.base] || [6, 5]; // v5.6.0: a second pen has its first one's footprint
       paintBox(g, P.bld.x - hx, P.bld.y - hy, P.bld.x + hx, P.bld.y + hy, BLOCKED);
       paintBox(g, P.trough.x - 4, P.trough.y - 2.2, P.trough.x + 4, P.trough.y + 2.2, BLOCKED);
     }
@@ -228,6 +240,7 @@
     for (const s of spots) if (s) carveDisc(g, s.x, s.y, 4.5, dirt);
   }
 
+  const HELP = { worldOf: (g, i, j) => worldOf(g, i, j), paintSeg: (...a) => paintSeg(...a), paintBox: (...a) => paintBox(...a), carveDisc: (...a) => carveDisc(...a), BLOCKED, GRASS, DIRT, FENCE_HW };
   function build(opts) {
     const o = opts || {}, g = makeGrid(o.world || (WD && WD.WORLD));
     paintWater(g);
@@ -235,9 +248,11 @@
     homeFences(g);
     regionFences(g, o.regions || []);
     penFences(g, o);
+    if (PL) PL.navPaint(g, HELP, o);
     paintTreesAndRocks(g, o);
     paintDirt(g, o.regions || []);
     carveEntries(g, o);
+    if (PL) PL.navCarve(g, HELP, o);
     g.opts = o;
     return g;
   }

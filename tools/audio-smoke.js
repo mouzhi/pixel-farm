@@ -29,7 +29,7 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
   });
   await test('icons do not overlap other HUD buttons', async () => {
     const hit = await p.evaluate(() => { const r = e => e.getBoundingClientRect(), a = r(document.getElementById('audioBar'));
-      return [...document.querySelectorAll('#wrap > button, #wrap > div.panel, #minimap, #tools, #speed, #log')].filter(e => e.offsetParent && e.id !== 'audioBar')
+      return [...document.querySelectorAll('#wrap > button, #wrap > div.panel, #minimap, #tools, #log')].filter(e => e.offsetParent && e.id !== 'audioBar')
         .filter(e => { const q = r(e); return q.width && !(q.right <= a.left || q.left >= a.right || q.bottom <= a.top || q.top >= a.bottom); }).map(e => e.id); });
     assert.deepStrictEqual(hit, []);
   });
@@ -40,7 +40,7 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
   });
   await test('recorded track for the time of day crossfades in, then the generator stops', async () => {
     await p.waitForFunction(() => { const s = PFAudio.state(); return s.mode === 'files' && s.track && s.trackPlays >= 1; }, null, { timeout: 15000 });
-    const s = await p.evaluate(() => PFAudio.state()); assert.ok(s.track.indexOf('assets/audio/' + s.slot + '.mp3') >= 0, s.track + ' / ' + s.slot);
+    const s = await p.evaluate(() => PFAudio.state()); assert.ok(s.track.indexOf('assets/audio/' + s.slot + '.mp3') >= 0 || s.track === 'audio/' + s.slot + '.mp3', s.track + ' / ' + s.slot); // xhs: morning ships in the main package (audio/)
     await p.waitForFunction(() => !PFAudio.state().generating, null, { timeout: 10000 });
   });
   await test('evening on the farm clock switches to the evening track', async () => {
@@ -89,7 +89,7 @@ async function test(name, fn) { try { await fn(); console.log('ok  ', name); } c
     await p.click('#musicBtn'); await p.waitForFunction(() => PFAudio.state().generating || PFAudio.state().mode === 'files', null, { timeout: 3000 });
   });
   await test('a fast farm day with sound on has no errors', async () => {
-    await p.evaluate(() => { PFAudio.setSfx(true); __farm.setGameSpeed && __farm.setGameSpeed(4); });
+    await p.evaluate(() => { PFAudio.setSfx(true); __farm.setSpeed(4); }); // the test-only clock multiplier (no bought 2x / 4x since v5.10.2)
     await p.waitForTimeout(6000); assert.deepStrictEqual(errs, []);
   });
   await b.close(); server.close();

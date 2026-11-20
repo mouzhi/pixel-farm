@@ -4,18 +4,18 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.4.7</title>
+<title>像素堆叠 · 放置农场 v5.10.13</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
   canvas#game{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
   /* v5.1.2: HUD chrome is a viewport grid so 第N天 / 日志 / 背包 / 标题 never overlap, including letterboxed laptop sizes */
-  #ui{position:fixed;inset:12px;display:grid;grid-template-columns:minmax(220px,min(380px,32vw)) minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"left mid right" "left mid right" "left inv btmr";gap:8px;pointer-events:none;z-index:2}
+  #ui{position:fixed;inset:12px;display:grid;grid-template-columns:minmax(220px,min(380px,32vw)) minmax(0,1fr) auto;grid-template-rows:auto minmax(0,1fr) auto;grid-template-areas:"left mid right" "left mid right" "left inv inv";gap:8px;pointer-events:none;z-index:2}
   #leftDock{grid-area:left;display:flex;flex-direction:column;justify-content:space-between;gap:8px;min-width:0;max-width:100%;align-self:stretch;z-index:3}
   #leftBottom{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto}
   #rightDock{grid-area:right;display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:0;z-index:3}
   #navBtns{display:flex;gap:4px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
-  #bottomRight{grid-area:btmr;display:flex;gap:4px;align-items:flex-end;justify-content:flex-end;align-self:end}
+  #bottomRight{grid-row:2;grid-column:3;display:flex;flex-wrap:wrap;gap:4px;align-items:flex-end;justify-content:flex-end;align-self:end;justify-self:end;max-width:330px;z-index:2} /* v5.9.1: sits above the toolbar so the toolbar gets the full width */
   #hud{color:#fff6dc;font:600 15px/1.45 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei","Noto Serif CJK SC",sans-serif;
        background:rgba(40,28,22,.78);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35);padding:8px 12px;min-width:0;width:100%;box-sizing:border-box;letter-spacing:.5px;flex:none}
   #hud .row{display:flex;gap:14px;justify-content:space-between}
@@ -26,6 +26,7 @@
   #hud b{color:#ffd76a}
   #act{color:#bff0a0;margin:2px 0}
   #title{grid-area:mid;justify-self:end;align-self:start;color:#fff6dc;font:600 13px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:4px 10px;border:2px solid #e8c78a;max-width:min(420px,100%);box-sizing:border-box;z-index:3}
+  #titleS{display:none;color:#fff6dc;font:600 11px "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.6);padding:1px 6px;border:2px solid #e8c78a;white-space:nowrap;pointer-events:auto} /* v5.10.1: the one-line title on phones (the full one has no room between the HUD and the buttons) */
   #log{color:#fff6dc;font:500 13px/1.5 "Noto Sans CJK SC","Noto Serif CJK SC",sans-serif;background:rgba(40,28,22,.62);padding:6px 10px;border:2px solid #b89a66;min-width:0;width:100%;box-sizing:border-box}
   #log div{opacity:.95}
   canvas#game{cursor:grab} body.grab canvas#game{cursor:grabbing}
@@ -44,7 +45,8 @@
   .price{display:inline-flex;flex-direction:column;align-items:stretch;gap:2px;vertical-align:middle}
   #prices{font-weight:500;font-size:13px;color:#f3e2b8;margin-top:2px;overflow-wrap:anywhere}
   .panel{position:absolute;color:#fff6dc;font:600 13px/1.5 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;background:rgba(40,28,22,.86);border:3px solid #e8c78a;box-shadow:0 0 0 3px #3a2a20,4px 4px 0 3px rgba(0,0,0,.35)}
-  #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:wrap;justify-content:center;gap:6px;padding:6px 8px;max-width:100%;box-sizing:border-box}
+  #inv{grid-area:inv;justify-self:center;align-self:end;position:relative;left:auto;bottom:auto;transform:none;display:flex;flex-wrap:nowrap;justify-content:flex-start;gap:4px;padding:5px 6px;max-width:100%;box-sizing:border-box;overflow-x:auto;overflow-y:hidden;scrollbar-width:thin} /* v5.9.1: one row, never a block in the middle of the view */
+  #inv .slot{flex:none;width:54px;height:52px}#inv .slot .k{font-size:10px;max-width:52px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}#inv .slot .n{font-size:12px}#inv .slot canvas,#inv .slot i{width:28px;height:28px;background-size:28px!important}
   .slot{width:62px;height:58px;background:#2a1d16;border:2px solid #8a6a44;box-shadow:inset 0 0 0 2px #1a120e;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative}
   .slot .n{position:absolute;right:3px;top:1px;font-size:13px;color:#ffd76a;text-shadow:1px 1px 0 #000}
   .slot .k{font-size:11px;font-weight:500;opacity:.8;line-height:1;margin-top:1px}
@@ -59,10 +61,11 @@
   .pbtn{font:600 13px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif;color:#3a2a20;background:#e8c78a;border:2px solid #3a2a20;box-shadow:2px 2px 0 #3a2a20;padding:3px 10px;cursor:pointer}
   .pbtn:hover{background:#ffd98f}.pbtn:active{transform:translate(1px,1px);box-shadow:1px 1px 0 #3a2a20}.pbtn.warn{background:#d9826a}
   #menuBtn,#shopBtn,#storeBtn,#codexBtn{position:relative}
-  #speed{position:relative;display:flex;gap:4px}#speed[hidden]{display:none}
   .pbtn.on{background:#ffd76a;box-shadow:inset 0 0 0 2px #3a2a20}.pbtn[disabled]{opacity:.5;cursor:default;transform:none}
+  .mkpick{display:flex;flex-wrap:wrap;gap:4px;padding:4px 6px}.mkpick .pbtn.off{opacity:.65}.mkpick .more{width:100%}
   #shop{position:relative;right:auto;top:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #shop .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#shop .shead b:first-child{font-size:16px}#shop .shead .x{margin-left:auto;padding:0 7px}
+  #shop .shead .auto{font-size:11px;padding:1px 6px;margin-left:auto;opacity:.85}#shop .shead .auto.on{opacity:1}#shop .shead .auto + .x{margin-left:0}
   #shop .shead .wallet{display:inline-flex;align-items:center;gap:10px;color:#ffd76a;font-weight:600;line-height:16px}
   #shop .shead .wallet .cost:last-child{color:#e0b880}
   #shop .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:0 0 8px}
@@ -73,6 +76,7 @@
   #shop .card>i{width:32px;height:32px;image-rendering:pixelated;display:block;flex:none}
   #shop .ct{flex:1;min-width:0}#shop .lv{font-weight:500;font-size:11px;opacity:.75}#shop .d{font-weight:500;font-size:12px;opacity:.85}
   #shop .cb{display:flex;flex-direction:column;align-items:stretch;gap:2px;flex:none;min-width:6.5em}
+  #shop .more{grid-column:1/-1;font-size:12px;opacity:.65;text-align:center;padding:4px 0}#shop .cb{max-width:45%}#shop .ct{min-width:8em}#shop .short.lock{white-space:normal;text-align:right;line-height:15px;padding:2px 4px} /* v5.9.1: a long lock note wraps under the price instead of squeezing the name column to one character */
   #shop .cb .price,#shop .short .price{font:600 13px/16px "Noto Sans CJK SC","Noto Sans SC","Microsoft YaHei",sans-serif}
   #shop .cb .price .cost,#shop .short .price .cost{grid-template-columns:16px 40px}
   #shop .cb .price .amt,#shop .short .price .amt{text-align:right}
@@ -91,9 +95,18 @@
   #menu .bad{color:#ffb39a}
   #offline{position:fixed;left:50%;top:40%;transform:translate(-50%,-50%);padding:14px 18px;min-width:280px;text-align:center;font-size:14px;z-index:5}
   #offline h3{margin:0 0 6px;font-size:16px;color:#ffd76a}
-  #minimap{position:relative;right:auto;top:auto;width:224px;height:140px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
+  #career{position:fixed;left:50%;top:42%;transform:translate(-50%,-50%);padding:14px 18px;min-width:300px;max-width:min(420px,calc(100vw - 24px));text-align:left;font-size:14px;z-index:6}
+  #career h3{margin:0 0 6px;font-size:16px;color:#ffd76a;text-align:center}
+  #career .csub{text-align:center;font-size:13px;opacity:.9;margin-bottom:8px}
+  #career .copt{display:block;width:100%;box-sizing:border-box;text-align:left;margin:0 0 6px;padding:8px 10px;white-space:normal;line-height:1.45}
+  #career .copt.on{box-shadow:inset 0 0 0 2px #ffd76a}
+  #career .copt .cd{display:block;font-weight:500;font-size:12px;opacity:.85;margin-top:2px}
+  #career .cwhy{color:#ffb39a;font-size:12px}
+  #career .crow{display:flex;justify-content:center;gap:8px;margin-top:8px}
+  #loveTip .cchg{margin-top:4px}
+  #minimap{position:relative;right:auto;top:auto;width:224px;height:188px;padding:0;cursor:pointer;image-rendering:auto;flex:none}#minimap[hidden]{display:none}
   #mapBtn{position:relative}
-  #tools{position:relative;display:flex;gap:4px}#tools[hidden]{display:none}
+  #tools{position:relative;display:flex;flex-wrap:wrap;justify-content:flex-end;gap:4px}#tools .pbtn,#bottomRight>.pbtn{white-space:nowrap}#tools .pbtn.full{background:#b8a07a}#tools[hidden]{display:none}
   #shop,#menu,#store,#codex{z-index:3}
   #store{position:relative;right:auto;top:auto;bottom:auto;width:min(380px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px}
   #store .shead{display:flex;align-items:center;gap:12px;margin-bottom:6px;flex-wrap:wrap}#store .shead b:first-child{font-size:16px}#store .shead .x{margin-left:auto;padding:0 7px}
@@ -116,13 +129,14 @@
   #loveHud .meter .fill{background:#e57fa0}
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
-  #loveTip .hint{opacity:.9;margin-top:3px}#loveTip b, #loveVal{color:#ffd76a}
-  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #speed,#ui #tools,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  #loveTip .hint{opacity:.9;margin-top:3px}#loveTip .rel{margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:4px}#loveTip .rk{margin-top:3px}#loveTip .rr{display:flex;gap:6px;align-items:center;font-size:12px}#loveTip .rr>span:first-child{min-width:4.5em}#loveTip .rh{color:#e57fa0;letter-spacing:-1px}#loveTip .rh i{color:rgba(255,255,255,.22);font-style:normal}#loveTip .rl{opacity:.75}#loveTip b, #loveVal{color:#ffd76a}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #tools,#ui #audioBar,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #diaryBtn,#ui #diary,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
   /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
   @media (max-width:720px){
     #shop,#store,#codex,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
     #hud .row.res{gap:6px 10px}
   }
+  @media (max-width:960px){#ui #title{display:none}#ui #titleS{display:block}}@media (max-width:480px){#titleS .n{display:none}}@media (max-width:389px){#titleS .s{display:none}} /* v5.10.1: below ~960px the full title has to wrap */
 
   #codex{position:relative;right:auto;top:auto;bottom:auto;width:min(420px,calc(100vw - 24px));max-height:calc(100vh - 200px);overflow:auto;padding:8px 10px;color:#fff6dc}
   #codex .shead{display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap}#codex .shead b:first-child{font-size:16px;color:#ffd76a}#codex .shead .x{margin-left:auto;padding:0 7px}
@@ -178,20 +192,22 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.4.7 · 院子里的昆虫是小点，捉到时只在头顶闪一下（自动运行）<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.10.13 · 日记本<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
-      <div id="speed" hidden></div>
       <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
       <button id="codexBtn" class="pbtn" title="图鉴（J）">图鉴 J</button>
+      <button id="diaryBtn" class="pbtn" title="日记（K）：这几天家里每个人干了什么">日记 K</button>
       <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
       <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
     </div>
+    <div id="titleS"><span class="n">放置农场 </span>v5.10.13<span class="s"> · 日记本</span></div>
     <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
     <div id="shop" class="panel" hidden></div>
     <div id="store" class="panel" hidden></div>
     <div id="codex" class="panel" hidden></div>
+    <div id="diary" class="panel" hidden></div>
     <div id="menu" class="panel" hidden></div>
   </div>
   <div id="inv" class="panel"></div>
@@ -201,28 +217,57 @@
   </div>
 </div>
 <div id="offline" class="panel" hidden></div>
+<div id="career" class="panel" hidden></div>
 <div id="say" class="panel" hidden></div>
-<script src="assets/palette.js?v=5.4.7"></script>
-<script src="assets/sprites.js?v=5.4.7"></script>
-<script src="assets/family_sprites.js?v=5.4.7"></script>
-<script src="sim.js?v=5.4.7"></script>
-<script src="world.js?v=5.4.7"></script>
-<script src="wood.js?v=5.4.7"></script>
-<script src="path.js?v=5.4.7"></script>
-<script src="animals.js?v=5.4.7"></script>
-<script src="fish.js?v=5.4.7"></script>
-<script src="kids.js?v=5.4.7"></script>
-<script src="family.js?v=5.4.7"></script>
-<script src="surprise.js?v=5.4.7"></script>
-<script src="weather.js?v=5.4.7"></script>
-<script src="insects.js?v=5.4.7"></script>
-<script src="codex.js?v=5.4.7"></script>
-  <script src="codex_icons.js?v=5.4.7"></script>
-<script src="save.js?v=5.4.7"></script>
-<script src="playlog.js?v=5.4.7"></script>
-<script src="fx.js?v=5.4.7"></script>
-<script src="game.js?v=5.4.7"></script>
-<script src="ui.js?v=5.4.7"></script>
-<script src="audio.js?v=5.4.7"></script>
+<script src="assets/palette.js?v=5.10.13"></script>
+<script src="assets/sprites.js?v=5.10.13"></script>
+<script src="assets/family_sprites.js?v=5.10.13"></script>
+<script src="decor.js?v=5.10.13"></script>
+<script src="town.js?v=5.10.13"></script>
+<script src="slots.js?v=5.10.13"></script>
+<script src="yard.js?v=5.10.13"></script>
+<script src="market.js?v=5.10.13"></script>
+<script src="bakery.js?v=5.10.13"></script>
+<script src="woodshop.js?v=5.10.13"></script>
+<script src="smithy.js?v=5.10.13"></script>
+<script src="school.js?v=5.10.13"></script>
+<script src="library.js?v=5.10.13"></script>
+<script src="clinic.js?v=5.10.13"></script>
+<script src="festival.js?v=5.10.13"></script>
+<script src="hall.js?v=5.10.13"></script>
+<script src="careers.js?v=5.10.13"></script>
+<script src="home.js?v=5.10.13"></script>
+<script src="sim.js?v=5.10.13"></script>
+<script src="world.js?v=5.10.13"></script>
+<script src="plots.js?v=5.10.13"></script>
+<script src="inn.js?v=5.10.13"></script>
+<script src="inn-art.js?v=5.10.13"></script>
+<script src="wood.js?v=5.10.13"></script>
+<script src="path.js?v=5.10.13"></script>
+<script src="animals.js?v=5.10.13"></script>
+<script src="works.js?v=5.10.13"></script>
+<script src="fish.js?v=5.10.13"></script>
+<script src="kids.js?v=5.10.13"></script>
+<script src="family.js?v=5.10.13"></script>
+<script src="surprise.js?v=5.10.13"></script>
+<script src="weather.js?v=5.10.13"></script>
+<script src="insects.js?v=5.10.13"></script>
+<script src="codex.js?v=5.10.13"></script>
+  <script src="codex_icons.js?v=5.10.13"></script>
+<script src="diary.js?v=5.10.13"></script>
+<script src="save.js?v=5.10.13"></script>
+<script src="playlog.js?v=5.10.13"></script>
+<script src="fx.js?v=5.10.13"></script>
+<script src="expansion.js?v=5.10.13"></script>
+<script src="works-art.js?v=5.10.13"></script>
+<script src="decor-art.js?v=5.10.13"></script>
+<script src="yard-art.js?v=5.10.13"></script>
+<script src="home-art.js?v=5.10.13"></script>
+<script src="town-art.js?v=5.10.13"></script>
+<script src="game.js?v=5.10.13"></script>
+<script src="ui.js?v=5.10.13"></script>
+<script src="plots-ui.js?v=5.10.13"></script>
+<script src="diary-ui.js?v=5.10.13"></script>
+<script src="audio.js?v=5.10.13"></script>
 </body>
 </html>

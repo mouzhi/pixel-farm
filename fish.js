@@ -44,7 +44,13 @@
     { id: 'carbon', name: '碳素竿', wait: [16, 28], miss: 0.05, rare: 2.2, bite: 1.3 },
   ];
   const CAST = 4, BITE = 3, REEL = 5, SHOW = 4; // game minutes: the ritual around the wait (show = land and look)
-  const rodOf = lv => RODS[Math.max(0, Math.min(RODS.length - 1, lv | 0))];
+  const shopRod = lv => RODS[Math.max(0, Math.min(RODS.length - 1, lv | 0))];
+  // v5.10.5: the smithy can further shorten the wait, cut misses and lift rare fish (smith is { wait, miss, rare })
+  function rodOf(lv, smith) {
+    const r = shopRod(lv); if (!smith) return r;
+    const wait0 = Math.max(8, r.wait[0] + (smith.wait || 0)), wait1 = Math.max(wait0 + 2, r.wait[1] + (smith.wait || 0));
+    return { id: r.id, name: r.name, wait: [wait0, wait1], miss: Math.max(0.02, r.miss + (smith.miss || 0)), rare: r.rare * (smith.rare || 1), bite: r.bite };
+  }
   const isFish = id => !!BY_ID[id];
   const fishOf = id => BY_ID[id] || null;
   const priceOf = id => (BY_ID[id] && BY_ID[id].price) || 0;
@@ -56,10 +62,10 @@
     for (let i = 0; i < list.length; i++) { t -= w[i]; if (t <= 0) return list[i]; }
     return list[list.length - 1];
   }
-  function waitTime(lv, rnd) { const r = rodOf(lv), a = r.wait[0], b = r.wait[1]; return a + Math.floor(rnd() * (b - a + 1)); }
+  function waitTime(lv, rnd, smith) { const r = rodOf(lv, smith), a = r.wait[0], b = r.wait[1]; return a + Math.floor(rnd() * (b - a + 1)); }
   // one hook: { miss } or { fish, gold }. `water` is 'pond' or 'sea'. `fed` raises bass and koi when the home pond was fed today.
-  function roll(water, lv, rnd, fed) {
-    const r = rodOf(lv), list = water === 'sea' ? SEA : POND;
+  function roll(water, lv, rnd, fed, smith) {
+    const r = rodOf(lv, smith), list = water === 'sea' ? SEA : POND;
     if (rnd() < r.miss) return { miss: true, water };
     const f = pickFrom(list, r.rare, rnd, water === 'pond' && fed ? FED_BOOST : null);
     return { miss: false, water, fish: f.id, name: f.name, gold: f.price, col: f.col, rare: !!f.rare };

@@ -64,11 +64,11 @@ ok('no regression: a working child in an old save stays at least helper (user �
   assert.strictEqual(K.stageOf(fam.kids[0], 50), 'helper');
 });
 
-ok('v10 save keeps floor append-only and drops junk; version stays 10', () => {
-  assert.strictEqual(SAVE.CURRENT, 10);
+ok('v10 save keeps floor append-only and drops junk; migrates to v11 (v5.5.0) keeping it', () => {
+  assert.strictEqual(SAVE.CURRENT, 15);
   const base = SAVE.migrate({ saveVersion: 10, clock: { day: 58, t: 800 }, coins: 0, tiles: [{ f: 'home', c: 0, r: 0, open: true }],
     family: { love: 100, met: 30, moved: 41, kids: [{ id: 'kid0', name: '小豆', born: 48, floor: 'helper' }, { id: 'kid1', name: '小米', born: 58, floor: 'nope' }] } });
-  assert.strictEqual(base.saveVersion, 10);
+  assert.strictEqual(base.saveVersion, 15);
   assert.deepStrictEqual(base.family.kids[0], { id: 'kid0', name: '小豆', born: 48, floor: 'helper' });
   assert.deepStrictEqual(base.family.kids[1], { id: 'kid1', name: '小米', born: 58 });
 });

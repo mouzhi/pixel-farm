@@ -1,5 +1,5 @@
 // Plays the real game headless for N days with a scripted player who buys shop items in a fixed order as soon as he can,
-// and prints what the farm earns, when each purchase happens (in real minutes at the bought speed), and how seeds flow.
+// and prints what the farm earns, when each purchase happens (in real minutes; one game speed since v5.10.2), and how seeds flow.
 //   node tools/econ.js [days=20] [seed]   Phase 3: also chops, transplants and reports wood / fruit gold;
 //   Phase 4/v4.6: buys the home coop early and each region's pen + animals after the region and reports animal-product gold, hay spent and average happiness
 //   v5.0: the axe comes early (any wild tree at home is choppable), house tiers and the pen fence are bought with wood + gold, and the
@@ -8,8 +8,8 @@ const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
 const ROOT = path.resolve(__dirname, '..'), DAYS = +process.argv[2] || 20, RNG = process.argv[3];
 // v4.7: the home coop and a couple of chickens come right after the first tools; a cat and a dog early-ish; each bigger animal right after its region
-const ORDER = ['field', 'can', 'field', 'shoe', 'coop', 'chicken', 'hoe', 'chicken', 'basket', 'axe', 'field', 'cat', 'speed', 'house', 'can', 'chicken', 'dog', 'forest', 'sty', 'pig', 'axe', 'strawberry', 'east', 'shoe', 'basket',
-  'chicken', 'pig', 'orchard', 'fold', 'sheep', 'watermelon', 'speed', 'fence', 'lumber', 'house', 'south', 'hoe', 'sheep', 'can', 'shoe', 'rod', 'axe', 'chicken', 'pig', 'pasture', 'shed', 'cow', 'sheep', 'chicken', 'cow', 'cow', 'rod', 'house', 'can', 'coast', 'searod'];
+const ORDER = ['field', 'can', 'field', 'shoe', 'coop', 'chicken', 'hoe', 'chicken', 'basket', 'axe', 'field', 'cat', 'house', 'can', 'chicken', 'dog', 'forest', 'sty', 'pig', 'axe', 'strawberry', 'east', 'shoe', 'basket',
+  'chicken', 'pig', 'orchard', 'fold', 'sheep', 'watermelon', 'fence', 'lumber', 'house', 'south', 'hoe', 'sheep', 'can', 'shoe', 'rod', 'axe', 'chicken', 'pig', 'pasture', 'shed', 'cow', 'sheep', 'chicken', 'cow', 'cow', 'rod', 'house', 'can', 'coast', 'searod'];
 // Phase 3 player: once he has the axe and the forest he marks 2 trees a day, and plants every sapling on the next free spot of a fixed list
 const PLANT = []; for (let y = -88; y <= 4; y += 16) for (let x = -140; x <= -50; x += 16) PLANT.push([x, y]); for (const [x, y] of [[20, 70], [30, 96], [176, 24], [184, 100], [12, 120]]) PLANT.push([x, y]);
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png' };
@@ -36,7 +36,7 @@ const server = http.createServer((req, res) => {
       for (const k of ['apple', 'orange']) while (F.saplings[k] > S.orders.filter(o => o.type === 'plant' && o.kind === k).length) {
         const sp = PLANT.find(([x, y]) => __farm.orderPlant(k, x, y).ok); if (!sp) break; }
       while (i < ORDER.length) { const id = ORDER[i], r = __farm.buy(id);
-        if (r.ok) { buys.push({ id, label: r.offer.level.label, cost: r.offer.cost + (r.offer.wood ? '+' + r.offer.wood + 'w' : ''), day: S.day, min: Math.round(real / 6) / 10 }); i++; if (id === 'speed') __farm.setGameSpeed(S.eff.speedMax); }
+        if (r.ok) { buys.push({ id, label: r.offer.level.label, cost: r.offer.cost + (r.offer.wood ? '+' + r.offer.wood + 'w' : ''), day: S.day, min: Math.round(real / 6) / 10 }); i++; }
         else if (r.reason === 'maxed') i++; else break; }
       if (days.length < S.day - 1) days.push({ day: S.day - 1, earn: S.dayEarn[S.dayEarn.length - 1], coins: S.coins, earned: S.earned, open: __farm.tiles.filter(t => t.open).length,
         seeds: seeds(S.store) + seeds(F.bag) + F.gathered, min: Math.round(real / 6) / 10, idle: idleTiles, flow: Object.assign({}, S.flow), wood: S.woodGold || 0, fruit: S.fruitGold || 0, trees: S.trees.filter(t => t.kind !== 'wild' && t.stage === 'tree').length,

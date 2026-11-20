@@ -1,11 +1,15 @@
 // 像素农场 · 节奏、经济与商店规则（纯函数，没有画面依赖；浏览器里是 window.PFSim，Node 里可以直接 require 做单元测试）
 // Phase 1: day-based crops, one watering lasts the whole day, auto crop choice by profit, daily price drift, offline settlement.
-// Phase 2: shop (tools, basket, speed, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
+// Phase 2: shop (tools, basket, field, seed unlocks), seeds from harvests, seed surplus sold back to the merchant.
 // Phase 3: the axe and four regions on the big map (geometry and tree rules live in world.js).
 // Phase 4: the north pasture, a coop and a shed, chickens / sheep / cows (care rules live in animals.js).
 // Phase 5 (v5.0): house tiers and pen fences cost wood as well as gold; family rules live in family.js.
 'use strict';
 (function (root) {
+  const TN = root.PFTown || (typeof require === 'function' ? require('./town.js') : null); // v5.8.0 phase 10: the town
+  const HM = root.PFHome || (typeof require === 'function' ? require('./home.js') : null); // v5.9.0 phase 11: the new house
+  const YD = root.PFYard || (typeof require === 'function' ? require('./yard.js') : null); // v5.10.3: yard, stall and animal-care things
+  const DC = root.PFDecor || (typeof require === 'function' ? require('./decor.js') : null); // v5.7.0 phase 9: the decoration shop
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
   const SLEEP_MULT = 6;           // the night runs 6x faster while the farmer sleeps
   const WAKE = 6 * 60, BEDTIME = 20 * 60;
@@ -14,6 +18,11 @@
   const WATER_MAX0 = 4;           // watering can capacity at the start
   const BASKET = 10;              // crops carried before a market trip (start)
   const OFFLINE_RATE = 0.5, OFFLINE_CAP_DAYS = 3, OFFLINE_MIN_SEC = 60;
+  const OFFLINE_FREE_SEC = 300, OFFLINE_FREE_GOLD = 100; // v5.10.2: a short absence (under 5 min, or under 100 gold) is paid but not counted in the 24-hour window
+  // v5.10.2: the 2x / 4x game speed is gone (one speed for everyone; the night still runs SLEEP_MULT faster while the farmer sleeps).
+  // Saves that bought it get the price back once: level 1 cost 600, level 2 another 3000.
+  const SPEED_REFUND = [600, 3000];
+  const speedRefund = lv => SPEED_REFUND.slice(0, Math.max(0, Math.min(SPEED_REFUND.length, lv | 0))).reduce((a, b) => a + b, 0);
   // seed: shop price, days: watered days to the first harvest, price: base sell price, seedSell: what the merchant pays
   // for a spare seed, drop: [chance of >= 1 seed, chance of a 2nd] from a harvest (expected < 1, so the merchant still
   // matters), regrow / harvests: berry bushes keep fruiting every `regrow` days for `harvests` pickings
@@ -23,6 +32,8 @@
     pumpkin: { name: '南瓜', seed: 25, days: 4, price: 85, seedSell: 10, drop: [0.6, 0.1] },
     strawberry: { name: '草莓', seed: 80, days: 4, price: 30, seedSell: 30, drop: [0.6, 0], regrow: 1, harvests: 10, unlock: 'strawberry' },
     watermelon: { name: '西瓜', seed: 60, days: 6, price: 220, seedSell: 20, drop: [0.55, 0.05], unlock: 'watermelon' },
+    // v5.6.0: wheat comes with the mill and is planted for it on demand (game.js), never chosen for profit (it earns little raw)
+    wheat: { name: '小麦', seed: 4, days: 2, price: 14, seedSell: 2, drop: [0.9, 0.4], unlock: 'mill' },
   };
   const IDS = Object.keys(CROPS);
   // ---- shop: every item is a ladder of levels; upgrades[id] = how many levels are bought ----
@@ -36,7 +47,6 @@
     { id: 'shoe', name: '鞋子', icon: 'shoe', levels: [{ cost: 200, label: '布鞋', desc: '走路 ×1.25' }, { cost: 800, label: '皮靴', desc: '走路 ×1.5' }, { cost: 2500, label: '风行靴', desc: '走路 ×1.8' }] },
     { id: 'hoe', name: '锄头', icon: 'hoe', levels: [{ cost: 250, label: '钢锄头', desc: '开垦快一倍' }, { cost: 3000, label: '宽锄头', desc: '一锄翻 3×3' }] },
     { id: 'basket', name: '篮子', icon: 'basket', levels: [{ cost: 300, label: '大篮子', desc: '一次装 20 个' }, { cost: 1200, label: '手推车', desc: '一次装 40 个' }] },
-    { id: 'speed', name: '游戏倍速', icon: 'speed', levels: [{ cost: 600, label: '2× 速度', desc: '解锁 2× 按钮' }, { cost: 3000, label: '4× 速度', desc: '解锁 4× 按钮' }] },
     { id: 'strawberry', name: '草莓种子', icon: 'strawberry', levels: [{ cost: 800, label: '草莓', desc: '4 天结果，之后每天摘一次，共 10 次' }] },
     { id: 'watermelon', name: '西瓜种子', icon: 'watermelon', levels: [{ cost: 2500, label: '西瓜', desc: '6 天成熟，卖 220' }] },
     { id: 'axe', name: '斧头', icon: 'axe', levels: [
@@ -53,13 +63,15 @@
     // animals (v4.7): each kind has a building in its own place; the building needs its region, one level = one more animal.
     // Home coop (no region) is the early one; then pigs at the forest edge, sheep on the orchard slope, cows in the north pasture.
     { id: 'coop', name: '鸡舍', icon: 'coop', farm: 1, levels: [{ cost: 300, label: '鸡舍', desc: '盖在家门口西边，能养 6 只鸡，带小水槽' }] },
-    { id: 'chicken', name: '鸡', icon: 'chicken', farm: 1, needs: 'coop', levels: [100, 130, 170, 220, 280, 340].map((cost, i) => ({ cost, label: `第 ${i + 1} 只鸡`, desc: '每天吃 1 份干草，下 1 个蛋（开心时 2 个）' })) },
+    { id: 'chicken', name: '鸡', icon: 'chicken', farm: 1, needs: 'coop', levels: [100, 130, 170, 220, 280, 340, 360, 380, 400, 420, 440, 460].map((cost, i) => ({ cost, label: `第 ${i + 1} 只鸡`, desc: '每天吃 1 份干草，下 1 个蛋（开心时 2 个）' + (i >= 6 ? '；住进第二鸡舍' : '') })) },
     { id: 'sty', name: '猪圈', icon: 'sty', farm: 1, needs: 'forest', levels: [{ cost: 500, label: '猪圈', desc: '林场路边的猪圈，能养 3 头猪' }] },
-    { id: 'pig', name: '猪', icon: 'pig', farm: 1, needs: 'sty', levels: [400, 480, 560].map((cost, i) => ({ cost, label: `第 ${i + 1} 头猪`, desc: '每天吃 2 份干草，每 2 天在树下拱出 1 颗松露（开心时 2 颗）' })) },
+    { id: 'pig', name: '猪', icon: 'pig', farm: 1, needs: 'sty', levels: [400, 480, 560, 600, 640, 680].map((cost, i) => ({ cost, label: `第 ${i + 1} 头猪`, desc: '每天吃 2 份干草，每 2 天在树下拱出 1 颗松露（开心时 2 颗）' + (i >= 3 ? '；住进第二猪圈' : '') })) },
     { id: 'fold', name: '羊圈', icon: 'fold', farm: 1, needs: 'orchard', levels: [{ cost: 900, label: '羊圈', desc: '果园坡上的羊圈，能养 3 只羊' }] },
-    { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'fold', levels: [700, 800, 900].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' })) },
+    // v5.5.0: the fold's meadow behind the orchard (no plot needed); sheep go out to graze by day
+    { id: 'graze', name: '放牧草地', icon: 'graze', farm: 1, needs: 'fold', levels: [{ cost: 600, wood: 30, label: '放牧草地', desc: '在羊圈后面（果园西边）围出一块草地，白天 8–17 点羊会出去吃草' }] },
+    { id: 'sheep', name: '羊', icon: 'sheep', farm: 1, needs: 'fold', levels: [700, 800, 900, 950, 1000, 1050].map((cost, i) => ({ cost, label: `第 ${i + 1} 只羊`, desc: '每天吃 2 份干草，每 3 天剪 1 份羊毛（开心时 2 份）' + (i >= 3 ? '；住进第二羊圈' : '') })) },
     { id: 'shed', name: '牛棚', icon: 'shed', farm: 1, needs: 'pasture', levels: [{ cost: 1500, label: '牛棚', desc: '北牧场的牛棚，能养 3 头牛，旁边堆干草' }] },
-    { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1400, 1600, 1900].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' })) },
+    { id: 'cow', name: '牛', icon: 'cow', farm: 1, needs: 'shed', levels: [1400, 1600, 1900, 2000, 2100, 2200].map((cost, i) => ({ cost, label: `第 ${i + 1} 头牛`, desc: '每天吃 3 份干草，挤 1 瓶奶（开心时 2 瓶）' + (i >= 3 ? '；住进第二牛棚' : '') })) },
     // companions (v4.6): no hay, no product, a small bonus each
     { id: 'cat', name: '猫', icon: 'cat', pet: 1, levels: [{ cost: 120, label: '橘猫' }, { cost: 180, label: '黑猫' }, { cost: 260, label: '三花猫' }].map(l => Object.assign(l, { desc: '在农场里晒太阳、跟着散步；每天早上叼来 1 颗胡萝卜种子' })) },
     { id: 'dog', name: '狗', icon: 'dog', pet: 1, levels: [
@@ -79,15 +91,41 @@
     { id: 'searod', name: '海竿', icon: 'searod', fish: 1, needs: 'coast', levels: [{ cost: 2000, label: '大海竿', desc: '能在码头上钓海鱼' }] },
     // v5.3.1 wood automation (rules in wood.js): the hut in the forest adds wood per tree and replants stumps from stored saplings
     { id: 'lumber', name: '伐木小屋', icon: 'lumber', lumber: 1, needs: 'forest', levels: [{ cost: 2400, wood: 30, label: '伐木小屋', desc: '盖在林场里：林场的树每棵多 2 份木材；树桩当晚就用仓库里的树苗补种，3 天长回来（原来 5 天）' }] },
+    // v5.6.0 phase 8 (rules in works.js): bought once, then the family installs, tends and empties them by themselves
+    { id: 'sprinkler', name: '田边浇水器', icon: 'sprinkler', works: 1, p8: 1, levels: Array.from({ length: 16 }, (_, i) => ({ cost: 800, wood: 20, label: `第 ${i + 1} 台`, desc: '家人自己摆到田边，每天把旁边 8 格左右的田浇透；不用电、不会坏。全部田都有浇水器时，浇水就不再是家人的活' })) },
+    { id: 'mill', name: '磨坊', icon: 'mill', works: 1, p8: 1, levels: [{ cost: 5000, wood: 120, label: '磨坊', desc: '盖在工坊院里，同时解锁小麦（家人按需要自己种）。2 份小麦磨成 1 袋面粉（卖 60），磨下的麸皮做成 2 捆饲料放进仓库' }] },
+    { id: 'jam', name: '果酱铺', icon: 'jam', works: 1, p8: 1, levels: [{ cost: 3500, wood: 80, label: '果酱铺', desc: '盖在工坊院里。家人把草莓、苹果、橘子送进去，2 个熬成 1 罐果酱（卖 80）' }] },
+    { id: 'cheese', name: '奶酪坊', icon: 'cheese', works: 1, p8: 1, levels: [{ cost: 4500, wood: 100, label: '奶酪坊', desc: '盖在工坊院里。2 瓶牛奶做成 1 块奶酪（卖 130）' }] },
+    { id: 'pie', name: '苹果派坊', icon: 'jam', works: 1, p8: 1, levels: [{ cost: 4000, wood: 80, label: '苹果派坊', desc: '书屋里学到的配方：1 份面粉和 2 个苹果做成 1 个苹果派（卖 140），给面包房订单用' }] }, // v5.10.9
+    { id: 'wheel', name: '水车', icon: 'wheel', works: 1, p8: 1, levels: [{ cost: 1500, wood: 60, label: '修好水车', desc: '动力坝上的水车转起来给农场供电：家人在院子、新地门口和加工坊前立起电灯，离水车不太远的灯夜里会亮，灯下的果树结果快一点' }, { cost: 2500, wood: 80, label: '第二架水车', desc: '再修一架（要第二块动力坝），远处的灯也能亮' }] },
+    { id: 'hive', name: '蜂箱', icon: 'hive', works: 1, p8: 1, levels: Array.from({ length: 6 }, (_, i) => ({ cost: 800, wood: 20, label: `第 ${i + 1} 箱`, desc: '放在花甸里（没有花甸时果园坡最多放 2 箱）。家人自己照看，每 2 天收 1 瓶蜂蜜（卖 40），花多时偶尔多一瓶' })) },
+    { id: 'coop2', p8: 1, name: '第二鸡舍', icon: 'coop', farm: 1, needs: 'coop', levels: [{ cost: 600, wood: 40, label: '第二鸡舍', desc: '盖在选成「牧场」的新地上，再养 6 只鸡' }] },
+    { id: 'sty2', p8: 1, name: '第二猪圈', icon: 'sty', farm: 1, needs: 'sty', levels: [{ cost: 900, wood: 50, label: '第二猪圈', desc: '盖在选成「牧场」的新地上，再养 3 头猪' }] },
+    { id: 'fold2', p8: 1, name: '第二羊圈', icon: 'fold', farm: 1, needs: 'fold', levels: [{ cost: 1500, wood: 60, label: '第二羊圈', desc: '盖在选成「牧场」的新地上，再养 3 只羊' }] },
+    { id: 'shed2', p8: 1, name: '第二牛棚', icon: 'shed', farm: 1, needs: 'shed', levels: [{ cost: 2500, wood: 80, label: '第二牛棚', desc: '盖在选成「牧场」的新地上，再养 3 头牛' }] },
+    // v5.7.0 phase 9 (rules in decor.js): decorations at a flat price; each one bought goes to the storehouse and the family sets it down
+    ...(DC ? DC.SHOP_IDS.map(id => { const c = DC.CATALOG[id]; return { id, name: c.name, icon: id, deco: 1, p9: 1, flat: 1,
+      levels: Array.from({ length: c.shop.max }, (_, i) => ({ cost: c.shop.cost, wood: c.shop.wood, label: c.shop.max > 1 ? `第 ${i + 1} 个` : c.name, desc: c.desc })) }; }) : []),
+    // v5.8.0 phase 10 (rules in town.js): the town east of 东大道; its gate opens once the road is bought and a child has been to school
+    ...(TN ? [{ id: 'town', p10: 1, name: '隔壁镇子', icon: 'town', levels: [{ cost: TN.PRICE.cost, wood: TN.PRICE.wood, label: '打开镇门', desc: '东大道尽头的镇子：学校、小店（工坊货、蜂蜜和鱼多卖两成）、几户人家；孩子改去镇上的学校' }] }] : []),
+    // v5.9.0 phase 11 (rules in home.js): a smaller house on a bought 花甸 / 农田 plot, for a grown child who marries
+    ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i ? '第二座新房子' : '新房子',
+      desc: (i ? '给第二个孩子成家用。' : '') + '家人在花甸或农田里盖一座小一号的房子，旁边带 6 格小田和两只母鸡。孩子长成少年、和同学走得很近以后，会在这里成家' })) }] : []),
+    // v5.10.3 (rules in yard.js): small early things for the yard, 阿禾's stall and the animals; the family sets each one up on its own spot
+    ...(YD ? YD.ITEMS.map(t => ({ id: t.id, name: t.name, icon: 'y_' + t.id, yard: 1, flat: t.max > 1 && !t.costs ? 1 : 0, ...(t.needs ? { needs: t.needs } : {}),
+      levels: Array.from({ length: t.max }, (_, i) => ({ cost: YD.costAt(t, i), ...(t.wood ? { wood: t.wood } : {}), label: t.max > 1 ? (t.id === 'roof' ? ['绿屋顶', '蓝屋顶', '青灰屋顶'][i] : `第 ${i + 1} ${t.id === 'gravel' || t.id === 'flag' || t.id === 'vegfence' ? '段' : '个'}`) : t.name, desc: t.desc })) })) : []),
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
   const SHOP_TABS = [
-    { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'speed', 'rod', 'searod'] },
+    { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
-    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast'] },
-    { id: 'build', name: '建筑', ids: ['house', 'fence', 'lumber', 'coop', 'sty', 'fold', 'shed'] },
+    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : [])] },
+    { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
+    { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive'] }, // v5.6.0; v5.10.9 pie
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
+    ...(YD ? [{ id: 'yard', name: '院子', title: '院子、阿禾的小摊和动物照护', ids: YD.IDS.slice() }] : []), // v5.10.3
+    ...(DC ? [{ id: 'decor', name: '装饰', title: '装饰、夜灯和派对区', ids: DC.SHOP_IDS.slice() }] : []), // v5.7.0
   ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.map(k => [k, 0]));
   const shopItem = id => SHOP.find(s => s.id === id);
@@ -100,15 +138,18 @@
       walk: Math.round([1, 1.25, 1.5, 1.8][lv('shoe')] * (1 + 0.03 * lv('dog')) * 1000) / 1000, // v4.7: each dog +3%
       tillDur: lv('hoe') >= 1 ? 2 : 4, till3: lv('hoe') >= 2,
       basket: [BASKET, 20, 40][lv('basket')],
-      speedMax: [1, 2, 4][lv('speed')],
       crops: IDS.filter(k => !CROPS[k].unlock || lv(CROPS[k].unlock) > 0),
       axe: lv('axe') > 0, axeLv: lv('axe'), lumber: lv('lumber') > 0, // v5.3.1: axe levels and the lumber hut (wood.js)
       regions: SHOP.filter(s => s.region && lv(s.id) > 0).map(s => s.id),
-      coop: lv('coop') > 0, sty: lv('sty') > 0, fold: lv('fold') > 0, shed: lv('shed') > 0,
+      coop: lv('coop') > 0, sty: lv('sty') > 0, fold: lv('fold') > 0, shed: lv('shed') > 0, graze: lv('graze') > 0, // v5.5.0
       animals: { chicken: lv('chicken'), sheep: lv('sheep'), cow: lv('cow'), pig: lv('pig') },
       pets: { cat: lv('cat'), dog: lv('dog') },
       rod: lv('rod'), searod: lv('searod') > 0,
       house: lv('house'), fence: lv('fence') > 0,
+      sprinkler: lv('sprinkler'), mill: lv('mill') > 0, jam: lv('jam') > 0, cheese: lv('cheese') > 0, pie: lv('pie') > 0, wheel: lv('wheel'), hive: lv('hive'), // v5.6.0; v5.10.9 pie
+      town: TN ? lv('town') > 0 : false, // v5.8.0
+      cottage: HM ? lv('cottage') : 0, // v5.9.0
+      coop2: lv('coop2') > 0, sty2: lv('sty2') > 0, fold2: lv('fold2') > 0, shed2: lv('shed2') > 0,
     };
   }
   // what the next level of an item costs and whether it can be bought now
@@ -119,6 +160,8 @@
     const L = it.levels[have];
     const wood = L.wood || 0, shortWood = Math.max(0, wood - (woodHave | 0)); // v5.0: some levels also cost wood from the barn
     if (it.needs && !((up && up[it.needs]) > 0)) return { id, item: it, have, level: L, cost: L.cost, wood, ok: false, locked: it.needs, short: 0, shortWood: 0 };
+    const why = api.gate ? api.gate(id, have) : null; // v5.6.0: conditions outside the shop (a 工坊院 plot, a cow, a second pen ...), set by game.js
+    if (why) return { id, item: it, have, level: L, cost: L.cost, wood, ok: false, locked: id, lockText: why, short: 0, shortWood: 0 };
     return { id, item: it, have, level: L, cost: L.cost, wood, ok: coins >= L.cost && !shortWood, short: Math.max(0, L.cost - coins), shortWood };
   }
   // 12 of the 24 home tiles are open at the start; each field upgrade opens 4 more tiles (12 → 16 → 20 → 24)
@@ -196,15 +239,64 @@
     for (const k of IDS) { const m = (prices && prices[k]) || 1; out[k] = Math.round(Math.min(1.2, Math.max(0.8, m + 0.3 * (1 - m) + (rnd() * 2 - 1) * 0.05)) * 1000) / 1000; }
     return out;
   }
-  // offline: away time -> game days at 50% of the online rate (always 1x speed), at most 3 days, times the recent daily income
-  function offlineSettle(awaySec, dayEarn) {
-    if (!(awaySec >= OFFLINE_MIN_SEC)) return null;
-    const days = Math.min(OFFLINE_CAP_DAYS, awaySec / DAY_REAL_SEC * OFFLINE_RATE);
-    const recent = (dayEarn || []).slice(-3), avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
-    return { awaySec, days: Math.round(days * 100) / 100, capped: awaySec / DAY_REAL_SEC * OFFLINE_RATE > OFFLINE_CAP_DAYS, avg: Math.round(avg), gold: Math.floor(avg * days) };
+  // offline: away time -> game days at 50% of the online rate, at most 3 days, times the recent daily income.
+  // v5.10.1: and at most 3 days in any 24 real hours. `win` is the save's list of past settlements [{ at: ms, days }]; without it
+  // (old callers, unit tests of the per-visit rule) there is no 24-hour window.
+  const OFFLINE_WIN_MS = 24 * 3600 * 1000, OFFLINE_WIN_MAX = 12;
+  // the settlements still inside the 24-hour window. A time in the future (the clock was set forward, then back) counts as
+  // "just now", so turning the clock back never frees the window early; it frees 24 real hours later.
+  function offlineWindow(win, now) {
+    return (Array.isArray(win) ? win : []).filter(w => w && isFinite(w.at) && w.days > 0)
+      .map(w => ({ at: Math.min(w.at, now), days: Math.min(OFFLINE_CAP_DAYS, w.days) }))
+      .filter(w => w.at > now - OFFLINE_WIN_MS).slice(-OFFLINE_WIN_MAX);
   }
-  const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC,
+  function offlineSettle(awaySec, dayEarn, win, now) {
+    if (!(awaySec >= OFFLINE_MIN_SEC)) return null;
+    const raw = awaySec / DAY_REAL_SEC * OFFLINE_RATE, asked = Math.round(Math.min(OFFLINE_CAP_DAYS, raw) * 100) / 100;
+    const recent = (dayEarn || []).slice(-3), avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+    const out = { awaySec, asked, days: asked, capped: raw > OFFLINE_CAP_DAYS, avg: Math.round(avg), used: 0, limited: false, free: false };
+    // v5.10.2: under 5 minutes away, or under 100 gold, is paid in full and leaves the 24-hour window alone
+    out.free = awaySec < OFFLINE_FREE_SEC || Math.floor(avg * asked) < OFFLINE_FREE_GOLD;
+    if (win !== undefined && out.free) {
+      now = +now || Date.now();
+      const w = offlineWindow(win, now); out.used = Math.round(w.reduce((a, x) => a + x.days, 0) * 100) / 100;
+      out.win = w; out.nextFullAt = w.length ? Math.max(...w.map(x => x.at)) + OFFLINE_WIN_MS : now;
+    } else if (win !== undefined) {
+      now = +now || Date.now();
+      const w = offlineWindow(win, now), used = Math.round(w.reduce((a, x) => a + x.days, 0) * 100) / 100;
+      out.used = used; out.days = Math.max(0, Math.round(Math.min(asked, OFFLINE_CAP_DAYS - used) * 100) / 100); out.limited = out.days < asked;
+      if (out.days > 0) w.push({ at: now, days: out.days });
+      out.win = w.slice(-OFFLINE_WIN_MAX);
+      out.nextFullAt = out.win.length ? Math.max(...out.win.map(x => x.at)) + OFFLINE_WIN_MS : now; // all of today's days are free again
+    }
+    out.gold = Math.floor(avg * out.days);
+    return out;
+  }
+  // v5.10.1 「家人帮忙添置」 (off by default): the only things the family ever buys for the player, in this order. No wood, no
+  // decorations, pets, land, buildings, workshops or town things: those are the player's own choices.
+  const AUTO_BUY = ['field', 'field', 'field', 'can', 'shoe', 'hoe', 'basket', 'coop', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken', 'chicken',
+    'can', 'shoe', 'strawberry', 'basket'];
+  const AUTO_MULT = 3, AUTO_FLOOR = 300; // buy only with 3x the price in hand, and keep max(300, 2x the recent daily average) after it
+  // the next AUTO_BUY step not bought yet (the list repeats an id once per level: the k-th 'field' is field level k)
+  function autoNext(up) {
+    const seen = {};
+    for (const id of AUTO_BUY) { seen[id] = (seen[id] || 0) + 1; if ((up && up[id] | 0) < seen[id]) return { id, level: seen[id] }; }
+    return null;
+  }
+  // what the family would buy now: { id, cost } or { id: null, why }. shown(id): the shop's progressive reveal (game.js)
+  function autoPick(up, coins, wood, dayEarn, shown) {
+    const next = autoNext(up); if (!next) return { id: null, why: 'done' };
+    const o = offer(up, coins, next.id, wood);
+    if (!o || o.maxed || o.have + 1 !== next.level) return { id: null, why: 'order' };
+    if (o.locked) return { id: null, why: 'locked', next: next.id };
+    if (shown && !shown(next.id)) return { id: null, why: 'hidden', next: next.id };
+    const recent = (dayEarn || []).slice(-3), avg = recent.length ? recent.reduce((a, b) => a + b, 0) / recent.length : 0;
+    const keep = Math.max(AUTO_FLOOR, Math.round(2 * avg));
+    if (!o.ok || coins < o.cost * AUTO_MULT || coins - o.cost < keep) return { id: null, why: 'purse', next: next.id, cost: o.cost, keep };
+    return { id: next.id, cost: o.cost, keep };
+  }
+  const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC, OFFLINE_FREE_SEC, OFFLINE_FREE_GOLD, SPEED_REFUND, speedRefund,
     CROPS, IDS, SHOP, SHOP_IDS, SHOP_TABS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
-    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle };
+    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, gate: null };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

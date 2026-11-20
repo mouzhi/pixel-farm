@@ -113,8 +113,10 @@
     if (P._logToast) return;
     P._logToast = true;
     var lastLine = '';
+    // 1.2.0：pf:say 是对玩家这一下点按的回话（「点家门口的池塘…」「标记了要放进池塘的金鱼」），
+    // 以前和农场日志同级，0.4 秒内就被下一条日志顶掉，手机上等于没说。改成按点按反馈处理。
     root.addEventListener('pf:say', function (e) {
-      if (e && e.detail) toastLog(e.detail);
+      if (e && e.detail) { lastToastSrc = String(e.detail); P.notice(String(e.detail)); }
     });
     function check() {
       var S = root.__farm && __farm.S;
@@ -179,8 +181,34 @@
     return b;
   }
 
+  // 1.2.0（网页版 v5.10.13 日记本）：网页的「日记 K」按钮在手机上隐藏，底栏放一个书本图标。
+  // diary-ui.js 自己在 window pointerdown 里关面板，所以和 sheetIco 一样在按下那一刻记住开/关。
+  function diaryIco() {
+    var b = ico('xhs-btn-diary', 'diary', '日记', function () {
+      var el = doc.getElementById('diary');
+      var wasOpen = b._wasOpen != null ? b._wasOpen : isOpen(el);
+      b._wasOpen = null;
+      var D = root.PFDiaryUI;
+      if (!D) { say('日记还在加载，稍等一下'); return; }
+      if (wasOpen) { D.close(); markIcons(); return; }
+      closeSheets(D.el || el);
+      D.open();
+      markIcons();
+    });
+    function remember() {
+      if (b._wasOpen != null && Date.now() - (b._wasAt || 0) < 600) return;
+      b._wasAt = Date.now();
+      b._wasOpen = isOpen(doc.getElementById('diary'));
+      clearTimeout(b._wasT);
+      b._wasT = setTimeout(function () { b._wasOpen = null; }, 1200);
+    }
+    b.addEventListener('pointerdown', remember);
+    b.addEventListener('touchstart', remember, { passive: true });
+    return b;
+  }
+
   function reparentSheets() {
-    ['shop', 'store', 'codex', 'menu', 'offline', 'loveTip', 'speed'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'diary', 'menu', 'offline', 'loveTip'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (!el || el.parentNode === doc.body) return;
       if (id === 'codex' && el.closest && el.closest('#xhs-board')) return;
@@ -197,7 +225,7 @@
     if (board && board !== except && P.leaderboard && typeof P.leaderboard.close === 'function') {
       P.leaderboard.close();
     }
-    ['shop', 'store', 'codex', 'menu', 'xhs-board'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'diary', 'menu', 'xhs-board', 'loveTip'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (el && el !== except) el.hidden = true;
     });
@@ -221,6 +249,8 @@
     if (shopB) shopB.classList.toggle('on', !!(shop && !shop.hidden));
     if (boardB) boardB.classList.toggle('on', !!(board && !board.hidden));
     if (followB) followB.classList.toggle('on', !!P.followFarmer);
+    var diaryB = doc.getElementById('xhs-btn-diary'), diary = doc.getElementById('diary');
+    if (diaryB) diaryB.classList.toggle('on', !!(diary && !diary.hidden));
   }
   P._markTabs = markIcons;
 
@@ -235,30 +265,6 @@
   function setFollow(on) {
     P.followFarmer = !!on;
     markIcons();
-  }
-
-  function syncSpeedBtn() {
-    var btn = doc.getElementById('xhs-btn-speed');
-    if (!btn) return;
-    var S = root.__farm && __farm.S;
-    var max = S && S.eff ? S.eff.speedMax : 1;
-    btn.hidden = !(max > 1);
-    var cur = (S && S.speed) || 1;
-    var em = btn.querySelector('em');
-    if (!em) { em = doc.createElement('em'); btn.appendChild(em); }
-    em.textContent = cur + '×';
-    btn.classList.toggle('on', cur > 1);
-  }
-
-  function cycleSpeed() {
-    var G = root.__farm;
-    if (!G || !G.setGameSpeed || !G.S) return;
-    var max = G.S.eff.speedMax || 1;
-    var opts = [1, 2, 4].filter(function (v) { return v <= max; });
-    if (!opts.length) return;
-    var i = opts.indexOf(G.S.speed || 1);
-    G.setGameSpeed(opts[(i + 1) % opts.length]);
-    syncSpeedBtn();
   }
 
   function compactHud() {
@@ -318,6 +324,7 @@
     bar.appendChild(sheetIco('xhs-btn-bag', 'bag', '背包', 'xhs-inv-dock', null));
     bar.appendChild(sheetIco('xhs-btn-store', 'store', '仓库', 'store', 'storeBtn'));
     bar.appendChild(sheetIco('xhs-btn-shop', 'shop', '商店', 'shop', 'shopBtn'));
+    bar.appendChild(diaryIco());
     var follow = ico('xhs-follow', 'follow', '跟随农夫', function () {
       setFollow(!P.followFarmer);
     });
@@ -333,9 +340,6 @@
 
     var side = doc.createElement('div'); side.id = 'xhs-side';
     side.appendChild(ico('xhs-btn-note', 'note', '发笔记', onPostNote));
-    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
-    speed.hidden = true;
-    side.appendChild(speed);
     var music = ico('xhs-btn-music', 'music', '音乐', toggleMusic);
     var sfx = ico('xhs-btn-sfx', 'sfx', '音效', toggleSfx);
     music.classList.add('off');
@@ -897,6 +901,43 @@
 
   // 1.1.1：新档 0 金币时商店里每个购买按钮都是 disabled，点了毫无反应（审核看到的就是一屏点不动的按钮）。
   // 改成看起来仍是灰的，但能点：点了提示还差多少金币 / 先买什么，并轻轻抖一下。
+  // 1.2.0：#tools 里的模式按钮（放养金鱼/锦鲤、种树、砍树…）把「接下来点哪里」写在 title 里，
+  // 手机没有悬停，玩家点了按钮看不到任何提示，也不知道要去点池塘（金鱼放不进去的反馈）。
+  // 进入模式时把 title 当提示弹出；放养时池塘不在屏幕里就停止跟随、把镜头移回家门口。
+  var POND_AT = { x: 34, y: 100 }; // game.js POND
+  // 把世界坐标 at 移到屏幕 (tx, ty)：panScreen 吃的是帧缓冲像素，先试推 8px 量出屏幕像素比例。
+  function centerOn(G, at, tx, ty) {
+    var c0 = G.toClient(at.x, at.y);
+    G.panScreen(8, 0);
+    var c1 = G.toClient(at.x, at.y);
+    var k = (c1.x - c0.x) / 8;
+    if (!isFinite(k) || Math.abs(k) < 0.01) return;
+    G.panScreen((tx - c1.x) / k, (ty - c1.y) / k);
+  }
+  function wireToolHints() {
+    var tools = doc.getElementById('tools');
+    if (!tools || tools._xhsHints) return;
+    tools._xhsHints = true;
+    tools.addEventListener('click', function (e) {
+      var b = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
+      if (!b) return;
+      var m = b.getAttribute('data-m'), k = b.getAttribute('data-k') || '';
+      var hint = String(b.title || '').replace(/[（(][^）)]*Esc[^）)]*[）)]/g, '').trim();
+      setTimeout(function () {
+        var G = root.__farm;
+        var mode = G && G.input ? G.input : null;
+        if (!mode || mode.mode !== m || (k && mode.kind && mode.kind !== k)) return;
+        if (hint) P.notice(hint);
+        if (m === 'release' && G.toClient) {
+          var c = G.toClient(POND_AT.x, POND_AT.y);
+          var vw = root.innerWidth || 390, vh = root.innerHeight || 844;
+          var off = !c || !(c.x > 30 && c.x < vw - 30 && c.y > 120 && c.y < vh - 160);
+          if (off && G.panScreen) { setFollow(false); centerOn(G, POND_AT, vw * 0.45, vh * 0.5); }
+        }
+      }, 0);
+    });
+  }
+
   function wireShopFeedback() {
     var shop = doc.getElementById('shop');
     if (!shop || shop._xhsShort) return;
@@ -982,7 +1023,6 @@
       if (!P.fbLocked) chooseFramebuffer();
       if (root.__farm && __farm.fit) __farm.fit();
       compactHud();
-      syncSpeedBtn();
       return;
     }
     bootUi._wired = true;
@@ -990,8 +1030,8 @@
     if (!P.fbLocked) chooseFramebuffer();
     if (root.__farm && __farm.fit) __farm.fit();
     compactHud();
-    syncSpeedBtn();
     wireLogToast();
+    wireToolHints();
     if (root.visualViewport) {
       visualViewport.addEventListener('resize', function () {
         applyWindowInsets();
@@ -1026,7 +1066,6 @@
     wireShopFeedback();
     reparentSheets();
     compactHud();
-    syncSpeedBtn();
     paintAudioToggles();
     var mm = doc.getElementById('minimap');
     if (mm && !mm._xhsDefaulted) {
@@ -1039,7 +1078,6 @@
       bootUi();
       if (root.__farm && __farm.fit) __farm.fit();
       compactHud();
-      syncSpeedBtn();
       if (n > 80) clearInterval(iv);
     }
   }, 50);

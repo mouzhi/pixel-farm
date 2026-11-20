@@ -21,15 +21,15 @@
   const HUT = { x: 170, y: -61 }, HUT_LOGS = { x: 152, y: -49 }; // the hut stands in the forest's empty south strip, east of the gate
   const HUT_FOOT = [11, 7];
   // wood from one tree. forest: the tree is in 林场 (the hut only helps there)
-  function perTree(eff, forest) { eff = eff || {}; return WD.WOOD.perChop + (AXE_BONUS[eff.axeLv | 0] || 0) + (forest && eff.lumber ? HUT_BONUS : 0); }
-  const chopMinutes = eff => AXE_DUR[(eff && eff.axeLv) | 0] || AXE_DUR[0];
+  function perTree(eff, forest) { eff = eff || {}; return WD.WOOD.perChop + (AXE_BONUS[eff.axeLv | 0] || 0) + (eff.smithAxe | 0) + (forest && eff.lumber ? HUT_BONUS : 0); }
+  const chopMinutes = eff => Math.max(6, (AXE_DUR[(eff && eff.axeLv) | 0] || AXE_DUR[0]) - ((eff && eff.smithAxeCut) | 0));
   const regrowNights = eff => (eff && eff.lumber) ? HUT_REGROW : WD.STUMP_TO_TREE;
   // how much wood to keep in the storehouse: what the next wood-costing level in the shop needs (the biggest one, so the
   // manor's 400 drives it), never more than the storehouse holds. v5.4.5: when nothing left needs wood the target is the
   // whole storehouse (it used to be a 40-wood reserve, so after the manor he never went to 林场 again)
   function need(shop, up) {
     let n = 0;
-    for (const it of shop) { const have = (up && up[it.id]) | 0, L = it.levels[have]; if (!L || !L.wood) continue;
+    for (const it of shop) { const have = (up && up[it.id]) | 0, L = it.levels[have]; if (!L || !L.wood || it.p8 || it.p9 || it.p10 || it.p11 || it.yard) continue; // v5.6.0: the phase-8 builds (≤120 wood) don't steer chopping; the storehouse fill covers them (v5.9.0: the new house too)
       if (it.needs && !((up && up[it.needs]) > 0)) continue; n = Math.max(n, L.wood); }
     return n;
   }

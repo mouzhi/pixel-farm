@@ -386,8 +386,9 @@
   function urlOf(img) {
     const c = canvasOf(img); return c ? c.toDataURL() : '';
   }
-  function fishURL(id) { const im = paint('fish', id); return im ? urlOf(im) : ''; }
-  function rareURL(id) { const im = paint('rare', id); return im ? urlOf(im) : ''; }
+  const urlCache = {}; // v5.5.0: the fishing log re-renders often; one canvas + data URL per icon, not per render
+  function fishURL(id) { const k = 'fish:' + id; if (urlCache[k] === undefined) { const im = paint('fish', id); urlCache[k] = im ? urlOf(im) : ''; } return urlCache[k]; }
+  function rareURL(id) { const k = 'rare:' + id; if (urlCache[k] === undefined) { const im = paint('rare', id); urlCache[k] = im ? urlOf(im) : ''; } return urlCache[k]; }
   function silURL(kind, id) {
     const key = kind + ':' + id;
     if (!silCache[key]) { const im = paint(kind, id); silCache[key] = im ? silhouette(im) : null; }

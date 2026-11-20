@@ -10,8 +10,17 @@
   const SU = (typeof require === 'function' && typeof document === 'undefined') ? require('./surprise.js') : root.PFSurprise;
   const CX = (typeof require === 'function' && typeof document === 'undefined') ? require('./codex.js') : root.PFCodex;
   const WX = (typeof require === 'function' && typeof document === 'undefined') ? require('./weather.js') : root.PFWeather;
+  const PL = (typeof require === 'function' && typeof document === 'undefined') ? require('./plots.js') : root.PFPlots; // v5.5.0
+  const PW = (typeof require === 'function' && typeof document === 'undefined') ? require('./works.js') : root.PFWorks; // v5.6.0
+  const DC = (typeof require === 'function' && typeof document === 'undefined') ? require('./decor.js') : root.PFDecor; // v5.7.0
+  const TN = (typeof require === 'function' && typeof document === 'undefined') ? require('./town.js') : root.PFTown; // v5.8.0
+  const HM = (typeof require === 'function' && typeof document === 'undefined') ? require('./home.js') : root.PFHome; // v5.9.0
+  const HL = (typeof require === 'function' && typeof document === 'undefined') ? require('./hall.js') : root.PFHall; // v5.10.0
+  const YD = (typeof require === 'function' && typeof document === 'undefined') ? require('./yard.js') : root.PFYard; // v5.10.3
+  const IN = (typeof require === 'function' && typeof document === 'undefined') ? require('./inn.js') : root.PFInn; // v5.10.7
+  const DY = (typeof require === 'function' && typeof document === 'undefined') ? require('./diary.js') : root.PFDiary; // v5.10.13
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
-  const CURRENT = 10;
+  const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
   const MIGRATIONS = {
     // v4.1 shop: every upgrade starts at level 0 (nothing bought), the game runs at 1x
@@ -70,17 +79,43 @@
         streaks: s.streaks || CX.emptyStreaks(),
       });
     },
+    // v5.5.0 phase 7: the map grows outward in a ring (old coordinates do not move); no plot of the ring is bought yet,
+    // and the fold has no grazing meadow yet
+    11: s => Object.assign({}, s, { plots: s.plots && typeof s.plots === 'object' ? s.plots : {}, upgrades: Object.assign({ graze: 0 }, s.upgrades) }),
+    // v5.6.0 phase 8: nothing of it is bought yet (no sprinklers, workshops, wheel, hives or second pens); no wheat seeds;
+    // the second pens get empty troughs; the works state starts empty
+    12: s => Object.assign({}, s, {
+      upgrades: Object.assign({ sprinkler: 0, mill: 0, jam: 0, cheese: 0, wheel: 0, hive: 0, coop2: 0, sty2: 0, fold2: 0, shed2: 0 }, s.upgrades),
+      troughs: Object.assign({ coop2: { feed: 0, water: 0 }, sty2: { feed: 0, water: 0 }, fold2: { feed: 0, water: 0 }, shed2: { feed: 0, water: 0 } }, s.troughs),
+      works: s.works && typeof s.works === 'object' ? s.works : { sprinklers: [], works: {}, hives: [], penHost: null },
+    }),
+    // v5.7.0 phase 9: no decorations yet (none in the storehouse, none set down), no party held; nothing else moves
+    13: s => Object.assign({}, s, {
+      upgrades: Object.assign(DC.SHOP_IDS.reduce((o, k) => (o[k] = 0, o), {}), s.upgrades),
+      decor: s.decor && typeof s.decor === 'object' ? s.decor : DC.empty(),
+    }),
+    // v5.8.0 phase 10: the town is not bought; school days start counting today (nobody's record is made up)
+    14: s => Object.assign({}, s, {
+      upgrades: Object.assign({ town: 0 }, s.upgrades),
+      town: s.town && typeof s.town === 'object' ? s.town : TN.empty(),
+    }),
+    // v5.9.0 phase 11: no new house bought, nobody married, nobody close to anyone yet (closeness starts from today)
+    15: s => Object.assign({}, s, {
+      upgrades: Object.assign({ cottage: 0 }, s.upgrades),
+      home: s.home && typeof s.home === 'object' ? s.home : HM.empty(),
+    }),
   };
-  const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon'];
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed', 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber']; // levels (shop order); max levels live in sim
-  const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed'];
+  const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon', 'wheat']; // v5.6.0 wheat (a missing count reads as 0)
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed' /* v5.10.2: legacy, refunded on load */, 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town', 'cottage', ...(YD ? YD.IDS : [])]; // levels (shop order); max levels live in sim
+  const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']; // v5.6.0 second pens
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
-  const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south'], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
+  const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
   const num = (v, d, lo = -Infinity, hi = Infinity) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, v)) : d);
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const seeds = v => { const o = obj(v), out = {}; for (const k of CROP_IDS) out[k] = int(o[k], 0, 0, 1e6); return out; };
-  const itemOk = ty => CROP_IDS.includes(ty) || FRUIT_IDS.includes(ty) || PRODUCT_IDS.includes(ty) || FISH_IDS.includes(ty) || ty === 'flower';
+  const WORK_ITEMS = ['flour', 'jam', 'cheese', 'honey', 'apple_pie']; // v5.6.0 workshop products and honey; v5.10.9 苹果派
+  const itemOk = ty => WORK_ITEMS.includes(ty) || CROP_IDS.includes(ty) || FRUIT_IDS.includes(ty) || PRODUCT_IDS.includes(ty) || FISH_IDS.includes(ty) || ty === 'flower';
   // v5.1: a basket slot can be a string (including a wildflower) or a surprise item {type, glow, giant, rare}
   function validBasket(list) {
     return (Array.isArray(list) ? list : []).map(k => {
@@ -125,9 +160,17 @@
     c = obj(c); if (!FISH_IDS.includes(c.id)) return null;
     return { id: c.id, name: typeof c.name === 'string' ? c.name.slice(0, 12) : c.id, gold: int(c.gold, 0, 0, 999), water: c.water === 'sea' ? 'sea' : 'pond', day: int(c.day, 1, 1, 1e6) };
   }
+  function validSettings(st) {
+    // v5.10.2: one game speed for everyone; `speed` stays in the save as 1 for older readers. speedRefund: gold given back for a bought 2x / 4x (once)
+    const layout = int(st.decorLayout, 0, 0, 9); return { speed: 1, speedRefund: int(st.speedRefund, 0, 0, 1e6), autoBuy: st.autoBuy === true, autoDay: int(st.autoDay, 0, 0, 1e6), autoN: int(st.autoN, 0, 0, 1e6), ...(layout ? { decorLayout: layout } : {}) }; // v5.10.3/4: decorLayout (1 = first tidy-up, 2 = wider lamps)
+  }
+  function validOfflineWin(w) { // [{ at: ms, days: 0..3 }], at most 12; the 24-hour cut happens in sim.js at settlement time
+    return (Array.isArray(w) ? w : []).map(obj).filter(x => typeof x.at === 'number' && isFinite(x.at) && x.at > 0)
+      .map(x => ({ at: Math.round(x.at), days: num(x.days, 0, 0, 3) })).filter(x => x.days > 0).slice(-12);
+  }
   // fills defaults for everything, so a v1 save written before a field existed still loads
   function validate(s) {
-    const up = obj(s.upgrades), sp = obj(s.settings).speed;
+    const up = obj(s.upgrades);
     const clock = obj(s.clock), stats = obj(s.stats), inv = obj(s.inventory), f = obj(s.farmer), prices = obj(s.prices);
     if (!Array.isArray(s.tiles) || !s.tiles.length) throw new Error('save has no tiles');
     return {
@@ -149,14 +192,15 @@
         wood: int(inv.wood, 0, 0, 1e6), saplings: Object.fromEntries(FRUIT_IDS.map(k => [k, int(obj(inv.saplings)[k], 0, 0, 999)])), hay: int(inv.hay, 0, 0, 99),
         fishFood: int(inv.fishFood, 0, 0, 30), ornament: CX.validOrnament(inv.ornament),
       },
-      farmer: { x: num(f.x, 36, -200, 400), y: num(f.y, 40, -150, 400), sleeping: !!f.sleeping, home: f.home !== false },
+      farmer: { x: num(f.x, 36, -260, 452), y: num(f.y, 40, -212, 388), sleeping: !!f.sleeping, home: f.home !== false },
       tiles: s.tiles.map(validTile),
-      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 9)])),
-      settings: { speed: [1, 2, 4].includes(sp) ? sp : 1 },
+      upgrades: Object.fromEntries(UPGRADE_IDS.map(k => [k, int(up[k], 0, 0, 24)])), // v5.6.0: 16 sprinklers, 12 chickens; v5.10.3: 20 path pieces
+      settings: validSettings(obj(s.settings)), // v5.10.1 append-only: autoBuy (off by default), the day and count of the family's purchases
+      offline: { win: validOfflineWin(obj(s.offline).win) }, // v5.10.1 append-only: settlements in the last 24 real hours
       yard: Array.isArray(s.yard) ? s.yard.map(validYard).filter(Boolean).slice(0, 40) : undefined,
       trees: Array.isArray(s.trees) ? s.trees.map(validTree).filter(Boolean).slice(0, 600) : null, // null: the game builds its default forest
       orders: (Array.isArray(s.orders) ? s.orders : []).map(validOrder).filter(Boolean).slice(0, 24),
-      animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 20),
+      animals: (Array.isArray(s.animals) ? s.animals : []).map(validAnimal).filter(Boolean).slice(0, 40), // v5.6.0: second pens double the room
       troughs: Object.fromEntries(PEN_IDS.map(k => { const t = obj(obj(s.troughs)[k]); return [k, { feed: int(t.feed, 0, 0, 99), water: t.water ? 1 : 0 }]; })),
       catches: (Array.isArray(s.catches) ? s.catches : []).map(validCatch).filter(Boolean).slice(0, 12),
       pondFish: CX.validPondFish(s.pondFish),
@@ -169,6 +213,14 @@
       weather: WX && WX.validWeather ? WX.validWeather(s.weather) : { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0, nextStart: 0, nextDur: 0 },
       bugNet: s.bugNet ? 1 : 0,
       log: (Array.isArray(s.log) ? s.log : []).filter(x => typeof x === 'string').slice(0, 4),
+      plots: PL.validPlots(s.plots), // v5.5.0
+      works: PW.valid(s.works, PL.validPlots(s.plots)), // v5.6.0
+      decor: DC.valid(s.decor), // v5.7.0
+      town: Object.assign(TN.valid(s.town), { hall: HL.valid(s.town && s.town.hall) }), // v5.8.0; v5.10.0: + hall (镇公所: projects, gifts), filled in when missing
+      home: HM.valid(s.home), // v5.9.0
+      ...(s.homeyard && YD ? { homeyard: YD.valid(s.homeyard) } : {}), // v5.10.3 append-only: the yard, stall and animal-care things set up
+      ...(IN ? { inn: IN.valid(s.inn) } : {}), // v5.10.7 append-only: 民宿 + 农家菜馆 (missing = nothing built)
+      ...(s.diary && DY ? { diary: DY.valid(s.diary) } : {}), // v5.10.13 append-only: the last 30 days of the family diary
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
