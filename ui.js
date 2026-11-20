@@ -287,7 +287,7 @@
     const S = G.S, tabs = shopTabs().filter(tabShown);
     if (!tabs.some(t => t.id === shopTab)) shopTab = tabs[0].id;
     const PU = window.PFPlotsUI, PH = { costChip, priceChips };
-    const key = [shopTab, !!S.autoBuy, JSON.stringify((S.homeyard && S.homeyard.put) || {}), tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length, S.coins, G.F && G.F.wood]) : '', shopTab === 'inn' && S.inn ? JSON.stringify([S.inn, S.coins, G.F && G.F.wood, S.town && S.town.hall]) : ''].join(','); // v5.6.0: what the phase-8 gates read; v5.10.7 inn
+    const key = [shopTab, !!S.autoBuy, JSON.stringify((S.homeyard && S.homeyard.put) || {}), tabs.map(t => t.id).join(''), S.coins, G.F.wood, S.family && S.family.kids ? S.family.kids.length : 0, S.fishFood, S.bugNet || 0, (S.pondFish || []).length, (S.ornament && S.ornament.goldfish) || 0, ...SIM.SHOP_IDS.map(k => S.up[k]), !!atlas, plotView, JSON.stringify(S.plots || {}), (S.family || {}).moved, S.members.length, S.animals.length, S.works ? JSON.stringify([S.works.works, S.works.hives.length, S.works.penHost]) : '', shopTab === 'hall' && S.town ? JSON.stringify([S.town.hall, S.decor.inv, S.decor.placed.length, S.coins, G.F && G.F.wood]) : '', shopTab === 'inn' && S.inn ? JSON.stringify([S.inn, S.coins, G.F && G.F.wood, S.town && S.town.hall]) : ''].join(','); // v5.6.0: what the phase-8 gates read; v5.10.7 inn
     if (!force && key === shopKey) return; shopKey = key;
     const tabBtns = tabs.map(t => `<button type="button" class="pbtn${t.id === shopTab ? ' on' : ''}" data-tab="${t.id}" title="${esc(t.title || t.name)}">${esc(t.name)}</button>`).join('');
     let h = `<div class="shead"><b>商店</b><span class="wallet">${costChip(S.coins, 'coin')}${costChip(G.F.wood, 'wood')}</span><button type="button" class="pbtn auto${S.autoBuy ? ' on' : ''}" data-a="autobuy" aria-pressed="${S.autoBuy ? 'true' : 'false'}" title="${AUTO_TIP}">家人帮忙添置 · ${S.autoBuy ? '开' : '关'}</button><button class="pbtn x" data-a="close" title="关闭（B）">✕</button></div><div class="tabs">${tabBtns}</div><div class="cards">`;
@@ -328,10 +328,10 @@
       }
       if (gf) {
         const held = ((S.ornament && S.ornament.goldfish) || 0) + (S.pondFish || []).filter(f => f.kind === 'goldfish').length;
-        const maxed = held >= (FS.POND_CAP || 8), ok = !maxed && S.coins >= gf.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(gf.price - S.coins, 'coin')}</span></span>`;
-        h += `<div class="card${maxed ? ' max' : ''}" data-item="goldfish">${itemArt({ group: 'fish', id: 'goldfish' }, { fit: 32 })}<div class="ct"><div><b>金鱼</b> <span class="lv">已有 ${held}/${FS.POND_CAP}</span></div>` +
-          (maxed ? `<div class="d">池塘已经养满了</div></div><div class="cb"><span class="done">✓</span></div>` :
-            `<div class="d">买来放到家门口池塘里养着，只是在水里游给人看，不再卖掉。海鱼不能放进淡水池塘</div></div><div class="cb"><button class="pbtn" data-buy="goldfish"${ok ? '' : ' disabled'}>${priceChips(gf.price, 0)}</button>${short}</div>`) + '</div>';
+        const pondN = (S.pondFish || []).length, maxed = (G.pondRoom ? G.pondRoom() <= 0 : pondN >= (FS.POND_CAP || 8)), ok = !maxed && S.coins >= gf.price, short = ok || maxed ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${costChip(gf.price - S.coins, 'coin')}</span></span>`;
+        h += `<div class="card${maxed ? ' max' : ''}" data-item="goldfish">${itemArt({ group: 'fish', id: 'goldfish' }, { fit: 32 })}<div class="ct"><div><b>金鱼</b> <span class="lv">池塘 ${pondN}/${FS.POND_CAP}</span></div>` +
+          (maxed ? `<div class="d">池塘已经养满了（观赏鱼合计最多 ${FS.POND_CAP} 条），不会再扣金币</div></div><div class="cb"><span class="done">✓</span></div>` :
+            `<div class="d">买好就会直接游进家门口的池塘，不用再点放养。观赏鱼只是看着玩，不再卖掉。海鱼不能放进淡水池塘</div></div><div class="cb"><button class="pbtn" data-buy="goldfish"${ok ? '' : ' disabled'}>${priceChips(gf.price, 0)}</button>${short}</div>`) + '</div>';
       }
     }
     shop.innerHTML = h + '</div>';
@@ -489,7 +489,7 @@
     if (d.plotlook) { const p = PFPlots.plot(d.plotlook); G.panTo((p.rect[0] + p.rect[2]) / 2, (p.rect[1] + p.rect[3]) / 2); toggleShop(false); }
     if (d.pbuy || d.pzone) { const [pid, mod] = (d.pbuy || d.pzone).split(':'), r = d.pbuy ? G.buyPlot(pid, mod) : G.rezonePlot(pid, mod); drawShop(true); if (!r.ok) el.classList.add('shake'); }
     if (d.look) { const P = d.look.startsWith('pen:') && PFWorld.PENS[d.look.slice(4)], r = P ? { center: { x: P.bld.x + 12, y: P.bld.y + 14 } } : PFWorld.region(d.look); G.panTo(r.center.x, r.center.y); toggleShop(false); }
-    if (d.buy) { const r = G.buy(d.buy); drawShop(true); if (!r.ok) el.classList.add('shake'); }
+    if (d.buy) { const r = G.buy(d.buy); drawShop(true); if (!r.ok) { el.classList.add('shake'); if (r.why) dispatchEvent(new CustomEvent('pf:say', { detail: r.why })); } }
     if (d.mk) { const [a, k] = d.mk.split(':'); if (a === 'mode') G.setMarketPick(!G.marketView().pick); else G.setMarketPick(null, k); drawShop(true); return; } // v5.10.3
     if (d.bk) { const [a, k] = d.bk.split(':'); if (a === 'mode') G.setBakeryPick(!G.bakeryView().pick); else G.setBakeryPick(null, k); drawShop(true); return; } // v5.10.4
     if (d.ws) { if (d.ws === 'mode') G.setWoodshopAuto(!G.woodshopView().auto); drawShop(true); return; } // v5.10.5
@@ -676,8 +676,8 @@
     if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
     const room = !(F.saplings.apple || F.saplings.orange) || !G.plantRoom || G.plantRoom(); // v5.9.1: say so when there is no grass left for a sapling
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}${room ? '' : ' full'}" data-m="plant" data-k="${k}" title="${room ? '点一块空草地，农夫会去种（Esc 退出）' : G.PLANT_FULL}">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}${room ? '' : '（没地方了）'}</button>`;
-    if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="点家门口的池塘，把篮子里的锦鲤放进去养着（Esc 退出）。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
-    if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="点家门口的池塘，把买来的金鱼放进去养着（Esc 退出）">放养金鱼 ${gfN}</button>`;
+    if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="把篮子里的一条锦鲤直接放进家门口的池塘。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
+    if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="池塘有空位时，把仓库里的金鱼放进去">放养金鱼 ${gfN}</button>`;
     for (const id of deco) h += `<button class="pbtn${m.mode === 'decor' && m.kind === id ? ' on' : ''}" data-m="decor" data-k="${id}" title="点一块草地（亮绿色就能放），家人会从仓库搬过去（Esc 退出）。不放也没关系，家人会自己找地方摆上">摆${DCm.CATALOG[id].name} ${free(id)}</button>`;
     if (movN) h += `<button class="pbtn${m.mode === 'move' ? ' on' : ''}" data-m="move" title="先点要挪的东西（装饰、派对区、加工坊、蜂箱、浇水器；老房子不能挪），再点新位置，家人会搬过去（Esc 退出）">挪东西</button>`;
     if (ordN) h += `<button class="pbtn" data-m="clearmove" title="取消还没搬完的摆放和挪动">要搬的 ${ordN} ✕</button>`;
@@ -686,6 +686,7 @@
   }
   $('tools').addEventListener('click', e => { const d = e.target.dataset; if (!d || !d.m) return;
     if (d.m === 'clear') { G.S.orders.length = 0; G.setMode(null); G.saveNow(); }
+    else if (d.m === 'release') { const r = G.orderRelease(d.k); G.setMode(null); dispatchEvent(new CustomEvent('pf:say', { detail: r.ok ? '游进了家门口的池塘' : r.why })); G.saveNow(); }
     else if (d.m === 'clearmove') { G.clearMoves(); G.setMode(null); G.saveNow(); } // v5.7.0
     else if (d.m === 'plant' && G.plantRoom && !G.plantRoom()) { G.setMode(null); dispatchEvent(new CustomEvent('pf:say', { detail: G.PLANT_FULL })); } // v5.9.1
     else if (G.input.mode === d.m && (!d.k || G.input.kind === d.k)) G.setMode(null); else G.setMode(d.m, d.k); tools(); });

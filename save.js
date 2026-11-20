@@ -18,6 +18,7 @@
   const HL = (typeof require === 'function' && typeof document === 'undefined') ? require('./hall.js') : root.PFHall; // v5.10.0
   const YD = (typeof require === 'function' && typeof document === 'undefined') ? require('./yard.js') : root.PFYard; // v5.10.3
   const IN = (typeof require === 'function' && typeof document === 'undefined') ? require('./inn.js') : root.PFInn; // v5.10.7
+  const DY = (typeof require === 'function' && typeof document === 'undefined') ? require('./diary.js') : root.PFDiary; // v5.10.13
   const KEY = PREFIX + 'save', BAK = KEY + ':bak';
   const CURRENT = 15;
   const YARD_TYPES = ['rock', 'branch', 'weed', 'pebble'];
@@ -219,6 +220,7 @@
       home: HM.valid(s.home), // v5.9.0
       ...(s.homeyard && YD ? { homeyard: YD.valid(s.homeyard) } : {}), // v5.10.3 append-only: the yard, stall and animal-care things set up
       ...(IN ? { inn: IN.valid(s.inn) } : {}), // v5.10.7 append-only: 民宿 + 农家菜馆 (missing = nothing built)
+      ...(s.diary && DY ? { diary: DY.valid(s.diary) } : {}), // v5.10.13 append-only: the last 30 days of the family diary
     };
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
