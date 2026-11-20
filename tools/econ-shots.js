@@ -35,7 +35,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.context().close(); }
   // 2. 2 days already settled 3 hours ago, away 2 hours now: 1 day, the box says so and when the window is full again
   { const p = await page(away(120, [[-3 * H, 2]])); const r = await p.evaluate(offState); await p.screenshot({ path: path.join(OUT, 'v5101_offline_partial.png') });
-    check('v5101_offline_partial.png', !r.shown ? 'no box' : r.r.days !== 1 || !r.r.limited || r.r.used !== 2 ? 'days' : r.r.gold !== 4000 ? 'gold' : !/已经结算过 2 天，这次按 1 天算/.test(r.box) || !/每 24 小时最多结算 3 天离线收益，(今天|明天) \d\d:\d\d 以后再满/.test(r.box) ? 'box text' : null, r);
+    check('v5101_offline_partial.png', !r.shown ? 'no box' : r.r.days !== 1 || !r.r.limited || r.r.used !== 2 ? 'days' : r.r.gold !== 4000 ? 'gold' : !/已经结算过 2 天，这次相当于 1 天的收入/.test(r.box) /* v5.11.0.8 copy */ || !/每 24 小时最多结算 3 天离线收益，(今天|明天) \d\d:\d\d 以后再满/.test(r.box) ? 'box text' : null, r);
     await p.context().close(); }
   // 3. the clock was turned back (saved 3 hours "in the future"): no gold, a log line, the window kept
   { const s = away(-180, [[2 * H, 3]]); const p = await page(s); const r = await p.evaluate(() => ({ off: __farm.SAVE.offline, coins: __farm.S.coins, shown: !document.getElementById('offline').hidden, log: __farm.S.log.slice(0, 3), win: __farm.snapshot().offline.win }));
