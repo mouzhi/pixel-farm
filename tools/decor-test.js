@@ -36,7 +36,7 @@ ok('party: anniversaries (28 days) make one likelier; guests 0-2; the evening wi
   assert(DC.special(60, { kids: [{ born: 4 }] })); assert(!DC.special(60, {}));
   const r = rng(3), c = [0, 0, 0]; for (let i = 0; i < 3000; i++) c[DC.guestCount(r)]++; assert(c[0] && c[1] && c[2]);
   assert(!DC.partyOn(17 * 60)); assert(DC.partyOn(18 * 60)); assert(DC.partyOn(20 * 60 + 10)); assert(!DC.partyOn(20 * 60 + 30));
-  assert.strictEqual(DC.partySeats({ x: 0, y: 0 }).length, 5); assert.strictEqual(DC.partyPosts({ x: 0, y: 0 }).length, 4);
+  assert.strictEqual(DC.partySeats({ x: 0, y: 0 }).length, 2); assert.strictEqual(DC.partyPosts({ x: 0, y: 0 }).length, 4);
 });
 ok('v5.11.0.15 party: seats 8 apart; lawn corners on free grass, never under the area or each other; nobody shares a place', () => {
   const s = DC.partySeats({ x: 0, y: 0 }); for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) assert(Math.hypot(s[i].x - s[j].x, s[i].y - s[j].y) >= 7.9, 'seats ' + i + ' ' + j);
@@ -51,11 +51,12 @@ ok('v5.11.0.15 party: seats 8 apart; lawn corners on free grass, never under the
   assert.deepStrictEqual(DC.partyLawn(c, b => b[1] > c.y), DC.partyLawn(c, b => b[1] > c.y));
   const roster = ['farmer', 'partner', 'father', 'g0', 'g1', 'f0', 'sp_kid1', 'kid1'].map(key => ({ key })).concat([{ key: 'kid0', kid: 1 }, { key: 'm2', kid: 1 }]);
   for (const lawn of [all, narrow, []]) for (let ph = 0; ph < 3; ph++) {
-    const extra = [{ x: 0, y: 0 }, { x: 1, y: 30 }, { x: 2, y: 60 }, { x: 3, y: 90 }, { x: 4, y: 120 }], plan = DC.partyPlan(c, lawn, roster, ph, extra), spots = Object.values(plan).filter(Boolean);
-    const placed = roster.filter(r => plan[r.key]).length; assert(placed >= Math.min(roster.length, 5 + lawn.reduce((n, l) => n + l.spots.length, 0) + extra.length), 'placed ' + placed);
+    const extra = Array.from({ length: 20 }, (_, i) => ({ x: -200 + (i % 5) * 30, y: -200 + Math.floor(i / 5) * 40 })), plan = DC.partyPlan(c, lawn, roster, ph, extra), spots = Object.values(plan).filter(Boolean);
+    const placed = roster.filter(r => plan[r.key]).length; assert.strictEqual(placed, roster.length, 'placed ' + placed);
+    for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) assert(DC.partyClear(spots[i], spots[j]), 'projected silhouettes overlap');
     assert.strictEqual(new Set(spots.map(p => p.x + ',' + p.y)).size, spots.length, 'two people on one spot (phase ' + ph + ')');
     if (lawn.length === 3) { if (ph !== 1) assert.strictEqual(plan.kid0.act, 'play'); else assert.strictEqual(plan.kid0.act, 'eat');
-      if (ph === 0) assert.strictEqual(plan.farmer.act, 'eat'); else assert(new Set(roster.filter(r => !r.kid).map(r => plan[r.key].act)).size >= 3, 'the grown-ups mix'); }
+      if (ph === 0) assert.strictEqual(plan.farmer.act, 'eat'); else assert(new Set(roster.filter(r => !r.kid).map(r => plan[r.key].act)).size >= 2, 'the grown-ups mix'); }
   }
   // round 0 is dinner; later rounds move people along; the rounds' edges
   assert.strictEqual(DC.partyPhase(17 * 60 + 30), 0); assert.strictEqual(DC.partyPhase(18 * 60 + 40), 1); assert.strictEqual(DC.partyPhase(19 * 60 + 35), 2); assert.strictEqual(DC.phaseEnd(18 * 60), 18 * 60 + 40); assert.strictEqual(DC.phaseEnd(20 * 60), DC.PARTY.to);

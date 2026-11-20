@@ -31,7 +31,9 @@ fs.mkdirSync(OUT, { recursive: true });
     at(8 * 60); const bought = f.buy('party'); until(() => !!f.partyArea() && !S.decor.orders.length, 900);
     const area = f.partyArea(); dry();
     if (area) { S.decor.party.at = S.day - 1; S.decor.party.last = S.day - 9; S.decor.party.tonight = S.day; S.decor.party.guests = 2; }
-    const party = T => { at(16 * 60 + 50); dry(); S.decor.party.tonight = S.day; S.decor.party.guests = 2; until(() => S.t % 1440 >= T, 900); dry(); };
+    const party = T => { at(16 * 60 + 50); dry(); S.decor.party.tonight = S.day; S.decor.party.guests = 2; until(() => S.t % 1440 >= T, 900); dry();
+      if (f.partyPlan) for (let i = 0; i < 240; i++) { at(T); f.advance(1, 10); const plan = f.partyPlan();
+        if (f.actors().concat(f.GUESTS).every(a => { const p = plan[a === f.FARMER ? 'farmer' : a.id]; return p && !a.moving && !a.home && Math.hypot(a.x - p.x, a.y - p.y) < 1.2; })) break; } at(T); };
     const look = (x, y) => { f.setAngle(0.25); f.panTo(x, y); f.advance(0.4, 10); };
     const box = document.getElementById('offline'); if (box) box.hidden = true;`;
   const shot = async (name, fn, check) => { if (only && !name.includes(only)) return;
@@ -66,13 +68,36 @@ fs.mkdirSync(OUT, { recursive: true });
       for (let i = 0; i < 40; i++) { f.setRealT(100 + i * 0.25); f.render(); for (const o of f.partyFx()) seen[o.k] = (seen[o.k] | 0) + 1; }
       f.setRealT(100 + 2.4 * 3 + 0.9); f.render(); const fx = f.partyFx().map(o => o.k), plates = Object.values(f.partyPlan()).filter(P => P && P.act === 'eat').length;
       return { seen, fx, plates, ...people() }; })()`,
-      r => r.area === false ? 'no party area' : !r.seen.bite || !r.seen.crumb ? 'no bites ' + JSON.stringify(r.seen) : !r.seen.cup ? 'no toast' : r.plates < 3 ? 'diners ' + r.plates : r.gap < 6 ? 'overlap ' + r.gap : null);
+      r => r.area === false ? 'no party area' : !r.seen.bite || !r.seen.crumb ? 'no bites ' + JSON.stringify(r.seen) : !r.seen.cup ? 'no toast' : r.plates < 2 ? 'diners ' + r.plates : r.gap < 6 ? 'overlap ' + r.gap : null);
     // 3. 19:55, the last round: the children chase the ball round their lawn, others dance or chat on the rug
     await shot('party_play', `(() => { ${setup} ${people} if (!area) return { area: false };
       party(19 * 60 + 55); const L = f.partyLawn(), pz = L.lawn.find(l => l.kind === 'play') || area; look((area.x + pz.x) / 2, (area.y + pz.y) / 2 + 4); const seen = {};
       for (let i = 0; i < 40; i++) { f.setRealT(200 + i * 0.2); f.render(); for (const o of f.partyFx()) seen[o.k] = (seen[o.k] | 0) + 1; }
       f.setRealT(203.3); f.render(); const pp = people(); return { seen, ...pp, t: S.t % 1440 }; })()`,
       r => r.area === false ? 'no party area' : !r.seen.ball ? 'no ball ' + JSON.stringify(r.seen) : !r.acts.some(a => /:play$/.test(a)) ? 'nobody playing' : !r.acts.some(a => /:(dance|chat)$/.test(a)) ? 'nobody dancing or chatting' : !r.seen.note && !r.seen.say ? 'no notes / bubbles' : r.gap < 6 ? 'overlap ' + r.gap : null);
+    // Worst-case household (4), partners (2), town guests (2), invited friends (2): ten adult-sized silhouettes.
+    // Stage each normal assignment, then compare ACTUAL opaque sprite pixels through every activity cycle (not world distance).
+    await shot('party_crowd', `(() => { ${setup} if (!area) return { area: false }; party(18 * 60 + 30);
+      for (let i = 0; i < 4; i++) { const g = { id: 'stress' + i, look: i % 2 ? 'guestA' : 'guestB', x: area.x, y: area.y, pts: [], moving: false }; f.GUESTS.push(g); f.partySpot(g); }
+      const crowd = f.actors().concat(f.GUESTS), SPR = f.partySprite(), cache = new Map(); let frames = 0, minDrawn = 99, overlap = 0, bad = [];
+      const mask = o => { const sh = o.sheet || SPR, fw = SPR.fw, fh = SPR.fh, fr = o.fr % (SPR.frames[o.row] || 4), img = o.flip ? sh.flip : sh.img;
+        const key = (o.partyKey || '') + ':' + o.row + ':' + fr + ':' + o.flip; if (cache.has(key)) return cache.get(key);
+        const c = document.createElement('canvas'); c.width = fw; c.height = fh; const g = c.getContext('2d');
+        g.drawImage(img, o.flip ? SPR.img.width - (fr + 1) * fw : fr * fw, SPR.rows[o.row] * fh, fw, fh, 0, 0, fw, fh);
+        const d = g.getImageData(0, 0, fw, fh).data, px = []; for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) if (d[(y * fw + x) * 4 + 3]) px.push([x, y]); cache.set(key, px); return px; };
+      for (const T of [18 * 60 + 30, 19 * 60 + 5, 20 * 60]) { at(T); const plan = f.partyPlan();
+        for (const a of crowd) { const key = a === f.FARMER ? 'farmer' : a.id, P = plan[key]; if (!P) return { missing: key, T, capacity: Object.values(plan).filter(Boolean).length };
+          Object.assign(a, { x: P.x, y: P.y, home: false, away: false, sleeping: false, moving: false, task: { kind: 'party', rest: true, to: P } }); if (a.pts) a.pts = []; }
+        for (const angle of [-0.6, 0, 0.25, 0.6]) { f.setAngle(angle);
+          for (let i = 0; i < 32; i++) { f.setRealT(100 + i * 0.35); f.render(); frames++; const ds = f.partyDraw(); minDrawn = Math.min(minDrawn, ds.length); const occupied = new Map();
+            for (const o of ds) { const p = f.proj(o.x, o.y), x0 = Math.round(p[0]) - (o.flip ? SPR.fw - 1 - SPR.ax : SPR.ax), y0 = Math.round(p[1]) - SPR.ay - Math.round(o.z || 0);
+              for (const [x, y] of mask(o)) { const k = (x0 + x) + ',' + (y0 + y), prev = occupied.get(k); if (prev && prev !== o.partyKey) { overlap++; if (bad.length < 8) bad.push([T, angle, i, prev, o.partyKey]); } else occupied.set(k, o.partyKey); } }
+          } }
+      }
+      at(19 * 60 + 5); f.setAngle(0.25); const plan = f.partyPlan(); for (const a of crowd) { const P = plan[a === f.FARMER ? 'farmer' : a.id]; a.x = P.x; a.y = P.y; a.task.to = P; }
+      f.panTo(area.x - 4, area.y); f.setRealT(105); f.render(); return { frames, minDrawn, overlap, bad, total: crowd.length }; })()`,
+      r => r.area === false ? 'no area' : r.missing ? 'no safe slot for ' + r.missing + ' at ' + r.T + ' capacity ' + r.capacity : r.minDrawn !== 10 ? 'skipped crowd ' + r.minDrawn : r.overlap ? 'opaque body overlap ' + JSON.stringify(r.bad) : null);
+
   }
   if (net.length) fails.push('network: ' + net.slice(0, 3).join(' '));
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

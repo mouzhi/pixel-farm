@@ -2513,7 +2513,7 @@ function partyLawnNow() {
 let lawnSeen = { v: -1, seen: null };
 function lawnAt(a) { // the lawn corners an area at a would get (also asked by autoSpot, before the area is put down)
   const g = ensureNav(); if (lawnSeen.v !== navVer) lawnSeen = { v: navVer, seen: DC.reach(g, NAV.LAYOUT.DOOR, []) }; const seen = lawnSeen.seen;
-  const seat = DC.partySeats(a)[3], near = c => { const r = pathTo(seat, c); return !!r.reached && r.length <= Math.hypot(c.x - seat.x, c.y - seat.y) * 1.6 + 12; }; // a short walk from the table (not round a fence)
+  const seat = DC.partySeats(a)[0], near = c => { const r = pathTo(seat, c); return !!r.reached && r.length <= Math.hypot(c.x - seat.x, c.y - seat.y) * 1.6 + 12; }; // a short walk from the table (not round a fence)
   const why = {}, no = r => { why[r] = (why[r] | 0) + 1; return false; }, by = o => Math.abs(o.x - a.x) < 80 && Math.abs(o.y - a.y) < 80; // only what is near (autoSpot asks this for many spots)
   const nTiles = tiles.filter(t => (t.open || t.tilled || t.crop) && by(t)), nTrees = S.trees.filter(by), nYard = yard.filter(by), nProps = props.filter(p => !p.decor && !p.region && by(p));
   const free = (b, c) => { for (const [i, j] of DC.cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return no('edge'); const k = j * g.w + i; if (g.cost[k] !== NAV.GRASS || !seen[k]) return no('ground'); }
@@ -2533,7 +2533,7 @@ function lawnAt(a) { // the lawn corners an area at a would get (also asked by a
     const x = a.x + dx, y = a.y + dy; if (free([x - 2, y - 2, x + 2, y + 2], { x, y }) && !DC.partySeats(a).concat(extra, lawn.flatMap(l => l.spots)).some(p => Math.hypot(x - p.x, y - p.y) < 7) && !lawn.some(l => ptIn({ x, y }, l.box, 3))) extra.push({ x, y }); }
   // A full household and friends can outgrow a small lawn. Spare places remain on reachable grass, at least 7 units apart.
   const all = DC.partySeats(a).concat(lawn.flatMap(l => l.spots));
-  for (const p of DC.ringSpots(a, 35, 7)) { if (extra.length >= 12) break;
+  for (const p of DC.ringSpots(a, 60, 7)) { if (extra.length >= 48) break;
     if (all.concat(extra).some(q => Math.hypot(q.x - p.x, q.y - p.y) < 7) || ptIn(p, DC.boxOf(a.x, a.y, DC.CATALOG.party.foot), 2) || lawn.some(l => ptIn(p, l.box, 3))) continue;
     if (free([p.x - 2, p.y - 2, p.x + 2, p.y + 2], p)) extra.push({ x: p.x, y: p.y }); }
   return { lawn, extra, why }; // why: how often each reason ruled a spot out (for the shots)
@@ -3804,7 +3804,7 @@ function workYardsDraw(ref) {
 // drawn from realT each frame (no state, nothing saved): bites and chewing at the table, a toast now and then, hops on the
 // dance floor, little bubbles on the rug, and the children chasing a ball round their lawn. Plates, the barrel, the lantern
 // poles and the boards / rug are only out on a party evening.
-const PARTY_FX = []; let PARTY_FX_LAST = [];
+const PARTY_FX = []; let PARTY_FX_LAST = [], PARTY_DRAW_LAST = [];
 const PLATE_FOOD = [pix(['.ryR.', 'cEcEc', '.ccc.']), pix(['.oyo.', 'cEcEc', '.ccc.']), pix(['.ppl.', 'cEcEc', '.ccc.'])];
 const PLATE_LEFT = [pix(['..yR.', 'cEcEc', '.ccc.']), pix(['...o.', 'cEcEc', '.ccc.']), pix(['..p..', 'cEcEc', '.ccc.'])];
 const PLATE_DONE = pix(['.....', 'cEyEc', '.ccc.']);
@@ -3819,7 +3819,7 @@ function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a
   if (!d || !a || a.moving || a.home || !partyLive()) return;
   if (!a.pts && !(a.task && a.task.kind === 'party')) return;
   const P = partyPlanNow()[key]; if (!P || Math.hypot(a.x - P.x, a.y - P.y) > 2.5) return;
-  const area = partyArea(), h = partyHash(key), ph = (h % 997) / 997 * 6.283, cut = d.cut || 0, fx = (k, o) => PARTY_FX.push(Object.assign({ k, x: d.x, y: d.y, cut }, o));
+  d.partyKey = key; const area = partyArea(), h = partyHash(key), ph = (h % 997) / 997 * 6.283, cut = d.cut || 0, fx = (k, o) => PARTY_FX.push(Object.assign({ k, x: d.x, y: d.y, cut }, o));
   if (P.act === 'eat') {
     const f = facePose(0, area.y - P.y), col = P.seat % 3, per = 2.4, t = realT / per + col * 0.07, n = Math.floor(t), u = t - n;
     d.row = f.row; d.flip = f.flip; d.fr = 0;
@@ -3836,12 +3836,12 @@ function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a
     d.row = f.row; d.flip = f.flip; d.fr = 0;
     const t = realT / 3.1 + ph, n = Math.floor(t), u = t - n; if (u < 0.42) { d.z = Math.floor(u * 20) % 2; fx('say', { u, icon: (n + h) % 4 }); }
     return; }
-  if (P.act === 'play') { // round and round the lawn after the ball
+  if (P.act === 'play') { // pass the ball from fixed places: no children running through one another or the diners
     const L = partyLawnNow().lawn.find(l => l.kind === 'play'); if (!L) return;
-    const i = Math.max(0, L.spots.findIndex(p => Math.abs(p.x - P.x) < 0.1 && Math.abs(p.y - P.y) < 0.1)), w = realT * 1.25 + i * 2.094;
-    const rx = L.tall ? 3 : 7, ry = L.tall ? 8 : 3.2; d.x = L.x + Math.cos(w) * rx; d.y = L.y + Math.sin(w) * ry; const f = facePose(-Math.sin(w) * rx, Math.cos(w) * ry);
-    d.row = f.side ? 'walk_side' : f.row === 'idle_front' ? 'walk_front' : 'walk_back'; d.flip = f.flip; d.fr = Math.floor(realT * 9 + i) % 4; d.z = 0;
-    return; }
+    const f = facePose(L.x - P.x, L.y - P.y), beat = Math.sin(realT * 3 + ph);
+    d.row = f.side ? 'walk_side' : f.row === 'idle_front' ? 'walk_front' : 'walk_back'; d.flip = f.flip;
+    d.fr = Math.floor(realT * 4 + ph) % 4; d.z = Math.round(Math.max(0, beat) * 2); return;
+  }
 }
 function partyList(list) { // plates under the diners, the barrel, the lantern poles, the ball
   if (!partyProps()) return; const area = partyArea(), L = partyLawnNow(), live = partyLive(), T = S.t % 1440;
@@ -3851,7 +3851,7 @@ function partyList(list) { // plates under the diners, the barrel, the lantern p
   for (const k of Object.keys(plan)) { const P = plan[k]; if (!P || P.act !== 'eat' || !here(k)) continue; const s = P.seat;
     list.push({ spr: u < 0.45 ? PLATE_FOOD[s % 3] : u < 0.85 ? PLATE_LEFT[s % 3] : PLATE_DONE, x: P.x, y: area.y + (P.y < area.y ? -1.2 : 1.2), lift: 5, at: area }); }
   const play = L.lawn.find(l => l.kind === 'play');
-  if (play && Object.keys(plan).some(k => plan[k] && plan[k].act === 'play' && here(k))) { const w = realT * 1.25 + 0.75; PARTY_FX.push({ k: 'ball', x: play.x + Math.cos(w) * (play.tall ? 3 : 7), y: play.y + Math.sin(w) * (play.tall ? 8 : 3.2), z: Math.abs(Math.sin(realT * 6)) * 6 }); }
+  if (play && Object.keys(plan).some(k => plan[k] && plan[k].act === 'play' && here(k))) { const u = (Math.sin(realT * 2.2) + 1) / 2, a = play.spots[0], b = play.spots[1]; PARTY_FX.push({ k: 'ball', x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, z: Math.abs(Math.sin(realT * 4.4)) * 6 }); }
 }
 function partyGround() { // the dance floor's boards and the picnic rug, flat on the grass under everyone
   if (!partyProps()) return; const L = partyLawnNow().lawn; if (!L.length) return;
@@ -4770,6 +4770,7 @@ function render() {
     if (o.spr) { drawSpr(ctx, o, poseT); continue; }
     drawStack(ctx, o.m, o.x, o.y, o.z || 0, o.rot || 0); tick(o.m.w * o.m.d * o.m.h >= 3000 ? 'o.big' : 'o.small');
   }
+  PARTY_DRAW_LAST = list.filter(o => o.partyKey);
   tick('objects');
   fogUpdate(); drawFog(); tick('fog');
   if (farmerD && !fogHid(farmerD.x, farmerD.y)) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
@@ -5569,7 +5570,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
-  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
+  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
 Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------

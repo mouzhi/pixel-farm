@@ -55,10 +55,13 @@
   }
   const guestCount = r => (r() < PARTY.guests ? 1 + (r() < 0.5 ? 1 : 0) : 0);
   const partyOn = T => T >= PARTY.from && T < PARTY.to;
-  // v5.11.0.15: where people stand round the (longer) table: three on the far bench, two on the near one, staggered and
-  // 8 units apart, so no two people overlap on screen (one person is about 7 units wide); the rest of the party is on the lawn
-  const SEATS = [[-8, -4.6], [0, -4.6], [8, -4.6], [-4, 4.6], [4, 4.6]];
+  // One dining row: opposing benches overlapped because sprites are taller than the projected table depth.
+  // Two full-width places stay readable at the normal camera and quarter-turn views; everyone else rotates through the lawn.
+  const SEATS = [[-6.5, -5.5], [6.5, -5.5]];
   const partySeats = c => SEATS.map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy }));
+  // Conservative adult silhouette (20 x 26 framebuffer pixels), tested at the normal and nearby camera angles.
+  function partyClear(a, b) { const dx = a.x - b.x, dy = a.y - b.y;
+    return [-0.6, 0, 0.25, 0.6].every(t => Math.abs(2 * (dx * Math.cos(t) - dy * Math.sin(t))) >= 20 || Math.abs(1.5 * (dx * Math.sin(t) + dy * Math.cos(t))) >= 26); }
   const POSTS = [[-10.75, -7.25], [10.75, -7.25], [10.75, 7.25], [-10.75, 7.25]]; // the string-light posts
   const partyPosts = c => POSTS.map(([dx, dy]) => ({ x: c.x + dx, y: c.y + dy }));
 
@@ -74,8 +77,8 @@
       tall: { box: [-5, -13, 5, 13], spots: [[-2, -9], [2, 0], [-2, 9]], pole: [3.5, -11.5] } },
     { kind: 'chat', box: [-9, -4.5, 9, 4.5], spots: [[-6, 0.5], [6, 0.5], [0, 3.5]], pole: [-8, -3.5], barrel: [0, -1.5],
       tall: { box: [-5, -10, 5, 10], spots: [[-2.5, -6.5], [2.5, 6.5], [2.5, -1]], pole: [-3.5, -9], barrel: [-1.5, 1.5] } },
-    { kind: 'play', box: [-10, -5, 10, 5], spots: [[-6, -1], [6, 1], [0, 3]], pole: [9, -4], // the children run round it (game.js)
-      tall: { box: [-5.5, -10, 5.5, 10], spots: [[-1, -6], [1, 6], [2, 0]], pole: [-4.5, -9] } },
+    { kind: 'play', box: [-10, -5, 10, 5], spots: [[-7, 0], [7, 0]], pole: [9, -4], // the children run round it (game.js)
+      tall: { box: [-5.5, -10, 5.5, 10], spots: [[-2, -8], [2, 8]], pole: [-4.5, -9] } },
   ];
   // the corners' centres round the area (c): beside it first, then a ring further out; never under the area itself
   const LAWN_AT = [[0, 14], [-11, 25], [11, 25], [24, 0], [-24, 0], [0, -14], [24, 14], [-24, 14], [24, -14], [-24, -14], [0, 26], [36, 0], [-36, 0], [0, -26]];
@@ -85,7 +88,7 @@
   const boxHit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
   // free(box, centre) -> the whole box is plain grass, a short walk from the table; returns [{ kind, x, y, box, spots: [{x, y}], pole: {x, y}, barrel }]
   function partyLawn(c, free) {
-    const out = [], taken = [[c.x - 12.5, c.y - 9, c.x + 12.5, c.y + 9]];
+    const out = [], taken = [[c.x - 15, c.y - 20, c.x + 15, c.y + 20]];
     // each corner lies along x; on a narrow strip it may stand on end instead (`tall`: a short staggered column)
     const turn = L => Object.assign({ kind: L.kind, turned: 1 }, L.tall);
     // order of tries: the tidy spots lying flat, then standing on end, then the grid the same way
@@ -108,14 +111,14 @@
   // c: the area; lawn: partyLawn(); roster: [{ key, kid }] in the order people arrived; extra: spare grass spots for a crowd
   // -> { key: { x, y, act ('eat' | 'dance' | 'chat' | 'play' | 'stand'), seat (table index or -1) } }; no two people share a spot
   function partyPlan(c, lawn, roster, phase, extra) {
-    const seats = partySeats(c).map((p, i) => ({ x: p.x, y: p.y, act: 'eat', seat: i })), tableOrder = [1, 3, 4, 0, 2].map(i => seats[i]);
+    const seats = partySeats(c).map((p, i) => ({ x: p.x, y: p.y, act: 'eat', seat: i })), tableOrder = seats;
     const of = k => { const z = lawn.find(l => l.kind === k); return z ? z.spots.map(p => ({ x: p.x, y: p.y, act: k, seat: -1 })) : []; };
     const dance = of('dance'), chat = of('chat'), play = of('play'), spare = (extra || []).map(p => ({ x: p.x, y: p.y, act: 'stand', seat: -1 }));
     // the grown-ups' round: 17:30 everyone sits down to eat; after that they go two by two, each pair to the next corner
     // (table, dance floor, rug) every hour, so each corner keeps a few people and nobody stays put all evening
     const lists = { eat: tableOrder, dance, chat }, SEQ = ['eat', 'dance', 'chat'];
-    const used = new Set(), out = {};
-    const take = (key, list) => { for (const p of list) if (!used.has(p)) { used.add(p); out[key] = { x: p.x, y: p.y, act: p.act, seat: p.seat }; return true; } return false; };
+    const used = new Set(), occupied = [], out = {};
+    const take = (key, list) => { for (const p of list) if (!used.has(p) && occupied.every(q => partyClear(p, q))) { used.add(p); occupied.push(p); out[key] = { x: p.x, y: p.y, act: p.act, seat: p.seat }; return true; } return false; };
     const kids = roster.filter(r => r.kid), grown = roster.filter(r => !r.kid);
     for (const r of kids) if (!take(r.key, (phase === 1 ? tableOrder.slice().reverse() : []).concat(play, dance, tableOrder, chat, spare))) out[r.key] = null;
     grown.forEach((r, i) => { const a = phase === 0 ? 'eat' : SEQ[((i >> 1) + phase) % 3], rest = SEQ.filter(k => k !== a).map(k => lists[k]);
@@ -191,6 +194,6 @@
   }
 
   const api = { CATALOG, IDS, SHOP_IDS, LAMP_IDS, INV_MAX, PLACED_MAX, ORDERS_MAX, DROPS, rollDrop, GIANT_KEEP, SET_UNLOCK, pageDone,
-    PARTY, special, partyTonight, guestCount, partyOn, partySeats, partyPosts, LAWN, LAWN_AT, partyLawn, PHASES, partyPhase, phaseEnd, phaseStart, partyPlan, boxOf, cellsOf, onGrass, reach, keepsPaths, ringSpots, empty, valid };
+    PARTY, special, partyTonight, guestCount, partyOn, partySeats, partyPosts, partyClear, LAWN, LAWN_AT, partyLawn, PHASES, partyPhase, phaseEnd, phaseStart, partyPlan, boxOf, cellsOf, onGrass, reach, keepsPaths, ringSpots, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFDecor = api;
 })(typeof window !== 'undefined' ? window : globalThis);
