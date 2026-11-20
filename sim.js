@@ -96,6 +96,7 @@
     { id: 'mill', name: '磨坊', icon: 'mill', works: 1, p8: 1, levels: [{ cost: 5000, wood: 120, label: '磨坊', desc: '盖在工坊院里，同时解锁小麦（家人按需要自己种）。2 份小麦磨成 1 袋面粉（卖 60），磨下的麸皮做成 2 捆饲料放进仓库' }] },
     { id: 'jam', name: '果酱铺', icon: 'jam', works: 1, p8: 1, levels: [{ cost: 3500, wood: 80, label: '果酱铺', desc: '盖在工坊院里。家人把草莓、苹果、橘子送进去，2 个熬成 1 罐果酱（卖 80）' }] },
     { id: 'cheese', name: '奶酪坊', icon: 'cheese', works: 1, p8: 1, levels: [{ cost: 4500, wood: 100, label: '奶酪坊', desc: '盖在工坊院里。2 瓶牛奶做成 1 块奶酪（卖 130）' }] },
+    { id: 'pie', name: '苹果派坊', icon: 'jam', works: 1, p8: 1, levels: [{ cost: 4000, wood: 80, label: '苹果派坊', desc: '书屋里学到的配方：1 份面粉和 2 个苹果做成 1 个苹果派（卖 140），给面包房订单用' }] }, // v5.10.9
     { id: 'wheel', name: '水车', icon: 'wheel', works: 1, p8: 1, levels: [{ cost: 1500, wood: 60, label: '修好水车', desc: '动力坝上的水车转起来给农场供电：家人在院子、新地门口和加工坊前立起电灯，离水车不太远的灯夜里会亮，灯下的果树结果快一点' }, { cost: 2500, wood: 80, label: '第二架水车', desc: '再修一架（要第二块动力坝），远处的灯也能亮' }] },
     { id: 'hive', name: '蜂箱', icon: 'hive', works: 1, p8: 1, levels: Array.from({ length: 6 }, (_, i) => ({ cost: 800, wood: 20, label: `第 ${i + 1} 箱`, desc: '放在花甸里（没有花甸时果园坡最多放 2 箱）。家人自己照看，每 2 天收 1 瓶蜂蜜（卖 40），花多时偶尔多一瓶' })) },
     { id: 'coop2', p8: 1, name: '第二鸡舍', icon: 'coop', farm: 1, needs: 'coop', levels: [{ cost: 600, wood: 40, label: '第二鸡舍', desc: '盖在选成「牧场」的新地上，再养 6 只鸡' }] },
@@ -121,7 +122,7 @@
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
     { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : [])] },
     { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
-    { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive'] }, // v5.6.0
+    { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive'] }, // v5.6.0; v5.10.9 pie
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
     ...(YD ? [{ id: 'yard', name: '院子', title: '院子、阿禾的小摊和动物照护', ids: YD.IDS.slice() }] : []), // v5.10.3
     ...(DC ? [{ id: 'decor', name: '装饰', title: '装饰、夜灯和派对区', ids: DC.SHOP_IDS.slice() }] : []), // v5.7.0
@@ -145,7 +146,7 @@
       pets: { cat: lv('cat'), dog: lv('dog') },
       rod: lv('rod'), searod: lv('searod') > 0,
       house: lv('house'), fence: lv('fence') > 0,
-      sprinkler: lv('sprinkler'), mill: lv('mill') > 0, jam: lv('jam') > 0, cheese: lv('cheese') > 0, wheel: lv('wheel'), hive: lv('hive'), // v5.6.0
+      sprinkler: lv('sprinkler'), mill: lv('mill') > 0, jam: lv('jam') > 0, cheese: lv('cheese') > 0, pie: lv('pie') > 0, wheel: lv('wheel'), hive: lv('hive'), // v5.6.0; v5.10.9 pie
       town: TN ? lv('town') > 0 : false, // v5.8.0
       cottage: HM ? lv('cottage') : 0, // v5.9.0
       coop2: lv('coop2') > 0, sty2: lv('sty2') > 0, fold2: lv('fold2') > 0, shed2: lv('shed2') > 0,

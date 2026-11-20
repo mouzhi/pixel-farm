@@ -80,7 +80,7 @@
       if (z === 23) return x >= 1 && x <= 4 && y >= 1 && y <= 4 ? Ink[1] : null;
       if (z === 24) return (x === 2 || x === 3) && (y === 2 || y === 3) ? Ink[1] : null;
       return null; });
-    return { sprinkler, mill, jam, cheese, hive, lamp };
+    return { sprinkler, mill, jam, cheese, pie: jam, hive, lamp };
   }
   // ---------- small pixel icons (products, the lamp's 'too far' mark) ----------
   function makeIcons(x) { const pix = x.pix;
@@ -88,6 +88,7 @@
       flour: pix(['.ccc.', 'ccccc', 'ctctc', 'ccccc', '.ccc.']),
       jam: pix(['.ttt.', '.www.', 'rrrrr', 'rcrrr', 'rrrrr', '.rrr.']),
       cheese: pix(['...yy', '.yyyy', 'yyoyy', 'yyyyy', 'ooooo']),
+      apple_pie: pix(['.ttt.', '.wrw.', 'rrrrr', 'rcrcr', 'rrrrr', '.rrr.']),
       honey: pix(['.sss.', '.www.', 'yyyyy', 'yoyyy', 'yyyyy', '.yyy.']),
       far: pix(['...EE', '..EE.', '.EEEE', '..EE.', '.EE..', 'EE...']),
       bee: pix(['ii', 'yi'], false),

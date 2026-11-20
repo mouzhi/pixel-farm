@@ -12,11 +12,12 @@
   const LOT = { id: 'bakery', x: 483, y: 91, hw: 7, hd: 7, door: P(483, 82), rot: Math.PI, style: 3 };
   const STAND = P(LOT.door.x + 5, LOT.door.y - 3); // where 小桃 stands / the family hands the basket over
   const BOARD = P(LOT.door.x - 6, LOT.door.y + 1); // a little order board by the door, kept clear of L5
-  const UNIT = { flour: 60, jam: 80, cheese: 130, honey: 40, egg: 10, wool: 60, milk: 35, truffle: 45, apple: 12, orange: 15, strawberry: 30, wheat: 14 };
+  const UNIT = { flour: 60, jam: 80, cheese: 130, honey: 40, egg: 10, wool: 60, milk: 35, truffle: 45, apple: 12, orange: 15, strawberry: 30, wheat: 14, apple_pie: 140 };
   const WORD = {
     flour: ['份', '面粉'], jam: ['罐', '果酱'], cheese: ['块', '奶酪'], honey: ['罐', '蜂蜜'],
     egg: ['个', '鸡蛋'], wool: ['团', '羊毛'], milk: ['瓶', '牛奶'], truffle: ['个', '松露'],
     apple: ['个', '苹果'], orange: ['个', '橘子'], strawberry: ['篮', '草莓'], wheat: ['把', '小麦'],
+    apple_pie: ['个', '苹果派'],
   };
   const NAME = Object.fromEntries(Object.keys(WORD).map(id => [id, WORD[id][1]]));
   // each template is [item, min qty, max qty] pairs (two kinds, like the example)
@@ -42,13 +43,14 @@
   const needText = need => need.map(x => { const w = WORD[x.id] || ['', x.id]; return `${x.n} ${w[0]}${w[1]}`; }).join(' + ');
   const have = (need, counts) => need.every(x => (counts[x.id] | 0) >= x.n);
   // two different templates for the day, quantities from the day number (the same after a reload)
-  function offers(day, extra) {
+  function offers(day, extra, more) {
+    const templates = TEMPLATES.concat(Array.isArray(more) && more.length ? more : []);
     const d = day | 0, h = (Math.imul(d + 19, 0x9E3779B1) >>> 0), n = 2 + Math.max(0, extra | 0), idx = [];
-    let i = h % TEMPLATES.length;
-    for (let k = 0; k < n; k++) { idx.push(i); i = (i + 1 + ((h >>> (8 + k * 3)) % (TEMPLATES.length - 1))) % TEMPLATES.length; }
+    let i = h % templates.length;
+    for (let k = 0; k < n; k++) { idx.push(i); i = (i + 1 + ((h >>> (8 + k * 3)) % Math.max(1, templates.length - 1))) % templates.length; }
     return idx.map((ti, k) => {
       const bits = h >>> (k * 10);
-      const need = TEMPLATES[ti].map((row, j) => { const lo = row[1], hi = row[2]; return { id: row[0], n: lo + ((bits >>> (j * 3)) % (hi - lo + 1)) }; });
+      const need = templates[ti].map((row, j) => { const lo = row[1], hi = row[2]; return { id: row[0], n: lo + ((bits >>> (j * 3)) % (hi - lo + 1)) }; });
       return { id: 'o' + k, need, text: needText(need), base: baseOf(need), pay: payOf(need) };
     });
   }
@@ -81,9 +83,9 @@
     return out;
   }
   // a new day: post 2 orders, clear yesterday's pick; auto-accept is applied later once we know the stock
-  function roll(B, day, extra) {
+  function roll(B, day, extra, more) {
     const d = day | 0; if (B.last === d) return B;
-    B.last = d; B.offer = offers(d, extra); B.take = null; B.done = 0; return B;
+    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; return B;
   }
   // pick mode: the player chose `id` (null clears it so auto can run). ignored once today's order is delivered.
   function setTake(B, id) {

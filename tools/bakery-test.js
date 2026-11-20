@@ -33,7 +33,7 @@ ok('lot L6 sits between L5 and the square, in town, clear of buildings, lots, st
 });
 ok('once it is up, five projects take prosperity to 3; 小桃 works in the bakery 8:00–17:00 (her stall still wins on market day)', () => {
   const b = houses(); HL.start(b, 'market', 50); HL.finish(b, 51); assert.strictEqual(HL.prosperity(b), 2);
-  HL.start(b, 'bakery', 51); HL.finish(b, 52); assert.strictEqual(HL.prosperity(b), 3); assert.strictEqual(HL.nextLevelAt(b), null);
+  HL.start(b, 'bakery', 51); HL.finish(b, 52); assert.strictEqual(HL.prosperity(b), 3); assert.deepStrictEqual(HL.nextLevelAt(b), { need: 4 }, 'v5.10.9: school + library (and the two shops) make 4');
   const tao = TN.NEIGHBOURS.find(q => q.id === 'n3');
   assert.strictEqual(HL.bakeryAt(b, tao, 60, 10 * 60).spot, 'bakery');
   assert.strictEqual(HL.bakeryAt(b, tao, 60, 18 * 60), null, 'home in the evening');

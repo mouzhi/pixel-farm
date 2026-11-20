@@ -266,7 +266,7 @@
     if (tabId === 'build' && it.p8) return '第二套棚舍（盖在选成「牧场」的地块里，满员后的新动物住进去）';
     if (tabId === 'build' && it.farm) return '棚子';
     if (tabId === 'works' && it.id === 'sprinkler') return '浇水（装在田边，每台管一排 8 格）';
-    if (tabId === 'works' && ['mill', 'jam', 'cheese'].includes(it.id)) return '加工坊（盖在选成「工坊院」的地块里，家人送原料、取成品）';
+    if (tabId === 'works' && ['mill', 'jam', 'cheese', 'pie'].includes(it.id)) return '加工坊（盖在选成「工坊院」的地块里，家人送原料、取成品）';
     if (tabId === 'works' && it.id === 'wheel') return '水车和路灯（动力坝上的水车点亮附近的路灯）';
     if (tabId === 'works' && it.id === 'hive') return '养蜂（花甸或果园坡）';
     if (tabId === 'decor' && PFDecor.CATALOG[it.id] && PFDecor.CATALOG[it.id].light && it.id !== 'party') return '夜灯（接上水车的电，天一黑自己亮；没电时也能先摆着）';
@@ -279,7 +279,7 @@
     return '';
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
-  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目和农家乐、度假村都不会碰。'; // v5.10.1; v5.10.7 inn; v5.10.8 resort
+  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目、学校、书屋和农家乐、度假村都不会碰。'; // v5.10.1; v5.10.7 inn; v5.10.8 resort; v5.10.9 school
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
   const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'inn' ? !!(G.innView && G.innView() && G.innView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
@@ -448,6 +448,15 @@
         h += `<div class="card${u.maxed ? ' max' : ''}" data-item="smithy:${u.id}">${icon('town')}<div class="ct"><div><b>${esc(u.label)}</b> <span class="lv">${st}</span></div><div class="d">${esc(u.desc)}</div></div><div class="cb">` +
           (u.maxed ? '<span class="done">✓</span>' : `<button class="pbtn" data-sm="buy:${u.id}"${can ? '' : ' disabled'}>${priceChips(u.cost, 0)}</button>${short}`) + '</div></div>';
       }
+    }
+    const sc = v.school; // v5.10.9 学校扩建
+    if (sc) h += `<div class="sec">学校操场（扩建以后，每 14 天一次运动会，孩子们赛跑，家人去看；上学日和好感翻倍）</div>` +
+      `<div class="card" data-item="school">${icon('town')}<div class="ct"><div><b>${sc.sports ? '今天是运动会' : `下一次运动会：第 ${sc.next} 天`}</b></div><div class="d">9:00–15:00 在操场举行。林老师当裁判，书屋阿宁也会来看。</div></div></div>`;
+    const lb = v.library; // v5.10.9 书屋
+    if (lb) {
+      const tips = (lb.hints || []).map(q => esc(q.name) + (q.hint ? '：' + esc(q.hint) : '')).join('；');
+      h += `<div class="sec">书屋（孩子放学顺路看书，和阿宁的好感 +1；图鉴里还没收齐的条目，这里会给一点提示）</div>`;
+      h += `<div class="card" data-item="library">${icon('town')}<div class="ct"><div><b>书屋阿宁的提示</b></div><div class="d">${tips || '图鉴里能提示的条目都看过了'}</div></div></div>`;
     }
     h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
     const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));

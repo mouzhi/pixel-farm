@@ -105,7 +105,7 @@
     }),
   };
   const CROP_IDS = ['carrot', 'cabbage', 'pumpkin', 'strawberry', 'watermelon', 'wheat']; // v5.6.0 wheat (a missing count reads as 0)
-  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed' /* v5.10.2: legacy, refunded on load */, 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town', 'cottage', ...(YD ? YD.IDS : [])]; // levels (shop order); max levels live in sim
+  const UPGRADE_IDS = ['field', 'can', 'shoe', 'hoe', 'basket', 'speed' /* v5.10.2: legacy, refunded on load */, 'strawberry', 'watermelon', 'axe', 'forest', 'east', 'orchard', 'south', 'pasture', 'coop', 'chicken', 'sty', 'pig', 'fold', 'graze', 'sheep', 'shed', 'cow', 'cat', 'dog', 'house', 'fence', 'rod', 'coast', 'searod', 'lumber', 'sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'coop2', 'sty2', 'fold2', 'shed2', ...DC.SHOP_IDS, 'town', 'cottage', ...(YD ? YD.IDS : [])]; // levels (shop order); max levels live in sim
   const ANIMAL_IDS = ['chicken', 'sheep', 'cow', 'pig'], PRODUCT_IDS = ['egg', 'wool', 'milk', 'truffle'], PEN_IDS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']; // v5.6.0 second pens
   const FISH_IDS = ['crucian', 'carp', 'grassc', 'bass', 'koi', 'sardine', 'seabass', 'snapper', 'tuna', 'sword'];
   const FRUIT_IDS = ['apple', 'orange'], FIELD_IDS = ['home', 'east', 'south', ...PL.FIELD_PLOT_IDS], TREE_KINDS = ['wild', 'apple', 'orange'], TREE_STAGES = ['tree', 'stump', 'sapling'];
@@ -113,7 +113,7 @@
   const int = (v, d, lo = 0, hi = 1e15) => Math.round(num(v, d, lo, hi));
   const obj = v => (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
   const seeds = v => { const o = obj(v), out = {}; for (const k of CROP_IDS) out[k] = int(o[k], 0, 0, 1e6); return out; };
-  const WORK_ITEMS = ['flour', 'jam', 'cheese', 'honey']; // v5.6.0 workshop products and honey
+  const WORK_ITEMS = ['flour', 'jam', 'cheese', 'honey', 'apple_pie']; // v5.6.0 workshop products and honey; v5.10.9 苹果派
   const itemOk = ty => WORK_ITEMS.includes(ty) || CROP_IDS.includes(ty) || FRUIT_IDS.includes(ty) || PRODUCT_IDS.includes(ty) || FISH_IDS.includes(ty) || ty === 'flower';
   // v5.1: a basket slot can be a string (including a wildflower) or a surprise item {type, glow, giant, rare}
   function validBasket(list) {

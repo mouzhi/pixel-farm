@@ -45,7 +45,7 @@ ok('the smithy is a board project: 35,000 金 + 100 木材, needs 繁荣度 3; b
   HL.start(b, 'woodshop', 60); assert(/一次只盖一座/.test(HL.canStart(b, 'smithy', rich)));
   HL.finish(b, 61); assert.strictEqual(HL.canStart(b, 'smithy', rich), null);
   HL.start(b, 'smithy', 61); assert.strictEqual(HL.finish(b, 62), 'smithy'); assert(SM.built(b));
-  assert.strictEqual(HL.prosperity(b), 3); assert.strictEqual(HL.nextLevelAt(b), null);
+  assert.strictEqual(HL.prosperity(b), 3); assert.deepStrictEqual(HL.nextLevelAt(b), { need: 2 }, 'v5.10.9: school + library make 繁荣度 4');
   const hammer = HL.NEIGHBOURS.find(q => q.id === 'n8');
   assert.strictEqual(hammer.name, '铁匠阿锤');
   assert(HL.residents(b).some(q => q.id === 'n8'), '阿锤 moves in the morning after');

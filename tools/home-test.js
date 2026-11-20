@@ -95,7 +95,7 @@ ok('sites: only bought 花甸/农田 on ordinary ground; the yard fits inside th
 });
 ok('valid: clamps, unique sites, no shared spouse, a married child lives in their house', () => {
   const bad = { houses: [{ site: 'glade', x: -68, y: 160, built: 60, kid: 'kid0', tiles: [{ t: 1, c: { type: 'carrot', age: 2 } }, { c: { type: 'gold' } }] }, { site: 'glade', x: 0, y: 0 }, { site: 'nowhere', x: 0, y: 0 }],
-    rel: { kid0: { m0: 300, m1: -5, zz: 9 } }, nb: { n0: 12, n9: 4 },
+    rel: { kid0: { m0: 300, m1: -5, zz: 9 } }, nb: { n0: 12, n99: 4 },
     wed: { kid0: { mate: 'm1', day: 70, moved: 70, house: 0 }, kid1: { mate: 'm1', day: 71, moved: 71, house: 0 } }, help: { kid0: { day: 72, n: 9 } }, earn: -1 };
   const v = HM.valid(bad);
   assert.strictEqual(v.houses.length, 1); assert.strictEqual(v.houses[0].tiles.length, 6); assert.deepStrictEqual(v.houses[0].tiles[1], { t: 0, w: 0, c: null });

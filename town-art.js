@@ -15,7 +15,10 @@
     const P = TN.PLAZA, d = Math.hypot(x - P.x, y - P.y), H = S && S.town && S.town.hall, r = root.PFMarket && root.PFMarket.built(H) ? root.PFMarket.PLAZA_R : P.r; // v5.10.3: the market square is bigger
     if (d < r) { const cx = Math.floor((x + 400) / 3), cy = Math.floor((y + 400) / 3), k = hash(cx, cy, 5); // cobbles, a ring of darker stones at the edge
       if (d > r - 1.4) return [St[1], 'dirt']; return [(cx + cy) % 2 ? (k > 0.5 ? St[3] : St[2]) : (k > 0.7 ? St[2] : St[3]), 'dirt']; }
-    if (TN.inRect(x, y, TN.SCHOOLYARD)) { const k = hash(Math.floor(x), Math.floor(y), 9); return [k > 0.8 ? Wd[3] : Wd[4], 'dirt']; }
+    const SC = root.PFSchool, yard = (SC && SC.built(H)) ? SC.YARD : TN.SCHOOLYARD;
+    if (TN.inRect(x, y, yard)) {
+      if (SC && SC.built(H) && SC.onTrack(x, y)) { const k = hash(Math.floor(x), Math.floor(y), 11); return [k > 0.55 ? St[1] : Wd[2], 'dirt']; }
+      const k = hash(Math.floor(x), Math.floor(y), 9); return [k > 0.8 ? Wd[3] : Wd[4], 'dirt']; }
     const k = hash(Math.floor(x / 5), Math.floor(y / 5), 3); return [k > 0.82 ? G[3] : G[2], 'grass'];
   }
 
@@ -296,7 +299,36 @@
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 1, x0: X0 - 1, x1: X1 + 1, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[4] });
       if (r === 'fill') return wall; if (r) return r; return null; });
     const kidShops = { flower: kidShop('flower'), sweet: kidShop('sweet'), tackle: kidShop('tackle') };
-    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops };
+    // v5.10.9: second classroom (style 6) — a smaller school wing, plaster, red roof, door to the south
+    const classroom = B(32, 32, 36, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 3, Y1 = 27, ZW = 14;
+      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+        if (!(front || side || back)) return Ac[0];
+        if (z <= 1) return St[1];
+        if (front && x >= 13 && x <= 18 && z <= 9) return z === 9 ? Wd[2] : (x === 15 || x === 16 ? Wd[1] : Rf[1]);
+        if ((front || back) && z >= 5 && z <= 10 && x >= 4 && x <= 27 && (x - 4) % 6 < 3 && !(x >= 12 && x <= 19)) return z === 10 || z === 5 ? Ac[0] : Wt[3];
+        return z === ZW ? Wd[2] : Ac[0]; }
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1 + 1, fy0: Y0, fy1: Y1, base: Rf[2], line: Rf[1], ridge: Rf[1], trim: Wd[4] });
+      if (r === 'fill') return Ac[0]; if (r) return r; return null; });
+    // v5.10.9: 书屋 (style 7) — plaster, ink-blue roof, books in the windows, a hanging 书 sign
+    const library = B(W2, D2 + 6, 44, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 16;
+      const roof = '#2a4e88', line = '#1a2e58';
+      if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
+        if (!(front || side || back)) return Wd[3];
+        if (z === 0) return St[1];
+        if (front && x >= 12 && x <= 17 && z <= 8) return z === 8 ? Wd[2] : (x === 14 || x === 15 ? Wd[1] : Wd[2]);
+        if ((front || back) && z >= 3 && z <= 8 && ((x >= 3 && x <= 9) || (x >= 20 && x <= 26))) {
+          if (z === 3 || z === 8 || x === 3 || x === 9 || x === 20 || x === 26) return Wd[1];
+          return z <= 5 ? ((x + z) % 3 === 0 ? Rf[2] : (x % 2 ? G[2] : '#d4a04a')) : Wt[3]; } // books on the lower shelf
+        return z === ZW ? Wd[2] : Ac[0]; }
+      if (y === 26 && x >= 10 && x <= 21 && z >= 17 && z <= 22) return (z === 17 || z === 22 || x === 10 || x === 21) ? Wd[1] : (z === 20 ? '#f6ecd0' : '#2a4e88'); // 书 sign
+      const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.15, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1, fy0: Y0, fy1: Y1 - 1, base: roof, line, ridge: line, trim: Wd[4] });
+      if (r === 'fill') return Ac[0]; if (r) return r; return null; });
+    const yardFlag = B(6, 6, 28, (x, y, z) => {
+      if (x === 2 && y === 2 && z <= 26) return St[3];
+      if (z >= 16 && z <= 22 && y === 2 && x >= 3 && x <= 5) return z === 19 ? Ac[0] : Rf[2];
+      return null; });
+    const yardPost = B(4, 4, 14, (x, y, z) => (x >= 1 && x <= 2 && y >= 1 && y <= 2 && z <= 13) ? (z === 13 ? Rf[2] : Wd[2]) : null);
+    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy, classroom, library], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops, yardFlag, yardPost };
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -343,14 +375,24 @@
   function syncHall(force) {
     if (!mounted || !HL) return; const H = S.town && S.town.hall, open = !!(S.eff && S.eff.town);
     const lots = S.town && S.town.lots, path = S.home && S.home.path;
-    const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path]) : ''; if (!force && k === hallKey) return; hallKey = k;
+    const sports = !!(root.PFSchool && H && root.PFSchool.isDay(H, S.day));
+    const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path, sports ? 1 : 0]) : ''; if (!force && k === hallKey) return; hallKey = k;
     for (const q of own.hall) removeFrom(q); own.hall.length = 0; if (!k) return;
     for (const l of HL.LOTS) { const built = !!H.built[l.id], up = H.job && H.job.id === l.id; if (!built && !up) continue;
       own.hall.push(X.addProp(built ? (MD.two[l.style] || MD.two[2]) : MD.scaffold, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id }));
       if (built) { const fy = l.y - l.hd - 3; own.hall.push(X.addProp(MD.flowers, l.x - 10, fy, 0, { xp: 1, town: 'flowers' })); }
       if (built && l.id === 'bakery' && MD.orderBoard) { const BK = root.PFBakery; own.hall.push(X.addProp(MD.orderBoard, (BK && BK.BOARD.x) || (l.door.x - 8), (BK && BK.BOARD.y) || (l.door.y + 1), 0, { xp: 1, town: 'orders' })); }
       if (built && l.id === 'woodshop' && MD.timber) { const WS = root.PFWoodshop; own.hall.push(X.addProp(MD.timber, (WS && WS.PILE.x) || (l.door.x - 7), (WS && WS.PILE.y) || (l.door.y + 1), 0, { xp: 1, town: 'timber' })); }
-      if (built && l.id === 'smithy' && MD.anvil) { const SM = root.PFSmithy; own.hall.push(X.addProp(MD.anvil, (SM && SM.ANVIL.x) || (l.door.x - 6), (SM && SM.ANVIL.y) || (l.door.y + 1), 0, { xp: 1, town: 'anvil' })); } }
+      if (built && l.id === 'smithy' && MD.anvil) { const SM = root.PFSmithy; own.hall.push(X.addProp(MD.anvil, (SM && SM.ANVIL.x) || (l.door.x - 6), (SM && SM.ANVIL.y) || (l.door.y + 1), 0, { xp: 1, town: 'anvil' })); }
+      if (built && l.id === 'library' && MD.orderBoard) { const LB = root.PFLibrary; own.hall.push(X.addProp(MD.orderBoard, (LB && LB.BOARD.x) || (l.door.x - 8), (LB && LB.BOARD.y) || (l.door.y + 1), 0, { xp: 1, town: 'libboard' })); } }
+    const SC = root.PFSchool; // v5.10.9: playground posts and the flag; extra flags on sports day
+    if (SC && H.built.school) {
+      if (MD.yardFlag) own.hall.push(X.addProp(MD.yardFlag, SC.FLAG.x, SC.FLAG.y, 0, { xp: 1, town: 'flag' }));
+      if (MD.yardPost) { const T = SC.TRACK; for (const [dx, dy] of [[T.rx, 0], [-T.rx, 0], [0, T.ry], [0, -T.ry]]) own.hall.push(X.addProp(MD.yardPost, T.cx + dx, T.cy + dy, 0, { xp: 1, town: 'post' })); }
+      const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
+      if (DM && DM.bench) for (const b of SC.BENCHES) own.hall.push(X.addProp(DM.bench, b.x, b.y, 0, { xp: 1, town: 'yardbench' }));
+      if (sports && MD.yardFlag) { own.hall.push(X.addProp(MD.yardFlag, SC.TRACK.cx - 6, SC.TRACK.cy - SC.TRACK.ry, 0, { xp: 1, town: 'flag' })); own.hall.push(X.addProp(MD.yardFlag, SC.TRACK.cx + 6, SC.TRACK.cy - SC.TRACK.ry, 0, { xp: 1, town: 'flag' })); }
+    }
     const MKS = root.PFMarket; // v5.10.3: the market stalls (bare frames while 阿松 is putting them up)
     if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
