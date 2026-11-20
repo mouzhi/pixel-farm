@@ -71,17 +71,18 @@
     // v5.10.3 集市: a market stall (posts, a counter of goods, a back shelf, a striped awning); bare frames while it is going up
     const AWN = [[Rf[2], Ac[0]], [G[3], Ac[0]], [Wt[3], Ac[0]], [Ac[2], Rf[3]], [Rf[3], Ac[0]]];
     const GOODS = { farm: [G[3], Ac[2], Rf[2], G[4] || G[3]], n0: [Wd[3], Ac[2], St[2]], n3: [Wd[4], Wd[3], Ac[0]], n7: [Rf[2], Ac[2], Ac[0], G[3]], n5: [Wt[3], Rf[3], Ac[0], G[2]], v: [St[2], St[1], Wd[2]] };
-    const marketStall = (awn, goods, bare) => B(22, 16, 20, (x, y, z) => {
+    // v5.11.0.9 (房子比例): the same footprint, but the awning now clears the stallholder's hat (it sat at 16-17, a grown-up is 24)
+    const marketStall = (awn, goods, bare) => B(22, 16, 30, (x, y, z) => {
       const post = (x === 2 || x === 19) && (y === 3 || y === 13);
-      if (post && z <= 15) return Wd[1];
-      if (bare) { if ((z === 15) && (y === 3 || y === 13) && x >= 2 && x <= 19) return Wd[3]; if (z <= 1 && y >= 10 && y <= 13 && x >= 3 && x <= 18 && (x % 3)) return Wd[3]; return null; }
-      if (y >= 10 && y <= 13 && x >= 2 && x <= 19 && z <= 6) { if (z === 6) return Wd[3]; return y === 13 ? (x % 5 === 2 ? Wd[1] : Wd[2]) : Wd[1]; }          // the counter
-      if (y >= 10 && y <= 12 && x >= 3 && x <= 18 && (z === 7 || (z === 8 && hash(x, y, 31) > 0.45)) && x % 4 !== 2) return goods[((x >> 2) + y) % goods.length]; // goods in heaps
-      if (y >= 3 && y <= 4 && x >= 3 && x <= 18 && z <= 9) return z === 9 ? Wd[3] : (z % 3 ? null : Wd[2]);                                            // the back shelf
-      if (y >= 3 && y <= 4 && x >= 4 && x <= 17 && (z === 4 || z === 7 || z === 10) && x % 3 !== 0) return goods[(x + z) % goods.length];
-      const az = y < 8 ? 17 : 16; // the awning, tipped to the front, scalloped at its edge
+      if (post && z <= 25) return Wd[1];
+      if (bare) { if ((z === 25) && (y === 3 || y === 13) && x >= 2 && x <= 19) return Wd[3]; if (z <= 1 && y >= 10 && y <= 13 && x >= 3 && x <= 18 && (x % 3)) return Wd[3]; return null; }
+      if (y >= 10 && y <= 13 && x >= 2 && x <= 19 && z <= 8) { if (z === 8) return Wd[3]; return y === 13 ? (x % 5 === 2 ? Wd[1] : Wd[2]) : Wd[1]; }          // the counter
+      if (y >= 10 && y <= 12 && x >= 3 && x <= 18 && (z === 9 || (z === 10 && hash(x, y, 31) > 0.45)) && x % 4 !== 2) return goods[((x >> 2) + y) % goods.length]; // goods in heaps
+      if (y >= 3 && y <= 4 && x >= 3 && x <= 18 && z <= 16) return z === 16 ? Wd[3] : (z % 4 ? null : Wd[2]);                                          // the back shelf
+      if (y >= 3 && y <= 4 && x >= 4 && x <= 17 && (z === 5 || z === 9 || z === 13) && x % 3 !== 0) return goods[(x + z) % goods.length];
+      const az = y < 8 ? 27 : 26; // the awning, tipped to the front, scalloped at its edge
       if (x >= 1 && x <= 20 && y >= 1 && y <= 15 && z === az) return ((x >> 1) & 1) ? awn[0] : awn[1];
-      if (y === 15 && x >= 1 && x <= 20 && z === 15 && !((x >> 1) & 1)) return awn[0];
+      if (y === 15 && x >= 1 && x <= 20 && z === 25 && !((x >> 1) & 1)) return awn[0];
       return null; });
     const stalls = HL && root.PFMarket ? root.PFMarket.STALLS.map(st => marketStall(AWN[st.awn % AWN.length], GOODS[st.who] || GOODS.v, false)) : [];
     const stallFrame = marketStall(AWN[0], GOODS.v, true);
