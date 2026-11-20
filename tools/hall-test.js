@@ -59,7 +59,7 @@ ok('the weekly paper reads like a few lines of news', () => {
 ok('valid(): junk in, a clean hall out; unknown projects and the party table dropped; a job on a built lot dropped', () => {
   assert.deepStrictEqual(HL.valid(undefined), HL.empty()); assert.deepStrictEqual(HL.valid([1, 2]), HL.empty());
   const v = HL.valid({ built: { L5: 12, X9: 3 }, job: { id: 'L5', day: 12 }, gifts: ['bench', 'party', 7, 'lamppost'], paper: 63, week: { built: ['L5', 'zz'], gifts: 2, trade: 50 } });
-  assert.deepStrictEqual(v, { built: { L5: 12 }, job: null, gifts: ['bench', 'lamppost'], paper: 63, week: { built: ['L5'], gifts: 2, trade: 50 }, market: require('../market.js').empty(), bakery: require('../bakery.js').empty(), woodshop: require('../woodshop.js').empty(), smithy: require('../smithy.js').empty(), school: require('../school.js').empty(), library: require('../library.js').empty() });
+  assert.deepStrictEqual(v, { built: { L5: 12 }, job: null, gifts: ['bench', 'lamppost'], paper: 63, week: { built: ['L5'], gifts: 2, trade: 50 }, market: require('../market.js').empty(), bakery: require('../bakery.js').empty(), woodshop: require('../woodshop.js').empty(), smithy: require('../smithy.js').empty(), school: require('../school.js').empty(), library: require('../library.js').empty(), clinic: require('../clinic.js').empty() });
   assert.deepStrictEqual(HL.valid({ job: { id: 'L8', day: 5 } }).job, { id: 'L8', day: 5 });
 });
 ok('save: no version bump; every fixture gains an empty hall inside `town`, nothing else changes; a hall round-trips', () => {
@@ -67,7 +67,7 @@ ok('save: no version bump; every fixture gains an empty hall inside `town`, noth
     const s = SAVE.migrate(JSON.parse(JSON.stringify(FIX(f)))); const v = SAVE.validate(s);
     assert.strictEqual(v.saveVersion, SAVE.CURRENT, f); assert.deepStrictEqual(v.town.hall, HL.empty(), f);
     const t = Object.assign({}, v.town); delete t.hall; assert.deepStrictEqual(t, TN.valid(s.town), f + ': the rest of town as before');
-    v.town.hall = { built: { L5: 60, L8: 61 }, job: { id: 'L11', day: 62 }, gifts: ['lamppost', 'bench'], paper: 58, week: { built: ['L5', 'L8'], gifts: 2, trade: 120 }, market: { pick: 1, take: { crops: 1, fruit: 0, animals: 1, fish: 1, goods: 0 }, days: 3, gold: 4000, extra: 700, last: 56 }, bakery: { pick: 1, days: 4, gold: 2400, extra: 800, last: 70, offer: [{ id: 'o0', need: [{ id: 'flour', n: 6 }, { id: 'egg', n: 4 }], text: '6 份面粉 + 4 个鸡蛋', base: 400, pay: 600 }], take: 'o0', done: 1 }, woodshop: { auto: 1, days: 2, used: 80, last: 71, made: 0 }, smithy: { up: { water: 1, works: 0, axe: 2, rod: 0, cart: 1 } }, school: { last: 0 }, library: { days: 0, last: 0 } };
+    v.town.hall = { built: { L5: 60, L8: 61 }, job: { id: 'L11', day: 62 }, gifts: ['lamppost', 'bench'], paper: 58, week: { built: ['L5', 'L8'], gifts: 2, trade: 120 }, market: { pick: 1, take: { crops: 1, fruit: 0, animals: 1, fish: 1, goods: 0 }, days: 3, gold: 4000, extra: 700, last: 56 }, bakery: { pick: 1, days: 4, gold: 2400, extra: 800, last: 70, offer: [{ id: 'o0', need: [{ id: 'flour', n: 6 }, { id: 'egg', n: 4 }], text: '6 份面粉 + 4 个鸡蛋', base: 400, pay: 600 }], take: 'o0', done: 1 }, woodshop: { auto: 1, days: 2, used: 80, last: 71, made: 0 }, smithy: { up: { water: 1, works: 0, axe: 2, rod: 0, cart: 1 } }, school: { last: 0 }, library: { days: 0, last: 0 }, clinic: { last: 0 } };
     const back = SAVE.validate(JSON.parse(JSON.stringify(v))); assert.deepStrictEqual(back.town.hall, v.town.hall, f + ' round trip');
   }
 });

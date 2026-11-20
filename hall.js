@@ -14,6 +14,7 @@
   const SM = (typeof require === 'function' && typeof document === 'undefined') ? require('./smithy.js') : root.PFSmithy; // v5.10.5
   const SC = (typeof require === 'function' && typeof document === 'undefined') ? require('./school.js') : root.PFSchool; // v5.10.9
   const LB = (typeof require === 'function' && typeof document === 'undefined') ? require('./library.js') : root.PFLibrary; // v5.10.9
+  const CL = (typeof require === 'function' && typeof document === 'undefined') ? require('./clinic.js') : root.PFClinic; // v5.10.10
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
   const BOARD = P(HALL.x - 9, HALL.y + HALL.hd + 12);       // the notice board: in front of the hall, beside its path
@@ -30,6 +31,7 @@
     { id: 'smithy', x: 606, y: 134, hw: 7, hd: 7, door: P(606, 127), rot: Math.PI, style: 5 }, // v5.10.5: 铁匠阿锤's forge (coords live in smithy.js too)
     Object.assign({ style: 6 }, SC ? SC.LOT : { id: 'school', x: 618, y: 26, hw: 8, hd: 8, door: P(618, 36), rot: 0 }),
     Object.assign({ style: 7 }, LB ? LB.LOT : { id: 'library', x: 622, y: 118, hw: 7, hd: 7, door: P(622, 109), rot: Math.PI }),
+    Object.assign({ style: 8 }, CL ? CL.LOT : { id: 'clinic', x: 600, y: 87, hw: 8, hd: 7, door: P(600, 78), rot: Math.PI }),
   ];
   const LOT = Object.fromEntries(LOTS.map(l => [l.id, l]));
   const PROJECTS = [
@@ -47,9 +49,11 @@
     // v5.10.9: 学校扩建 + 书屋 (school.js / library.js): playground, sports day every 14 days, reading after school
     { id: 'school', name: '学校扩建', desc: '操场和第二间教室。每 14 天一次运动会，孩子们赛跑，家人去看；上学日的好感翻倍', cost: 40000, wood: 200, lv: 3, kind: 'school' },
     { id: 'library', name: '书屋', desc: '书屋阿宁在东街开馆。孩子放学顺路看书（上学日 +1）；图鉴里还没收集到的条目给出提示；解锁苹果派配方给面包房订单用', cost: 25000, wood: 150, lv: 3, kind: 'library', who: 'n9' },
-  ];
+    // v5.10.10: 诊所 + 老房翻盖 (clinic.js): monthly checkup, mood floor, streets paved at 繁荣度 5
+    { id: 'clinic', name: '诊所', desc: '苏大夫在东街开诊所。动物和猫狗心情的下限更高；每月来家里做一次体检，开心值 +。不做生病', cost: 30000, wood: 0, lv: 4, kind: 'clinic', who: 'n10' },
+  ].concat(CL && CL.REBUILDS ? CL.REBUILDS : []);
   const PROJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
-  const LEVELS = [0, 3, 5, 9];                              // 繁荣度 1, 2, 3, 4 (v5.10.4: bakery is the 5th; v5.10.5 shops stay at 3; v5.10.9 school + library make 9 → 4)
+  const LEVELS = [0, 3, 5, 9, 15];                          // 繁荣度 1–5 (v5.10.9 school + library make 9 → 4; v5.10.10 clinic + 5 rebuilds make 15 → 5)
   const LV_NAME = ['', '小镇', '热闹的小镇', '繁华的小镇', '大镇子', '远近闻名'];
   const prosperity = st => { const n = Object.keys((st && st.built) || {}).length; let lv = 1; for (let i = 1; i < LEVELS.length; i++) if (n >= LEVELS[i]) lv = i + 1; return lv; };
   const nextLevelAt = st => { const n = Object.keys((st && st.built) || {}).length; const nx = LEVELS.find(t => t > n); return nx === undefined ? null : { need: nx - n }; };
@@ -58,7 +62,8 @@
   const SPOTS = { hall: P(HALL.door.x + 5, HALL.door.y + 4), board: P(BOARD.x + 3, BOARD.y + 5), plaza2: P(TN.PLAZA.x - 14, TN.PLAZA.y - 6),
     street2: P(600, 72), street3: P(478, 72), L11shop: P(LOT.L11.door.x + 6, LOT.L11.door.y - 2), square: P(TN.PLAZA.x + 4, TN.PLAZA.y + 17), bakery: BK ? BK.STAND : P(490, 79),
     woodshop: WS ? WS.STAND : P(576, 139), smithy: SM ? SM.STAND : P(608, 139),
-    library: LB ? LB.STAND : P(626, 106), yard: SC ? SC.WATCH : P(606, 44) };
+    library: LB ? LB.STAND : P(626, 106), yard: SC ? SC.WATCH : P(606, 44),
+    clinic: CL ? CL.STAND : P(606, 76) };
   const NEIGHBOURS = [
     { id: 'n4', name: '镇长老顾', look: 'townE', home: 'h5', plan: [[8 * 60 + 30, 12 * 60, 'hall'], [13 * 60, 17 * 60, 'hall'], [17 * 60 + 30, 19 * 60 + 30, 'square']] },
     { id: 'n5', name: '裁缝阿梅', look: 'townF', lot: 'L5', plan: [[8 * 60, 11 * 60, 'plaza2'], [14 * 60, 17 * 60, 'board'], [18 * 60 + 30, 20 * 60 + 30, 'plaza2']] },
@@ -66,6 +71,7 @@
     { id: 'n7', name: '花匠秋姨', look: 'townH', lot: 'L11', plan: [[8 * 60 + 30, 17 * 60 + 30, 'L11shop'], [18 * 60, 20 * 60, 'square']] },
     { id: 'n8', name: '铁匠阿锤', look: 'townI', lot: 'smithy', plan: [[8 * 60, 17 * 60, 'smithy'], [18 * 60, 20 * 60, 'square']] }, // v5.10.5
     { id: 'n9', name: '书屋阿宁', look: 'townJ', lot: 'library', plan: [[9 * 60, 17 * 60, 'library'], [18 * 60, 20 * 60, 'square']] }, // v5.10.9
+    { id: 'n10', name: '苏大夫', look: 'townK', lot: 'clinic', plan: [[8 * 60, 17 * 60, 'clinic'], [18 * 60, 20 * 60, 'square']] }, // v5.10.10
   ];
   const doorOf = n => (n.lot ? LOT[n.lot].door : TN.BY_ID[n.home].door);
   // who lives in town now (the mayor always; a family once its house is built)
@@ -111,7 +117,14 @@
   }
   // 木匠阿松 works on the site while a house is going up (8:00–17:00)
   const BUILD_HOURS = [8 * 60, 17 * 60];
-  const siteSpot = id => { const l = LOT[id]; return l ? P(l.x + l.hw + 3, l.y - l.hd + 2) : id === 'market' ? P(TN.PLAZA.x - 20, TN.PLAZA.y + 4) : null; };
+  const CLINIC_HOURS = [8 * 60, 17 * 60];
+  function clinicAt(st, n, day, T) {
+    if (!CL || !CL.built(st) || n.id !== 'n10') return null; const t = ((T % 1440) + 1440) % 1440;
+    if (t < CLINIC_HOURS[0] || t >= CLINIC_HOURS[1]) return null;
+    return { at: CL.STAND, out: true, spot: 'clinic' }; }
+  const siteSpot = id => { const l = LOT[id]; if (l) return P(l.x + l.hw + 3, l.y - l.hd + 2);
+    if (id === 'market') return P(TN.PLAZA.x - 20, TN.PLAZA.y + 4);
+    const b = TN.BY_ID[id]; return b ? P(b.x + b.hw + 3, b.door.y) : null; };
 
   // ---------- the board: start a project, finish it the next morning ----------
   // ctx: { open (town bought), coins, wood } -> null or why not
@@ -161,6 +174,7 @@
     if (homes) out.push({ x: HALL.door.x, y: HALL.door.y - 1, z: 7, r: 16, s: 0.5 });
     if (st.built.smithy && SM) { // v5.10.5: the forge stays warm; brighter after dark
       const glow = t >= 18 * 60 || t < 6 * 60; out.push({ x: SM.LOT.x, y: SM.LOT.y + 2, z: 4, r: glow ? 22 : 14, s: glow ? 0.95 : 0.55, col: '#e06a2c' }); }
+    if (st.built.clinic && CL && homes) out.push({ x: CL.LOT.door.x, y: CL.LOT.door.y + 1, z: 6, r: 16, s: 0.6 });
     if (lamps && CAT) { const gp = giftPos(st); st.gifts.forEach((id, i) => { const c = CAT[id]; if (c && c.light && gp[i]) out.push({ x: gp[i].x, y: gp[i].y, z: 12, r: c.light, s: 0.85 }); }); }
     return out;
   }
@@ -175,7 +189,7 @@
   }
 
   // ---------- state (saved inside `town` as `hall`; append-only, old saves start with nothing built) ----------
-  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {}, woodshop: WS ? WS.empty() : {}, smithy: SM ? SM.empty() : {}, school: SC ? SC.empty() : {}, library: LB ? LB.empty() : {} }); // v5.10.3–v5.10.9
+  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {}, woodshop: WS ? WS.empty() : {}, smithy: SM ? SM.empty() : {}, school: SC ? SC.empty() : {}, library: LB ? LB.empty() : {}, clinic: CL ? CL.empty() : {} }); // v5.10.3–v5.10.10
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
   const DECOR_ID = /^[a-z_]{2,24}$/;
   function valid(v) {
@@ -190,6 +204,7 @@
     if (SM) out.smithy = SM.valid(o.smithy);
     if (SC) out.school = SC.valid(o.school);
     if (LB) out.library = LB.valid(o.library);
+    if (CL) out.clinic = CL.valid(o.clinic);
     const w = o.week && typeof o.week === 'object' ? o.week : {};
     out.week = { built: Array.isArray(w.built) ? w.built.filter(id => PROJ[id]).slice(0, PROJECTS.length) : [], gifts: int(w.gifts, 0, 99), trade: int(w.trade, 0, 1e9) };
     return out;
@@ -197,6 +212,7 @@
 
   const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, bakeryAt, MARKET_HOURS, BAKERY_HOURS, BUILD_HOURS, siteSpot,
     canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, giftPos, giftRoom, give, PAPER_EVERY, paperText, blocks, empty, valid,
-    woodshopAt, smithyAt, libraryAt, sportsAt, WOOD_HOURS, SMITH_HOURS, LIB_HOURS };
+    woodshopAt, smithyAt, libraryAt, sportsAt, clinicAt, CLINIC_HOURS, WOOD_HOURS, SMITH_HOURS, LIB_HOURS,
+    paved: st => !!(CL && CL.paved(st)) };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHall = api;
 })(typeof window !== 'undefined' ? window : globalThis);

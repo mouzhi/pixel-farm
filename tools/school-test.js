@@ -53,7 +53,7 @@ ok('building both takes prosperity 3 → 4; woodshop and smithy stay at 3 until 
   assert.strictEqual(HL.prosperity(st), 3); assert.deepStrictEqual(HL.nextLevelAt(st), { need: 1 });
   assert.strictEqual(SC.built(st), true); assert.strictEqual(SC.favorMul(st), 2);
   HL.start(st, 'library', 71); HL.finish(st, 72);
-  assert.strictEqual(HL.prosperity(st), 4); assert.strictEqual(HL.nextLevelAt(st), null);
+  assert.strictEqual(HL.prosperity(st), 4); assert.deepStrictEqual(HL.nextLevelAt(st), { need: 6 }, 'v5.10.10: clinic + 5 rebuilds make 繁荣度 5');
   assert.strictEqual(HL.LV_NAME[4], '大镇子');
 });
 

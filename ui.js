@@ -279,7 +279,7 @@
     return '';
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
-  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目、学校、书屋和农家乐、度假村都不会碰。'; // v5.10.1; v5.10.7 inn; v5.10.8 resort; v5.10.9 school
+  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目、学校、书屋、诊所、翻盖、铺路和农家乐、度假村都不会碰。'; // v5.10.1; v5.10.7–v5.10.10
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
   const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'inn' ? !!(G.innView && G.innView() && G.innView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
@@ -458,6 +458,9 @@
       h += `<div class="sec">书屋（孩子放学顺路看书，和阿宁的好感 +1；图鉴里还没收齐的条目，这里会给一点提示）</div>`;
       h += `<div class="card" data-item="library">${icon('town')}<div class="ct"><div><b>书屋阿宁的提示</b></div><div class="d">${tips || '图鉴里能提示的条目都看过了'}</div></div></div>`;
     }
+    const cl = v.clinic; // v5.10.10 诊所
+    if (cl) h += `<div class="sec">诊所（动物和猫狗心情下限 ${cl.floor}；每月一次体检，开心值 +。不做生病）${cl.paved ? ' · 路面已铺石板' : ''}</div>` +
+      `<div class="card" data-item="clinic">${icon('town')}<div class="ct"><div><b>${cl.next ? `下一次体检：第 ${cl.next} 天` : '诊所已经开张'}</b></div><div class="d">苏大夫 8:00–17:00 在诊所。铺上石板要先把五座老房子都翻成二层。</div></div></div>`;
     h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
     const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));
     if (!rows.length) h += `<div class="more">仓库和院子里还没有能送的装饰（派对区留在家里）</div>`;
