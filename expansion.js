@@ -277,7 +277,8 @@
   function rezonePlot(id, mod) {
     const o = PL.rezoneOffer(S.plots, id, mod, S.coins, X.FARMER.wood); if (!o) return { ok: false, reason: 'unknown' }; if (!o.ok) return o;
     const busy = X.plotBusy && X.plotBusy(id); if (busy) return Object.assign({}, o, { ok: false, reason: 'busy', why: busy }); // v5.6.0: workshops, hives or second pens stand on it
-    pay(o); const back = clearPlot(id, o.from); S.plots[id] = { mod, day: S.day };
+    pay(o); if (X.plotVacate) X.plotVacate(id, mod); // v5.10.12: a 工坊院's workshops move to another yard or into the storehouse first
+    const back = clearPlot(id, o.from); S.plots[id] = { mod, day: S.day };
     S.coins += back.gold; X.FARMER.wood = Math.min(X.woodCap(), (X.FARMER.wood || 0) + back.wood);
     const p = o.plot; X.log(`「${p.name}」从${PL.MODULES[o.from].name}改成了${PL.MODULES[mod].name}（${o.cost} 金）${back.gold ? '，地里的庄稼折了 ' + back.gold + ' 金' : ''}${back.wood ? '，砍下的树得了 ' + back.wood + ' 木材' : ''}`);
     X.popText(p.sign.x, p.sign.y, 22, '-' + o.cost, '#ffd76a');
