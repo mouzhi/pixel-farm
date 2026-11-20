@@ -79,6 +79,7 @@ html.xhs-mobile #storeBtn,
 html.xhs-mobile #codexBtn,
 html.xhs-mobile #diaryBtn,
 html.xhs-mobile #mapBtn,
+html.xhs-mobile #mmJump,
 html.xhs-mobile #speed { display: none !important; }
 
 html.xhs-mobile #day, html.xhs-mobile #clock { font-size: 12px; }
@@ -730,3 +731,7 @@ html.xhs-mobile #diary .page { background: repeating-linear-gradient(#f6e7c4 0 2
 html.xhs-mobile #diary .days { gap: 6px; }
 html.xhs-mobile #diary .days .pbtn { min-height: 36px; padding: 2px 8px; font-size: 13px; }
 html.xhs-mobile #diary .note { font-size: 12px; }
+
+/* v5.11.x port: the web's right dock (nav buttons, minimap, 家/农家乐/小镇/海边 jump row) is all hidden or moved on the phone;
+   collapse the empty grid cell so it does not sit as an invisible box under the host's top-right buttons */
+html.xhs-mobile #rightDock { width: 0; min-width: 0; overflow: visible; }
