@@ -48,11 +48,11 @@ fs.mkdirSync(OUT, { recursive: true });
     return { tab: !!t, card: !!c, text: c ? c.textContent.replace(/\\s+/g, ' ').slice(0, 160) : '' }; })()`, r => !r.card ? 'no card' : !/隔壁镇子/.test(r.text) || !/上过一天学/.test(r.text) ? 'card text' : null);
   // 3. bought: the gate opens; the town with its school, shop, houses, square and neighbours out by the clock
   await shot('v580_town.png', `(() => { ${setup} dry(); const ok = openTown(); at(10 * 60); f.advance(2, 10); until(() => f.NEIGH.filter(n => n.out && !n.moving).length >= 3, 400);
-    look(540, 66, 0); return { ok, eff: S.eff.town, open: f.TA.state().gate === 1 && !f.TA.state().inProps, out: f.NEIGH.filter(n => n.out).map(n => n.name), coins: S.coins }; })()`,
+    look(780, 60, 0); return { ok, eff: S.eff.town, open: f.TA.state().gate === 1 && !f.TA.state().inProps, out: f.NEIGH.filter(n => n.out).map(n => n.name), coins: S.coins }; })()`,
     r => !r.ok || !r.eff ? 'buy' : !r.open ? 'gate' : r.out.length < 3 ? 'neighbours ' + r.out : null);
   // 4. a school morning with the town open: the child walks the road, in at the gate, across to the school door
   await shot('v580_school_town.png', `(() => { ${setup} dry(); openTown(); at(7 * 60 + 50); until(() => kid().task && kid().task.kind === 'school-go', 300);
-    until(() => kid().x > 520 || kid().away, 1500); const k = kid(); look(560, 56, 0.3); return { pos: [Math.round(k.x), Math.round(k.y)], inTown: f.TN.inTown(k.x, k.y) }; })()`,
+    until(() => kid().x > 520 || kid().away, 1500); const k = kid(); look(640, 56, 0.3); return { pos: [Math.round(k.x), Math.round(k.y)], inTown: f.TN.inTown(k.x, k.y) }; })()`,
     r => !r.inTown ? 'not in town ' + r.pos : !/镇上的学校/.test(r.log[0] || '') ? 'no school log' : r.away !== 'school' ? 'never got to school' : Math.hypot(r.at[0] - r.door.x, r.at[1] - r.door.y) > 2 ? 'not at the school door ' + r.at : r.home !== true ? 'not home after school' : null,
     `until(() => kid().away === 'school', 600); const at_ = [Math.round(kid().x), Math.round(kid().y)], away = kid().away; until(() => tod() >= 16 * 60, 3000);
     return { away, at: at_, door: f.TN.SCHOOL_DOOR, home: !kid().away && kid().x < 360, log: S.events.map(e => e.msg).filter(l => /学校/.test(l)).slice(0, 1) };`);

@@ -38,14 +38,14 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // 1. the market goes up: bare stall frames the first day, six stalls and a bigger square the next morning
   await shot('v5103_market_build.png', `(() => { ${setup} ${houses} const lock0 = f.hallView().projects.find(p => p.id === 'market').why;
-    const c0 = S.coins, r = f.hallStart('market'), frames = ${stalls()}, paid = c0 - S.coins; if (!r.ok) return { r, built: S.town.hall.built, job: S.town.hall.job, day: S.day }; nextMorning(); at(9 * 60); f.advance(1, 10); look(524, 100, 0);
+    const c0 = S.coins, r = f.hallStart('market'), frames = ${stalls()}, paid = c0 - S.coins; if (!r.ok) return { r, built: S.town.hall.built, job: S.town.hall.job, day: S.day }; nextMorning(); at(9 * 60); f.advance(1, 10); look(650, 118, 0);
     return { lock0, r, frames, paid, stalls: ${stalls()}, built: S.town.hall.built.market, next: f.marketView().next, log: S.events.map(e => e.msg).filter(m => /集市/.test(m)).slice(0, 3) }; })()`,
     r => !r.r.ok ? 'start ' + JSON.stringify(r.r) : r.paid !== 30000 ? 'paid ' + r.paid : r.frames !== 6 || r.stalls !== 6 ? 'stalls ' + r.frames + '/' + r.stalls : !r.built ? 'not built' : r.next % 7 ? 'next ' + r.next : null);
   // 2. market day: neighbours at their stalls, pedlars and shoppers on the square, a grown-up sells the basket at the family's stall
   await shot('v5103_market_day.png', `(() => { ${setup} ${houses} f.hallStart('market'); nextMorning(); const nx = f.marketView().next; day(nx); at(6 * 60 + 50); f.advance(1, 10);
     const add = ['carrot', 'carrot', 'carrot', 'egg', 'egg', 'carrot']; f.FARMER.crops.length = 0; f.FARMER.crops.push(...add); const c0 = S.coins;
     until(() => S.events.some(e => /在集市上卖了/.test(e.msg)), 900); const after = S.coins - c0;
-    at(10 * 60); f.advance(3, 10); until(() => f.NEIGH.filter(q => /^stall:/.test(q.spot) && !q.moving).length >= 4, 600); look(524, 104, 0);
+    at(10 * 60); f.advance(3, 10); until(() => f.NEIGH.filter(q => /^stall:/.test(q.spot) && !q.moving).length >= 4, 600); look(650, 118, 0);
     return { day: S.day, isDay: f.marketDay(), at: f.NEIGH.filter(q => /^stall:/.test(q.spot)).map(q => q.name + ':' + q.spot), crowd: f.marketCrowd().length, after, left: f.FARMER.crops.length, mv: f.marketView(),
       log: S.events.map(e => e.msg).filter(m => /集市/.test(m)).slice(0, 4) }; })()`,
     r => !r.isDay ? 'not market day' : r.at.length < 4 ? 'stall keepers ' + r.at : r.crowd < 6 ? 'crowd ' + r.crowd : !(r.mv.days >= 1 && r.mv.extra > 0) ? 'no sale ' + JSON.stringify(r.mv) : null);
@@ -56,7 +56,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return { pick: v.pick, fish: v.take.fish, kinds: sh.querySelectorAll('[data-mk^="take:"]').length, txt: (sh.querySelector('[data-item="market"]') || {}).textContent }; })()`,
     r => r.pick !== 1 || r.fish !== 0 || r.kinds !== 5 ? JSON.stringify(r) : null);
   // 3b. market night: the square at dusk, stalls under the lamps
-  await shot('v5103_market_night.png', `(() => { ${setup} ${houses} f.hallStart('market'); nextMorning(); at(20 * 60 + 30); f.advance(1, 10); look(524, 100, 0); return { stalls: ${stalls()} }; })()`, r => r.stalls !== 6 ? 'stalls ' + r.stalls : null);
+  await shot('v5103_market_night.png', `(() => { ${setup} ${houses} f.hallStart('market'); nextMorning(); at(20 * 60 + 30); f.advance(1, 10); look(650, 118, 0); return { stalls: ${stalls()} }; })()`, r => r.stalls !== 6 ? 'stalls ' + r.stalls : null);
   // 4. the yard things (v5.10.3): bought in the 「院子」 tab, the family sets them up; effects; the decor slots stay free
   const yardAll = `for (const id of ['cat', 'cat', 'dog', 'dog', 'sty', 'shed']) f.buy(id); const okSlots = () => ['lamppost', 'flowerpot', 'bench', 'scarecrow'].map(id => f.slotWhy(id).filter(q => !q[2]).length).join('/');
     const slots0 = okSlots(), auto0 = S.autoBuy; S.autoBuy = true; const bought = {}, c0 = S.coins;
@@ -109,7 +109,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { day: s.clock.day, market: s.town.hall.market, coins: s.coins, decor: S.decor.placed.length, counts: c, layout: f.snapshot().settings.decorLayout }; })()`,
       r => r.day !== save.clock.day ? 'day' : !r.market || r.market.pick !== 0 ? 'market ' + JSON.stringify(r.market) : r.layout !== 2 ? 'layout flag' : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'decor counts ' + JSON.stringify(r.counts) + ' vs ' + JSON.stringify(want) : null, save); }
   for (const REAL of [process.env.PF_REAL_SAVE, process.env.PF_FRIEND_SAVE].filter(Boolean)) if (fs.existsSync(REAL)) { const save = readSave(REAL), tag = REAL === process.env.PF_REAL_SAVE ? 'realsave' : 'friendsave';
-    await shot(`v5103_${tag}.png`, `(() => { const f = __farm, S = f.S; const s = f.snapshot(); f.advance(2, 10); f.setAngle(0); f.panTo(540, 90); f.advance(0.3, 10);
+    await shot(`v5103_${tag}.png`, `(() => { const f = __farm, S = f.S; const s = f.snapshot(); f.advance(2, 10); f.setAngle(0); f.panTo(650, 110); f.advance(0.3, 10);
       return { day: s.clock.day, town: !!(S.eff && S.eff.town), market: s.town.hall.market, view: f.hallView() && f.hallView().projects.map(p => p.id + ':' + (p.why || 'ok')), decor: S.decor.placed.length }; })()`, r => r.day !== save.clock.day ? 'day' : null, save); }
   // 10. (local only) the real save with every yard thing bought: set up beside the laid-out decorations, nothing moved
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) { const save = readSave(process.env.PF_REAL_SAVE);

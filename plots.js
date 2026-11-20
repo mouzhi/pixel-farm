@@ -44,7 +44,7 @@
   const BRIDGE = { x: 24, y0: 302, y1: 330, hw: 5 };
   // The ridge: a cliff edge running along the north of the map, bending down at the west and east corners. North of it is
   // the high plateau, reached only by the mountain trail.
-  function ridgeY(x) { return -158 + Math.sin(x * 0.045) * 4 + Math.sin(x * 0.013 + 1) * 3 + Math.max(0, -170 - x) * 1.1 + Math.max(0, Math.min(x, 470) - 352) * 0.45; } // v5.8.0: level off past the old map edge (the town strip)
+  function ridgeY(x) { return -158 + Math.sin(x * 0.045) * 4 + Math.sin(x * 0.013 + 1) * 3 + Math.max(0, -170 - x) * 1.1 + Math.max(0, Math.min(x, 470) - 352) * 0.45 - Math.max(0, Math.min(x, 640) - 530) * 0.12; } // v5.8.0: level off past the old map edge (the town strip); v5.11.0: step back 13 north behind the new town
   const CLIFF = 5; // world units of rock face below the ridge line
   // the trail (dirt, bought as its own special plot): up the gap between 林场 and 北牧场, through the cliff, along the plateau
   const TRAIL = [P(204, -108), P(190, -126), P(214, -144), P(196, -166), P(196, -184)];

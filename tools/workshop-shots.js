@@ -44,7 +44,7 @@ fs.mkdirSync(OUT, { recursive: true });
     nextMorning(); at(10 * 60); f.advance(2, 10);
     until(() => { const a = f.NEIGH.find(q => q.id === 'n2'), h = f.NEIGH.find(q => q.id === 'n8');
       return a && a.spot === 'woodshop' && !a.moving && h && h.spot === 'smithy' && !h.moving; }, 1000);
-    look(587, 132, 0); hide();
+    look(680, 186, 0); hide();
     const song = f.NEIGH.find(q => q.id === 'n2'), hammer = f.NEIGH.find(q => q.id === 'n8');
     const props = (f.props || []).filter(q => q.town === 'woodshop' || q.town === 'smithy' || q.town === 'timber' || q.town === 'anvil').map(q => q.town);
     return { lockW, lockS, rW, rS, paidW, woodW, paidS, woodS, cap: f.woodCap(), lv: f.hallView().lv,
@@ -65,7 +65,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 2. the same shops at night: windows, forge glow, chimney smoke
   await shot('v5105_shops_night.png', `(() => { ${setup} ${readyTown}
     f.hallStart('woodshop'); nextMorning(); f.hallStart('smithy'); nextMorning();
-    at(21 * 60); dry(); f.advance(2, 10); look(587, 132, 0); hide();
+    at(21 * 60); dry(); f.advance(2, 10); look(680, 186, 0); hide();
     const lights = (f.litBuilds && f.litBuilds().length) || 0;
     const glow = f.HL.lightsAt(S.town.hall, S.t, window.PFDecor && window.PFDecor.CATALOG).some(l => l.r >= 18);
     const smoke = f.TA.smoke ? f.TA.smoke().length : 0;

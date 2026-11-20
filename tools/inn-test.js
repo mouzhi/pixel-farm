@@ -215,7 +215,7 @@ ok('plotBusy blocks a rezone once a cabin or the restaurant is up', () => {
 });
 
 ok('east-avenue entry: the town gate when the town is open, otherwise the east-road mouth', () => {
-  assert.deepStrictEqual(IN.entryOf({ eroad: { mod: 'road', day: 10 } }, true), { x: 440, y: 66 });
+  assert.deepStrictEqual(IN.entryOf({ eroad: { mod: 'road', day: 10 } }, true), { x: 596, y: 66 }); // v5.11.0: the town gate moved east
   assert.deepStrictEqual(IN.entryOf({ eroad: { mod: 'road', day: 10 } }, false), { x: 362, y: 66 });
   assert.deepStrictEqual(IN.entryOf({}, false), { x: 352, y: 66 });
 });

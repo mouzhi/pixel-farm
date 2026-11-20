@@ -40,14 +40,14 @@ fs.mkdirSync(OUT, { recursive: true });
     const paid = c0 - S.coins, wood = w0 - f.FARMER.wood, up = !!(f.props || []).find(q => q.town === 'bakery');
     nextMorning(); at(10 * 60); f.advance(2, 10);
     until(() => { const t = f.NEIGH.find(q => q.id === 'n3'); return t && t.spot === 'bakery' && !t.moving && Math.hypot(t.x - f.BK.STAND.x, t.y - f.BK.STAND.y) < 4; }, 800);
-    look(490, 100, -0.4); hide();
+    look(664, 186, 0); hide();
     const tao = f.NEIGH.find(q => q.id === 'n3');
     return { lock0, r, paid, wood, up, built: S.town.hall.built.bakery, lv: f.hallView().lv, tao: tao && { spot: tao.spot, out: tao.out, x: Math.round(tao.x), y: Math.round(tao.y) },
       log: S.events.map(e => e.msg).filter(m => /面包房|订单板/.test(m)).slice(0, 4) }; })()`,
     r => !r.r.ok ? 'start ' + JSON.stringify(r.r) : r.paid !== 25000 || r.wood !== 150 ? 'cost ' + r.paid + '/' + r.wood : !r.built ? 'not built' : r.lv < 2 ? 'lv ' + r.lv : !r.tao || r.tao.spot !== 'bakery' ? '小桃 ' + JSON.stringify(r.tao) : null);
 
   // 2. the same shop at night (windows and the street lamps)
-  await shot('v5104_bakery_night.png', `(() => { ${setup} ${houses} f.hallStart('bakery'); nextMorning(); at(21 * 60); dry(); f.advance(1, 10); look(490, 100, -0.4); hide();
+  await shot('v5104_bakery_night.png', `(() => { ${setup} ${houses} f.hallStart('bakery'); nextMorning(); at(21 * 60); dry(); f.advance(1, 10); look(664, 186, 0); hide();
     return { built: !!S.town.hall.built.bakery, t: S.t % 1440, lights: (f.litBuilds && f.litBuilds().length) || 0 }; })()`,
     r => !r.built ? 'not built' : r.t < 20 * 60 ? 'not night' : null);
 
@@ -67,7 +67,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const fav0 = (S.home.nb && S.home.nb.n3) || 0;
     at(8 * 60); f.advance(1, 10); until(() => S.events.some(e => /送到小桃的面包房/.test(e.msg)), 1200);
     until(() => { const a = f.actors().find(q => q.task && q.task.kind === 'bakery'); return !a; }, 200);
-    at(10 * 60); f.advance(2, 10); look(490, 100, -0.4); hide();
+    at(10 * 60); f.advance(2, 10); look(664, 186, 0); hide();
     const v = f.bakeryView(), tao = f.NEIGH.find(q => q.id === 'n3');
     return { offer: o.text, pay: o.pay, gold: v && v.gold, days: v && v.days, done: v && v.done, extra: v && v.extra, fav: ((S.home.nb && S.home.nb.n3) || 0) - fav0,
       tao: tao && tao.spot, log: S.events.map(e => e.msg).filter(m => /面包房|订单/.test(m)).slice(0, 5) }; })()`,
