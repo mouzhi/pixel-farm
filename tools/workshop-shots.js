@@ -114,7 +114,7 @@ fs.mkdirSync(OUT, { recursive: true });
       look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, woodshop: s2.town.hall.woodshop, smithy: s2.town.hall.smithy, bakery: s2.town.hall.bakery, cap: f.woodCap(), counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.3' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.8' ? 'ver ' + r.ver
         : !r.woodshop || r.woodshop.auto !== 1 ? 'woodshop ' + JSON.stringify(r.woodshop)
         : !r.smithy || r.smithy.up.axe !== 0 ? 'smithy ' + JSON.stringify(r.smithy)
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);

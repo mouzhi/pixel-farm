@@ -4874,7 +4874,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.5.3';
+const GAME_VERSION = '5.11.0.8';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5063,6 +5063,7 @@ function settleOffline(sec) { // decision: estimate at 50% of the online rate, a
   if (sec < -60) { log('电脑的时钟好像往回调过，这次不算离线收益'); noteLog('event', { type: 'clockBack', sec: Math.round(sec), day: S.day }); return null; }
   const now = Date.now(), r = SIM.offlineSettle(sec, S.dayEarn, S.offlineWin, now); if (!r) return null;
   S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now);
+  const T = Math.floor(S.t % 1440); r.day = S.day; r.clock = String(Math.floor(T / 60)).padStart(2, '0') + ':' + String(T % 60).padStart(2, '0'); // v5.11.0.8: the clock stood still (还是第 N 天 HH:MM)
   if (r.limited && r.days <= 0) { // the window is used up: a log line only, no box
     log(`离开了 ${Math.round(sec / 60)} 分钟；过去 24 小时的 3 天离线收益已经领过，${r.nextText} 以后再算`);
     noteLog('offline', r, logSnap()); SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
@@ -5072,7 +5073,7 @@ function settleOffline(sec) { // decision: estimate at 50% of the online rate, a
   offlineWood(r); // v5.3.1: the family also chopped a little in 林场
   if (WX && r.days > 0) {
     const off = WX.advanceDays(S.weather || WX.emptyWeather(), S.day, r.days, (S.createdAt | 0) || 1);
-    S.weather = off.weather;
+    S.weather = off.weather; r.wxDays = Math.floor(r.days); // v5.11.0.8: the weather walked these days although the calendar did not
     if (off.rainDays.length) {
       r.rain = true; r.rainDays = off.rainDays.slice();
       for (const tile of tiles) if (tile.crop && tile.open) tile.watered = true;
