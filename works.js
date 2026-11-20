@@ -75,7 +75,7 @@
   const YARD_SLOTS = 3;
   function slotPos(id, i) {
     const r = PL.plot(id).rect, w = r[2] - r[0], h = r[3] - r[1];
-    return w >= h ? P(Math.round(r[0] + w * (i + 0.5) / YARD_SLOTS), Math.round(r[1] + h * 0.5 + 2)) : P(Math.round((r[0] + r[2]) / 2 + 2), Math.round(r[1] + 10 + (h - 14) * (i + 0.5) / YARD_SLOTS));
+    return w >= h ? P(Math.round(r[0] + w * (i + 0.5) / YARD_SLOTS), Math.round(r[1] + h * 0.5 + 2)) : P(Math.round((r[0] + r[2]) / 2 + 2 + (w >= 40 ? (i % 2 ? 9 : -9) : 0)), Math.round(r[1] + 10 + (h - 14) * (i + 0.5) / YARD_SLOTS)); // v5.11.0.9: the taller workshops zigzag in a column so a roof never hides the door behind it
   }
   // v5.7.0: a workshop the player moved keeps its yard and slot (they still count as taken) and stands at its own x, y
   const workPos = w => (typeof w.x === 'number' && typeof w.y === 'number' ? P(w.x, w.y) : slotPos(w.at, w.slot));

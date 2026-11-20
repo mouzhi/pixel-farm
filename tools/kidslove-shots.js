@@ -34,7 +34,7 @@ const watch = n => new Promise(done => { let seen = 0, k = 0; const step = () =>
     await p.waitForTimeout(400); await p.click('#loveHud');
     const w = await p.evaluate(watch, 90); await p.waitForTimeout(100); await p.screenshot({ path: path.join(OUT, 'kids_fix_tip.png') });
     const r = Object.assign(await p.evaluate(tipState), w);
-    check('kids_fix_tip.png', r, r.ver !== VERSION ? 'ver ' + r.ver : !r.open ? 'tip closed' : r.seen < r.n ? `closeness rows on ${r.seen}/${r.n} frames` : !/小豆的同学/.test(r.txt) || !/小米的同学/.test(r.txt) ? 'no classmate rows' : !/62\/80/.test(r.txt) || !/57\/80/.test(r.txt) ? 'no wedding progress' : !/林老师/.test(r.txt) ? 'no neighbours' : r.kids.some(k => !/少年/.test(k.slot || '')) ? 'slots ' + JSON.stringify(r.kids) : null);
+    check('kids_fix_tip.png', r, r.ver !== VERSION ? 'ver ' + r.ver : !r.open ? 'tip closed' : r.seen < r.n ? `closeness rows on ${r.seen}/${r.n} frames` : !/小豆的同学/.test(r.txt) || !/小米的同学/.test(r.txt) ? 'no classmate rows' : !/62\/80/.test(r.txt) || !/57\/80/.test(r.txt) ? 'no wedding progress' : !/林老师/.test(r.txt) ? 'no neighbours' : !/小豆（少年/.test(r.txt) || !/小米（少年/.test(r.txt) ? 'stages (小米 is floored at 帮工 but 56 days old: 少年)' : null);
     // a 换个活法 button survives a few redraws (the tip only rewrites when its text changed)
     const same = await p.evaluate(async () => { const a = document.querySelector('#loveTip .rel'); await new Promise(r => setTimeout(r, 700)); return a === document.querySelector('#loveTip .rel'); });
     check('kids_fix_tip.png (stable node)', { same }, same ? null : 'tip DOM rebuilt while nothing changed');
