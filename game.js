@@ -374,22 +374,25 @@ function leafSprite(r, ramp, seed, inside, berries, sh = 0) { // sh: how deep in
   }
   g.putImageData(img, 0, 0); o = { c, rx, ry }; discC.set(key, o); return o;
 }
-function pineTier(r, ramp, seed) { // one branch tier: a wide, drooping triangle with a jagged, needly lower edge
-  const key = 'P' + r + ramp + seed; let o = discC.get(key); if (o) return o;
-  const Rm = TREE_RAMPS[ramp], ht = Math.round(r * 0.6), w = 2 * r + 1, h = ht + 6;
+function pineTier(r, th, ramp, seed) { // v5.11.0.5.3: one fir tier, a pointed cone of needles th px tall from its tip to its drooping skirt
+  // Row 0 is the tip, row th the skirt line (the tier's anchor). Each tier reaches well up behind the tier above, so the stack reads
+  // as one fir: green to the tip, no trunk between the tiers. Lit from the upper left, deep shade on the right and under the skirt.
+  const key = 'P' + r + '|' + th + ramp + seed; let o = discC.get(key); if (o) return o;
+  const Rm = TREE_RAMPS[ramp], w = 2 * r + 1, h = th + 4;
   const c = mkc(w, h), g = c.getContext('2d'), img = g.createImageData(w, h), d = new Uint32Array(img.data.buffer);
-  for (let x = -r; x <= r; x++) { const ax = Math.abs(x) / r, top = Math.round(ht * Math.pow(ax, 0.85)), ph = (x + seed + 99) % 3;
-    const bot = ht + 1 + Math.round(ax * ax * 2) + (ph === 0 ? 2 : ph === 1 ? 1 : 0) - (ax > 0.92 ? 1 : 0);
-    for (let y = top; y <= Math.min(h - 1, bot); y++) { const rel = (y - top) / Math.max(1, bot - top);
-      let L = 0.78 - rel * 0.85 - (x / r) * 0.4;
-      if (rel > 0.15 && ((Math.abs(x) + y) % 3 === 0)) L -= 0.2;      // needle streaks, sloping down and out
-      let t = L > 0.55 ? 0 : L > 0.3 ? 1 : L > 0.02 ? 2 : 3;
-      if (y >= bot - 0) t = Math.max(t, 3);
-      if (y === top && x <= 0) t = Math.min(t, 1);
+  for (let x = -r; x <= r; x++) { const ax = Math.abs(x) / r, top = Math.round(th * Math.pow(ax, 1.12)), ph = (Math.abs(x) + seed * 2 + 99) % 3;
+    const bot = Math.min(h - 1, th + Math.round(ax * ax * 1.5) + (Math.abs(x) < 3 ? 0 : ph === 0 ? 2 : ph === 1 ? 1 : 0) - (ax > 0.9 ? 1 : 0)); // jagged, drooping needle tips (a level skirt over the stub)
+    for (let y = top; y <= bot; y++) { const rel = (y - top) / Math.max(1, bot - top), v = y / Math.max(1, th);
+      let L = 1.0 - v * 0.5 - rel * 0.35 - (x / r) * 0.42;
+      if (y > top && ((Math.abs(x) * 2 + y + seed) % 4 === 0) && rel > 0.2) L -= 0.22;     // needle streaks, sloping down and out
+      let t = L > 0.62 ? 0 : L > 0.36 ? 1 : L > 0.08 ? 2 : 3;
+      if (y >= bot - (ax < 0.85 ? 1 : 0)) t = Math.max(t, x > 0 ? 4 : 3);            // the underside of the skirt
+      else if (y === top && x <= 0) t = Math.min(t, 1);                              // sunlit upper-left edge
+      else if (y === top && x > 0) t = Math.max(t, 2);
       d[y * w + x + r] = u32(Rm[t]); } }
-  g.putImageData(img, 0, 0); o = { c, rx: r, ry: ht }; discC.set(key, o); return o;
+  g.putImageData(img, 0, 0); o = { c, rx: r, ry: th }; discC.set(key, o); return o;
 }
-function clumpSprite(p) { return p.tier ? pineTier(p.r, p.ramp, p.seed) : leafSprite(p.r, p.ramp, p.seed, p.inside, p.berries, p.sh || 0); }
+function clumpSprite(p) { return p.tier ? pineTier(p.r, p.th, p.ramp, p.seed) : leafSprite(p.r, p.ramp, p.seed, p.inside, p.berries, p.sh || 0); }
 function discFoot(ps) { // shadow footprint of the canopy (screen px, centred)
   let R = 4; for (const p of ps) R = Math.max(R, Math.hypot(p.ox, p.oy) + p.r);
   const w = Math.ceil(2 * R), foot = mkc(w, w), g = foot.getContext('2d'); g.fillStyle = '#000';
@@ -423,13 +426,12 @@ function birchDef(seed, sc = 1) {
     discs.push({ ox: Math.cos(a) * rad + lean * cz0 * 0.5, oy: Math.sin(a) * rad * 0.8, cz: cz0 + zz * 12 * sc, r: Math.round(4 + r() * 2), ramp: 'birch', seed: (seed + i) % 6, sh: zz > 0.2 ? 0 : 1 }); }
   return finishTree({ kind: 'birch', parts, discs, push: 0.7, period: 4.8, damp: 1.05, h: Math.ceil(cz0 + 14 * sc + 10) }, cz0, 9 * sc);
 }
-function pineDef(seed, ramp = 'pine', sc = 1) {
+function pineDef(seed, ramp = 'pine', sc = 1) { // v5.11.0.5.3: a fir. A short trunk stub under overlapping cone tiers, foliage to the tip
   const r = mulberry32(seed), parts = [], discs = [], H = Math.round((62 + r() * 16) * sc), n = 5 + Math.floor(r() * 2), R0 = (16 + r() * 4) * sc;
-  parts.push(part([-2, 2, -2, 2, 0, H - 6], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? Wd[1] : null));
-  const base = 10 * sc, step = (H - 8 - base) / n;
+  const base = Math.round(3 * sc), step = (H - 2 - base) / (n + 0.9), th = Math.round(step * 1.9);
+  parts.push(part([-2, 2, -2, 2, 0, base + 3], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? (z === 0 ? Wd[0] : Wd[1]) : null)); // hidden above the skirt
   for (let i = 0; i < n; i++) { const up = (i + 0.5) / n;
-    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(4, Math.round(R0 * (1 - i / (n + 0.6)) + 2)), ramp, seed: (seed + i) % 3, tier: 1, w: up > 0.62 ? 0.2 + 0.25 * up : 0 }); }
-  discs.push({ ox: 0, oy: 0, cz: Math.round(base + n * step), r: 3, ramp, seed: 1, tier: 1, w: 0.4 });
+    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(5, Math.round(R0 * (1 - i / (n + 0.4)) + 2)), th: i === n - 1 ? H - 2 - Math.round(base + i * step) : th, ramp, seed: (seed + i) % 3, tier: 1, w: up > 0.62 ? 0.2 + 0.25 * up : 0 }); }
   return finishTree({ kind: 'pine', parts, discs, push: 0.3, period: 8.0, damp: 1.2, h: H + 8 }, 0, 1);
 }
 function bushDef(seed, ramp = 'oak') {
@@ -4872,7 +4874,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.5.2';
+const GAME_VERSION = '5.11.0.5.3';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5022,6 +5024,11 @@ function applyRainMorning(forced) {
   noteProgress({ sawRain: true });
   return true;
 }
+// v5.11.0.5.3: tools/pine-shots.js renders one tree on its own (its cached sprite at the current angle) and reads its pixels
+if (window.__farm) Object.assign(window.__farm, { treeDefs, treeImage: (def, x = 0, y = 0, poseT = 0, lean = 0) => { setCam(); const o = { tree: def, x, y, lean, tick: 0 }, k = treeCache(o, poseT);
+  const trunk = new Set(), leaf = new Set(); for (const c of Wd) trunk.add(u32(c)); for (const c of G) { leaf.add(u32(c)); leaf.add(OUTL.get(u32(c))); } leaf.delete(INK0); // ink outlines count as neither
+  for (const c of trunk) leaf.delete(c); const cls = Array.from(k.d32, v => !(v >>> 24) ? 0 : trunk.has(v) ? 2 : leaf.has(v) ? 1 : 3);
+  return { w: k.c.width, h: k.c.height, ox: k.ox, oy: k.oy, cls, url: k.c.toDataURL() }; } });
 if (window.__farm) Object.assign(window.__farm, { rainPick: () => rainPick(), rainUnder: (x, y) => rainUnder(x, y) }); // v5.11.0.4: for tools/rain-shots.js
 function tickWeather(dt) {
   const raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
