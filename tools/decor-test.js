@@ -36,7 +36,32 @@ ok('party: anniversaries (28 days) make one likelier; guests 0-2; the evening wi
   assert(DC.special(60, { kids: [{ born: 4 }] })); assert(!DC.special(60, {}));
   const r = rng(3), c = [0, 0, 0]; for (let i = 0; i < 3000; i++) c[DC.guestCount(r)]++; assert(c[0] && c[1] && c[2]);
   assert(!DC.partyOn(17 * 60)); assert(DC.partyOn(18 * 60)); assert(DC.partyOn(20 * 60 + 10)); assert(!DC.partyOn(20 * 60 + 30));
-  assert.strictEqual(DC.partySeats({ x: 0, y: 0 }).length, 10); assert.strictEqual(DC.partyPosts({ x: 0, y: 0 }).length, 4);
+  assert.strictEqual(DC.partySeats({ x: 0, y: 0 }).length, 5); assert.strictEqual(DC.partyPosts({ x: 0, y: 0 }).length, 4);
+});
+ok('v5.11.0.15 party: seats 8 apart; lawn corners on free grass, never under the area or each other; nobody shares a place', () => {
+  const s = DC.partySeats({ x: 0, y: 0 }); for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) assert(Math.hypot(s[i].x - s[j].x, s[i].y - s[j].y) >= 7.9, 'seats ' + i + ' ' + j);
+  const c = { x: 100, y: 50 }, all = DC.partyLawn(c, () => true); assert.deepStrictEqual(all.map(l => l.kind), ['dance', 'chat', 'play']);
+  const hit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+  const area = [c.x - 12, c.y - 8.5, c.x + 12, c.y + 8.5]; for (const l of all) { assert(!hit(l.box, area), l.kind + ' under the area'); assert(!l.tall); for (const p of l.spots) assert(p.x > l.box[0] && p.x < l.box[2] && p.y > l.box[1] && p.y < l.box[3]); }
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) assert(!hit(all[i].box, all[j].box));
+  // a narrow strip: the corners stand on end; no grass at all: no corners (the table alone still works)
+  const narrow = DC.partyLawn(c, b => b[2] - b[0] <= 12); assert(narrow.length === 3 && narrow.every(l => l.tall));
+  assert.deepStrictEqual(DC.partyLawn(c, () => false), []);
+  // the same farm gets the same spots
+  assert.deepStrictEqual(DC.partyLawn(c, b => b[1] > c.y), DC.partyLawn(c, b => b[1] > c.y));
+  const roster = ['farmer', 'partner', 'father', 'g0', 'g1', 'f0', 'sp_kid1', 'kid1'].map(key => ({ key })).concat([{ key: 'kid0', kid: 1 }, { key: 'm2', kid: 1 }]);
+  for (const lawn of [all, narrow, []]) for (let ph = 0; ph < 3; ph++) {
+    const extra = [{ x: 0, y: 0 }, { x: 1, y: 30 }, { x: 2, y: 60 }, { x: 3, y: 90 }, { x: 4, y: 120 }], plan = DC.partyPlan(c, lawn, roster, ph, extra), spots = Object.values(plan).filter(Boolean);
+    const placed = roster.filter(r => plan[r.key]).length; assert(placed >= Math.min(roster.length, 5 + lawn.reduce((n, l) => n + l.spots.length, 0) + extra.length), 'placed ' + placed);
+    assert.strictEqual(new Set(spots.map(p => p.x + ',' + p.y)).size, spots.length, 'two people on one spot (phase ' + ph + ')');
+    if (lawn.length === 3) { if (ph !== 1) assert.strictEqual(plan.kid0.act, 'play'); else assert.strictEqual(plan.kid0.act, 'eat');
+      if (ph === 0) assert.strictEqual(plan.farmer.act, 'eat'); else assert(new Set(roster.filter(r => !r.kid).map(r => plan[r.key].act)).size >= 3, 'the grown-ups mix'); }
+  }
+  // round 0 is dinner; later rounds move people along; the rounds' edges
+  assert.strictEqual(DC.partyPhase(17 * 60 + 30), 0); assert.strictEqual(DC.partyPhase(18 * 60 + 40), 1); assert.strictEqual(DC.partyPhase(19 * 60 + 35), 2); assert.strictEqual(DC.phaseEnd(18 * 60), 18 * 60 + 40); assert.strictEqual(DC.phaseEnd(20 * 60), DC.PARTY.to);
+  const a = DC.partyPlan(c, all, roster, 1), b = DC.partyPlan(c, all, roster, 2); assert(roster.some(r => a[r.key].x !== b[r.key].x || a[r.key].y !== b[r.key].y));
+  // a newcomer does not move the ones already there (within a round)
+  const before = DC.partyPlan(c, all, roster.slice(0, 4), 1), after = DC.partyPlan(c, all, roster.slice(0, 5), 1); for (const r of roster.slice(0, 4)) assert.deepStrictEqual(before[r.key], after[r.key]);
 });
 // a 10x6 grid of grass (10) with a dirt path (5) across row 2 and a wall (0) with one gap in column 6
 const grid = () => { const g = { x0: 0, y0: 0, cell: 4, w: 10, h: 6, cost: new Uint8Array(60).fill(10) };
