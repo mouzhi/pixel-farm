@@ -95,4 +95,27 @@ ok('shop: phase-8 items exist, wheat unlocks with the mill, gates go through SIM
   SIM.gate = null; assert(SIM.offer(up, 1e6, 'mill', 999).ok);
   assert.strictEqual(SIM.shopItem('sprinkler').levels.length, 16); assert.deepStrictEqual([SIM.shopItem('sprinkler').levels[0].cost, SIM.shopItem('sprinkler').levels[0].wood], [800, 20]);
 });
+ok('v5.10.12: a 工坊院 can be re-zoned once the game moves its workshops (worksMove)', () => {
+  assert.strictEqual(PW.plotBusy('wbank', { worksMove: true, works: { mill: { at: 'wbank' } } }), null);
+  assert(PW.plotBusy('glade', { worksMove: true, hives: [{ at: 'glade' }] }), 'hives still block');
+});
+ok('v5.10.12: slotIn finds a free slot in one yard; the moved workshop does not take its own', () => {
+  const works = { mill: { at: 'wbank', slot: 0 }, jam: { at: 'wbank', slot: 1 }, cheese: { at: 'wbank', slot: 2 } };
+  assert.strictEqual(PW.slotIn(works, 'wbank'), -1); assert.strictEqual(PW.slotIn(works, 'wbank', 'jam'), 1); assert.strictEqual(PW.slotIn(works, 'sbank'), 0);
+});
+ok('v5.10.12: evacuate moves workshops to another yard, else stores them (at null); restock puts them back', () => {
+  const plots = { wbank: { mod: 'workshop', day: 1 }, sbank: { mod: 'workshop', day: 2 } };
+  const works = { mill: { at: 'wbank', slot: 0, inp: 3, left: 10, ready: 2 }, jam: { at: 'wbank', slot: 1 }, cheese: { at: 'sbank', slot: 0 }, pie: { at: 'sbank', slot: 1 } };
+  const m = PW.evacuate(plots, works, 'wbank');
+  assert.deepStrictEqual(m, [{ id: 'mill', to: 'sbank', slot: 2 }, { id: 'jam', to: null, slot: 0 }]);
+  assert.strictEqual(works.mill.at, 'wbank', 'evacuate is pure');
+  // the caller applies it; the plot becomes a field; later a new 工坊院 restocks the stored one
+  works.mill.at = 'sbank'; works.mill.slot = 2; works.jam.at = null; const plots2 = { wbank: { mod: 'field', day: 1 }, sbank: plots.sbank };
+  assert.deepStrictEqual(PW.restock(plots2, works), [], 'no room yet');
+  const plots3 = Object.assign({}, plots2, { glade: { mod: 'workshop', day: 9 } });
+  assert.deepStrictEqual(PW.restock(plots3, works), [{ id: 'jam', to: 'glade', slot: 0 }]);
+  // a stored workshop keeps its state through the save
+  const v = PW.valid({ works: { mill: { at: 'sbank', slot: 2, inp: 3, left: 10, ready: 2 }, jam: { at: null, slot: 0, inp: 1, ready: 1 } } }, plots2);
+  assert.strictEqual(v.works.jam.at, null); assert.strictEqual(v.works.jam.inp, 1); assert.strictEqual(v.works.jam.ready, 1); assert.strictEqual(v.works.mill.ready, 2);
+});
 console.log(`works-test: ${n} ok`);
