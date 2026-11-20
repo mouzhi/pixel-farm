@@ -69,7 +69,7 @@ def write_boot_lists() -> None:
     core, after = [], []
     for src in WEB_SCRIPTS:
         (after if src in LATE_SCRIPTS else core).append(src)
-    after = ["audio-config.js"] + after + ["leaderboard.js"]
+    after = ["audio-config.js"] + after + ["leaderboard.js", "touch.js"]  # touch.js: the phone tool mode (needs game.js v5.11.0.2 hooks and ui.js #tools)
     boot = (HERE / "boot.js").read_text()
     js = lambda xs: "[\n" + ",\n".join(f"    '{x}'" for x in xs) + "\n  ]"
     boot, n1 = re.subn(r"var CORE = \[[^\]]*\]", "var CORE = " + js(core), boot, count=1)
@@ -107,6 +107,7 @@ def stage() -> None:
     shutil.copy2(HERE / "mobile.js", STAGE / "mobile.js")
     shutil.copy2(HERE / "mobile.css", STAGE / "mobile.css")
     shutil.copy2(HERE / "leaderboard.js", STAGE / "leaderboard.js")
+    shutil.copy2(HERE / "touch.js", STAGE / "touch.js")
     shutil.copy2(HERE / "atlas_hud_128_q90.webp", STAGE / "atlas_hud_128_q90.webp")
     shutil.copy2(HERE / "atlas_128_q90.webp", STAGE / "atlas_128_q90.webp")
     shutil.copy2(HERE / "note-copy.js", STAGE / "note-copy.js")

@@ -116,6 +116,7 @@
     // 1.2.0：pf:say 是对玩家这一下点按的回话（「点家门口的池塘…」「标记了要放进池塘的金鱼」），
     // 以前和农场日志同级，0.4 秒内就被下一条日志顶掉，手机上等于没说。改成按点按反馈处理。
     root.addEventListener('pf:say', function (e) {
+      if (P.touch && doc.documentElement.classList.contains('pt-mode')) return; // touch.js shows it in the tool bar
       if (e && e.detail) { lastToastSrc = String(e.detail); P.notice(String(e.detail)); }
     });
     function check() {
@@ -266,6 +267,7 @@
     P.followFarmer = !!on;
     markIcons();
   }
+  P.setFollow = setFollow; // touch.js pauses following while a tool is on
 
   function compactHud() {
     var day = doc.getElementById('day');
@@ -921,6 +923,7 @@
     tools.addEventListener('click', function (e) {
       var b = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
       if (!b) return;
+      if (P.touch) return; // touch.js: the ⚒ toolbox + crosshair replace these hints
       var m = b.getAttribute('data-m'), k = b.getAttribute('data-k') || '';
       var hint = String(b.title || '').replace(/[（(][^）)]*Esc[^）)]*[）)]/g, '').trim();
       setTimeout(function () {

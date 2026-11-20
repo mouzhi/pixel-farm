@@ -96,6 +96,9 @@ jobs:
           # 小红书小工具: pack the zip (ES2017 check + official audit), then phone shots on the packed tree (~4m)
           - group: xhs
             scripts: xhs-shots.js
+          # 小红书 触屏工具模式 (touch.js): ⚒ toolbox, crosshair + ✖/✔ bar, tap-to-aim, 砍树, long-press 移动/收回, 撤销 confirm (~1m)
+          - group: xhs-touch
+            scripts: xhs-touch-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -106,7 +109,7 @@ jobs:
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
       - name: Pack the 小红书 zip
-        if: matrix.group == 'xhs'
+        if: startsWith(matrix.group, 'xhs')
         run: bash platforms/xhs/pack.sh
       - name: Browser tests (${{ matrix.group }})
         env:
