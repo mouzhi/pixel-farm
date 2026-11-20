@@ -366,12 +366,38 @@
         if ((x >= 14 && x <= 16 && z >= 29 && z <= 43) || (z >= 34 && z <= 37 && x >= 12 && x <= 19)) return cross;
         return wall; }
       return null; });
+    // v5.10.11: the harvest-feast long table (cloth, dishes, benches on both sides, four posts)
+    const feast = B(48, 26, 26, (x, y, z) => {
+      const post = (x <= 2 || x >= 45) && (y <= 2 || y >= 23);
+      if (post && z <= 22) {
+        if (z <= 16) return z === 16 ? Wd[4] : Wd[2];
+        const cx = x <= 2 ? 1 : 46, cy = y <= 2 ? 1 : 24, c = Math.hypot(x - cx, y - cy);
+        if (c < 2.2) return (z === 17 || z === 22 || c > 1.6) ? Wd[4] : ((z + x) % 3 === 0 ? Ac[1] : Ac[0]);
+        return null; }
+      const tx = x >= 5 && x <= 42, ty = y >= 8 && y <= 17;
+      if (tx && ty) {
+        if (z <= 5) return ((x === 6 || x === 41) && (y === 9 || y === 16)) ? Wd[1] : null;
+        if (z === 6) return (y === 8 || y === 17 || x === 5 || x === 42) ? Wd[2] : Wd[3];
+        if (z === 7) return (y === 8 || y === 17 || x === 5 || x === 42) ? Rf[2] : Ac[0];
+        if (z === 8) { const k = (x * 5 + y * 3) % 10; return k === 0 ? Ac[2] : k === 3 ? Rf[3] : k === 6 ? G[3] : k === 8 ? Ac[1] : null; }
+        if (z === 9 && (x * 5 + y * 3) % 10 === 0) return Ac[1];
+        return null; }
+      if (x >= 7 && x <= 40 && (y === 3 || y === 4 || y === 21 || y === 22)) {
+        if (z === 4) return (x & 1) ? Wd[3] : Wd[4]; if (z <= 3) return (x === 8 || x === 39) ? Wd[1] : null; }
+      return null; });
+    const lantern = B(6, 6, 22, (x, y, z) => {
+      if ((x === 2 || x === 3) && (y === 2 || y === 3) && z <= 14) return z === 14 ? Wd[4] : Wd[2];
+      const c = Math.hypot(x - 2.5, y - 2.5);
+      if (z >= 15 && z <= 20 && c < 2.4) {
+        if (z === 15 || z === 20 || c > 1.8) return Wd[4];
+        return (z + x) % 3 === 0 ? Ac[1] : Ac[0]; }
+      return null; });
     const yardFlag = B(6, 6, 28, (x, y, z) => {
       if (x === 2 && y === 2 && z <= 26) return St[3];
       if (z >= 16 && z <= 22 && y === 2 && x >= 3 && x <= 5) return z === 19 ? Ac[0] : Rf[2];
       return null; });
     const yardPost = B(4, 4, 14, (x, y, z) => (x >= 1 && x <= 2 && y >= 1 && y <= 2 && z <= 13) ? (z === 13 ? Rf[2] : Wd[2]) : null);
-    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy, classroom, library, clinic], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops, yardFlag, yardPost };
+    return { houses: [house(Rf[2]), house(Rf[3]), house(St[1])], shop, school, fountain, gateOpen, flowers, hall, board, two: [twoStorey(0), twoStorey(1), twoStorey(2), bakery, woodshop, smithy, classroom, library, clinic], scaffold, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, kidShops, yardFlag, yardPost, feast, lantern };
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -419,7 +445,8 @@
     if (!mounted || !HL) return; const H = S.town && S.town.hall, open = !!(S.eff && S.eff.town);
     const lots = S.town && S.town.lots, path = S.home && S.home.path;
     const sports = !!(root.PFSchool && H && root.PFSchool.isDay(H, S.day));
-    const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path, sports ? 1 : 0]) : ''; if (!force && k === hallKey) return; hallKey = k;
+    const fest = !!(root.PFFestival && H && root.PFFestival.isDay(H, S.day));
+    const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path, sports ? 1 : 0, fest ? 1 : 0]) : ''; if (!force && k === hallKey) return; hallKey = k;
     for (const q of own.hall) removeFrom(q); own.hall.length = 0; if (!k) return;
     const CL = root.PFClinic; // v5.10.10: original houses swap to a two-storey (or scaffolding) when rebuilt
     if (CL) for (const b of TN.BUILDINGS) if (b.kind === 'house') {
@@ -448,13 +475,31 @@
     const CR = root.PFCareers; // v5.10.6: a child's own shop (scaffolding the first day, then the model for its kind)
     if (CR && lots) for (const l of CR.LOTS) { const kid = lots[l.id]; if (!kid) continue; const p = path && path[kid], ready = CR.shopReady(p, S.day), kind = (p && p.kind) || 'flower';
       const m = ready ? ((MD.kidShops && MD.kidShops[kind]) || MD.two[2]) : MD.scaffold; if (m) own.hall.push(X.addProp(m, l.x, l.y, l.rot, { xp: 1, big: 1, town: l.id })); }
+    const FS = root.PFFestival; // v5.10.11: the long table and lantern posts on harvest-festival day
+    if (fest && FS) {
+      if (MD.feast) own.hall.push(X.addProp(MD.feast, FS.TABLE.x, FS.TABLE.y, 0, { xp: 1, big: 1, town: 'feast' }));
+      if (MD.lantern) for (const q of FS.POSTS) own.hall.push(X.addProp(MD.lantern, q.x, q.y, 0, { xp: 1, town: 'lantern' })); }
     X.markNavDirty();
   }
   // a little sign over the shut gate while the town is locked (drawn by game.js with the plot locks)
   // v5.9.1: the town's lamps and windows for game.js's lighting pass (only while the town is open)
   function lights(hz, T) { if (!(S && S.eff && S.eff.town)) return; for (const l of TN.lightsAt(T)) hz(l.x, l.y, l.z, l.r, l.s);
     if (HL && S.town && S.town.hall) for (const l of HL.lightsAt(S.town.hall, T, root.PFDecor && root.PFDecor.CATALOG)) hz(l.x, l.y, l.z, l.r, l.s); // v5.10.0: the new houses' windows, the gift lamps
-    if (root.PFCareers && S.town && S.town.lots) for (const l of root.PFCareers.lightsAt(S.town.lots, S.home && S.home.path, T, S.day)) hz(l.x, l.y, l.z, l.r, l.s); } // v5.10.6: the child's shop window at dusk
+    if (root.PFCareers && S.town && S.town.lots) for (const l of root.PFCareers.lightsAt(S.town.lots, S.home && S.home.path, T, S.day)) hz(l.x, l.y, l.z, l.r, l.s); // v5.10.6: the child's shop window at dusk
+    const FS = root.PFFestival; // v5.10.11: warm lanterns over the paved streets and the plaza
+    if (FS && S.town && S.town.hall && FS.fairOpen(S.town.hall, S.day, T)) for (const l of FS.lights()) hz(l.x, l.y, l.z, l.r, l.s); }
+  function festString(ctx, proj, a, b, za, zb, n, lit, realT, ph) {
+    for (let i = 1; i < n; i++) { const t = i / n, x = a.x + (b.x - a.x) * t, y = a.y + (b.y - a.y) * t, z = za + (zb - za) * t - Math.sin(Math.PI * t) * 5;
+      const [sx, sy] = proj(x, y); const on = lit && (Math.sin(realT * 2 + i * 1.7 + ph) > -0.55);
+      ctx.fillStyle = !lit ? Wd[4] : on ? ((i % 3 === 0) ? '#fff4b8' : (i % 3 === 1) ? Ac[1] : Ac[2]) : Wd[3];
+      ctx.fillRect(Math.round(sx), Math.round(sy - z), 2, lit ? 3 : 1); }
+  }
+  function draw(ctx, proj, onScreen, realT, T, night) {
+    const FS = root.PFFestival, H = S && S.town && S.town.hall;
+    if (!FS || !H || !S.eff || !S.eff.town || !FS.isDay(H, S.day)) return;
+    const lit = !!(FS.fairOpen(H, S.day, T) && night > 0.12);
+    FS.STRINGS.forEach((pair, i) => { if (onScreen((pair[0].x + pair[1].x) / 2, (pair[0].y + pair[1].y) / 2, 80)) festString(ctx, proj, pair[0], pair[1], 16, 16, 10, lit, realT, i); });
+  }
   // chimney tops in world units (model voxels are 2 per world unit; lots with rot π flip the footprint)
   function chimneyOf(lot, vx, vy, vz, W, D) {
     let dx = (vx - (W - 1) / 2) / 2, dy = (vy - (D - 1) / 2) / 2;
@@ -467,6 +512,6 @@
     if (H.built && H.built.smithy) { const SM = root.PFSmithy, l = (SM && SM.LOT) || (HL && HL.LOT.smithy); if (l) out.push(Object.assign(chimneyOf(l, 24.5, 9.5, 50, 32, 34), { forge: 1 })); }
     return out;
   }
-  const api = { ground, mount, sync, lights, smoke, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
+  const api = { ground, mount, sync, lights, draw, smoke, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
   root.PFTownArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -279,7 +279,7 @@
     return '';
   }
   // v5.9.1: progressive shop: only what is buyable now and up to two unlock steps ahead; a tab with nothing to show yet is left out
-  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目、学校、书屋、诊所、翻盖、铺路和农家乐、度假村都不会碰。'; // v5.10.1; v5.10.7–v5.10.10
+  const AUTO_TIP = '打开后，钱多的时候家人每天最多替你买一样基础的东西（扩田、工具、鸡）。装饰、地块、建筑、镇公所的项目、学校、书屋、诊所、翻盖、铺路和农家乐、度假村、节日都不会碰。'; // v5.10.1; v5.10.7–v5.10.11
   const shown = id => !G.shopDepth || G.shopDepth(id) <= G.REVEAL_MAX;
   const tabShown = t => t.id === 'hall' ? !!(G.hallView && G.hallView() && G.hallView().open) : t.id === 'inn' ? !!(G.innView && G.innView() && G.innView().open) : t.id === 'tools' || t.id === 'land' || t.ids.some(shown);
   function drawShop(force) {
@@ -461,6 +461,13 @@
     const cl = v.clinic; // v5.10.10 诊所
     if (cl) h += `<div class="sec">诊所（动物和猫狗心情下限 ${cl.floor}；每月一次体检，开心值 +。不做生病）${cl.paved ? ' · 路面已铺石板' : ''}</div>` +
       `<div class="card" data-item="clinic">${icon('town')}<div class="ct"><div><b>${cl.next ? `下一次体检：第 ${cl.next} 天` : '诊所已经开张'}</b></div><div class="d">苏大夫 8:00–17:00 在诊所。铺上石板要先把五座老房子都翻成二层。</div></div></div>`;
+    const fs = v.festival; // v5.10.11 丰收节 + 灯会
+    if (fs) {
+      const title = fs.today ? '今天是丰收节' : `下一次丰收节：第 ${fs.next} 天`;
+      const d = fs.lantern ? '晚上 18:00–22:00 广场摆长桌宴，19:00–22:00 石板路和广场挂灯笼办灯会。' : '晚上 18:00–22:00 广场摆长桌宴。灯会要等铁匠铺和木工坊都建好。';
+      h += `<div class="sec">丰收节（繁荣度 5 以后每 28 天一次：一家人去广场吃长桌宴，当天按集市日结算。没有新的家务）</div>` +
+        `<div class="card" data-item="festival">${icon('town')}<div class="ct"><div><b>${title}</b></div><div class="d">${d}镇上会自动送来一份薄礼 ${fs.gift} 金。</div></div></div>`;
+    }
     h += `<div class="sec">送给镇上（装饰摆到主街边，灯天黑就亮，不用接电；主街还能摆 ${v.room} 件）</div>`;
     const rows = v.inv.map(o => ({ o, from: 'inv', label: `仓库里 ${o.n} 件` })).concat(v.placed.map(o => ({ o, from: 'yard', label: `院子里摆着 ${o.n} 件` })));
     if (!rows.length) h += `<div class="more">仓库和院子里还没有能送的装饰（派对区留在家里）</div>`;

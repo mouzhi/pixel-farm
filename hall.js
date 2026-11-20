@@ -15,6 +15,7 @@
   const SC = (typeof require === 'function' && typeof document === 'undefined') ? require('./school.js') : root.PFSchool; // v5.10.9
   const LB = (typeof require === 'function' && typeof document === 'undefined') ? require('./library.js') : root.PFLibrary; // v5.10.9
   const CL = (typeof require === 'function' && typeof document === 'undefined') ? require('./clinic.js') : root.PFClinic; // v5.10.10
+  const FS = (typeof require === 'function' && typeof document === 'undefined') ? require('./festival.js') : root.PFFestival; // v5.10.11
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
   const BOARD = P(HALL.x - 9, HALL.y + HALL.hd + 12);       // the notice board: in front of the hall, beside its path
@@ -122,6 +123,12 @@
     if (!CL || !CL.built(st) || n.id !== 'n10') return null; const t = ((T % 1440) + 1440) % 1440;
     if (t < CLINIC_HOURS[0] || t >= CLINIC_HOURS[1]) return null;
     return { at: CL.STAND, out: true, spot: 'clinic' }; }
+  function festivalAt(st, n, day, T) { // v5.10.11: neighbours sit at the long table 18:00–22:00
+    if (!FS || !FS.feastOpen(st, day, ((T % 1440) + 1440) % 1440)) return null;
+    const ids = ['n0', 'n1', 'n4', 'n5']; // four neighbours on the north bench; the south side is the family's
+    const i = ids.indexOf(n.id); if (i < 0) return null;
+    const at = FS.seatAt(4 + i);
+    return { at: P(at.x + (i % 2 ? 0.3 : -0.3), at.y), out: true, spot: 'feast' }; }
   const siteSpot = id => { const l = LOT[id]; if (l) return P(l.x + l.hw + 3, l.y - l.hd + 2);
     if (id === 'market') return P(TN.PLAZA.x - 20, TN.PLAZA.y + 4);
     const b = TN.BY_ID[id]; return b ? P(b.x + b.hw + 3, b.door.y) : null; };
@@ -189,7 +196,7 @@
   }
 
   // ---------- state (saved inside `town` as `hall`; append-only, old saves start with nothing built) ----------
-  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {}, woodshop: WS ? WS.empty() : {}, smithy: SM ? SM.empty() : {}, school: SC ? SC.empty() : {}, library: LB ? LB.empty() : {}, clinic: CL ? CL.empty() : {} }); // v5.10.3–v5.10.10
+  const empty = () => ({ built: {}, job: null, gifts: [], paper: 0, week: { built: [], gifts: 0, trade: 0 }, market: MK ? MK.empty() : {}, bakery: BK ? BK.empty() : {}, woodshop: WS ? WS.empty() : {}, smithy: SM ? SM.empty() : {}, school: SC ? SC.empty() : {}, library: LB ? LB.empty() : {}, clinic: CL ? CL.empty() : {}, festival: FS ? FS.empty() : {} }); // v5.10.3–v5.10.11
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
   const DECOR_ID = /^[a-z_]{2,24}$/;
   function valid(v) {
@@ -205,6 +212,7 @@
     if (SC) out.school = SC.valid(o.school);
     if (LB) out.library = LB.valid(o.library);
     if (CL) out.clinic = CL.valid(o.clinic);
+    if (FS) out.festival = FS.valid(o.festival);
     const w = o.week && typeof o.week === 'object' ? o.week : {};
     out.week = { built: Array.isArray(w.built) ? w.built.filter(id => PROJ[id]).slice(0, PROJECTS.length) : [], gifts: int(w.gifts, 0, 99), trade: int(w.trade, 0, 1e9) };
     return out;
@@ -212,7 +220,7 @@
 
   const api = { HALL, BOARD, PROPS, lightsAt, LOTS, LOT, PROJECTS, PROJ, LEVELS, LV_NAME, prosperity, nextLevelAt, SPOTS, NEIGHBOURS, doorOf, residents, neighbourAt, marketAt, bakeryAt, MARKET_HOURS, BAKERY_HOURS, BUILD_HOURS, siteSpot,
     canStart, start, finish, GIFT_SPOTS, GIFT_OK, giftSpot, giftPos, giftRoom, give, PAPER_EVERY, paperText, blocks, empty, valid,
-    woodshopAt, smithyAt, libraryAt, sportsAt, clinicAt, CLINIC_HOURS, WOOD_HOURS, SMITH_HOURS, LIB_HOURS,
+    woodshopAt, smithyAt, libraryAt, sportsAt, clinicAt, festivalAt, CLINIC_HOURS, WOOD_HOURS, SMITH_HOURS, LIB_HOURS,
     paved: st => !!(CL && CL.paved(st)) };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHall = api;
 })(typeof window !== 'undefined' ? window : globalThis);
