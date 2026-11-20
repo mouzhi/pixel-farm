@@ -46,14 +46,19 @@
     if (!e || !BY[e.id]) return null;
     const t = e.t == null || e.t < 0 ? -1 : int(e.t, 0, 1439);
     const w = (Array.isArray(e.w) ? e.w : []).filter(x => typeof x === 'string' && WHO.test(x)).slice(0, 4);
-    return { id: e.id, d: int(e.d, 0, 1e6), t, x: int(e.x, -9999, 9999), y: int(e.y, -9999, 9999), w };
+    const out = { id: e.id, d: int(e.d, 0, 1e6), t, x: int(e.x, -9999, 9999), y: int(e.y, -9999, 9999), w };
+    // q: a photo still waiting to be taken (people walking out of the door): { at: absolute game minute, f: who to centre on, re: re-place }
+    if (e.q && typeof e.q === 'object') out.q = { at: int(e.q.at, 0, 1e9), f: typeof e.q.f === 'string' && WHO.test(e.q.f) ? e.q.f : '', re: e.q.re ? 1 : 0 };
+    return out;
   }
+  const remove = (A, id) => { if (!A || !Array.isArray(A.list)) return false; const i = A.list.findIndex(e => e.id === id); if (i < 0) return false; A.list.splice(i, 1); return true; };
   function add(A, e) { if (!A || !Array.isArray(A.list)) return null; const n = norm(e); if (!n || has(A, n.id) || A.list.length >= MAX) return null; A.list.push(n); return n; }
   // the save form: one short string per moment
-  const pack1 = e => [e.id, e.d, e.t, e.x, e.y, e.w.join('.')].join('|');
+  const pack1 = e => [e.id, e.d, e.t, e.x, e.y, e.w.join('.')].concat(e.q ? [[e.q.at, e.q.f, e.q.re].join('.')] : []).join('|'); // 7th field only while a photo is pending
   function unpack1(s) {
-    if (typeof s !== 'string' || s.length > 64) return null; const p = s.split('|'); if (p.length < 5 || !ID.test(p[0])) return null;
-    return norm({ id: p[0], d: p[1], t: +p[2], x: p[3], y: p[4], w: p[5] ? p[5].split('.') : [] });
+    if (typeof s !== 'string' || s.length > 96) return null; const p = s.split('|'); if (p.length < 5 || !ID.test(p[0])) return null;
+    const q = p[6] ? p[6].split('.') : null;
+    return norm({ id: p[0], d: p[1], t: +p[2], x: p[3], y: p[4], w: p[5] ? p[5].split('.') : [], q: q && q.length === 3 ? { at: q[0], f: q[1], re: q[2] === '1' } : null });
   }
   const pack = A => (A && Array.isArray(A.list) ? A.list.map(norm).filter(Boolean).map(pack1) : []);
   function valid(raw) { // a save's `album` (array of strings) -> { list }; anything odd is dropped
@@ -62,8 +67,10 @@
     return out;
   }
   // facts (game.js builds them; old saves too): which moments already happened and on which day (0 = unknown)
-  // f: { ms: {id: day}, ach: {id: day}, kids: [{born}], mate (last classmate visit day), town, gateDay, market (first market day),
-  //      sports, fest (last day), inn, wed (first wedding day), movedIn (first move-in day), giant (first day) }
+  // Only what the save proves happened (a record of the event itself, never a building or an unlock that merely makes it possible):
+  // f: { ms: {id: day}, ach: {id: day}, kids: [{born}], mate (last classmate visit day), town (the gate is open: that is the moment),
+  //      marketDays / marketLast (days the family sold at the market, last such day), sports / fest (last day it was held),
+  //      inn (rooms ever paid for), wed (first wedding day), movedIn (first move-in day), giant (first day a giant grew) }
   function due(f) {
     f = f || {}; const out = [], ms = f.ms || {}, ach = f.ach || {}, kids = f.kids || [];
     const want = (id, ok, d) => { if (ok) out.push({ id, d: int(d, 0, 1e6) }); };
@@ -86,9 +93,9 @@
     want('rarefish', day(ach, 'truecatch') != null, day(ach, 'truecatch'));
     want('party', day(ach, 'party') != null, day(ach, 'party'));
     want('towngate', !!f.town, f.gateDay || 0);
-    want('market', f.market > 0, f.market);
-    want('sports', f.sports > 0, 0);
-    want('fest', f.fest > 0, 0);
+    want('market', f.marketDays > 0, f.marketDays === 1 ? f.marketLast : 0); // sold there at least once (a built square alone is not a market trip)
+    want('sports', f.sports > 0, f.sports);
+    want('fest', f.fest > 0, f.fest);
     want('inn', !!f.inn, 0);
     want('wedding', f.wed > 0, f.wed);
     want('newhouse', f.movedIn > 0, f.movedIn);
@@ -118,6 +125,6 @@
     try { if (store) store.setItem(KEY + (farm || 0), JSON.stringify(o)); return true; } catch (e) { return false; } } // full storage: kept for this session only
   const thumb = (store, farm, id) => { const v = loadThumbs(store, farm)[id]; return v ? { url: v[0], restaged: !!v[1] } : null; };
   const forget = farm => { delete memo[KEY + (farm || 0)]; };
-  const api = { PW, PH, MAX, KEY, MOMENTS, BY, empty, has, get, add, norm, pack, valid, due, caption, view, bytes, fill, dayText, loadThumbs, putThumb, thumb, forget };
+  const api = { PW, PH, MAX, KEY, MOMENTS, BY, empty, has, get, add, remove, norm, pack, valid, due, caption, view, bytes, fill, dayText, loadThumbs, putThumb, thumb, forget };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFAlbum = api;
 })(typeof window !== 'undefined' ? window : globalThis);

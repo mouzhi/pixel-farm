@@ -4,7 +4,9 @@
 (() => {
 // ---------- config ----------
 const VIEW = (new URLSearchParams(location.search).get('view') || '').match(/^(\d+)x(\d+)$/); // v5.5.0: ?view=WxH, wide screenshots only
-const W = VIEW ? Math.min(1600, +VIEW[1]) : 426, H = VIEW ? Math.min(1000, +VIEW[2]) : 266; // low-res framebuffer, integer upscaled (3x on 1280x800)
+const BW = 426, BH = 266; // the reference framebuffer: its whole-number scale on this screen sets the pixel size (3x on 1280x800)
+// v5.11.0.5.2: the framebuffer grows to cover the window at that pixel size (fit), so the picture always fills the screen; ?view=WxH stays fixed for wide screenshots
+let W = VIEW ? Math.min(1600, +VIEW[1]) : BW, H = VIEW ? Math.min(1000, +VIEW[2]) : BH;
 const RS = 2;                    // screen px per world unit: one 8-unit tile = 16 px, the classic 16-bit tile
 const K = 0.75;                  // vertical squash (camera tilt)
 const TILE = 8, COLS = 24, ROWS = 16, WW = COLS * TILE, WH = ROWS * TILE;
@@ -373,22 +375,25 @@ function leafSprite(r, ramp, seed, inside, berries, sh = 0) { // sh: how deep in
   }
   g.putImageData(img, 0, 0); o = { c, rx, ry }; discC.set(key, o); return o;
 }
-function pineTier(r, ramp, seed) { // one branch tier: a wide, drooping triangle with a jagged, needly lower edge
-  const key = 'P' + r + ramp + seed; let o = discC.get(key); if (o) return o;
-  const Rm = TREE_RAMPS[ramp], ht = Math.round(r * 0.6), w = 2 * r + 1, h = ht + 6;
+function pineTier(r, th, ramp, seed) { // v5.11.0.5.3: one fir tier, a pointed cone of needles th px tall from its tip to its drooping skirt
+  // Row 0 is the tip, row th the skirt line (the tier's anchor). Each tier reaches well up behind the tier above, so the stack reads
+  // as one fir: green to the tip, no trunk between the tiers. Lit from the upper left, deep shade on the right and under the skirt.
+  const key = 'P' + r + '|' + th + ramp + seed; let o = discC.get(key); if (o) return o;
+  const Rm = TREE_RAMPS[ramp], w = 2 * r + 1, h = th + 4;
   const c = mkc(w, h), g = c.getContext('2d'), img = g.createImageData(w, h), d = new Uint32Array(img.data.buffer);
-  for (let x = -r; x <= r; x++) { const ax = Math.abs(x) / r, top = Math.round(ht * Math.pow(ax, 0.85)), ph = (x + seed + 99) % 3;
-    const bot = ht + 1 + Math.round(ax * ax * 2) + (ph === 0 ? 2 : ph === 1 ? 1 : 0) - (ax > 0.92 ? 1 : 0);
-    for (let y = top; y <= Math.min(h - 1, bot); y++) { const rel = (y - top) / Math.max(1, bot - top);
-      let L = 0.78 - rel * 0.85 - (x / r) * 0.4;
-      if (rel > 0.15 && ((Math.abs(x) + y) % 3 === 0)) L -= 0.2;      // needle streaks, sloping down and out
-      let t = L > 0.55 ? 0 : L > 0.3 ? 1 : L > 0.02 ? 2 : 3;
-      if (y >= bot - 0) t = Math.max(t, 3);
-      if (y === top && x <= 0) t = Math.min(t, 1);
+  for (let x = -r; x <= r; x++) { const ax = Math.abs(x) / r, top = Math.round(th * Math.pow(ax, 1.12)), ph = (Math.abs(x) + seed * 2 + 99) % 3;
+    const bot = Math.min(h - 1, th + Math.round(ax * ax * 1.5) + (Math.abs(x) < 3 ? 0 : ph === 0 ? 2 : ph === 1 ? 1 : 0) - (ax > 0.9 ? 1 : 0)); // jagged, drooping needle tips (a level skirt over the stub)
+    for (let y = top; y <= bot; y++) { const rel = (y - top) / Math.max(1, bot - top), v = y / Math.max(1, th);
+      let L = 1.0 - v * 0.5 - rel * 0.35 - (x / r) * 0.42;
+      if (y > top && ((Math.abs(x) * 2 + y + seed) % 4 === 0) && rel > 0.2) L -= 0.22;     // needle streaks, sloping down and out
+      let t = L > 0.62 ? 0 : L > 0.36 ? 1 : L > 0.08 ? 2 : 3;
+      if (y >= bot - (ax < 0.85 ? 1 : 0)) t = Math.max(t, x > 0 ? 4 : 3);            // the underside of the skirt
+      else if (y === top && x <= 0) t = Math.min(t, 1);                              // sunlit upper-left edge
+      else if (y === top && x > 0) t = Math.max(t, 2);
       d[y * w + x + r] = u32(Rm[t]); } }
-  g.putImageData(img, 0, 0); o = { c, rx: r, ry: ht }; discC.set(key, o); return o;
+  g.putImageData(img, 0, 0); o = { c, rx: r, ry: th }; discC.set(key, o); return o;
 }
-function clumpSprite(p) { return p.tier ? pineTier(p.r, p.ramp, p.seed) : leafSprite(p.r, p.ramp, p.seed, p.inside, p.berries, p.sh || 0); }
+function clumpSprite(p) { return p.tier ? pineTier(p.r, p.th, p.ramp, p.seed) : leafSprite(p.r, p.ramp, p.seed, p.inside, p.berries, p.sh || 0); }
 function discFoot(ps) { // shadow footprint of the canopy (screen px, centred)
   let R = 4; for (const p of ps) R = Math.max(R, Math.hypot(p.ox, p.oy) + p.r);
   const w = Math.ceil(2 * R), foot = mkc(w, w), g = foot.getContext('2d'); g.fillStyle = '#000';
@@ -422,13 +427,12 @@ function birchDef(seed, sc = 1) {
     discs.push({ ox: Math.cos(a) * rad + lean * cz0 * 0.5, oy: Math.sin(a) * rad * 0.8, cz: cz0 + zz * 12 * sc, r: Math.round(4 + r() * 2), ramp: 'birch', seed: (seed + i) % 6, sh: zz > 0.2 ? 0 : 1 }); }
   return finishTree({ kind: 'birch', parts, discs, push: 0.7, period: 4.8, damp: 1.05, h: Math.ceil(cz0 + 14 * sc + 10) }, cz0, 9 * sc);
 }
-function pineDef(seed, ramp = 'pine', sc = 1) {
+function pineDef(seed, ramp = 'pine', sc = 1) { // v5.11.0.5.3: a fir. A short trunk stub under overlapping cone tiers, foliage to the tip
   const r = mulberry32(seed), parts = [], discs = [], H = Math.round((62 + r() * 16) * sc), n = 5 + Math.floor(r() * 2), R0 = (16 + r() * 4) * sc;
-  parts.push(part([-2, 2, -2, 2, 0, H - 6], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? Wd[1] : null));
-  const base = 10 * sc, step = (H - 8 - base) / n;
+  const base = Math.round(3 * sc), step = (H - 2 - base) / (n + 0.9), th = Math.round(step * 1.9);
+  parts.push(part([-2, 2, -2, 2, 0, base + 3], (x, y, z) => Math.max(Math.abs(x + 0.5), Math.abs(y + 0.5)) <= 1.6 ? (z === 0 ? Wd[0] : Wd[1]) : null)); // hidden above the skirt
   for (let i = 0; i < n; i++) { const up = (i + 0.5) / n;
-    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(4, Math.round(R0 * (1 - i / (n + 0.6)) + 2)), ramp, seed: (seed + i) % 3, tier: 1, w: up > 0.62 ? 0.2 + 0.25 * up : 0 }); }
-  discs.push({ ox: 0, oy: 0, cz: Math.round(base + n * step), r: 3, ramp, seed: 1, tier: 1, w: 0.4 });
+    discs.push({ ox: 0, oy: 0, cz: Math.round(base + i * step), r: Math.max(5, Math.round(R0 * (1 - i / (n + 0.4)) + 2)), th: i === n - 1 ? H - 2 - Math.round(base + i * step) : th, ramp, seed: (seed + i) % 3, tier: 1, w: up > 0.62 ? 0.2 + 0.25 * up : 0 }); }
   return finishTree({ kind: 'pine', parts, discs, push: 0.3, period: 8.0, damp: 1.2, h: H + 8 }, 0, 1);
 }
 function bushDef(seed, ramp = 'oak') {
@@ -471,16 +475,24 @@ function discSway(o, p, poseT, unit) { // one canopy clump; the whole tree share
 const cv = document.getElementById('game'), ctx = cv.getContext('2d', { willReadFrequently: true });
 cv.width = W; cv.height = H;
 const mk = mkc;
-const shMask = new Uint32Array(W * H);
-const shC = mk(W, H), sctx = shC.getContext('2d');
-const litC = mk(W, H), lctx = litC.getContext('2d'); const litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
+let shMask = new Uint32Array(W * H);
+let shC = mk(W, H), sctx = shC.getContext('2d');
+let litC = mk(W, H), lctx = litC.getContext('2d'); let litImg = lctx.createImageData(W, H), litL = new Float32Array(W * H); let litKey = '', litBuilds = 0; // v5.9.1: the light layer is cached by key
 const GW = Math.ceil((WORLD.x1 - WORLD.x0 + 2 * GM) * RS), GH = Math.ceil((WORLD.y1 - WORLD.y0 + 2 * GM) * RS);
 const groundBase = mk(GW, GH);
 [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
-let zoom = 0; // extra integer zoom steps from the mouse wheel (CSS scale only, so pixels stay square)
-function fit() { // largest whole multiple of the buffer in *device* pixels, placed on a whole device pixel (letterboxed)
-  const dpr = window.devicePixelRatio || 1, vw = Math.floor(innerWidth * dpr), vh = Math.floor(innerHeight * dpr);
-  const base = Math.max(1, Math.floor(Math.min(vw / W, vh / H))), s = base + zoom;
+let zoom = 0; // extra integer zoom steps from the mouse wheel (bigger pixels, so pixels stay square)
+function sizeBuffers(w, h) { // v5.11.0.5.2: the screen-sized buffers follow the framebuffer
+  if (w === W && h === H) return;
+  W = w; H = h; cv.width = W; cv.height = H;
+  shMask = new Uint32Array(W * H); shC = mk(W, H); sctx = shC.getContext('2d');
+  litC = mk(W, H); lctx = litC.getContext('2d'); litImg = lctx.createImageData(W, H); litL = new Float32Array(W * H); litKey = '';
+  [ctx, sctx].forEach(c => c.imageSmoothingEnabled = false);
+}
+function fit() { // whole multiple of the framebuffer in *device* pixels; the framebuffer is sized to cover the window, so there is no letterbox
+  const dpr = window.devicePixelRatio || 1, vw = Math.max(1, Math.round(innerWidth * dpr)), vh = Math.max(1, Math.round(innerHeight * dpr));
+  const base = Math.max(1, Math.floor(Math.min(vw / BW, vh / BH))), s = base + zoom;
+  if (!VIEW) sizeBuffers(Math.min(1600, Math.ceil(vw / s)), Math.min(1000, Math.ceil(vh / s)));
   const wrap = document.getElementById('wrap'), left = Math.floor((vw - W * s) / 2), top = Math.floor((vh - H * s) / 2);
   wrap.style.left = left / dpr + 'px'; wrap.style.top = top / dpr + 'px';
   cv.style.width = W * s / dpr + 'px'; cv.style.height = H * s / dpr + 'px';
@@ -4736,17 +4748,22 @@ const albumId = a => (a === FARMER ? 'farmer' : a.id);
 const albumOut = a => a && !a.home && !a.away && !a.sleeping;
 // a live moment: the metadata now, the picture in a frame or two (o: { wait: game minutes, follow: actor id to centre on })
 function albumSnap(id, x, y, o) {
-  if (!ALB || !S.album || !ALB.BY[id] || ALB.has(S.album, id)) return null; o = o || {};
+  if (!ALB || !S.album || !ALB.BY[id]) return null; o = o || {};
+  const old = ALB.get(S.album, id); if (old && old.t >= 0) return null; // taken already
+  if (old) ALB.remove(S.album, id); // a re-staged (补拍) frame from the backfill: the real moment takes its place
   if (x == null) { const p = albumPlace(ALB.BY[id].at); x = p.x; y = p.y; }
   const e = ALB.add(S.album, { id, d: S.day, t: Math.floor(S.t % 1440), x, y, w: [] }); if (!e) return null;
-  albumQ.push({ e, at: S.t + (o.wait == null ? (ALBUM_WAIT[id] || 0) : o.wait), follow: o.follow || null, re: !!o.re });
+  const at = Math.floor(S.t + (o.wait == null ? (ALBUM_WAIT[id] || 0) : o.wait));
+  e.q = { at, f: o.follow || '', re: o.re ? 1 : 0 }; // saved with the album, so a reload before the photo is taken keeps it pending
+  albumQ.push({ e, at, follow: o.follow || null, re: !!o.re });
   if (DY && S.diary) DY.note(S.diary, S.day, 'photo:' + id);
   return e;
 }
 // at the end of render(): take one due photo
 function albumFlush() {
   const i = albumQ.findIndex(q => S.t >= q.at); if (i < 0) return; const q = albumQ.splice(i, 1)[0], e = q.e;
-  if (!ALB.has(S.album, e.id)) return; // a different farm was loaded meanwhile
+  if (ALB.get(S.album, e.id) !== e) return; // a different farm was loaded meanwhile
+  delete e.q;
   const f = q.follow && (q.follow === 'farmer' ? FARMER : S.members.find(m => m.id === q.follow));
   if (albumOut(f)) { e.x = Math.round(f.x); e.y = Math.round(f.y); } else if (q.re) { const p = albumPlace(ALB.BY[e.id].at); e.x = Math.round(p.x); e.y = Math.round(p.y); }
   e.t = Math.floor(S.t % 1440); e.d = S.day;
@@ -4768,9 +4785,10 @@ function albumShot(x, y, stage) {
       who.forEach((a, i) => { saved.push([a, { x: a.x, y: a.y, home: a.home, away: a.away, sleeping: a.sleeping, fx: a.fx, fy: a.fy, moving: a.moving }]);
         Object.assign(a, { x: x + (i - (who.length - 1) / 2) * 9, y: y + 2 + (i % 2), home: false, away: null, sleeping: false, fx: 0, fy: 1, moving: false }); });
       if (stage.t != null) S.t = S.t - (S.t % 1440) + stage.t; }
-    albumBusy = 1;
-    try { cam.x = x; cam.y = y; render(); [x0, y0] = box(); g.drawImage(cv, x0, y0, PW, PH, 0, 0, PW, PH); }
-    finally { S.t = T0; for (const [a, v] of saved) Object.assign(a, v); cam.x = keep.x; cam.y = keep.y; render(); albumBusy = 0; }
+    albumBusy = 1; const w0 = W, h0 = H, small = W < PW || H < PH; // v5.11.0.5.2: the framebuffer follows the window (and the zoom); a tiny one grows for this frame
+    try { if (small) sizeBuffers(Math.max(W, PW), Math.max(H, PH)); cam.x = x; cam.y = y; render(); [x0, y0] = box();
+      x0 = clamp(x0, 0, Math.max(0, W - PW)); y0 = clamp(y0, 0, Math.max(0, H - PH)); g.drawImage(cv, x0, y0, PW, PH, 0, 0, PW, PH); }
+    finally { S.t = T0; for (const [a, v] of saved) Object.assign(a, v); cam.x = keep.x; cam.y = keep.y; if (small) sizeBuffers(w0, h0); render(); albumBusy = 0; }
   }
   try { return c.toDataURL('image/png'); } catch (err) { return null; }
 }
@@ -4790,15 +4808,15 @@ function albumFacts() {
   const m = l => Object.fromEntries((l || []).map(u => [u.id, u.day | 0])), H = S.town && S.town.hall, hm = S.home || {};
   const weds = HM && hm.wed ? HM.KID_IDS.map(k => hm.wed[k]).filter(Boolean) : [], moved = weds.filter(w => w.moved > 0);
   const giants = (BOOK.GIANT_CROPS || []).map(k => BOOK.entryOf(S.codex, BOOK.keyGiant(k))).filter(Boolean);
-  let market = 0; try { if (MK && H && MK.built(H)) { const d = MK.nextDay(H, (H.built.market | 0) + 1); if (d && d < S.day) market = d; } } catch (e) {}
+  const M = H && H.market; // what the family actually sold at the market (days, last day), not the square being built
   return { ms: m(S.milestones), ach: m(S.achievements), kids: S.family.kids, met: S.family.met | 0, moved: S.family.moved | 0, mate: (S.town && S.town.mate && S.town.mate.last) | 0,
-    town: townOpen(), market, sports: (H && H.school && H.school.last) | 0, fest: (H && H.festival && H.festival.last) | 0,
+    town: townOpen(), marketDays: (M && M.days) | 0, marketLast: (M && M.last) | 0, sports: (H && H.school && H.school.last) | 0, fest: (H && H.festival && H.festival.last) | 0,
     inn: !!(S.inn && ((S.inn.earn && S.inn.earn.rooms > 0) || (S.inn.guests || []).length)), wed: weds.length ? Math.min(...weds.map(w => w.day | 0)) : 0,
     movedIn: moved.length ? Math.min(...moved.map(w => w.moved)) : 0, giant: giants.length ? Math.min(...giants.map(e => e.firstDay | 0)) : null };
 }
 function albumBackfill() { // silent: re-staged frames for what already happened (no picture yet: the album re-stages it when opened)
   if (!ALB || !S.album) return 0; let n = 0;
-  for (const f of ALB.due(albumFacts())) { if (ALB.has(S.album, f.id) || f.d >= S.day && f.d > 1) continue; const m = ALB.BY[f.id], p = albumPlace(m.at);
+  for (const f of ALB.due(albumFacts())) { if (ALB.has(S.album, f.id) || (f.d > 0 && f.d >= S.day)) continue; const m = ALB.BY[f.id], p = albumPlace(m.at); // f.d today: the live photo may still come
     if (ALB.add(S.album, { id: f.id, d: f.d, t: -1, x: p.x, y: p.y, w: m.who })) n++; }
   return n;
 }
@@ -5091,6 +5109,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   S.pondFish = (s.pondFish || []).map(f => Object.assign({}, f)); S.pondFed = 0;
   S.diary = DY ? DY.valid(s.diary) : null; // v5.10.13
   S.album = ALB ? ALB.valid(s.album) : null; albumQ.length = 0; // v5.11.0.11 (old saves: backfilled after the load)
+  if (S.album) for (const e of S.album.list) if (e.q) albumQ.push({ e, at: e.q.at, follow: e.q.f || null, re: !!e.q.re }); // photos still waiting when it was saved
   S.codex = BOOK.validCodex(s.codex); S.achievements = (s.achievements || []).map(u => Object.assign({}, u)); S.milestones = (s.milestones || []).map(u => Object.assign({}, u));
   S.streaks = BOOK.validStreaks(s.streaks); S.doorGift = null; S.loose = []; S.dogPlan = null; planDogDay();
   S.weather = WX && WX.validWeather ? WX.validWeather(s.weather) : (s.weather || { nextDay: 0, start: 0, dur: 0, lastDay: 0, rained: 0 }); S.weather = WX && WX.ensure ? WX.ensure(S.weather, S.day, s.createdAt | 0 || 1) : S.weather; S.bugNet = s.bugNet ? 1 : 0; if (INS && INS.reset) INS.reset();
@@ -5133,6 +5152,11 @@ function applyRainMorning(forced) {
   noteProgress({ sawRain: true });
   return true;
 }
+// v5.11.0.5.3: tools/pine-shots.js renders one tree on its own (its cached sprite at the current angle) and reads its pixels
+if (window.__farm) Object.assign(window.__farm, { treeDefs, treeImage: (def, x = 0, y = 0, poseT = 0, lean = 0) => { setCam(); const o = { tree: def, x, y, lean, tick: 0 }, k = treeCache(o, poseT);
+  const trunk = new Set(), leaf = new Set(); for (const c of Wd) trunk.add(u32(c)); for (const c of G) { leaf.add(u32(c)); leaf.add(OUTL.get(u32(c))); } leaf.delete(INK0); // ink outlines count as neither
+  for (const c of trunk) leaf.delete(c); const cls = Array.from(k.d32, v => !(v >>> 24) ? 0 : trunk.has(v) ? 2 : leaf.has(v) ? 1 : 3);
+  return { w: k.c.width, h: k.c.height, ox: k.ox, oy: k.oy, cls, url: k.c.toDataURL() }; } });
 if (window.__farm) Object.assign(window.__farm, { rainPick: () => rainPick(), rainUnder: (x, y) => rainUnder(x, y) }); // v5.11.0.4: for tools/rain-shots.js
 function tickWeather(dt) {
   const raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
@@ -5206,7 +5230,7 @@ document.addEventListener('visibilitychange', () => {
   else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }
 });
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
-Object.assign(window.__farm, { ALB, albumSnap: (id, x, y, o) => albumSnap(id, x, y, o), albumView: () => albumView(), albumRestage: id => albumRestage(id), albumBackfill: () => albumBackfill(), albumFacts: () => albumFacts(), albumPlace: at => albumPlace(at), albumQueue: () => albumQ.length, albumMs: () => albumMs }); // v5.11.0.11
+Object.assign(window.__farm, { ALB, albumSnap: (id, x, y, o) => albumSnap(id, x, y, o), albumView: () => albumView(), albumRestage: id => albumRestage(id), albumBackfill: () => albumBackfill(), albumFacts: () => albumFacts(), albumPlace: at => albumPlace(at), albumQueue: () => albumQ.length, albumPending: () => albumQ.map(q => [q.e.id, q.at]), albumMs: () => albumMs }); // v5.11.0.11
 Object.assign(window.__farm, { snapshot: () => snapshot(), YD, yardTodo: () => yardTodo(), yardWalk: (x, y) => yardWalk(x, y), yardNight: () => yardNight(), clothesOut: () => clothesOut(), petBed: (d, k) => petBed(d, k), yardSetup: id => { const q = yardSetupTask(id); q.done(); }, priceMult: () => YD.stallMult(S.homeyard.put) });
 Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, pondRoom: () => pondRoom(), pondCatchUp: () => pondCatchUp(), DY, diaryView: d => diaryView(d), diaryMorning: () => diaryMorning(), KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,

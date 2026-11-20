@@ -114,6 +114,48 @@ fs.mkdirSync(OUT, { recursive: true });
       return { shown: !el.hidden, album: !!el.querySelector('.grid'), cols: pols.length === 2 && Math.abs(pols[0].top - pols[1].top) < 6 ? 2 : 1, w: Math.round(rc.width), right: Math.round(rc.right), vw: innerWidth, tab: !!el.querySelector('[data-a="diary"]'), webBtn: !!document.getElementById('albumBtn').offsetParent, tap: Math.round(pols[0] ? pols[0].height : 0) }; }); },
     r => !r.shown || !r.album ? 'no album in the diary sheet' : r.cols !== 2 ? 'columns ' + r.cols : r.right > r.vw ? 'off screen' : !r.tab ? 'no way back to the diary' : r.webBtn ? 'web 相册 button shown on the phone' : r.tap < 44 ? 'tap target ' + r.tap : null);
 
+  // 8. review (1): a built market square is not a market trip. Day 66 the square is built, day 70 is a market day with nothing sold,
+  //    day 72 reload: no 「第一次赶集」 may be backfilled. And a real sale replaces a re-staged (补拍) frame of the same moment.
+  await shot('review_market.png', null, save72, async p => {
+    const save = await p.evaluate(() => { const f = __farm, S = f.S, H = S.town.hall; S.up.town = 1; f.applyUpgrades();
+      H.built = Object.assign({}, H.built, { market: S.day - 6 }); H.market = f.MK.empty(); f.ALB.remove && f.ALB.remove(S.album, 'market'); return f.snapshot(); });
+    await p.evaluate(s => { localStorage.setItem('mouzhi/pixel-farm:save', JSON.stringify(Object.assign(s, { savedAt: Date.now() }))); }, save); await p.reload(); await ready(p);
+    const r = await p.evaluate(() => { const f = __farm, S = f.S; f.SAVE.off = true; const H = S.town.hall;
+      return { day: S.day, open: f.ALB ? !!(S.eff && S.eff.town) : null, built: H.built.market, marketDay: f.MK.isDay(H, 70), sold: H.market.days, backfilled: f.ALB.pack({ list: S.album.list.filter(e => e.id === 'market') }) }; });
+    Object.assign(r, await p.evaluate(() => { const f = __farm, S = f.S; // an older build's re-staged frame, then the real first sale (the hook's call)
+      if (!f.ALB.has(S.album, 'market')) f.ALB.add(S.album, { id: 'market', d: 70, t: -1, x: 650, y: 120, w: ['farmer'] });
+      f.panTo(650, 120); f.render(); const got = f.albumSnap('market', 650, 120, { wait: 0 }); f.render(); const e = f.ALB.get(S.album, 'market'), v = f.albumView().shots.find(x => x.id === 'market');
+      return { replaced: !!got, after: e && [e.d, e.t >= 0], live: !!(v && v.url && !v.restaged) }; }));
+    return r; },
+    r => !r.open || r.built !== r.day - 6 || !r.marketDay || r.sold ? 'setup ' + JSON.stringify(r) : r.backfilled.length ? 'backfilled without a sale: ' + r.backfilled : !r.replaced || !r.after || r.after[0] !== r.day || !r.after[1] || !r.live ? 'real sale blocked ' + JSON.stringify(r) : null);
+
+  // 9. review (2): save + reload while a photo is still waiting (people walking out of the door): it is still taken afterwards
+  await shot('review_pending.png', null, null, async p => {
+    const r = { before: await p.evaluate(() => { const f = __farm; f.SAVE.off = false; f.saveNow(); return { q: f.albumQueue(), meta: f.ALB.pack(f.S.album) }; }) };
+    await p.reload(); await ready(p);
+    r.reloaded = await p.evaluate(() => { const f = __farm; f.SAVE.off = true; return { q: f.albumQueue(), meta: f.ALB.pack(f.S.album) }; });
+    r.after = await p.evaluate(() => { const f = __farm; for (let i = 0; i < 120 && f.albumQueue(); i++) f.advance(1, 10); const v = f.albumView().shots.find(x => x.id === 'open');
+      return { q: f.albumQueue(), url: !!(v && v.url), restaged: !!(v && v.restaged), meta: f.ALB.pack(f.S.album) }; });
+    return r; },
+    r => !r.before.q ? 'nothing pending to begin with' : !r.reloaded.q ? 'pending capture lost on reload ' + JSON.stringify(r.reloaded) : r.after.q || !r.after.url ? 'not taken after reload' : r.after.restaged ? 'came back as 补拍' : /\|.*\|.*\|.*\|.*\|.*\|/.test(r.after.meta[0]) ? 'pending field left behind ' + r.after.meta : null);
+  // ... and the same for a wedding announced in the morning and shot in the evening (re-placed at the spot when it fires)
+  await shot('review_pending_wedding.png', null, save72, async p => {
+    await p.evaluate(() => { const f = __farm; f.albumSnap('wedding', null, null, { wait: 40, re: true }); f.SAVE.off = false; f.saveNow(); });
+    await p.reload(); await ready(p);
+    return p.evaluate(() => { const f = __farm; f.SAVE.off = true; const q = f.albumQueue(); for (let i = 0; i < 120 && f.albumQueue(); i++) f.advance(1, 10);
+      const v = f.albumView().shots.find(x => x.id === 'wedding'); return { q, left: f.albumQueue(), url: !!(v && v.url), restaged: !!(v && v.restaged) }; }); },
+    r => !r.q ? 'pending capture lost on reload' : r.left || !r.url ? 'not taken' : r.restaged ? 'came back as 补拍' : null);
+
+  // 10. canvas-fill (v5.11.0.5.2): a small, zoomed-in framebuffer still gives a full 160×110 photo
+  await shot('small_view.png', { width: 520, height: 360 }, null, async p => {
+    for (let i = 0; i < 3; i++) { await p.mouse.move(260, 200); await p.mouse.wheel(0, -100); await p.waitForTimeout(60); } // zoom in 3 steps: a 130×90 framebuffer
+    return p.evaluate(async () => { const f = __farm; const W0 = document.getElementById('game').width, H0 = document.getElementById('game').height;
+      f.panTo(400, 40); f.render(); const e = f.albumSnap('fish', 40, 104, { wait: 0 }); f.render(); const v = f.albumView().shots.find(x => x.id === 'fish');
+      const img = new Image(); img.src = v.url; await img.decode(); const c = document.createElement('canvas'); c.width = 160; c.height = 110; const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+      const d = g.getImageData(0, 0, 160, 110).data; let blank = 0; for (let i = 3; i < d.length; i += 4) if (d[i] === 0) blank++;
+      return { fb: [W0, H0], after: [document.getElementById('game').width, document.getElementById('game').height], w: img.width, h: img.height, blank }; }); },
+    r => r.fb[0] >= 160 && r.fb[1] >= 110 ? 'framebuffer not small ' + r.fb : r.w !== 160 || r.h !== 110 ? 'size' : r.blank > 0 ? 'blank pixels ' + r.blank : r.after[0] !== r.fb[0] || r.after[1] !== r.fb[1] ? 'framebuffer not restored' : null);
+
   await b.close(); server.close();
   const real = errs.filter(e => !/favicon|404/.test(e)); if (real.length) { console.log('page errors:', real.slice(0, 5)); fails.push('page errors'); }
   if (fails.length) { console.log('FAILED:', fails.join(' | ')); process.exit(1); } console.log('album-shots: all ok');

@@ -39,11 +39,11 @@ ok('album view: taken by day, then locked frames with a hint (not the title)', (
 });
 ok('backfill facts from an old save: milestones, achievements, kids, town days', () => {
   const f = { ms: { open: 1, fish: 50, met: 30, moved: 41, manor: 55, animal: 0 }, ach: { kidwork: 53, school: 66, firstrain: 68, truecatch: 0, firstbug: 64, firstpark: 67, party: 71 },
-    kids: [{ born: 48 }, { born: 58 }], met: 30, moved: 41, mate: 98, town: true, market: 105, sports: 112, fest: 0, inn: false, wed: 0, movedIn: 0, giant: 54 };
+    kids: [{ born: 48 }, { born: 58 }], met: 30, moved: 41, mate: 98, town: true, marketDays: 1, marketLast: 105, sports: 112, fest: 0, inn: false, wed: 0, movedIn: 0, giant: 54 };
   const due = A.due(f), ids = due.map(d => d.id), day = id => due.find(d => d.id === id).d;
   for (const id of ['open', 'animal', 'fish', 'met', 'moved', 'manor', 'born0', 'born1', 'kidwork', 'school', 'classmate', 'bug', 'park', 'rain', 'giant', 'rarefish', 'party', 'towngate', 'market', 'sports']) assert(ids.includes(id), id);
   for (const id of ['fest', 'inn', 'wedding', 'newhouse']) assert(!ids.includes(id), id);
-  assert.equal(day('born1'), 58); assert.equal(day('school'), 66); assert.equal(day('classmate'), 0); assert.equal(day('market'), 105); assert.equal(day('animal'), 0);
+  assert.equal(day('born1'), 58); assert.equal(day('school'), 66); assert.equal(day('classmate'), 0); assert.equal(day('market'), 105); assert.equal(day('sports'), 112); assert.equal(day('animal'), 0);
   assert.deepEqual(A.due({}), []);
 });
 ok('picture store: own key per farm, bad entries dropped, a full storage does not throw', () => {
@@ -63,5 +63,18 @@ ok('v10 / v15 fixtures load without an album; the v15 append-only album survives
     assert.equal(r.saveVersion, 15); assert.deepEqual(r.album, A.pack(a)); assert(enc.length - before < 1500, 'grew ' + (enc.length - before));
     assert(!/data:image/.test(enc), 'no pictures in the save');
   }
+});
+ok('review: a built market square / town buildings alone never backfill a moment; only records of the event do', () => {
+  const ids = f => A.due(f).map(d => d.id);
+  assert(!ids({ marketDays: 0, marketLast: 0 }).includes('market'), 'square built, nothing sold');
+  assert.deepEqual(A.due({ marketDays: 3, marketLast: 21 }).filter(d => d.id === 'market'), [{ id: 'market', d: 0 }], 'several market days: first day unknown');
+  assert(!ids({ sports: 0, fest: 0, inn: false, wed: 0, movedIn: 0, mate: 0, giant: null }).length);
+});
+ok('review: a photo still waiting to be taken is packed with the album (7th field) and comes back; taken photos stay 6 fields', () => {
+  const a = A.empty(); A.add(a, { id: 'born0', d: 48, t: 400, x: 42, y: 48, w: [], q: { at: 69520, f: 'partner', re: 0 } }); A.add(a, { id: 'open', d: 1, t: 390, x: 82, y: 66, w: ['farmer'] });
+  const p = A.pack(a); assert.deepEqual(p, ['born0|48|400|42|48||69520.partner.0', 'open|1|390|82|66|farmer']);
+  const b = A.valid(p); assert.deepEqual(A.get(b, 'born0').q, { at: 69520, f: 'partner', re: 0 }); assert(!('q' in A.get(b, 'open')));
+  assert.deepEqual(A.valid(['wedding|90|1100|1|2|kid0|99.<x>.1']).list[0].q, { at: 99, f: '', re: 1 });
+  assert(A.remove(b, 'born0') && !A.has(b, 'born0') && !A.remove(b, 'born0'));
 });
 console.log('album-test:', n, 'ok');
