@@ -179,7 +179,7 @@
       if (lamp && lit && p.id !== 'stringlights' && p.id !== 'party') { const [sx, sy] = proj(p.x, p.y), h = p.id === 'lamppost' ? 12 : 5; ctx.fillStyle = '#fff4b8'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - h, 2, 2); }
       if (lamp && !lamp.on && wheel && night > 0.2 && !(p.id === 'party' && partyNow(T)) && X.farIcon) { const [sx, sy] = proj(p.x, p.y); ctx.globalAlpha = 0.85; ctx.drawImage(X.farIcon(), Math.round(sx) - 3, Math.round(sy) - 30); ctx.globalAlpha = 1; } }
     // pending orders: a little flag where it is going
-    for (const q of S.decor.orders) { if (!onScreen(q.x, q.y, 30)) continue; const [sx, sy] = proj(q.x, q.y), x = Math.round(sx), y = Math.round(sy);
+    for (const q of S.decor.orders) { if (q.op === 'store' || !onScreen(q.x, q.y, 30)) continue; const [sx, sy] = proj(q.x, q.y), x = Math.round(sx), y = Math.round(sy);
       ctx.fillStyle = Ink[0]; ctx.fillRect(x, y - 9, 1, 9); ctx.fillStyle = q.st === 1 ? Ac[1] : Ac[0]; ctx.fillRect(x + 1, y - 9, 4, 3); }
     // someone carrying a piece: its icon bobbing over their head
     for (const c of carriers || []) { const url = c.id && ICON_URL[c.id]; if (!url) continue; const img = iconImg(c.id); if (!img) continue;

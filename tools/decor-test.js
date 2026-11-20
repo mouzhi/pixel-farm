@@ -88,4 +88,11 @@ ok('shop: a 装饰 tab with flat prices; the party area costs 2000 + 40 wood', (
   const p = SIM.shopItem('party'); assert(p.flat && p.p9); assert.deepStrictEqual([p.levels[0].cost, p.levels[0].wood], [2000, 40]);
   const b = SIM.shopItem('bench'); assert(b.levels.every(l => l.cost === 300 && l.wood === 10)); assert.strictEqual(b.levels.length, 6);
 });
+ok('v5.11.0.2 收回: store orders and kept pieces survive valid(); kept never exceeds the storehouse; untouched saves keep their shape', () => {
+  const v = DC.valid({ inv: { bench: 2, flowerpot: 1 }, kept: { bench: 5, flowerpot: 1, nope: 3 }, placed: [{ u: 3, id: 'bench', x: 60, y: 60 }],
+    orders: [{ op: 'store', what: 'decor', ref: 3, id: 'bench', x: 158, y: 41, mine: 1 }, { op: 'store', what: 'work', ref: 'mill', x: 1, y: 1 }, { op: 'store', what: 'decor', ref: null, x: 1, y: 1 }], n: 4 });
+  assert.deepStrictEqual(v.kept, { bench: 2, flowerpot: 1 });
+  assert.strictEqual(v.orders.length, 1); assert.deepStrictEqual([v.orders[0].op, v.orders[0].what, v.orders[0].ref, v.orders[0].mine], ['store', 'decor', 3, 1]);
+  assert(!('kept' in DC.valid({ inv: { bench: 1 } })), 'no kept field unless used'); assert(!('kept' in DC.empty()));
+});
 console.log(`decor-test: ${n} ok`);
