@@ -82,7 +82,7 @@ fs.mkdirSync(OUT, { recursive: true });
       look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, bakery: s2.town.hall.bakery, layout: s2.settings.decorLayout, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.5.2' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
 
   // 6. (local only) the real save and the friend's save load, decorations keep their counts, lamps use the wider spots
