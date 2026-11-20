@@ -188,5 +188,30 @@ ok('forceCatch can attach the catching kid so the popup can sit above their head
   assert.strictEqual(ev.kidY, 76);
 });
 
+ok('v5.11.0.4 drizzle: drops aim at world spots, land as splash + wet spot (ground) or a ripple hit (water), pools stay capped', () => {
+  WX.resetVisual();
+  let n = 0; const pick = () => { n++; return n % 3 === 0 ? { x: 30, y: 100, water: 1 } : n % 7 === 0 ? null : { x: 80 + (n % 17), y: 60 + (n % 11), water: 0 }; };
+  for (let i = 0; i < 90; i++) WX.tickVisual(1 / 30, { raining: true, wetness: 1, W: 426, H: 266, pick });
+  const s = WX.rainStats();
+  assert(s.drops > 5 && s.drops <= s.caps.drops, 'drops ' + s.drops);
+  assert(s.wet > 10 && s.wet <= s.caps.wet, 'wet ' + s.wet);
+  assert(s.hits > 0 && s.hits <= s.caps.hits, 'hits ' + s.hits);
+  assert.strictEqual(WX._visual.streaks.length, 0); // no screen-space streaks any more
+  WX.eachDrop(d => { assert(d.len >= WX.RAIN.LEN_MIN && d.len <= WX.RAIN.LEN_MAX); assert(d.t < d.dur); assert(d.x >= 30); });
+  const H = WX.rainHits(); for (let i = 0; i < H.n; i++) { assert(H.a[i].age < WX.RAIN.RIPPLE); assert.strictEqual(H.a[i].x, 30); }
+  // a heavy pick rate never grows the pools past their caps, and the pool objects are reused
+  const first = WX.rainHits().a[0];
+  for (let i = 0; i < 300; i++) WX.tickVisual(1 / 30, { raining: true, wetness: 1, W: 1600, H: 1000, pick });
+  const s2 = WX.rainStats();
+  assert(s2.drops <= s2.caps.drops && s2.wet <= s2.caps.wet && s2.splashes <= s2.caps.splash && s2.hits <= s2.caps.hits, JSON.stringify(s2));
+  assert.strictEqual(WX.rainHits().a.length, s2.caps.hits); assert(WX.rainHits().a.includes(first));
+  // the shower ends: nothing new spawns and everything in flight lands and fades within a few seconds
+  for (let i = 0; i < 180; i++) WX.tickVisual(1 / 30, { raining: false, wetness: 0.5, W: 426, H: 266, pick }); // the fade-out tail, then the last wet spots
+  const s3 = WX.rainStats(); assert.strictEqual(s3.drops + s3.splashes + s3.wet + s3.hits, 0, JSON.stringify(s3));
+  // no pick (Node / older hooks): no drops, no crash
+  WX.resetVisual(); WX.tickVisual(0.5, { raining: true }); assert.strictEqual(WX.rainStats().drops, 0);
+  assert.strictEqual(WX.drawRain(), 0);
+});
+
 console.log(n + ' tests ok');
 

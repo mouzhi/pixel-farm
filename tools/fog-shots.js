@@ -89,6 +89,15 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('fog_full.png', `(() => { ${helpers} at(10 * 60); dry(); look(600, 40, 0); openTown(); f.advance(2, 10); toLv3(); f.advance(2, 10); hide();
       const r = fog(); r.same = same(); r.jumps = jumps(); r.lv = f.hallView().lv; return r; })()`,
     r => r.lv < 3 ? 'lv ' + r.lv : r.fading || !r.empty ? 'still shaded ' + JSON.stringify(r.shut) : !r.same ? 'something still drawn' : r.jumps.agri !== 'open' || r.jumps.town !== 'open' ? 'jumps ' + JSON.stringify(r.jumps) : null, null, wide);
+  // 6b. v5.11.0.5 农家乐区: the lodging stands in the district (cabins, two-storey inn, restaurant) — no shade over it
+  const district = `S.inn.cabins = 4; S.inn.inn2 = 1; S.inn.diner.lv = 3; S.inn.job = null; S.inn.arrived = 0; S.inn._morn = 0; f.IA.sync(true); f.markNavDirty(); f.innRepaint(); f.applyUpgrades();`;
+  await shot('fog_agri_built.png', `(() => { ${helpers} at(11 * 60); dry(); openTown(); f.advance(2, 10); toLv3(); ${district} f.advance(2, 10); look(520, 62, 0); hide();
+      const r = fog(); r.same = same(); r.props = (f.props || []).filter(q => q.inn).length; r.cells = [f.fogCell(490, 20), f.fogCell(550, 150), f.fogCell(520, 100)]; return r; })()`,
+    r => r.props < 20 ? 'district not built ' + r.props : !r.empty || r.shut.agri ? 'district still shaded ' + JSON.stringify(r.shut) : r.cells.some(v => v) ? 'cells ' + r.cells : !r.same ? 'something drawn' : null);
+  // the first lodging going up lifts the district's shade with the fade (a migrated old inn, or a build finishing)
+  await shot('fog_agri_fade.png', `(() => { ${helpers} at(11 * 60); dry(); openTown(); f.advance(2, 10); look(520, 62, 0); const before = fog(); ${district} f.advance(0.1, 10); f.advance(0.5, 20); hide();
+      const r = fog(); r.before = before.shut; r.mid = r.fading; f.advance(1.5, 10); r.after = fog(); return r; })()`,
+    r => !r.before.agri ? 'district was not shut before' : !r.mid ? 'no fade' : r.after.fading || !r.after.empty ? 'did not finish ' + JSON.stringify(r.after) : null, null, wide);
   await shot('fog_minimap_full.png', `(() => { ${helpers} openTown(); toLv3(); f.advance(3, 10); look(100, 60, 0); f.minimapDraw(); return fog(); })()`, null, null, { deviceScaleFactor: 2 }, 'minimap, mmJump');
   // 7. an existing save that already opened everything: no shade and no fade on load; the day-72 fixture (town shut) is shaded
   if (!only || 'fog_load'.includes(only) || only.includes('fog_load')) {

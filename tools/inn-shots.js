@@ -39,10 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const wedMorning = `f.buyPlot('glade', 'meadow'); const cot = f.buy('cottage'); const h = S.home.houses[0]; if (h) { h.built = S.day - 1; h._tiles = null; f.homeTilesSync(); if (f.HA && f.HA.sync) f.HA.sync(true); }
     S.home.rel.kid0 = { m0: 30, m1: 85, m2: 20 }; S.home.nb = Object.assign(S.home.nb || {}, { n3: 60, n2: 10, n8: 5 });
     day(S.day + 1); at(6 * 60 + 20); dry(); f.homeMorning();`;
-  const zoneInn = `let land = f.buyPlot('sbank', 'inn');
-    if (!land.ok && !S.plots.sbank) { land = f.buyPlot('sbank', 'meadow'); }
-    if (S.plots.sbank && S.plots.sbank.mod !== 'inn') { const z = f.rezonePlot('sbank', 'inn'); if (!z.ok) throw new Error('rezone inn: ' + (z.why || z.reason)); }
-    if (!f.innPlot()) throw new Error('no inn plot ' + JSON.stringify(land));`;
+  const zoneInn = `if (!f.innPlot()) throw new Error('no inn site: the 农家乐区 opens with the town gate (v5.11.0.5), town=' + !!(S.eff && S.eff.town));`;
   const raiseInn = `S.inn.cabins = 4; S.inn.diner.lv = 3; S.inn.job = null; S.inn.arrived = 0; S.inn._morn = 0;
     if (f.IA && f.IA.sync) f.IA.sync(true); f.markNavDirty && f.markNavDirty();`;
   const shot = async (name, fn, check, save) => { if (only && !name.includes(only)) return;
