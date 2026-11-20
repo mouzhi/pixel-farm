@@ -252,11 +252,12 @@
   // v5.11.0.8 compact form (same saveVersion 15): a save leaves out what validate() would fill back in anyway, so a page from
   // before this change reads it unchanged. Tiles and trees drop default fields (open true; tilled / watered false; debris / weed /
   // crop null; crop n 0; tree v / age / ripe / cd 0, stage 'tree'), animals drop cd 1 / ready 0 / pet 0, upgrade levels, seed counts and troughs drop 0s, the little farms' tiles
-  // drop t / w 0, n and c null, and every other float is kept to 3 decimals (rot to 2: it only turns a sprite).
-  // compact(validate(compact(x))) === compact(x), and validate(compact(s)) is s with those floats rounded (tools/save-compact-test.js).
-  const r3 = v => Math.round(v * 1000) / 1000, r2 = v => Math.round(v * 100) / 100;
-  function roundDeep(v, k) {
-    if (typeof v === 'number') return Number.isInteger(v) || !isFinite(v) ? v : (k === 'rot' ? r2(v) : r3(v));
+  // drop t / w 0, n and c null, and `rot` is kept to 2 decimals (it only turns a sprite). Every other number is written exactly:
+  // clock.t, work timers, positions and prices can sit next to a boundary (clock.t 1799.9996 rounded to 1800 skipped that dawn's
+  // rollover), so nothing but rot is ever rounded. compact(validate(compact(x))) === compact(x) (tools/save-compact-test.js).
+  const r2 = v => Math.round(v * 100) / 100;
+  function roundDeep(v, k) { // copies the state; only `rot` (a sprite's turn) is rounded
+    if (typeof v === 'number') return k === 'rot' && !Number.isInteger(v) && isFinite(v) ? r2(v) : v;
     if (Array.isArray(v)) return v.map(x => roundDeep(x));
     if (v && typeof v === 'object') { const o = {}; for (const key of Object.keys(v)) if (v[key] !== undefined) o[key] = roundDeep(v[key], key); return o; }
     return v;

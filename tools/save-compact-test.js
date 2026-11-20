@@ -1,12 +1,12 @@
 // v5.11.0.8 compact saves (still saveVersion 15):  node tools/save-compact-test.js
 //   PF_REAL_SAVE=<exported JSON> also checks a real save (local only, never committed) and prints its sizes.
-// The compact form leaves out what validate() fills back in, rounds floats (rot to 2 decimals, others to 3), and an
+// The compact form leaves out what validate() fills back in, rounds only rot (2 decimals; every other number is exact), and an
 // unchanged validate() (the one older pages run) reads it, so old verbose saves and new compact ones both load.
 'use strict';
 const fs = require('fs'), path = require('path'), assert = require('assert');
 const SAVE = require('../save.js'), FIX = path.join(__dirname, 'fixtures');
 const bytes = x => Buffer.byteLength(typeof x === 'string' ? x : JSON.stringify(x));
-const rounded = s => JSON.parse(JSON.stringify(s), (k, v) => (typeof v === 'number' && !Number.isInteger(v) && isFinite(v) ? (k === 'rot' ? Math.round(v * 100) / 100 : Math.round(v * 1000) / 1000) : v));
+const rounded = s => JSON.parse(JSON.stringify(s), (k, v) => (typeof v === 'number' && !Number.isInteger(v) && isFinite(v) ? (k === 'rot' ? Math.round(v * 100) / 100 : v) : v)); // only rot is rounded
 class Mem { constructor() { this.m = {}; } get length() { return Object.keys(this.m).length; } key(i) { return Object.keys(this.m)[i] || null; } getItem(k) { return k in this.m ? this.m[k] : null; } setItem(k, v) { this.m[k] = String(v); } removeItem(k) { delete this.m[k]; } }
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 const read = f => { const t = JSON.parse(fs.readFileSync(f, 'utf8')); return t.save || t; };
@@ -41,5 +41,18 @@ ok('defaults dropped are exactly what validate() fills (tiles, trees, animals, l
   assert.deepStrictEqual(c.animals[0], { id: 'c0', kind: 'chicken', h: 50 }); assert.deepStrictEqual(c.upgrades, {});
   const closed = SAVE.compact(Object.assign({}, t, { tiles: [Object.assign({}, t.tiles[0], { open: false, tilled: true })] }));
   assert.deepStrictEqual(closed.tiles[0], { open: false, tilled: 1 }); assert.strictEqual(SAVE.migrate(closed).tiles[0].open, false); assert.strictEqual(SAVE.migrate(closed).tiles[0].tilled, true);
+});
+ok('review fix: clock.t just before 6:00 is written exactly, so the dawn rollover is not skipped', () => {
+  const v = SAVE.migrate(read(path.join(FIX, 'save-v15-day72-cottage.json'))); const WAKE = 360;
+  for (const t of [1799.9996, 73 * 1440 + WAKE - 0.0004, 73 * 1440 + WAKE - 1e-9, 1439.9999]) {
+    const s = Object.assign({}, v, { clock: { day: v.clock.day, t } }), back = SAVE.migrate(JSON.parse(JSON.stringify(SAVE.compact(s))));
+    assert.strictEqual(back.clock.t, t); assert.strictEqual(Math.floor((back.clock.t - WAKE) / 1440), Math.floor((t - WAKE) / 1440));
+  }
+});
+ok('review fix: no number other than rot changes (timers, positions, prices, offline window, weather)', () => {
+  for (const f of files) { const v = SAVE.migrate(JSON.parse(JSON.stringify(read(f)))); v.works = v.works || {}; const c = SAVE.compact(v), seen = [];
+    (function walk(a, b, k, p) { if (typeof a === 'number' && k !== 'rot' && typeof b === 'number') { if (a !== b) seen.push(p + ' ' + a + ' -> ' + b); return; }
+      if (a && b && typeof a === 'object' && typeof b === 'object') for (const key of Object.keys(b)) walk(a[key], b[key], key, p + '.' + key); })(v, c, '', '');
+    assert.deepStrictEqual(seen, [], path.basename(f)); }
 });
 console.log(`all ${n} passed`);
