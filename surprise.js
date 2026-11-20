@@ -11,7 +11,7 @@
   const GIANT_CHANCE = 0.10, GIANT_MULT = 6;
   // each carrot seed a cat would have left: chance to swap in a shop-only seed
   const CAT_RARE_CHANCE = 0.18;
-  const EGG = { gold: { chance: 0.04, mult: 5, rare: 'gold', name: '金蛋' }, double: { chance: 0.06, mult: 2, rare: 'double', name: '双黄蛋' } };
+  const EGG = { gold: { chance: 0.04, mult: 5, rare: 'gold', name: '金蛋' }, double: { chance: 0.03, mult: 2, rare: 'double', name: '双黄蛋' } }; // v5.9.1: double yolks halved (0.06 -> 0.03), they were a third of all surprises
   const TRUFFLE = { white: { chance: 0.05, mult: 4, rare: 'white', name: '白松露' }, big: { chance: 0.07, mult: 2, rare: 'big', name: '大松露' } };
 
   const isPart = crop => !!(crop && crop.giantOf);
@@ -218,6 +218,12 @@
   }
 
   function cropLabel(type, names) { return (names && names[type]) || type; }
+  // v5.9.1: the second and later surprise of a kind on one day rewrite one log line with the count instead of adding a line each
+  const MERGED = {
+    'gold-egg': n => `今天捡到 ${n} 颗金蛋！`, 'double-egg': n => `今天捡到 ${n} 颗双黄蛋`, 'white-truffle': n => `今天拱出 ${n} 颗白松露！`,
+    'big-truffle': n => `今天拱出 ${n} 颗大松露`, glow: n => `今天有 ${n} 棵作物在发光`, giant: n => `今天长出 ${n} 个巨大的作物！`, 'cat-seed': n => `猫咪今天带来 ${n} 颗稀有种子`,
+  };
+  const mergedMsg = (ev, n) => (n > 1 && MERGED[ev.kind] ? MERGED[ev.kind](n) : ev.msg);
   function glowToast(t, names) { return { kind: 'glow', msg: `一棵${cropLabel(t.crop.type, names)}在发光！`, crop: t.crop.type }; }
   function giantToast(t, names) { return { kind: 'giant', msg: `四棵${cropLabel(t.crop.type, names)}长成了一个巨大的${cropLabel(t.crop.type, names)}！`, crop: t.crop.type }; }
   function catToast(kind, names) { return { kind: 'cat-seed', msg: `猫咪带来了惊喜：一颗${cropLabel(kind, names)}种子！`, seed: kind }; }
@@ -243,7 +249,7 @@
     return compact(o);
   }
 
-  const api = {
+  const api = { MERGED, mergedMsg,
     GIANT_TYPES, SHOP_SEEDS, GLOW_CHANCE, GLOW_MULT, GIANT_CHANCE, GIANT_MULT, CAT_RARE_CHANCE, EGG, TRUFFLE,
     isPart, isGiant, itemOf, itemType, compact, keyOf, tileMap, blocks2x2, originOf, partsOf,
     canHarvest, canGrow, rollGlow, eligibleBlock, mergeBlock, rollGiant, clearGiant, harvestItem,

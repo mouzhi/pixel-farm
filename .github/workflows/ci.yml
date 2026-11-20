@@ -5,59 +5,120 @@ on:
     branches: [main]
 permissions:
   contents: read
+
+# The previous single `check` job hit the 50-minute timeout after v5.10.7
+# added inn-shots.js (run 44622565450, 50m15s). Nothing hung: every finished
+# step succeeded. Unit tests took a few seconds; ~21 browser scripts then ran
+# one after another for 45+ minutes. The job was cancelled mid careers-shots,
+# so inn-shots never started. Slowest completed steps: market-shots 5.5m,
+# works-shots 5.0m, save-smoke 5.0m, home-shots 4.4m, decor-shots 4.1m.
+# Split into a fast unit job plus a matrix of browser groups (npm cached)
+# so wall time stays well under 50 minutes. No script is run twice.
+
 jobs:
-  check:
+  unit:
+    name: unit
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fx.js sim.js save.js world.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+      - name: Unit tests
+        run: |
+          set -e
+          node tools/save-test.js
+          node tools/xhs-save-test.js
+          node tools/playlog-test.js
+          node tools/surprise-test.js
+          node tools/path-test.js
+          node tools/plots-test.js
+          node tools/wood-test.js
+          node tools/codex-test.js
+          node tools/weather-test.js
+          node tools/kids-test.js
+          node tools/works-test.js
+          node tools/decor-test.js
+          node tools/town-test.js
+          node tools/home-test.js
+          node tools/hall-test.js
+          node tools/market-test.js
+          node tools/slots-test.js
+          node tools/yard-test.js
+          node tools/bakery-test.js
+          node tools/workshop-test.js
+          node tools/careers-test.js
+          node tools/inn-test.js
+          node tools/resort-test.js
+          node tools/school-test.js
+          node tools/clinic-test.js
+          node tools/festival-test.js
+          node tools/econ-test.js
+
+  shots:
+    name: shots (${{ matrix.group }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ~7.5m on run 44622565450 (save-smoke alone was 5.0m)
+          - group: smoke
+            scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js
+          # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
+          - group: works-town
+            scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
+          # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
+          - group: home
+            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js
+          # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
+          - group: hall-market
+            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js
+          # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
+          - group: recent-a
+            scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
+          - group: recent-b
+            scripts: inn-shots.js resort-shots.js school-shots.js clinic-shots.js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: tools/package-lock.json
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
-      - name: Headless smoke test
+      - name: Browser tests (${{ matrix.group }})
         env:
           CHROME: /usr/bin/google-chrome
-        run: node tools/smoke.js
-      - name: Save / sim unit tests
-        run: node tools/save-test.js
-      - name: XHS save quota / corrupt-recovery tests
-        run: node tools/xhs-save-test.js
-      - name: Save / load browser test
-        env:
-          CHROME: /usr/bin/google-chrome
-        run: node tools/save-smoke.js
-      - name: Playlog unit tests
-        run: node tools/playlog-test.js
-      - name: Surprise unit tests
-        run: node tools/surprise-test.js
-      - name: Pathfinding unit tests
-        run: node tools/path-test.js
-      - name: Wood automation unit tests
-        run: node tools/wood-test.js
-      - name: Codex / achievement unit tests
-        run: node tools/codex-test.js
-      - name: Weather / insect unit tests
-        run: node tools/weather-test.js
-      - name: Kids growth / play unit tests
-        run: node tools/kids-test.js
-      - name: Surprise browser test
-        env:
-          CHROME: /usr/bin/google-chrome
-        run: node tools/surprise-smoke.js
-      - name: Audio browser test
-        env:
-          CHROME: /usr/bin/google-chrome
-        run: node tools/audio-smoke.js
-      - name: Codex browser test
-        env:
-          CHROME: /usr/bin/google-chrome
-        run: node tools/codex-smoke.js
-      - name: Playlog folder-sync browser test
-        env:
-          CHROME: /usr/bin/google-chrome
-        run: node tools/playlog-smoke.js
+          PF_SHOTS: /tmp/pf-shots
+        run: |
+          set -euo pipefail
+          for s in ${{ matrix.scripts }}; do
+            echo "::group::node tools/$s"
+            node "tools/$s"
+            echo "::endgroup::"
+          done
+
+  # Keeps the required check name `check`. Succeeds only when unit and every
+  # shots matrix leg succeeded.
+  check:
+    name: check
+    needs: [unit, shots]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm all CI jobs succeeded
+        run: |
+          echo "unit=${{ needs.unit.result }}"
+          echo "shots=${{ needs.shots.result }}"
+          test "${{ needs.unit.result }}" = success
+          test "${{ needs.shots.result }}" = success

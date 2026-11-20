@@ -21,17 +21,18 @@
     { id: 'allland', name: '遥遥领先', hint: '把现有 7 块区域全部买下' },
     { id: 'movedin', name: '安排上了', hint: '阿禾搬来的那天早上' },
     { id: 'kidwork', name: '村里来了个神童', hint: '小豆第一次出门干轻活' },
-    { id: 'school', name: '小镇做题家', hint: '孩子第一次去上学', later: 1 },
-    { id: 'sprinkler', name: '懒人福音', hint: '家人第一次自动在田边摆好浇水器', later: 1 },
-    { id: 'nightlight', name: '今晚月色真美', hint: '电网接通后，夜里第一次点亮一座夜灯', later: 1 },
+    { id: 'school', name: '小镇做题家', hint: '孩子第一次去上学' },
+    { id: 'sprinkler', name: '懒人福音', hint: '家人第一次自动在田边摆好浇水器' },
+    { id: 'nightlight', name: '今晚月色真美', hint: '电网接通后，夜里第一次点亮一座夜灯' },
     { id: 'dogjob', name: '旺旺队出动', hint: '狗第一次没有跟着农夫，自己去办成一件小事' },
-    { id: 'herding', name: '专业对口', hint: '第一次看见边境牧羊犬把羊赶到草地上', later: 1 },
-    { id: 'party', name: '我家大门常打开', hint: '第一次办成一场派对，家里或镇上来了客人', later: 1 },
+    { id: 'herding', name: '专业对口', hint: '第一次看见边境牧羊犬把羊赶到草地上' },
+    { id: 'party', name: '我家大门常打开', hint: '第一次办成一场派对，家里或镇上来了客人' },
     { id: 'newhouse', name: '新房入伙', hint: '孩子成家，搬进新盖的房子', later: 1 },
     { id: 'happypets', name: '精神状态良好', hint: '所有动物心情连续 5 天不低于 80' },
     { id: 'richday', name: '芜湖起飞', hint: '单日收入第一次超过 2,000 金' },
     { id: 'firstrain', name: '这场雨我允许了', hint: '第一次遇上小雨' },
     { id: 'firstbug', name: '先入图鉴为敬', hint: '孩子第一次用捕虫网捉到昆虫，看一眼再放走' },
+    { id: 'firstpark', name: '童年 DNA 动了', hint: '孩子第一次在乐园玩滑梯、沙坑或秋千' },
   ];
   const MILESTONES = [
     { id: 'open', name: '农场开张', hint: '新的一天开始了' },
@@ -105,6 +106,7 @@
     if (!it) return 'common';
     if (it.group === 'bug' && it.rarity) return it.rarity;
     if (it.group === 'glow' || it.group === 'giant') return 'epic';
+    if (it.group === 'decor') return it.shop ? 'common' : /^giant_|^koistatue$|^chime$/.test(it.id) ? 'epic' : 'rare'; // v5.7.0
     if (TIER_EPIC.has(it.id)) return 'epic';
     if (TIER_RARE.has(it.id)) return 'rare';
     return 'common';
@@ -122,7 +124,9 @@
     const glow = GLOW_CROPS.map(id => withRarity({ key: keyGlow(id), id, name: '发光的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'glow', type: id }));
     const giant = GIANT_CROPS.map(id => withRarity({ key: keyGiant(id), id, name: '巨大的' + ((SIM && SIM.CROPS[id] && SIM.CROPS[id].name) || id), group: 'giant', type: id }));
     const bugs = (INS && INS.catalog) ? INS.catalog() : [];
-    return { fish, rare: rares, glow, giant, bug: bugs, decor: [] };
+    const DC = root.PFDecor || (typeof require === 'function' && typeof document === 'undefined' ? require('./decor.js') : null); // v5.7.0
+    const decor = DC ? DC.IDS.map(id => withRarity({ key: keyDecor(id), id, name: DC.CATALOG[id].name, group: 'decor', shop: DC.CATALOG[id].shop ? 1 : 0 })) : [];
+    return { fish, rare: rares, glow, giant, bug: bugs, decor };
   }
 
   function groups() {
@@ -132,7 +136,7 @@
       { id: 'glow', name: '发光作物', items: catalog().glow },
       { id: 'giant', name: '巨大作物', items: catalog().giant },
       { id: 'bug', name: '昆虫', items: catalog().bug },
-      { id: 'decor', name: '装饰', items: catalog().decor, later: 1 },
+      { id: 'decor', name: '装饰', items: catalog().decor },
     ];
   }
 
@@ -221,6 +225,9 @@
     if (((s && s.stats && s.stats.todayEarn) | 0) >= 2000 || ((s && s.stats && s.stats.dayEarn) || []).some(v => v >= 2000)) mark('richday', 0);
     if (s && s.weather && (s.weather.lastDay | 0) > 0) mark('firstrain', s.weather.lastDay | 0);
     if (s && s.codex && s.codex.entries && Object.keys(s.codex.entries).some(k => k.indexOf('bug:') === 0)) mark('firstbug', 0);
+    if (s && s.works && Array.isArray(s.works.sprinklers) && s.works.sprinklers.length) mark('sprinkler', 0); // v5.7.0
+    if (s && s.decor && s.decor.moon) mark('nightlight', 0);
+    if (s && s.decor && s.decor.party && s.decor.party.last) mark('party', s.decor.party.last | 0);
     void peak;
     return out;
   }
@@ -276,6 +283,12 @@
     want('richday', (ctx.todayEarn | 0) >= 2000 || ((ctx.dayEarn || []).some && (ctx.dayEarn || []).some(v => v >= 2000)));
     want('firstrain', !!ctx.sawRain);
     want('firstbug', !!ctx.caughtBug);
+    want('firstpark', !!ctx.playedPark);
+    want('school', !!ctx.wentSchool);
+    want('sprinkler', !!ctx.sprinklerPlaced); // v5.7.0: the phase 8 / 9 ones can be earned now
+    want('nightlight', !!ctx.litLamp);
+    want('herding', !!ctx.herded);
+    want('party', !!ctx.partyHeld); // v5.5.0: the school stage exists since v5.4.3
     return due;
   }
 

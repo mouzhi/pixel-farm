@@ -108,11 +108,11 @@ ok('__insects.nearest (and PFInsects.nearest) returns the closest live insect', 
   assert.strictEqual(n.kind, n2.kind);
 });
 
-ok('a v10 save keeps weather and insect entries without bumping the version', () => {
+ok('a v10 save keeps weather and insect entries (and validates to the current version)', () => {
   const s = SAVE.validate({ saveVersion: 10, clock: { day: 8, t: 600 }, tiles: [{ f: 'home', c: 0, r: 0, open: true }],
     weather: { nextDay: 11, start: 540, dur: 180, lastDay: 3, rained: 0, nextStart: 0, nextDur: 0 }, bugNet: 1,
     codex: { entries: { 'bug:white': { firstDay: 6, count: 1 } } } });
-  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert.strictEqual(s.weather.nextDay, 11);
   assert.strictEqual(s.bugNet, 1);
   assert.ok(s.codex.entries['bug:white']);
@@ -120,7 +120,7 @@ ok('a v10 save keeps weather and insect entries without bumping the version', ()
 
 ok('insect catalog has 8 species with rarity colours and the 昆虫 group is in the book', () => {
   const g = CX.groups().find(x => x.id === 'bug');
-  assert(g && g.name === '昆虫' && g.items.length === 8);
+  assert(g && g.name === '昆虫' && g.items.length === 9);
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'white')), 'common');
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'grey')), 'rare');
   assert.strictEqual(CX.rarityOf(g.items.find(i => i.id === 'swallow')), 'epic');
@@ -174,8 +174,9 @@ ok('index.html scripts are cache-busted with the current version', () => {
   const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   const scripts = [...html.matchAll(/<script src="([^"]+)"/g)].map(m => m[1]);
   assert(scripts.length >= 20, 'scripts ' + scripts.length);
-  for (const s of scripts) assert(/\?v=5\.4\.7$/.test(s), 'missing cache bust: ' + s);
-  assert(html.indexOf('v5.4.7') >= 0);
+  const V = fs.readFileSync(path.join(__dirname, '..', 'game.js'), 'utf8').match(/GAME_VERSION = '([^']+)'/)[1]; // v5.10.0: read it, do not repeat it
+  for (const s of scripts) assert(s.endsWith('?v=' + V), 'missing cache bust: ' + s);
+  assert(html.indexOf('v' + V) >= 0);
 });
 
 ok('forceCatch can attach the catching kid so the popup can sit above their head', () => {
