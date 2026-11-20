@@ -367,17 +367,23 @@
         return wall; }
       return null; });
     // v5.10.11: the harvest-feast long table (cloth, dishes, benches on both sides, four posts)
-    const feast = B(44, 24, 22, (x, y, z) => {
-      if ((x <= 1 || x >= 42) && (y <= 1 || y >= 22) && z <= 18) return z === 18 ? Wd[4] : Wd[2];
-      const tx = x >= 4 && x <= 39, ty = y >= 8 && y <= 15;
-      if (tx && ty) {
-        if (z <= 4) return ((x === 5 || x === 38) && (y === 8 || y === 15)) ? Wd[1] : null;
-        if (z === 5) return (y === 8 || y === 15 || x === 4 || x === 39) ? Rf[2] : Ac[0];
-        if (z === 6) { const k = (x * 7 + y * 3) % 8; return k === 0 ? Ac[2] : k === 2 ? Rf[3] : k === 4 ? G[4] : k === 6 ? Ac[1] : null; }
-        if (z === 7) return (x * 5 + y) % 9 === 0 ? Ac[1] : null;
+    const feast = B(48, 26, 26, (x, y, z) => {
+      const post = (x <= 2 || x >= 45) && (y <= 2 || y >= 23);
+      if (post && z <= 22) {
+        if (z <= 16) return z === 16 ? Wd[4] : Wd[2];
+        const cx = x <= 2 ? 1 : 46, cy = y <= 2 ? 1 : 24, c = Math.hypot(x - cx, y - cy);
+        if (c < 2.2) return (z === 17 || z === 22 || c > 1.6) ? Wd[4] : ((z + x) % 3 === 0 ? Ac[1] : Ac[0]);
         return null; }
-      if (x >= 6 && x <= 37 && (y === 4 || y === 5 || y === 18 || y === 19)) {
-        if (z === 3) return (x & 1) ? Wd[3] : Wd[4]; if (z <= 2) return (x === 7 || x === 36) ? Wd[1] : null; }
+      const tx = x >= 5 && x <= 42, ty = y >= 8 && y <= 17;
+      if (tx && ty) {
+        if (z <= 5) return ((x === 6 || x === 41) && (y === 9 || y === 16)) ? Wd[1] : null;
+        if (z === 6) return (y === 8 || y === 17 || x === 5 || x === 42) ? Wd[2] : Wd[3];
+        if (z === 7) return (y === 8 || y === 17 || x === 5 || x === 42) ? Rf[2] : Ac[0];
+        if (z === 8) { const k = (x * 5 + y * 3) % 10; return k === 0 ? Ac[2] : k === 3 ? Rf[3] : k === 6 ? G[3] : k === 8 ? Ac[1] : null; }
+        if (z === 9 && (x * 5 + y * 3) % 10 === 0) return Ac[1];
+        return null; }
+      if (x >= 7 && x <= 40 && (y === 3 || y === 4 || y === 21 || y === 22)) {
+        if (z === 4) return (x & 1) ? Wd[3] : Wd[4]; if (z <= 3) return (x === 8 || x === 39) ? Wd[1] : null; }
       return null; });
     const lantern = B(6, 6, 22, (x, y, z) => {
       if ((x === 2 || x === 3) && (y === 2 || y === 3) && z <= 14) return z === 14 ? Wd[4] : Wd[2];

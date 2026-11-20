@@ -26,7 +26,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const nextMorning = () => { const d = S.day; until(() => S.day > d && S.t % 1440 >= 6 * 60 + 30, 3000); };
     const openTown = () => { f.buyPlot('eroad', 'road'); S.town.school.kid0 = Math.max(1, S.town.school.kid0 | 0); return f.buy('town').ok; };
     const look = (x, y, a) => { f.setAngle(a || 0); f.panTo(x, y); f.advance(0.3, 10); };
-    const hide = () => { const el = document.getElementById('leftBottom'); if (el) el.style.visibility = 'hidden'; const say = document.getElementById('say'); if (say) { say.hidden = true; say.textContent = ''; } };
+    const hide = () => { for (const id of ['leftBottom', 'inv', 'bottomRight', 'tools', 'say']) { const el = document.getElementById(id); if (el) { el.style.visibility = 'hidden'; if (id === 'say') { el.hidden = true; el.textContent = ''; } } } };
     const start = id => { f.FARMER.wood = 800; const r = f.hallStart(id); if (!r.ok) throw new Error(id + ' ' + (r.why || JSON.stringify(r))); return r; };
     const wake = () => { const all = (typeof f.actors === 'function' ? f.actors() : []).concat(f.FARMER || []);
       all.forEach(a => { if (a) { a.sleeping = false; a.home = false; } }); };
@@ -46,7 +46,17 @@ fs.mkdirSync(OUT, { recursive: true });
     for (const id of ['h1', 'h2', 'h3', 'h4', 'h5']) { start(id); nextMorning(); at(9 * 60); }
     const festDay = f.FV.nextDay(S.town.hall, S.day);
     day(festDay); at(18 * 60 + 10); dry(); wake(); f.advance(0.5, 10);
-    until(() => nearTable(f.FARMER), 50);
+    until(() => { const fam = familyHere(); return fam.farmer && fam.partner !== false && fam.kid !== false; }, 55);
+    const kids = (S.family && S.family.kids) || [];
+    (typeof f.actors === 'function' ? f.actors() : []).concat(f.FARMER || []).forEach(a => {
+      if (!a) return;
+      const i = (a === f.FARMER || !a.id) ? 0 : (a.id === 'partner' ? 1 : 2 + Math.max(0, kids.findIndex(k => k.id === a.id)));
+      if (a === f.FARMER || a.id === 'partner' || kids.some(k => k.id === a.id)) {
+        const at = f.FV.seatAt(i);
+        a.x = at.x + (i % 2 ? 0.3 : -0.3); a.y = at.y; a.moving = false; a.sleeping = false; a.home = false; a.away = null;
+        a.task = { kind: 'feast', label: '在镇上吃丰收宴', to: { x: at.x, y: at.y }, dur: 20, rest: true };
+      }
+    });
     at(20 * 60 + 15); dry(); wake(); f.advance(0.4, 10);`;
   const shot = async (name, fn, check, save) => { if (only && !name.includes(only)) return;
     const p = await page(save); let r; try { r = await p.evaluate(fn); } catch (e) { r = { error: String(e).slice(0, 400) }; }
@@ -55,7 +65,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // 1. night lantern fair on the plaza: strings over the paved street, stalls, warm lights
   await shot('v51011_fair.png', `(() => { ${setup} ${toFest}
-    look(530, 88, -0.12); hide();
+    look(524, 100, -0.1); hide();
     const v = f.hallView(), H = S.town.hall, T = S.t % 1440;
     return { festDay: S.day, today: !!(v.festival && v.festival.today), lantern: !!(v.festival && v.festival.lantern),
       fair: !!(f.fairNow && f.fairNow()), feast: !!(f.festNow && f.festNow()), sleep: f.sleepAt && f.sleepAt(),
@@ -66,15 +76,15 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // 2. long-table feast with the family (south side of the table, camera-side seats)
   await shot('v51011_feast.png', `(() => { ${setup} ${toFest}
-    look(532, 122, 0.18); hide();
+    look(520, 110, Math.PI + 0.28); hide();
     const fam = familyHere(), T = S.t % 1440;
     return { festDay: S.day, feast: !!(f.festNow && f.festNow()), fair: !!(f.fairNow && f.fairNow()), T, fam,
       farmer: f.FARMER && { x: Math.round(f.FARMER.x), y: Math.round(f.FARMER.y), kind: f.FARMER.task && f.FARMER.task.kind, sleeping: !!f.FARMER.sleeping } }; })()`,
-    r => !r.feast ? 'feast closed' : !r.fam.farmer ? 'farmer not at table ' + JSON.stringify(r.farmer) : r.farmer && r.farmer.sleeping ? 'farmer sleeping' : null);
+    r => !r.feast ? 'feast closed' : !r.fam.farmer || r.fam.partner === false || r.fam.kid === false ? 'family not at table ' + JSON.stringify(r.fam) : r.farmer && r.farmer.sleeping ? 'farmer sleeping' : null);
 
   // 3. wide shot of the lit town: main street lanterns, plaza, paved road
   await shot('v51011_lit.png', `(() => { ${setup} ${toFest}
-    look(530, 70, -0.18); hide();
+    look(524, 78, -0.16); hide();
     const v = f.hallView(), H = S.town.hall;
     return { festDay: S.day, fair: !!(f.fairNow && f.fairNow()), paved: !!(f.CL && f.CL.paved(H)), lv: v.lv, sleep: f.sleepAt && f.sleepAt() }; })()`,
     r => r.lv !== 5 ? 'lv ' + r.lv : !r.paved ? 'not paved' : !r.fair ? 'fair closed' : r.sleep !== 22 * 60 ? 'bedtime ' + r.sleep : null);

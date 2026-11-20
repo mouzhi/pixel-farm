@@ -10,15 +10,15 @@
   const FEAST = { from: 18 * 60, to: 22 * 60 };
   const FAIR = { from: 19 * 60, to: 22 * 60 };
   // east of the fountain, south of the main street, clear of the market stalls and L11
-  const TABLE = P(532, 118);
+  const TABLE = P(520, 112);
   const SEATS = [
-    P(522, 123), P(528, 123), P(534, 123), P(540, 123),
-    P(522, 113), P(528, 113), P(534, 113), P(540, 113),
+    P(508, 117), P(516, 117), P(524, 117), P(532, 117),
+    P(508, 107), P(516, 107), P(524, 107), P(532, 107),
   ];
   // wooden posts that hold the lantern strings over the paved main street and the plaza
   const POSTS = [
     P(452, 66), P(484, 66), P(516, 66), P(548, 66), P(580, 66), P(612, 66),
-    P(510, 88), P(538, 88), P(520, 114), P(544, 118),
+    P(510, 88), P(538, 88), P(508, 106), P(532, 106),
   ];
   const STRINGS = [
     [POSTS[0], POSTS[1]], [POSTS[1], POSTS[2]], [POSTS[2], POSTS[3]], [POSTS[3], POSTS[4]], [POSTS[4], POSTS[5]],

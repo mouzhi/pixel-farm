@@ -125,10 +125,10 @@
     return { at: CL.STAND, out: true, spot: 'clinic' }; }
   function festivalAt(st, n, day, T) { // v5.10.11: neighbours sit at the long table 18:00–22:00
     if (!FS || !FS.feastOpen(st, day, ((T % 1440) + 1440) % 1440)) return null;
-    const ids = ['n0', 'n1', 'n4', 'n5', 'n6', 'n7', 'n8', 'n9', 'n10', 'n2', 'n3'];
-    const i = Math.max(0, ids.indexOf(n.id));
+    const ids = ['n0', 'n1', 'n4', 'n5']; // four neighbours on the north bench; the south side is the family's
+    const i = ids.indexOf(n.id); if (i < 0) return null;
     const at = FS.seatAt(4 + i);
-    return { at: P(at.x + (i % 3 - 1) * 0.6, at.y + (i % 2 ? 0.4 : -0.4)), out: true, spot: 'feast' }; }
+    return { at: P(at.x + (i % 2 ? 0.3 : -0.3), at.y), out: true, spot: 'feast' }; }
   const siteSpot = id => { const l = LOT[id]; if (l) return P(l.x + l.hw + 3, l.y - l.hd + 2);
     if (id === 'market') return P(TN.PLAZA.x - 20, TN.PLAZA.y + 4);
     const b = TN.BY_ID[id]; return b ? P(b.x + b.hw + 3, b.door.y) : null; };
