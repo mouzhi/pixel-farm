@@ -67,6 +67,7 @@ html.xhs-mobile #hud .row { gap: 8px; justify-content: flex-start; flex-wrap: no
 html.xhs-mobile #act,
 html.xhs-mobile #prices,
 html.xhs-mobile #title,
+html.xhs-mobile #titleS,
 html.xhs-mobile #syncHint,
 html.xhs-mobile #fakecursor,
 html.xhs-mobile #storeHud,
@@ -649,3 +650,55 @@ html.xhs-mobile #shop .tabs {
   padding: 0 12px 8px;
   background: rgba(40, 28, 22, .98);
 }
+
+/* 1.2.0：家人状态卡（点「一家」）和孩子选职业 / 成家后做什么的弹窗（网页版 v5.9.x 新增）。
+   网页版把家人卡放在左侧 HUD 下面；手机上它被挪到 body 里，原来的相对定位会跑到屏幕上方，
+   这里固定在 HUD 卡片下面，长了就在卡片里滚动。 */
+html.xhs-mobile #loveTip {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  bottom: auto;
+  height: auto;
+  min-height: 0;
+  max-height: calc(100% - var(--xhs-sheet-top, 160px) - var(--xhs-bottom-clear) - var(--xhs-bar-h) - 12px);
+  width: auto;
+  max-width: none;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 23;
+  padding: 10px 12px;
+  background: rgba(40, 28, 22, .94);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 4px 4px 0 3px rgba(0,0,0,.35);
+  color: #fff6dc;
+  font-size: 13px;
+  line-height: 1.5;
+}
+html.xhs-mobile #loveTip[hidden] { display: none !important; }
+html.xhs-mobile #loveTip .pbtn { min-height: 44px; }
+html.xhs-mobile #career {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  max-height: calc(100% - var(--xhs-sheet-top, 160px) - var(--xhs-bottom-clear) - var(--xhs-bar-h) - 12px);
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  transform: none;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 24;
+  box-sizing: border-box;
+  background: rgba(40, 28, 22, .96);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 4px 4px 0 3px rgba(0,0,0,.35);
+  color: #fff6dc;
+}
+html.xhs-mobile #career[hidden] { display: none !important; }
+html.xhs-mobile #career .copt,
+html.xhs-mobile #career .crow .pbtn { min-height: 44px; }

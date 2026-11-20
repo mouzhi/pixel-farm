@@ -9,6 +9,7 @@
     "save": "node save-test.js && node save-smoke.js"
   },
   "dependencies": {
+    "acorn": "8.14.0",
     "playwright-core": "1.65.1"
   }
 }

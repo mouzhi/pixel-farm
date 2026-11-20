@@ -16,11 +16,13 @@ DIST = HERE / "dist"
 STAGE = HERE / ".stage"
 ZIP = HERE / "pixel-farm-xhs-tool.zip"
 
-JS_FILES = [
-    "animals.js", "family.js", "fish.js", "fx.js", "game.js", "path.js", "playlog.js",
-    "save.js", "sim.js", "surprise.js", "ui.js", "world.js", "audio.js",
-    "wood.js", "kids.js", "weather.js", "insects.js", "codex.js", "codex_icons.js",
-]
+# 1.2.0: the script list comes from the web build's index.html (main keeps adding modules: market,
+# bakery, smithy, school, clinic, festival, inn, ...), so the zip and boot.js never miss one.
+WEB_SCRIPTS = [m.split("?")[0] for m in re.findall(r'<script src="([^"]+)"', (ROOT / "index.html").read_text())]
+JS_FILES = [f for f in WEB_SCRIPTS if "/" not in f]
+# Loaded after the first frames (not on the boot path): audio and the ranking/codex panel.
+# ui.js / plots-ui.js stay right after game.js like on the web, since the HUD needs them.
+LATE_SCRIPTS = {"audio.js"}
 ASSETS = [
     "palette.js", "sprites.js", "family_sprites.js", "chars.png", "crops.png", "hud_icons.png", "palette.png",
 ]
@@ -62,6 +64,22 @@ def b64_mp3(path: Path, *, music: bool = False) -> str:
     return base64.b64encode(data).decode("ascii")
 
 
+def write_boot_lists() -> None:
+    """Copy boot.js with CORE / AFTER filled from index.html's script order."""
+    core, after = [], []
+    for src in WEB_SCRIPTS:
+        (after if src in LATE_SCRIPTS else core).append(src)
+    after = ["audio-config.js"] + after + ["leaderboard.js"]
+    boot = (HERE / "boot.js").read_text()
+    js = lambda xs: "[\n" + ",\n".join(f"    '{x}'" for x in xs) + "\n  ]"
+    boot, n1 = re.subn(r"var CORE = \[[^\]]*\]", "var CORE = " + js(core), boot, count=1)
+    boot, n2 = re.subn(r"var AFTER = \[[^\]]*\]", "var AFTER = " + js(after), boot, count=1)
+    if n1 != 1 or n2 != 1:
+        raise SystemExit("boot.js: CORE / AFTER lists not found")
+    (STAGE / "boot.js").write_text(boot)
+    print("boot.js: core", len(core), "scripts, after", after)
+
+
 def official_audit_scripts() -> tuple[Path, Path]:
     wf = Path("/home/box/agent-data/workflows/minitool-zip-builder/scripts")
     if (wf / "audit_artifact.py").is_file():
@@ -82,12 +100,12 @@ def stage() -> None:
 
     for name in JS_FILES:
         shutil.copy2(ROOT / name, STAGE / name)
+    write_boot_lists()
     for name in ASSETS:
         shutil.copy2(ROOT / "assets" / name, STAGE / "assets" / name)
     shutil.copy2(HERE / "platform.js", STAGE / "platform.js")
     shutil.copy2(HERE / "mobile.js", STAGE / "mobile.js")
     shutil.copy2(HERE / "mobile.css", STAGE / "mobile.css")
-    shutil.copy2(HERE / "boot.js", STAGE / "boot.js")
     shutil.copy2(HERE / "leaderboard.js", STAGE / "leaderboard.js")
     shutil.copy2(HERE / "atlas_hud_128_q90.webp", STAGE / "atlas_hud_128_q90.webp")
     shutil.copy2(HERE / "atlas_128_q90.webp", STAGE / "atlas_128_q90.webp")
@@ -171,6 +189,9 @@ def stage() -> None:
     (STAGE / "game.js").write_text(game)
     if patched:
         print("patched staged game.js:", ", ".join(patched))
+    r = subprocess.run(["node", str(HERE / "scripts" / "desugar.js"), str(STAGE)])
+    if r.returncode:
+        raise SystemExit("staged JS is not ES2017 (see above); run `npm --prefix tools ci` first")
     leftover = []
     for staged in STAGE.rglob("*.js"):
         text = staged.read_text(errors="ignore")

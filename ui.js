@@ -351,7 +351,7 @@
       `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
     const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' };
     if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
-    const label = o => o.name || o.id;
+    const label = o => o.name || jobName[o.id] || o.id; // xhs 1.2.0: the kitchen offer has no name (web showed "kitchen")
     const desc = o => ({
       cabin: v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。',
       diner: '院子南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜。',

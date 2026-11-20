@@ -180,7 +180,7 @@
   }
 
   function reparentSheets() {
-    ['shop', 'store', 'codex', 'menu', 'offline', 'loveTip', 'speed'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'menu', 'offline', 'loveTip'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (!el || el.parentNode === doc.body) return;
       if (id === 'codex' && el.closest && el.closest('#xhs-board')) return;
@@ -197,7 +197,7 @@
     if (board && board !== except && P.leaderboard && typeof P.leaderboard.close === 'function') {
       P.leaderboard.close();
     }
-    ['shop', 'store', 'codex', 'menu', 'xhs-board'].forEach(function (id) {
+    ['shop', 'store', 'codex', 'menu', 'xhs-board', 'loveTip'].forEach(function (id) {
       var el = doc.getElementById(id);
       if (el && el !== except) el.hidden = true;
     });
@@ -235,30 +235,6 @@
   function setFollow(on) {
     P.followFarmer = !!on;
     markIcons();
-  }
-
-  function syncSpeedBtn() {
-    var btn = doc.getElementById('xhs-btn-speed');
-    if (!btn) return;
-    var S = root.__farm && __farm.S;
-    var max = S && S.eff ? S.eff.speedMax : 1;
-    btn.hidden = !(max > 1);
-    var cur = (S && S.speed) || 1;
-    var em = btn.querySelector('em');
-    if (!em) { em = doc.createElement('em'); btn.appendChild(em); }
-    em.textContent = cur + '×';
-    btn.classList.toggle('on', cur > 1);
-  }
-
-  function cycleSpeed() {
-    var G = root.__farm;
-    if (!G || !G.setGameSpeed || !G.S) return;
-    var max = G.S.eff.speedMax || 1;
-    var opts = [1, 2, 4].filter(function (v) { return v <= max; });
-    if (!opts.length) return;
-    var i = opts.indexOf(G.S.speed || 1);
-    G.setGameSpeed(opts[(i + 1) % opts.length]);
-    syncSpeedBtn();
   }
 
   function compactHud() {
@@ -333,9 +309,6 @@
 
     var side = doc.createElement('div'); side.id = 'xhs-side';
     side.appendChild(ico('xhs-btn-note', 'note', '发笔记', onPostNote));
-    var speed = ico('xhs-btn-speed', 'speed', '倍速', cycleSpeed);
-    speed.hidden = true;
-    side.appendChild(speed);
     var music = ico('xhs-btn-music', 'music', '音乐', toggleMusic);
     var sfx = ico('xhs-btn-sfx', 'sfx', '音效', toggleSfx);
     music.classList.add('off');
@@ -982,7 +955,6 @@
       if (!P.fbLocked) chooseFramebuffer();
       if (root.__farm && __farm.fit) __farm.fit();
       compactHud();
-      syncSpeedBtn();
       return;
     }
     bootUi._wired = true;
@@ -990,7 +962,6 @@
     if (!P.fbLocked) chooseFramebuffer();
     if (root.__farm && __farm.fit) __farm.fit();
     compactHud();
-    syncSpeedBtn();
     wireLogToast();
     if (root.visualViewport) {
       visualViewport.addEventListener('resize', function () {
@@ -1026,7 +997,6 @@
     wireShopFeedback();
     reparentSheets();
     compactHud();
-    syncSpeedBtn();
     paintAudioToggles();
     var mm = doc.getElementById('minimap');
     if (mm && !mm._xhsDefaulted) {
@@ -1039,7 +1009,6 @@
       bootUi();
       if (root.__farm && __farm.fit) __farm.fit();
       compactHud();
-      syncSpeedBtn();
       if (n > 80) clearInterval(iv);
     }
   }, 50);

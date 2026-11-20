@@ -86,6 +86,9 @@ jobs:
             scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
           - group: recent-b
             scripts: inn-shots.js resort-shots.js school-shots.js clinic-shots.js
+          # 小红书小工具: pack the zip (ES2017 check + official audit), then phone shots on the packed tree (~4m)
+          - group: xhs
+            scripts: xhs-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -95,6 +98,9 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Install playwright-core (no browser download; uses the runner's Chrome)
         run: npm --prefix tools ci --no-audit --no-fund
+      - name: Pack the 小红书 zip
+        if: matrix.group == 'xhs'
+        run: bash platforms/xhs/pack.sh
       - name: Browser tests (${{ matrix.group }})
         env:
           CHROME: /usr/bin/google-chrome

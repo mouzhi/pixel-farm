@@ -66,11 +66,11 @@ function lateGame() {
   return SAVE.migrate(base);
 }
 
-ok('published xhs v1.0.0 (save v9) migrates cleanly to v10', () => {
+ok('published xhs v1.0.0 (save v9) migrates cleanly to the current save version', () => {
   const raw = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v9-day4.json'), 'utf8'));
   assert.strictEqual(raw.saveVersion, 9);
   const s = SAVE.migrate(raw);
-  assert.strictEqual(s.saveVersion, 10);
+  assert.strictEqual(s.saveVersion, SAVE.CURRENT);
   assert(s.codex && typeof s.codex === 'object');
   assert(Array.isArray(s.achievements));
   assert(Array.isArray(s.milestones));
@@ -208,7 +208,8 @@ function loadPlatform(opts) {
   };
   sandbox.globalThis = sandbox;
   sandbox.window = sandbox;
-  sandbox.window.xhs = { miniTool: mini };
+  // 1.1.1 gates cloud storage on client 9.51+ (buildVersion); the mock is a 9.53.3 client unless opts.build says otherwise
+  sandbox.window.xhs = { miniTool: mini, launchOptions: { miniToolEnv: { buildVersion: opts.build != null ? opts.build : 9533123 } } };
   sandbox.window.localStorage = local;
   sandbox.window.dispatchEvent = function () {};
   vm.createContext(sandbox);
