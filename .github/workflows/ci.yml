@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fog.js diary.js diary-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fog.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -62,6 +62,7 @@ jobs:
           node tools/econ-test.js
           node tools/townscale-test.js
           node tools/diary-test.js
+          node tools/album-test.js
           node tools/save-compact-test.js
           node tools/fog-test.js
           node tools/kids-test.js
@@ -95,21 +96,28 @@ jobs:
           # v5.11.0.5: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
-            scripts: inn-shots.js resort-shots.js rain-shots.js
+          # v5.11.0.12: rain-shots -> agrilot (recent-b was 24m43s with rain on album run 44777224060; inn+resort stay here)
+            scripts: inn-shots.js resort-shots.js
           # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s) and the district / town / farm / seaside
           # shots with door routes and perf (~5m on CI)
+          # v5.11.0.11: + offline-shots and album-shots from townscale (townscale hit 25m13s with them on run 44772874375: v5110 15m, school 5m,
+          # offline 2.5m, album 2.6m; scale was 6.5m)
           - group: scale
-            scripts: scale-audit.js scale-shots.js
+            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js rain-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
-            scripts: v5110-shots.js school-shots.js offline-shots.js
+            scripts: v5110-shots.js school-shots.js
           # v5.11.0.5 农家乐区: its own leg (~11m on CI: recent-b went 11m -> 22m16s with it on run 44703708506; with rain-shots there too it would pass 25m)
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           # v5.11.0.7: + hotbar-shots (~1m); agrilot was the lightest leg (5–9m on runs 44727901332 / 44729908140)
           # v5.11.0.13: fog-shots -> fog2-shots (the opaque cloud; ~4m locally, like the old one)
           - group: agrilot
-            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js
+          # v5.11.0.12: + restaurant-shots (~1m, two shop-panel snaps) and rain-shots from recent-b
+            # (album run 44777224060: agrilot 11m44s with fog+hotbar, recent-b 24m43s with rain;
+            #  expected agrilot ~19–20m with rain+restaurant, >=3m headroom under 25m)
+            # v5.11.0.13: fog-shots -> fog2-shots (~3m more than the old one), so rain-shots (~7m) goes on to scale (9m41s on run 44782373476)
+            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

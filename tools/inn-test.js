@@ -1,5 +1,5 @@
 // v5.10.7 unit tests: guest schedule, room fees and star coefficients, menu stock (missing dishes drop off),
-// star sources, old-save defaults, the 民宿院 layout.  node tools/inn-test.js
+// star sources, old-save defaults, the 民宿院 layout, v5.11.0.12 restaurant shortfalls.  node tools/inn-test.js
 const assert = require('assert');
 const WD = require('../world.js'); globalThis.PFWorld = WD;
 const PL = require('../plots.js');
@@ -23,7 +23,7 @@ ok('valid() fills missing fields as nothing built; save stays append-only', () =
   assert.strictEqual(I.diner.lv, 3);
   assert.deepStrictEqual(I.diner.menu, ['grill_fish']);
   assert.strictEqual(I.stars.last[0].s, 5);
-  assert.ok(I.stars.last[0].note.length <= 24);
+  assert.ok(I.stars.last[0].note.length <= IN.NOTE_MAX);
   assert.strictEqual(I.resort.huts, 4);
   assert.strictEqual(I.job, null);
   assert.strictEqual(I.stars.avg, 5);
@@ -134,14 +134,20 @@ ok('menu: 1.6× stall; auto picks the most abundant stock; missing dishes drop o
   const auto = IN.autoMenu(I, stock, false).map(d => d.id);
   assert.ok(auto[0] === 'cabbage_egg', 'most stocked dish first: ' + auto);
   assert.ok(!auto.includes('jam_muffin') && !auto.includes('grill_fish'), 'missing stock is not listed');
+  // a maxed kitchen's garden (24 时蔬 + cabbages) covers the rest of a 20-portion sitting
   const r = IN.serve(I, 20, stock, false);
-  assert.ok(r.n > 0 && r.missed > 0, 'serves what it can, then reports the shortfall');
-  assert.strictEqual(r.n + r.missed, 20);
-  assert.strictEqual(stock.egg + stock.cabbage < 2 || stock.pumpkin + stock.flour < 2, true, 'used up what it cooked');
+  assert.strictEqual(r.n, 20, 'garden 时蔬 fills the sitting once farm dishes run low: ' + r.n);
+  assert.strictEqual(r.missed, 0);
+  assert.ok(r.used.includes('cabbage_egg') && r.used.includes('garden_veg'), r.used.join(','));
+  assert.ok((stock.egg | 0) < 8, 'farm eggs were used');
   assert.strictEqual(I.earn.meals, r.gold);
+  assert.strictEqual(I.diner.servedLast, 20);
+  assert.strictEqual(I.diner.missedLast, 0);
   const I2 = IN.empty(); I2.diner.lv = 3; IN.setMenu(I2, ['grill_fish', 'jam_muffin'], false);
   const r2 = IN.serve(I2, 4, { fish: 1 }, false);
-  assert.strictEqual(r2.n, 1); assert.strictEqual(r2.missed, 3, 'the fish dish drops off once the last fish is used');
+  assert.ok(r2.used.includes('grill_fish'));
+  assert.ok(r2.n >= 1, 'fish first, then garden 时蔬 covers the rest at a maxed kitchen');
+  assert.strictEqual(r2.n + r2.missed, 4);
 });
 
 ok('meals: two a day per staying guest, plus walk-ins on a festive / market day', () => {
@@ -285,4 +291,150 @@ ok('v5.11.0.9: the bigger buildings still leave lanes, fixed decor slots and tab
   }
 });
 
+ok('v5.11.0.12: kitchen garden and cap grow with upgrades; a maxed kitchen covers a full inn', () => {
+  const I = IN.empty(); I.diner.lv = 1;
+  assert.strictEqual(IN.seatsOf(I), 4);
+  assert.strictEqual(IN.kitchenCap(I), 12);
+  assert.strictEqual(IN.gardenYield(I).greens, 8);
+  assert.strictEqual(IN.gardenYield(I).cabbage, 2);
+  I.diner.lv = 2;
+  assert.strictEqual(IN.kitchenCap(I), 24);
+  assert.strictEqual(IN.gardenYield(I).greens, 16);
+  I.diner.lv = 3;
+  assert.strictEqual(IN.kitchenCap(I), 36);
+  assert.deepStrictEqual(IN.gardenYield(I), { greens: 24, cabbage: 10, carrot: 4 });
+  // 4 cabins + inn2, 8 groups of 2 = 16 people, 32 raw meals; cap 36 so a maxed kitchen takes them all
+  I.cabins = 4; I.inn2 = 1;
+  I.guests = Array.from({ length: 8 }, (_, i) => ({ id: 'g' + i, look: 'innA', n: 2, room: i, from: 116, until: 118, at: 700 }));
+  assert.strictEqual(IN.peopleStay(I, 117, 'inn'), 16);
+  assert.strictEqual(IN.mealsWanted(I, 117, false, 0), 32);
+  I.diner.lv = 1;
+  assert.strictEqual(IN.mealsWanted(I, 117, false, 0), 12, 'a small kitchen is not asked for 32 portions');
+  I.diner.lv = 3;
+  const stock = { egg: 12, milk: 4, flour: 6, jam: 3, cheese: 3, honey: 3, fish: 2 }; // a reasonable late farm, no cabbage in the baskets
+  const r = IN.serve(I, IN.mealsWanted(I, 117, false, 0), Object.assign({}, stock), false);
+  assert.strictEqual(r.missed, 0, 'maxed kitchen + garden + a reasonable farm satisfies a full inn: served ' + r.n + ' missed ' + r.missed + ' used ' + r.used.slice(0, 8));
+  assert.strictEqual(r.n, 32);
+  I.diner.lv = 1;
+  const r1 = IN.serve(I, 12, { egg: 12 }, false);
+  assert.ok(r1.n < 32 && r1.n >= 8, 'the level-1 garden already helps, but cannot match a maxed kitchen: ' + r1.n);
+});
+
+ok('v5.11.0.12: a lifetime missed total must not poison later reviews; the note names what was short', () => {
+  const I = IN.empty(); I.diner.lv = 3; I.cabins = 2;
+  // an early short day (empty baskets, before the garden fallback existed in old builds)
+  I.diner.served = 3; I.diner.missed = 40; I.diner.last = 100;
+  I.diner.missedLast = 9; I.diner.servedLast = 3; I.diner.short = ['cabbage', 'flour'];
+  const mid = IN.mealReview(I, 101);
+  assert.strictEqual(mid.missed, 9, 'dawn checkout reads yesterday\'s service, not the lifetime 40');
+  assert.deepStrictEqual(mid.short, ['cabbage', 'flour']);
+  const note = IN.rateStay({ animals: [{ h: 90 }], yard: 0, yardCap: 18, decor: 8, flowers: 8, missed: mid.missed, short: mid.short, diner: 1 }).note;
+  assert.ok(/菜不够/.test(note) && /卷心菜/.test(note), 'actionable short note: ' + note);
+
+  // the next day the maxed kitchen cooks enough; lifetime missed stays 40
+  const r = IN.serve(I, 12, { egg: 12, flour: 6, cheese: 4 }, false);
+  I.diner.last = 117;
+  assert.strictEqual(r.missed, 0);
+  assert.strictEqual(I.diner.missed, 40, 'lifetime total is unchanged when today is fully served');
+  const later = IN.mealReview(I, 118);
+  assert.strictEqual(later.missed, 0);
+  const good = IN.rateStay({ animals: [{ h: 90 }], yard: 0, yardCap: 18, decor: 8, flowers: 8, missed: later.missed, short: later.short, diner: 1, servedDish: later.dish || 'cabbage_egg' });
+  assert.ok(!/菜不够/.test(good.note), 'a full service does not write 菜不够: ' + good.note);
+  assert.ok(good.s >= 4, 'stars recover: ' + good.s);
+
+  // a stale lifetime total alone, with no last-service shortfall, is ignored
+  const stale = IN.mealReview({ diner: { lv: 3, missed: 99, last: 80, missedLast: 12 } }, 118);
+  assert.strictEqual(stale.missed, 0, 'a week-old shortfall does not apply at checkout');
+});
+
+ok('v5.11.0.12: seafood-stall misses do not write diner.missedLast or a 菜不够 review', () => {
+  const I = IN.empty(); I.diner.lv = 3; I.resort.stall = 1;
+  I.diner.last = 117; I.diner.missedLast = 0; I.diner.servedLast = 16; I.diner.dishLast = 'cabbage_egg';
+  const stall = IN.serveStall(I, 8, { sardine: 1 }, null);
+  assert.ok(stall.missed > 0, 'the stall itself can still run short');
+  assert.strictEqual(I.diner.missedLast, 0, 'stall shortfalls stay off the restaurant review');
+  const rev = IN.mealReview(I, 118);
+  assert.strictEqual(rev.missed, 0);
+});
+
+ok('v5.11.0.12: guestbook merges same-day lines (old saves had ten identical 菜不够 rows)', () => {
+  const I = IN.empty(); I.cabins = 4;
+  I.guests = [
+    { id: 'g1', look: 'innA', n: 2, room: 0, from: 116, until: 118, at: 600 },
+    { id: 'g2', look: 'innB', n: 2, room: 1, from: 116, until: 118, at: 620 },
+    { id: 'g3', look: 'innC', n: 1, room: 2, from: 116, until: 118, at: 640 },
+  ];
+  const ctx = { animals: [{ h: 80 }], yard: 0, yardCap: 18, missed: 4, short: ['cabbage'], diner: 1 };
+  const out = IN.checkOut(I, 118, () => IN.rateStay(ctx));
+  assert.strictEqual(out.groups.length, 3);
+  assert.strictEqual(I.stars.last.length, 1, 'one row per day, not one per group');
+  assert.strictEqual(I.stars.last[0].n, 3);
+  assert.ok(/卷心菜/.test(I.stars.last[0].note), I.stars.last[0].note);
+  // an already-written save with ten identical lines still displays as one
+  const old = IN.empty();
+  for (let i = 0; i < 4; i++) old.stars.last.push({ day: 116, s: 3, note: '今天的菜不够' });
+  for (let i = 0; i < 3; i++) old.stars.last.push({ day: 117, s: 3, note: '今天的菜不够' });
+  for (let i = 0; i < 3; i++) old.stars.last.push({ day: 118, s: 3, note: '今天的菜不够' });
+  const b = IN.book(old);
+  assert.strictEqual(b.length, 3);
+  assert.strictEqual(b[0].day, 118);
+  assert.strictEqual(b[0].n, 3);
+  assert.strictEqual(b[1].n, 3);
+  assert.strictEqual(b[2].n, 4);
+});
+
+ok('v5.11.0.12: a short sitting names the missing ingredient; valid() keeps last-service fields', () => {
+  const I = IN.empty(); I.diner.lv = 1;
+  // no farm stock and a small garden (8 时蔬, cap 12) so 4 portions are still missed
+  const r = IN.serve(I, 12, {}, false);
+  assert.strictEqual(r.n, 8, 'level-1 garden serves 8 时蔬: ' + r.n);
+  assert.strictEqual(r.missed, 4);
+  assert.ok(r.short.includes('cabbage') || r.short.includes('egg') || r.short.includes('flour'), 'short ' + JSON.stringify(r.short));
+  assert.ok(/缺/.test(IN.shortNote(r.short)), IN.shortNote(r.short));
+  const v = IN.valid(I);
+  assert.strictEqual(v.diner.missedLast, 4);
+  assert.strictEqual(v.diner.servedLast, 8);
+  assert.ok(Array.isArray(v.diner.short) && v.diner.short.length);
+  const v0 = IN.valid({ diner: { lv: 3 } });
+  assert.ok(!('missedLast' in v0.diner), 'missing last-service fields stay omitted (append-only)');
+});
+
+ok('v5.11.0.12: garden cabbage is used first; farm cabbage is still reserved and deducted', () => {
+  const I = IN.empty(); I.diner.lv = 3;
+  assert.strictEqual(IN.gardenYield(I).cabbage, 10, 'maxed kitchen garden is 10 cabbage');
+  IN.setMenu(I, ['cabbage_egg'], false);
+  const stock = { cabbage: 20, egg: 20 };
+  const need = IN.reserveNeed(I, 12, false, Object.assign({}, stock));
+  assert.strictEqual(need.cabbage, 2, 'reserve the 2 farm cabbages past the garden: ' + JSON.stringify(need));
+  assert.strictEqual(need.egg, 12, 'reserve 12 eggs: ' + JSON.stringify(need));
+  const r = IN.serve(I, 12, stock, false);
+  assert.strictEqual(r.n, 12);
+  assert.strictEqual(r.missed, 0);
+  assert.ok(r.used.every(id => id === 'cabbage_egg'), r.used.join(','));
+  assert.strictEqual(r.farmNeed.cabbage, 2, 'deduct 2 farm cabbages, not 0: ' + JSON.stringify(r.farmNeed));
+  assert.strictEqual(r.farmNeed.egg, 12);
+  assert.strictEqual(stock.cabbage, 18, '18 farm cabbage remain, garden covered 10: ' + stock.cabbage);
+  assert.strictEqual(stock.egg, 8);
+});
+
+ok('v5.11.0.12: same-day 3/3/4 and 4/3/3 both average 3.3 after a reload', () => {
+  const run = order => {
+    const I = IN.empty(); I.cabins = 3;
+    for (const s of order) IN.pushStar(I, { day: 118, s, note: '住得很安静' });
+    I.stars.avg = IN.avgOf(I.stars.last);
+    const loaded = IN.valid(I);
+    return { avg: loaded.stars.avg, row: loaded.stars.last[0], before: I.stars.avg, raw: I.stars.last[0] };
+  };
+  const a = run([3, 3, 4]), b = run([4, 3, 3]);
+  assert.strictEqual(a.avg, 3.3, '3,3,4 -> 3.3, got ' + a.avg + ' row ' + JSON.stringify(a.row));
+  assert.strictEqual(b.avg, 3.3, '4,3,3 -> 3.3, got ' + b.avg + ' row ' + JSON.stringify(b.row));
+  assert.strictEqual(a.before, 3.3);
+  assert.strictEqual(b.before, 3.3);
+  // append-only: a row without sum still averages from s × n
+  const legacy = IN.valid({ cabins: 1, stars: { last: [{ day: 10, s: 4, n: 2, note: '羊好软' }] } });
+  assert.strictEqual(legacy.stars.avg, 4);
+  assert.ok(!('sum' in legacy.stars.last[0]), 'missing sum stays omitted');
+});
+
 console.log('\n' + n + ' tests ok');
+
