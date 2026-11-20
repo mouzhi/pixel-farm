@@ -79,6 +79,8 @@ fs.mkdirSync(OUT, { recursive: true });
     // Stage each normal assignment, then compare ACTUAL opaque sprite pixels through every activity cycle (not world distance).
     await shot('party_crowd', `(() => { ${setup} if (!area) return { area: false }; party(18 * 60 + 30);
       for (let i = 0; i < 4; i++) { const g = { id: 'stress' + i, look: i % 2 ? 'guestA' : 'guestB', x: area.x, y: area.y, pts: [], moving: false }; f.GUESTS.push(g); f.partySpot(g); }
+      // At the maximum wedding/friends crowd the children are grown: use their taller teen bodies, not short child sprites.
+      S.members.filter(a => /^kid/.test(a.id)).forEach(a => { a.role = 'teen'; });
       const crowd = f.actors().concat(f.GUESTS), SPR = f.partySprite(), cache = new Map(); let frames = 0, minDrawn = 99, overlap = 0, bad = [];
       const mask = o => { const sh = o.sheet || SPR, fw = SPR.fw, fh = SPR.fh, fr = o.fr % (SPR.frames[o.row] || 4), img = o.flip ? sh.flip : sh.img;
         const key = (o.partyKey || '') + ':' + o.row + ':' + fr + ':' + o.flip; if (cache.has(key)) return cache.get(key);
