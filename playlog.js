@@ -229,7 +229,7 @@
   function wrapSave(snap) {
     return {
       meta: { kind: 'pixel-farm-save', exportedAt: new Date().toISOString(), gameVersion: snap && snap.gameVersion || null, saveVersion: snap && snap.saveVersion || null },
-      save: snap
+      save: snap && root.PFSave && root.PFSave.compact ? root.PFSave.compact(snap) : snap // v5.11.0.8: the same compact form as the game's own save
     };
   }
 

@@ -113,4 +113,12 @@ ok('only basics: never decor, plots, buildings, or the town hall (projects, gift
   for (let p; (p = SIM.autoPick(u, 1e9, 1e6, [])).id; k++) { assert.ok(BASIC.has(p.id)); assert.ok(!/^(hall|plot|town)/.test(p.id)); u[p.id] = (u[p.id] | 0) + 1; assert.ok(k < 30); }
   assert.strictEqual(k, SIM.AUTO_BUY.length); assert.strictEqual(SIM.autoPick(u, 1e9, 1e6, []).why, 'done');
 });
+ok('v5.11.0.8 review: two 1.5-day records — the first 1.5 days come back 1 h later, not when the window is full (23 h)', () => {
+  const win = [{ at: T0 - 23 * H, days: 1.5 }, { at: T0 - 1 * H, days: 1.5 }], avg = [5000, 5000, 5000];
+  const r = SIM.offlineSettle(1800, avg, win, T0); assert.strictEqual(r.days, 0); assert(r.limited);
+  assert.strictEqual(r.nextFullAt, T0 + 23 * H); assert.strictEqual(r.nextPartAt, T0 + 1 * H); assert.strictEqual(r.nextPartDays, 1.5);
+  const later = SIM.offlineSettle(1800, avg, win, r.nextPartAt + 1000); assert.strictEqual(later.days, 1.5, 'paid 1.5 days right after nextPartAt');
+  const before = SIM.offlineSettle(1800, avg, win, r.nextPartAt - 1000); assert.strictEqual(before.days, 0, 'nothing just before it');
+  const one = SIM.offlineSettle(1800, avg, [{ at: T0 - 2 * H, days: 3 }], T0); assert.strictEqual(one.nextPartAt, one.nextFullAt); assert.strictEqual(one.nextPartDays, 3);
+});
 console.log(`\n${n} passed`);
