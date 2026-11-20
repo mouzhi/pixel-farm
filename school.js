@@ -10,9 +10,9 @@
   const LOT = { id: 'school', x: 618, y: 26, hw: 8, hd: 8, door: P(618, 36), rot: 0, style: 6 };
   // the dirt yard grows east once the project is up (the old yard is town.js SCHOOLYARD [572, 44, 608, 60])
   const YARD = [572, 38, 628, 64];
-  const TRACK = { cx: 618, cy: 51, rx: 9, ry: 6 }; // a running oval in the east yard
-  const BENCHES = [P(604, 42), P(608, 42), P(604, 46)];
-  const WATCH = P(606, 44); // where the family stands to watch
+  const TRACK = { cx: 600, cy: 52, rx: 22, ry: 8 }; // a running oval across the yard, in front of both classrooms
+  const BENCHES = [P(586, 42), P(592, 42), P(582, 46)];
+  const WATCH = P(588, 44); // where the family stands to watch
   const FLAG = P(618, 44);
   const built = H => !!(H && H.built && H.built.school);
   const isDay = (H, day) => built(H) && (day | 0) > (H.built.school | 0) && (day | 0) % EVERY === 0;

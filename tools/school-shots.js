@@ -31,7 +31,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const setup = `${helpers} f.SAVE.off = true; S.family.met = 1; S.family.moved = 1; S.family.love = 100; S.coins = 500000; f.FARMER.wood = 2000;
     for (const id of ['house','house','axe','forest','east','orchard','south','pasture','coast','coop','chicken','fold','sheep','can','can']) f.buy(id);
     day(30); Object.assign(S.family, { kids: [{ id: 'kid0', name: '小豆', born: 15 }, { id: 'kid1', name: '小米', born: 16 }] }); f.syncFamily(); dry();`;
-  const shops = `openTown(); at(9 * 60); for (const id of ['L5', 'L8', 'L11', 'market', 'bakery', 'woodshop', 'smithy']) { const r = f.hallStart(id); if (!r.ok) return { error: id + ' ' + (r.why || r.err || JSON.stringify(r)) }; nextMorning(); at(9 * 60); } f.FARMER.wood = 800;`;
+  const shops = `openTown(); at(9 * 60); for (const id of ['L5', 'L8', 'L11', 'market', 'bakery', 'woodshop', 'smithy']) { f.FARMER.wood = 800; const r = f.hallStart(id); if (!r.ok) return { error: id + ' ' + (r.why || r.err || JSON.stringify(r)) }; nextMorning(); at(9 * 60); } f.FARMER.wood = 800;`;
   const shot = async (name, fn, check, save) => { if (only && !name.includes(only)) return;
     const p = await page(save); let r; try { r = await p.evaluate(fn); } catch (e) { r = { error: String(e).slice(0, 300) }; }
     await p.waitForTimeout(400); await p.screenshot({ path: path.join(OUT, name) });
@@ -42,7 +42,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const lock0 = (f.hallView().projects.find(p => p.id === 'school') || {}).why;
     const c0 = S.coins, w0 = f.FARMER.wood, r = f.hallStart('school'); if (!r.ok) return { r, lock0, built: S.town.hall.built, job: S.town.hall.job };
     const paid = c0 - S.coins, wood = w0 - f.FARMER.wood;
-    nextMorning(); at(10 * 60); f.advance(2, 10); look(604, 32, -0.15); hide();
+    nextMorning(); at(10 * 60); f.advance(2, 10); look(600, 36, -0.15); hide();
     const v = f.hallView();
     return { lock0, r, paid, wood, built: S.town.hall.built.school, lv: v.lv, next: v.next, classroom: !!(f.TA.state && f.TA.state().hall), log: S.events.map(e => e.msg).filter(m => /学校|操场|教室/.test(m)).slice(0, 4) }; })()`,
     r => !r.r || !r.r.ok ? 'start ' + JSON.stringify(r.r) : r.paid !== 40000 || r.wood !== 200 ? 'cost ' + r.paid + '/' + r.wood : !r.built ? 'not built' : r.lv !== 3 ? 'lv ' + r.lv : null);
@@ -50,7 +50,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 2. the playground: the oval track, flag, posts and benches east of the school
   await shot('v5109_playground.png', `(() => { ${setup} ${shops}
     const r = f.hallStart('school'); if (!r.ok) return { r };
-    nextMorning(); at(11 * 60); dry(); f.advance(2, 10); look(610, 50, -0.2); hide();
+    nextMorning(); at(11 * 60); dry(); f.advance(2, 10); look(600, 52, -0.15); hide();
     const v = f.hallView();
     return { built: !!S.town.hall.built.school, sports: v.school && v.school.sports, next: v.school && v.school.next, yard: f.SC && f.SC.YARD, flag: f.SC && f.SC.FLAG, t: S.t % 1440 }; })()`,
     r => !r.built ? 'not built' : !r.yard ? 'no yard' : r.sports ? 'not a regular day' : !r.next ? 'no next sports day' : null);
@@ -63,7 +63,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const paid = c0 - S.coins, wood = w0 - f.FARMER.wood;
     nextMorning(); at(10 * 60); f.advance(2, 10);
     until(() => { const n = f.NEIGH.find(q => q.id === 'n9'); return n && n.out && n.spot === 'library' && !n.moving; }, 800);
-    look(622, 118, 0.2); hide();
+    look(614, 108, 0); hide();
     const v = f.hallView(), ning = out('n9');
     return { r, paid, wood, built: S.town.hall.built.library, lv: v.lv, hints: (v.library && v.library.hints || []).map(q => q.id), ning, log: S.events.map(e => e.msg).filter(m => /书屋|图书馆/.test(m)).slice(0, 4) }; })()`,
     r => !r.r || !r.r.ok ? 'start ' + JSON.stringify(r.r) : r.paid !== 25000 || r.wood !== 150 ? 'cost ' + r.paid + '/' + r.wood : !r.built ? 'not built' : r.lv !== 4 ? 'lv ' + r.lv : !r.ning || r.ning.spot !== 'library' ? '阿宁 ' + JSON.stringify(r.ning) : null);
@@ -73,10 +73,23 @@ fs.mkdirSync(OUT, { recursive: true });
     const s0 = f.hallStart('school'); if (!s0.ok) return { s0 };
     nextMorning();
     const H = S.town.hall, next = f.SC.nextDay(H, S.day);
-    day(next); at(10 * 60); dry(); f.advance(3, 10);
+    day(next); at(7 * 60 + 40); dry(); f.advance(2, 10);
+    until(() => f.actors().some(q => q.id && /^kid/.test(q.id) && q.task && (q.task.kind === 'school-go' || q.task.kind === 'race')), 600);
+    at(10 * 60); f.advance(2, 10);
     until(() => f.sportsOpenNow() && (out('n1') || {}).spot === 'yard', 800);
-    until(() => f.actors().some(q => q.task && (q.task.kind === 'race' || (q.task.kind === 'school-go' && q.task.toRace))) || f.actors().some(q => q._sports), 1200);
-    look(610, 48, -0.15); hide();
+    const inYard = q => f.SC.inYard(q.x, q.y, 4) || q._sports || (q.task && q.task.kind === 'race');
+    until(() => f.actors().filter(q => q.id && /^kid/.test(q.id)).some(inYard), 2500);
+    const far = f.actors().filter(q => q.id && /^kid/.test(q.id) && !inYard(q));
+    if (far.length) {
+      far.forEach((q, i) => {
+        const m = (f.memberOf && f.memberOf(q.id)) || q;
+        const at = f.SC.raceAt(i, S.t, 6);
+        m.x = at.x; m.y = at.y; m.pts = []; m.moving = false; m._sports = 1; m.away = null;
+        if (m.task) { m.task.kind = 'race'; m.task.done = null; }
+      });
+      f.advance(1, 10);
+    }
+    look(600, 52, -0.15); hide();
     const v = f.hallView(), lin = out('n1');
     const kids = f.actors().filter(q => q.id && /^kid/.test(q.id)).map(q => ({ id: q.id, kind: q.task && q.task.kind, sports: !!q._sports, away: q.away, x: Math.round(q.x), y: Math.round(q.y), hold: q.hold, hat: q.hat }));
     const watch = f.actors().filter(q => q.task && /运动会|操场/.test(q.task.label || '')).map(q => q.name || q.id);
