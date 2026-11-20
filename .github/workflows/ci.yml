@@ -87,8 +87,9 @@ jobs:
           - group: recent-a
             scripts: bakery-shots.js workshop-shots.js careers-shots.js festival-shots.js
           # v5.11.0: recent-b ran 23m39s (inn 7.4m, resort 7.2m, school 4.6m, clinic 4.3m) on run 44683475759; school -> townscale, clinic -> smoke
+          # v5.11.1: + agrilot-shots (农家乐区, ~5m locally); recent-b was 11m on run 44697205625
           - group: recent-b
-            scripts: inn-shots.js resort-shots.js
+            scripts: inn-shots.js resort-shots.js agrilot-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           - group: townscale
             scripts: v5110-shots.js school-shots.js

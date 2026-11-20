@@ -31,7 +31,9 @@ ok('layout: plots inside the world, apart from each other, the farm, the old reg
   assert.strictEqual(PL.PLOTS.length, 16);
   const area = r => (r[2] - r[0]) * (r[3] - r[1]), small = Math.min(...WD.REGIONS.map(q => area(q.rect)));
   assert(PL.PLOTS.every(p => area(p.rect) < 7800), 'small and medium: none as big as the old regions'); assert(PL.PLOTS.filter(p => area(p.rect) <= small * 0.75).length >= 8, 'at least half are small');
-  for (const id of ['field', 'pasture', 'orchard', 'meadow', 'woodland', 'workshop', 'dam', 'road', 'playground', 'inn', 'resort']) assert(PL.PLOTS.some(p => p.mods.includes(id)), 'some plot offers ' + id);
+  for (const id of ['field', 'pasture', 'orchard', 'meadow', 'woodland', 'workshop', 'dam', 'road', 'playground', 'resort']) assert(PL.PLOTS.some(p => p.mods.includes(id)), 'some plot offers ' + id);
+  assert(!PL.PLOTS.some(p => p.mods.includes('inn')), 'v5.11.1: no plot offers 民宿院 any more (the 农家乐区 is its own ground)');
+  assert.deepStrictEqual(PL.LEGACY_MODS, ['inn']);
   assert.deepStrictEqual(PL.PLOTS.find(p => p.id === 'play').mods, ['playground', 'meadow']);
 });
 ok('routes: every plot gate is on a dirt road from the farm', () => {

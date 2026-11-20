@@ -115,8 +115,43 @@
     return ids[0] || null;
   };
   const plotOk = id => INN_PLOTS.includes(id);
+  // ---------- v5.11.1: the 农家乐区 (docs/town-scale-plan.md 2.4) ----------
+  // Its own ground by the town gate (town.js AGRI), the east road through the middle. Cabins (and the two-storey inn) stand in
+  // a row on the north half, the restaurant with its kitchen, tables, a kitchen garden and a little guest square on the south
+  // half. No farm plot is zoned for it any more: once the town gate is open the district is there to build on.
+  const SITE = 'agri';
+  const AGRI = [456, -40, 584, 200];
+  // where the lodging stands. townOpen: the town gate is open (the district is reachable); a save that already has buildings
+  // keeps them even if that flag is somehow off.
+  const anyInn = I => !!(I && ((I.cabins | 0) > 0 || (I.inn2 | 0) > 0 || (I.diner && I.diner.lv | 0) > 0 || (I.job && INN_JOBS.test(I.job.id))));
+  const siteOf = (townOpen, I) => (townOpen || anyInn(I)) ? SITE : null;
+  function agriLayout() {
+    const [x0, y0, x1, y1] = AGRI, roadY = 66;
+    const cw = 14, cd = 10;
+    const cabins = [482, 506, 534, 558].map((x, i) => ({ i, x, y: 8, hw: cw / 2, hd: cd / 2, door: P(x, 13), rot: 0 }));
+    const diner = { x: 520, y: 104, hw: 10, hd: 6, door: P(520, 110), rot: 0 };
+    const tables = [];
+    for (let i = 0; i < 6; i++) { const col = i % 3, row = (i / 3) | 0; tables.push({ i, x: 510 + col * 10, y: 120 + row * 9, seats: 2 }); }
+    diner.tables = tables;
+    diner.stand = P(diner.door.x + 7, diner.door.y + 2);
+    // lanes: road -> cabin lane (north), road -> restaurant door (south), restaurant -> guest square
+    const paths = [
+      [P(520, roadY - 5), P(520, 20)], [P(476, 20), P(564, 20)],
+      [P(544, roadY + 5), P(544, 112), P(526, 112)],
+      [P(544, 112), P(552, 150)],
+    ];
+    const lamps = [P(514, 52), P(526, 30), P(550, 84), P(538, 100)];
+    const pots = [];
+    for (const c of cabins) { pots.push({ x: c.door.x - 5, y: c.door.y + 3 }); pots.push({ x: c.door.x + 5, y: c.door.y + 3 }); lamps.push(P(c.x + c.hw + 2, c.y)); }
+    lamps.push(P(diner.x - diner.hw - 2, diner.y)); lamps.push(P(diner.x + diner.hw + 2, diner.y));
+    const garden = [470, 146, 512, 182];   // 菜园: rows of greens, once the restaurant is up
+    const square = [532, 140, 574, 178];   // 游客小广场
+    return { plot: SITE, site: SITE, rect: AGRI.slice(), gate: P(520, roadY), diner, cabins, tables, path: paths[0], paths, lamps, pots,
+      board: P(508, 56), yard: P(553, 160), garden, square, name: '农家乐区' };
+  }
   // a packed-dirt yard with a south-facing restaurant, up to 4 cabins, tables, lamps, pots and a guestbook board
   function layout(plotId) {
+    if (plotId === SITE) return agriLayout();
     const p = PL && PL.plot ? PL.plot(plotId) : null; if (!p) return null;
     const [x0, y0, x1, y1] = p.rect, gate = p.gate;
     const pad = 8, ix0 = x0 + pad, iy0 = y0 + pad, ix1 = x1 - pad, iy1 = y1 - pad;
@@ -295,6 +330,8 @@
     if (o.job && typeof o.job === 'object' && ALL_JOBS.test(o.job.id)) out.job = { id: o.job.id, day: int(o.job.day, 0, 1e6) };
     out.walkins = int(o.walkins, 0, 99);
     out.arrived = int(o.arrived, 0, 1e6);
+    if (o.where === SITE) out.where = SITE;      // v5.11.1: the lodging moved from a plot to the 农家乐区 …
+    if (int(o.moved, 1, 1e6)) out.moved = int(o.moved, 1, 1e6); // … on this day (the notice is shown once)
     return out;
   }
 
@@ -317,45 +354,45 @@
   function offer(I, id) {
     if (id === 'cabin') {
       const n = cabinsUp(I);
-      if (n >= MAX_CABINS) return { id, ok: false, reason: 'full', why: '小木屋最多 4 间' };
+      if (n >= MAX_CABINS) return { id, name: '小木屋', ok: false, reason: 'full', why: '小木屋最多 4 间' };
       const c = cabinCost(n);
       return { id, name: n ? '再盖一间小木屋' : '第一间小木屋', cost: c.cost, wood: c.wood, ok: true };
     }
     if (id === 'diner') {
-      if (dinerUp(I)) return { id, ok: false, reason: 'done', why: '农家菜馆已经盖好了' };
+      if (dinerUp(I)) return { id, name: '农家菜馆', ok: false, reason: 'done', why: '农家菜馆已经盖好了' };
       return { id, name: '农家菜馆', cost: DINER.cost, wood: DINER.wood, ok: true };
     }
     if (id === 'kitchen') {
-      if (!dinerUp(I)) return { id, ok: false, reason: 'need', why: '先盖农家菜馆' };
+      if (!dinerUp(I)) return { id, name: '厨房升级', cost: KITCHEN.cost, wood: KITCHEN.wood, ok: false, reason: 'need', why: '先盖农家菜馆' };
       const lv = kitchenLv(I);
-      if (lv >= KITCHEN.max) return { id, ok: false, reason: 'done', why: '厨房已经升到 2 级' };
+      if (lv >= KITCHEN.max) return { id, name: '厨房', ok: false, reason: 'done', why: '厨房已经升到 2 级' };
       return { id, name: '厨房第 ' + (lv + 1) + ' 级', cost: KITCHEN.cost, wood: KITCHEN.wood, ok: true, lv: lv + 1 };
     }
     if (id === 'inn2') {
-      if (I.inn2) return { id, ok: false, reason: 'done', why: '已经是二层客栈了' };
-      if (cabinsUp(I) < 1) return { id, ok: false, reason: 'need', why: '先盖至少一间小木屋' };
+      if (I.inn2) return { id, name: '二层客栈', ok: false, reason: 'done', why: '已经是二层客栈了' };
+      if (cabinsUp(I) < 1) return { id, name: '二层客栈', cost: INN2.cost, wood: INN2.wood, ok: false, reason: 'need', why: '先盖至少一间小木屋' };
       return { id, name: '二层客栈', cost: INN2.cost, wood: INN2.wood, ok: true };
     }
     if (id === 'hut') {
       const n = hutsUp(I);
-      if (n >= MAX_HUTS) return { id, ok: false, reason: 'full', why: '沙滩小屋最多 4 间' };
+      if (n >= MAX_HUTS) return { id, ok: false, reason: 'full', why: '沙滩小屋最多 4 间', name: '沙滩小屋' };
       return { id, name: n ? '再盖一间沙滩小屋' : '第一间沙滩小屋', cost: HUT.cost, wood: HUT.wood, ok: true };
     }
     if (id === 'parasol') {
       const n = parasolsUp(I);
-      if (n >= MAX_PARASOLS) return { id, ok: false, reason: 'full', why: '遮阳伞最多 8 把' };
+      if (n >= MAX_PARASOLS) return { id, ok: false, reason: 'full', why: '遮阳伞最多 8 把', name: '遮阳伞' };
       return { id, name: '遮阳伞', cost: PARASOL.cost, wood: PARASOL.wood, ok: true, instant: 1 };
     }
     if (id === 'stall') {
-      if (stallUp(I)) return { id, ok: false, reason: 'done', why: '海鲜摊已经盖好了' };
+      if (stallUp(I)) return { id, ok: false, reason: 'done', why: '海鲜摊已经盖好了', name: '海鲜摊' };
       return { id, name: '海鲜摊', cost: SEA_STALL.cost, wood: SEA_STALL.wood, ok: true };
     }
     if (id === 'pier') {
-      if (pierUp(I)) return { id, ok: false, reason: 'done', why: '游客栈桥已经盖好了' };
+      if (pierUp(I)) return { id, ok: false, reason: 'done', why: '游客栈桥已经盖好了', name: '游客栈桥' };
       return { id, name: '游客栈桥', cost: GUEST_PIER.cost, wood: GUEST_PIER.wood, ok: true };
     }
     if (id === 'deck') {
-      if (deckUp(I)) return { id, ok: false, reason: 'done', why: '日落观景台已经盖好了' };
+      if (deckUp(I)) return { id, ok: false, reason: 'done', why: '日落观景台已经盖好了', name: '日落观景台' };
       return { id, name: '日落观景台', cost: DECK.cost, wood: DECK.wood, ok: true };
     }
     return { id, ok: false, reason: 'unknown', why: '没有这个项目' };
@@ -367,7 +404,7 @@
       if (!(ctx && ctx.coast)) return '先买下海边';
       if (!(ctx && ctx.resort)) return '先把东南滩改建成度假村';
     } else {
-      if (!(ctx && ctx.plot)) return '先把一块地改建成民宿院（林间空地、南河湾、河对岸或东坡）';
+      if (!(ctx && (ctx.site || ctx.plot))) return '先开镇门：农家乐区就在镇门口东大道两边，不用改建地块';
     }
     if ((ctx.lv | 0) < PROSPERITY) return '繁荣度到 3 才能建（先把集市和面包房盖好）';
     if (id !== 'parasol' && I.job) return I.job.id === id ? '正在盖' : '一次只盖一样，等家人先把这一样搭好';
@@ -399,15 +436,30 @@
   }
   const plotBusy = (plotId, plots, I) => {
     if (!plotId || !plots || !plots[plotId]) return null;
-    if (plots[plotId].mod === 'inn') {
-      if ((I && I.cabins | 0) > 0 || dinerUp(I) || (I && I.inn2) || (I && I.job && INN_JOBS.test(I.job.id))) return '这块地上有民宿，不能改建';
-    }
+    // v5.11.1: the lodging moved to the 农家乐区, so an old 民宿院 plot is an empty yard and never busy
     if (plots[plotId].mod === 'resort') {
       const r = I && I.resort;
       if ((r && (r.huts || r.parasols || r.stall || r.pier || r.deck)) || (I && I.job && RESORT_JOBS.test(I.job.id))) return '这块地上有度假村，不能改建';
     }
     return null;
   };
+
+  // ---------- v5.11.1 migration: a save whose lodging stood on a zoned 民宿院 plot ----------
+  // Everything (cabins, inn, restaurant + kitchen, a build in progress, guests and their rooms, stars, guestbook, takings) is
+  // kept by count and index, so it simply stands in the 农家乐区 now. The old plot stays an empty yard that can be rezoned once
+  // for free (plots[id].free = 1). Idempotent: run on every load; `moved` (the day) is set once so the notice shows once.
+  // -> { plots: [ids freed now], notice: true when this load is the move }
+  function migrate(I, plots, day) {
+    const out = { plots: [], notice: false };
+    if (!I || !plots) return out;
+    for (const id of Object.keys(plots)) {
+      const p = plots[id];
+      if (!p || p.mod !== 'inn' || p.free) continue;
+      p.free = 1; out.plots.push(id);
+    }
+    if (out.plots.length && !(I.moved | 0)) { I.moved = Math.max(1, day | 0); I.where = SITE; out.notice = true; }
+    return out;
+  }
 
   // ---------- guests ----------
   const hash = (day, k) => (Math.imul((day | 0) * 33 + (k | 0) + 19, 0x9E3779B1) >>> 0);
@@ -618,7 +670,7 @@
     STAY, GROUP, ARRIVE, LEAVE_MORNING, ON_SCREEN, STAR_BOOST, FURNISH, BOOK_MAX, STARS_MAX, LOOKS, BEACH_LOOKS,
     UNIT, DISHES, DISH, STALL_DISHES, unitOf, dishBase, dishPay, canMake, pullDish, isSeaFish, seaCount, pullSea,
     starCoef, roomFee, groupsWanted, effectiveStars,
-    innPlotOf, resortPlotOf, plotOk, layout, resortLayout, isSunset,
+    innPlotOf, resortPlotOf, plotOk, layout, SITE, AGRI, siteOf, anyInn, agriLayout, migrate, resortLayout, isSunset,
     empty, emptyDiner, emptyStars, emptyEarn, emptyResort, valid, validMenu, avgOf,
     cabinsUp, dinerUp, kitchenLv, seatsOf, dishSlots, unlocked, cabinCost, offer, canStart, start, finish, plotBusy,
     innRoomsOf, hutsUp, parasolsUp, stallUp, pierUp, deckUp, stayOf, cabinOf,

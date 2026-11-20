@@ -14,7 +14,7 @@
   const RECT = [600, -96, 984, 212];                       // the town: 384 x 308 world units (was 184 x 166 at 448..632 x -16..150)
   const STRIP = [448, -208, 1008, 384];                    // the strip the map grew by (v5.8.0: 448..640; v5.11.0: to 1008)
   const GATE = P(596, 66);                                 // the town gate, where the east road reaches the town
-  const AGRI = [456, -40, 584, 200];                       // kept clear for the 农家乐区 (v5.11.1): no trees, no props
+  const AGRI = [456, -40, 584, 200];                       // the 农家乐区 (v5.11.1, inn.js AGRI): no trees, no props
   const AVENUE = { y: 66, hw: 5, x0: 362, x1: 980, walk: 1.3 }; // 东大道 + 主街 in stone: people walk 1.3x faster on it
   const SQUARE = [706, 86, 820, 172];                      // 节庆广场: the harvest feast's long table and the lantern ring
   const RESERVED = [                                       // 预留地块: signposted, nothing on them yet
@@ -58,9 +58,16 @@
     return null;
   }
   // nav: what people may not walk on in the strip. open: the town is bought
-  function blocks(open) {
-    // the strip west of the town: only the east road crosses it (the 农家乐区 ground stays empty until v5.11.1)
-    const out = [[STRIP[0], STRIP[1], RECT[0] - 2, GATE.y - 8], [STRIP[0], GATE.y + 8, RECT[0] - 2, STRIP[3]]];
+  function blocks(open, agri) {
+    // the strip west of the town: only the east road crosses it. v5.11.1: once the 农家乐区 is in use (agri) its ground is
+    // walkable too (guests, the family running it); the rest of the strip stays wild.
+    const out = [];
+    if (agri) {
+      const [ax0, ay0, ax1, ay1] = AGRI, ex = RECT[0] - 2;
+      out.push([STRIP[0], STRIP[1], ex, ay0 - 1], [STRIP[0], ay1 + 1, ex, STRIP[3]], // north and south of the district
+        [STRIP[0], ay0 - 1, ax0 - 1, GATE.y - 8], [ax1 + 1, ay0 - 1, ex, GATE.y - 8],   // its west and east edges, north of the road
+        [STRIP[0], GATE.y + 8, ax0 - 1, ay1 + 1], [ax1 + 1, GATE.y + 8, ex, ay1 + 1]);  // … and south of it
+    } else out.push([STRIP[0], STRIP[1], RECT[0] - 2, GATE.y - 8], [STRIP[0], GATE.y + 8, RECT[0] - 2, STRIP[3]]);
     if (!open) { out.push([GATE.x + 2, STRIP[1], STRIP[2], STRIP[3]]); return out; }
     out.push([RECT[0] - 2, STRIP[1], STRIP[2], RECT[1]], [RECT[0] - 2, RECT[3], STRIP[2], STRIP[3]], [RECT[2], RECT[1], STRIP[2], RECT[3]],
       [RECT[0] - 2, RECT[1], RECT[0] + 2, GATE.y - 8], [RECT[0] - 2, GATE.y + 8, RECT[0] + 2, RECT[3]]);

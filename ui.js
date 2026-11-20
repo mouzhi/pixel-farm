@@ -250,7 +250,7 @@
   const shop = $('shop'); let shopKey = '', shopFocus = '', plotView = ''; // plotView: v5.5.0 one plot's page (plots-ui.js)
   const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
   const HALL_TAB = { id: 'hall', name: '镇公所', title: '镇公所的告示板：建设项目、繁荣度、送给镇上的装饰', ids: [] }; // v5.10.0
-  const INN_TAB = { id: 'inn', name: '农家乐', title: '民宿院、二层客栈和海边度假村。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7; v5.10.8 resort
+  const INN_TAB = { id: 'inn', name: '农家乐', title: '镇门口农家乐区的民宿、二层客栈、菜馆，还有海边度假村。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7; v5.10.8 resort
   const shopTabs = () => (SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }]).concat(G.hallView ? [HALL_TAB] : []).concat(G.innView ? [INN_TAB] : []);
   const readShopTab = () => { try { const v = localStorage.getItem(SHOP_TAB_KEY); if (shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
   let shopTab = readShopTab();
@@ -342,20 +342,22 @@
     const stars = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
     const starTxt = '★'.repeat(stars) + '☆'.repeat(5 - stars);
     let h = '';
-    h += `<div class="sec">民宿院${v.plotName ? ' · ' + esc(v.plotName) : ''}${v.inn2 ? ' · 二层客栈' : ''}</div>`;
-    if (!v.plot) h += `<div class="more">先在「地块」里把林间空地、南河湾、河对岸或东坡改建成民宿院。</div>`;
+    h += `<div class="sec">农家乐区 · 民宿${v.inn2 ? ' · 二层客栈' : ''}</div>`; // v5.11.1: its own district by the town gate, no plot is rezoned
+    if (!v.plot) h += `<div class="more">农家乐区在镇门口东大道两边，是一块专门的空地，不占家里的地块。先修好东大道、开了镇门，就能在这里盖小木屋和菜馆。</div>`;
+    else h += `<div class="more">小木屋、二层客栈、农家菜馆和厨房都盖在镇门口的农家乐区（东大道北边是民宿，南边是菜馆和菜园），不用改建任何地块。小地图下面点「农家乐」就能过去看。</div>`;
+    if (v.freed && v.freed.length) h += `<div class="more">民宿已经从「${esc(v.freed.join('、'))}」搬到农家乐区，原来那块地空出来了，可以在「地块」里免费改建一次。</div>`;
     h += `<div class="more">现在 ${v.cabins} / 4 间小木屋${v.inn2 ? '（每间可住两组）' : ''}，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
       (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +
       (v.guests && v.guests.length ? `，今天住着 ${v.guests.length} 组共 ${v.people} 人` : '，今天还没有客人') +
       `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
     const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' };
     if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
-    const label = o => o.name || o.id;
+    const label = o => o.name || jobName[o.id] || '农家乐项目'; // v5.11.1: never a raw id (the kitchen card showed "kitchen")
     const desc = o => ({
       cabin: v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。',
-      diner: '院子南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜。',
+      diner: '农家乐区南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜，旁边还有一块菜园。',
       kitchen: '厨房升一级，多 2 道菜、多 4 个座位。一共可以升两级。',
-      inn2: '把整个院子的小木屋加盖成二层客栈，每间多住一组客人。家人一天改好。',
+      inn2: '把农家乐区的小木屋都加盖成二层客栈，每间多住一组客人。家人一天改好。',
       hut: '海边的沙滩小屋。度假村的客人只住这里，白天在沙滩上走、在伞下躺。家人一天盖好。',
       parasol: '一把遮阳伞。家人马上摆到沙滩上固定的位置，最多 8 把。',
       stall: '用家里钓的海鱼做海鱼烤和海鲜汤，收入算进菜馆。家人一天盖好。',

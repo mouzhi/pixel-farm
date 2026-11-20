@@ -233,7 +233,8 @@
   }
   const CABIN_CY = 1; // model centre sits a little north of the door so the porch hangs south
 
-  function layout() {
+  function layout() { // v5.11.1: the 农家乐区 (game.js decides when it is open)
+    if (X && X.innLay) return X.innLay();
     const id = IN && S && S.plots ? IN.innPlotOf(S.plots) : null;
     return id ? IN.layout(id) : null;
   }
@@ -380,16 +381,31 @@
   }
   function ground(x, y) {
     const L = layout();
-    if (L) {
-      for (let i = 0; i < L.path.length - 1; i++) {
-        const a = L.path[i], b = L.path[i + 1], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    if (L && (!L.rect || (x >= L.rect[0] - 4 && x <= L.rect[2] + 4 && y >= L.rect[1] - 4 && y <= L.rect[3] + 4))) {
+      for (const path of (L.paths || [L.path])) for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i], b = path[i + 1], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
         const t = ((x - a.x) * dx + (y - a.y) * dy) / (len * len);
         if (t < -0.02 || t > 1.02) continue;
         const px = a.x + t * dx, py = a.y + t * dy;
         if (Math.hypot(x - px, y - py) < 3.2) return [hash(x, y, 3) > 0.7 ? Wd[3] : Wd[4], 'dirt'];
       }
-      if ((S.inn && S.inn.diner && S.inn.diner.lv) > 0) {
+      const dinerUp = (S.inn && S.inn.diner && S.inn.diner.lv) > 0;
+      if (dinerUp) {
         for (const tb of L.tables) if (Math.hypot(x - tb.x, y - tb.y) < 5) return [St[3], 'dirt'];
+      }
+      // v5.11.1: the district's yard under the cabins, the restaurant's forecourt, the kitchen garden and the guest square
+      const inR = r => r && x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+      if ((S.inn && S.inn.cabins | 0) > 0 && L.site && x >= 472 && x <= 568 && y >= -6 && y <= 24) return [hash(x, y, 7) > 0.8 ? Wd[3] : Wd[4], 'dirt'];
+      if (dinerUp && inR(L.garden)) {
+        const row = Math.floor((y - L.garden[1]) / 6), inRow = (y - L.garden[1]) - row * 6;
+        if (x < L.garden[0] + 1 || x > L.garden[2] - 1 || y < L.garden[1] + 1 || y > L.garden[3] - 1) return [Wd[2], 'dirt']; // a low wooden edge
+        if (inRow < 3) return [hash(x, y, 9) > 0.5 ? G[4] : G[2], 'dirt'];  // greens
+        return [Wd[1], 'dirt'];                                           // tilled soil between the rows
+      }
+      if (dinerUp && inR(L.square)) {
+        const u = Math.floor((x + (Math.floor(y / 3) & 1) * 1.5) / 3), gx = (x + (Math.floor(y / 3) & 1) * 1.5) % 3, gy = y % 3;
+        if (gx < 0.5 || gy < 0.5) return [St[1], 'dirt'];
+        return [(u + Math.floor(y / 3)) % 4 ? St[3] : St[2], 'dirt'];
       }
     }
     const RL = rLayout(), r = S && S.inn && S.inn.resort;

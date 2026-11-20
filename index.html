@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="icon" href="data:,">
-<title>像素堆叠 · 放置农场 v5.11.0.1</title>
+<title>像素堆叠 · 放置农场 v5.11.1</title>
 <style>
   html,body{margin:0;height:100%;background:#1b2a24;overflow:hidden}
   #wrap{position:absolute;left:0;top:0}
@@ -214,7 +214,7 @@
       <div id="log"></div>
     </div>
   </div>
-  <div id="title">像素堆叠 · 放置农场 v5.11.0.1 · 活动倒计时<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
+  <div id="title">像素堆叠 · 放置农场 v5.11.1 · 农家乐区<br><span style="font-weight:400;opacity:.8">拖动 / W A S D 平移 · Shift+拖动 / Q E 旋转 · R 回家 · I 仓库 · J 图鉴 · 滚轮缩放</span></div>
   <div id="rightDock">
     <button id="syncHint" class="pbtn" hidden>点此恢复本地同步</button>
     <div id="navBtns">
@@ -224,7 +224,7 @@
       <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
       <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
     </div>
-    <div id="titleS"><span class="n">放置农场 </span>v5.11.0.1<span class="s"> · 活动倒计时</span></div>
+    <div id="titleS"><span class="n">放置农场 </span>v5.11.1<span class="s"> · 农家乐区</span></div>
     <canvas id="minimap" class="panel" title="小地图：点一下看那里"></canvas>
     <div id="mmJump"><button class="pbtn" data-j="home" title="回家（R）">家</button><button class="pbtn" data-j="agri" title="农家乐">农家乐</button><button class="pbtn" data-j="town" title="小镇">小镇</button><button class="pbtn" data-j="beach" title="海边">海边</button></div>
     <div id="shop" class="panel" hidden></div>
@@ -242,58 +242,58 @@
 <div id="offline" class="panel" hidden></div>
 <div id="career" class="panel" hidden></div>
 <div id="say" class="panel" hidden></div>
-<script src="assets/palette.js?v=5.11.0.1"></script>
-<script src="assets/sprites.js?v=5.11.0.1"></script>
-<script src="assets/family_sprites.js?v=5.11.0.1"></script>
-<script src="decor.js?v=5.11.0.1"></script>
-<script src="town.js?v=5.11.0.1"></script>
-<script src="slots.js?v=5.11.0.1"></script>
-<script src="yard.js?v=5.11.0.1"></script>
-<script src="market.js?v=5.11.0.1"></script>
-<script src="bakery.js?v=5.11.0.1"></script>
-<script src="woodshop.js?v=5.11.0.1"></script>
-<script src="smithy.js?v=5.11.0.1"></script>
-<script src="school.js?v=5.11.0.1"></script>
-<script src="library.js?v=5.11.0.1"></script>
-<script src="clinic.js?v=5.11.0.1"></script>
-<script src="festival.js?v=5.11.0.1"></script>
-<script src="events.js?v=5.11.0.1"></script>
-<script src="hall.js?v=5.11.0.1"></script>
-<script src="careers.js?v=5.11.0.1"></script>
-<script src="home.js?v=5.11.0.1"></script>
-<script src="sim.js?v=5.11.0.1"></script>
-<script src="world.js?v=5.11.0.1"></script>
-<script src="plots.js?v=5.11.0.1"></script>
-<script src="inn.js?v=5.11.0.1"></script>
-<script src="inn-art.js?v=5.11.0.1"></script>
-<script src="wood.js?v=5.11.0.1"></script>
-<script src="path.js?v=5.11.0.1"></script>
-<script src="animals.js?v=5.11.0.1"></script>
-<script src="works.js?v=5.11.0.1"></script>
-<script src="fish.js?v=5.11.0.1"></script>
-<script src="kids.js?v=5.11.0.1"></script>
-<script src="family.js?v=5.11.0.1"></script>
-<script src="surprise.js?v=5.11.0.1"></script>
-<script src="weather.js?v=5.11.0.1"></script>
-<script src="insects.js?v=5.11.0.1"></script>
-<script src="codex.js?v=5.11.0.1"></script>
-  <script src="codex_icons.js?v=5.11.0.1"></script>
-<script src="diary.js?v=5.11.0.1"></script>
-<script src="save.js?v=5.11.0.1"></script>
-<script src="playlog.js?v=5.11.0.1"></script>
-<script src="fx.js?v=5.11.0.1"></script>
-<script src="expansion.js?v=5.11.0.1"></script>
-<script src="works-art.js?v=5.11.0.1"></script>
-<script src="decor-art.js?v=5.11.0.1"></script>
-<script src="yard-art.js?v=5.11.0.1"></script>
-<script src="home-art.js?v=5.11.0.1"></script>
-<script src="town-bldg.js?v=5.11.0.1"></script>
-<script src="town-art.js?v=5.11.0.1"></script>
-<script src="game.js?v=5.11.0.1"></script>
-<script src="ui.js?v=5.11.0.1"></script>
-<script src="events-ui.js?v=5.11.0.1"></script>
-<script src="plots-ui.js?v=5.11.0.1"></script>
-<script src="diary-ui.js?v=5.11.0.1"></script>
-<script src="audio.js?v=5.11.0.1"></script>
+<script src="assets/palette.js?v=5.11.1"></script>
+<script src="assets/sprites.js?v=5.11.1"></script>
+<script src="assets/family_sprites.js?v=5.11.1"></script>
+<script src="decor.js?v=5.11.1"></script>
+<script src="town.js?v=5.11.1"></script>
+<script src="slots.js?v=5.11.1"></script>
+<script src="yard.js?v=5.11.1"></script>
+<script src="market.js?v=5.11.1"></script>
+<script src="bakery.js?v=5.11.1"></script>
+<script src="woodshop.js?v=5.11.1"></script>
+<script src="smithy.js?v=5.11.1"></script>
+<script src="school.js?v=5.11.1"></script>
+<script src="library.js?v=5.11.1"></script>
+<script src="clinic.js?v=5.11.1"></script>
+<script src="festival.js?v=5.11.1"></script>
+<script src="events.js?v=5.11.1"></script>
+<script src="hall.js?v=5.11.1"></script>
+<script src="careers.js?v=5.11.1"></script>
+<script src="home.js?v=5.11.1"></script>
+<script src="sim.js?v=5.11.1"></script>
+<script src="world.js?v=5.11.1"></script>
+<script src="plots.js?v=5.11.1"></script>
+<script src="inn.js?v=5.11.1"></script>
+<script src="inn-art.js?v=5.11.1"></script>
+<script src="wood.js?v=5.11.1"></script>
+<script src="path.js?v=5.11.1"></script>
+<script src="animals.js?v=5.11.1"></script>
+<script src="works.js?v=5.11.1"></script>
+<script src="fish.js?v=5.11.1"></script>
+<script src="kids.js?v=5.11.1"></script>
+<script src="family.js?v=5.11.1"></script>
+<script src="surprise.js?v=5.11.1"></script>
+<script src="weather.js?v=5.11.1"></script>
+<script src="insects.js?v=5.11.1"></script>
+<script src="codex.js?v=5.11.1"></script>
+  <script src="codex_icons.js?v=5.11.1"></script>
+<script src="diary.js?v=5.11.1"></script>
+<script src="save.js?v=5.11.1"></script>
+<script src="playlog.js?v=5.11.1"></script>
+<script src="fx.js?v=5.11.1"></script>
+<script src="expansion.js?v=5.11.1"></script>
+<script src="works-art.js?v=5.11.1"></script>
+<script src="decor-art.js?v=5.11.1"></script>
+<script src="yard-art.js?v=5.11.1"></script>
+<script src="home-art.js?v=5.11.1"></script>
+<script src="town-bldg.js?v=5.11.1"></script>
+<script src="town-art.js?v=5.11.1"></script>
+<script src="game.js?v=5.11.1"></script>
+<script src="ui.js?v=5.11.1"></script>
+<script src="events-ui.js?v=5.11.1"></script>
+<script src="plots-ui.js?v=5.11.1"></script>
+<script src="diary-ui.js?v=5.11.1"></script>
+<script src="audio.js?v=5.11.1"></script>
 </body>
 </html>
