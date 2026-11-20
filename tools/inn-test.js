@@ -48,7 +48,7 @@ ok('3 stars bring 1 group a day, 5 stars at most 3; festive days double; below 3
   assert.ok(lows.every(v => v === 0 || v === 1));
 });
 
-ok('cabin / restaurant / kitchen prices and the one-day build; prosperity 3 and a 民宿院 are required', () => {
+ok('cabin / restaurant / kitchen prices and the one-day build; prosperity 3 and the 农家乐区 are required', () => {
   const I = IN.empty();
   assert.deepStrictEqual(IN.cabinCost(0), { cost: 20000, wood: 300 });
   assert.deepStrictEqual(IN.cabinCost(1), { cost: 25000, wood: 250 });
@@ -57,7 +57,8 @@ ok('cabin / restaurant / kitchen prices and the one-day build; prosperity 3 and 
   assert.strictEqual(IN.offer(I, 'diner').wood, 400);
   assert.ok(/先盖农家菜馆/.test(IN.offer(I, 'kitchen').why));
   const poor = { plot: 'glade', lv: 3, coins: 100, wood: 10 };
-  assert.strictEqual(IN.canStart(I, 'cabin', { plot: null, lv: 3, coins: 1e6, wood: 999 }), '先把一块地改建成民宿院（林间空地、南河湾、河对岸或东坡）');
+  assert.strictEqual(IN.canStart(I, 'cabin', { plot: null, lv: 3, coins: 1e6, wood: 999 }), '先开镇门：农家乐区就在镇门口东大道两边，不用改建地块');
+  assert.strictEqual(IN.canStart(I, 'cabin', { site: 'agri', lv: 3, coins: 1e6, wood: 999 }), null, 'v5.11.0.5.1: the 农家乐区 is the site');
   assert.ok(/繁荣度到 3/.test(IN.canStart(I, 'cabin', { plot: 'glade', lv: 2, coins: 1e6, wood: 999 })));
   assert.strictEqual(IN.canStart(I, 'cabin', poor), '金币不够');
   const rich = { plot: 'glade', lv: 3, coins: 1e6, wood: 999 };
@@ -177,41 +178,72 @@ ok('staffed path adds 0.3 stars and a signature dish; furniture from the woodsho
   assert.ok(IN.effectiveStars(I, true, true) > IN.effectiveStars(I, true, false));
 });
 
-ok('the 民宿院 module is offered on 林间空地, 南河湾, 河对岸 and 东坡; layout stays inside the fence and does not overlap', () => {
-  assert.deepStrictEqual(IN.INN_PLOTS, ['glade', 'sbank', 'swacross', 'seacross', 'eslope']);
-  for (const id of IN.INN_PLOTS) {
-    const p = PL.plot(id);
-    assert.ok(p.mods.includes('inn'), id + ' can be zoned 民宿院');
-    const L = IN.layout(id); assert.ok(L, 'layout ' + id);
-    const [x0, y0, x1, y1] = p.rect;
-    const boxes = L.cabins.map(c => ({ id: 'c' + c.i, a: [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd] }))
-      .concat([{ id: 'diner', a: [L.diner.x - L.diner.hw, L.diner.y - L.diner.hd, L.diner.x + L.diner.hw, L.diner.y + L.diner.hd] }]);
-    for (const b of boxes) {
-      assert.ok(b.a[0] >= x0 + 2 && b.a[2] <= x1 - 2 && b.a[1] >= y0 + 2 && b.a[3] <= y1 - 2, id + ' ' + b.id + ' inside ' + b.a);
-    }
-    for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
-      const A = boxes[i].a, B = boxes[j].a;
-      const hit = A[0] < B[2] - 1 && B[0] < A[2] - 1 && A[1] < B[3] - 1 && B[1] < A[3] - 1;
-      assert.ok(!hit, id + ' overlap ' + boxes[i].id + ' / ' + boxes[j].id);
-    }
-    assert.strictEqual(L.cabins.length, 4);
-    assert.strictEqual(L.tables.length, 6);
-    assert.ok(L.lamps.length >= 4 && L.pots.length >= 4);
-    assert.ok(L.board && L.diner.door && L.diner.stand);
-    // south-facing doors (default camera)
-    for (const c of L.cabins) assert.ok(c.door.y >= c.y, 'cabin door on the south side');
-    assert.ok(L.diner.door.y >= L.diner.y, 'restaurant door on the south side');
+ok('v5.11.0.5.1: no plot offers 民宿院; the 农家乐区 layout stays inside the district, off the road, and does not overlap', () => {
+  const TN = require('../town.js');
+  assert.deepStrictEqual(IN.AGRI, TN.AGRI, 'inn.js and town.js agree on the district');
+  for (const p of PL.PLOTS) assert.ok(!p.mods.includes('inn'), p.id + ' no longer zones 民宿院');
+  const L = IN.layout('agri'); assert.ok(L && L.site === 'agri' && L.name === '农家乐区');
+  const [x0, y0, x1, y1] = IN.AGRI;
+  const boxes = L.cabins.map(c => ({ id: 'c' + c.i, a: [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd] }))
+    .concat([{ id: 'diner', a: [L.diner.x - L.diner.hw, L.diner.y - L.diner.hd, L.diner.x + L.diner.hw, L.diner.y + L.diner.hd] }]);
+  for (const b of boxes) {
+    assert.ok(b.a[0] >= x0 + 2 && b.a[2] <= x1 - 2 && b.a[1] >= y0 + 2 && b.a[3] <= y1 - 2, b.id + ' inside ' + b.a);
+    assert.ok(b.a[3] < TN.AVENUE.y - TN.AVENUE.hw - 2 || b.a[1] > TN.AVENUE.y + TN.AVENUE.hw + 2, b.id + ' off the east road');
   }
-  assert.ok(!PL.plot('eshore').mods.includes('inn'), '东南滩 is reserved for the resort');
-  assert.ok(!PL.plot('play').mods.includes('inn'), 'the playground plot stays a playground');
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const A = boxes[i].a, B = boxes[j].a;
+    assert.ok(!(A[0] < B[2] + 2 && B[0] < A[2] + 2 && A[1] < B[3] + 2 && B[1] < A[3] + 2), 'overlap ' + boxes[i].id + ' / ' + boxes[j].id);
+  }
+  for (const c of L.cabins) assert.ok(c.y < TN.AVENUE.y, 'cabins on the north half');
+  assert.ok(L.diner.y > TN.AVENUE.y, 'the restaurant on the south half');
+  for (const t of L.tables) assert.ok(t.y > L.diner.door.y && t.x > x0 && t.x < x1, 'tables south of the door');
+  assert.strictEqual(L.cabins.length, 4); assert.strictEqual(L.tables.length, 6);
+  assert.ok(L.lamps.length >= 4 && L.pots.length >= 4 && L.board && L.diner.stand && L.garden && L.square);
+  for (const c of L.cabins) assert.ok(c.door.y >= c.y, 'cabin door on the south side');
+  // the old per-plot layout still works (unused, kept for code that asks by plot id)
+  assert.ok(IN.layout('glade'));
 });
 
-ok('plotBusy blocks a rezone once a cabin or the restaurant is up', () => {
-  const plots = { glade: { mod: 'inn', day: 80 } };
-  assert.strictEqual(IN.plotBusy('glade', plots, IN.empty()), null);
-  const I = IN.empty(); I.cabins = 1;
-  assert.ok(/民宿/.test(IN.plotBusy('glade', plots, I)));
-  assert.strictEqual(IN.plotBusy('sbank', plots, I), null);
+ok('v5.11.0.5.1: siteOf — the district opens with the town gate; a save with buildings keeps it', () => {
+  assert.strictEqual(IN.siteOf(false, IN.empty()), null);
+  assert.strictEqual(IN.siteOf(true, IN.empty()), 'agri');
+  const I = IN.empty(); I.cabins = 1; assert.strictEqual(IN.siteOf(false, I), 'agri');
+  const J = IN.empty(); J.job = { id: 'cabin', day: 3 }; assert.strictEqual(IN.siteOf(false, J), 'agri');
+});
+
+ok('v5.11.0.5.1: migrate — an old 民宿院 plot keeps every building, frees the plot once, idempotent', () => {
+  const plots = { glade: { mod: 'inn', day: 70 }, sbank: { mod: 'field', day: 40 } };
+  const I = IN.valid({ cabins: 3, inn2: 1, diner: { lv: 2, served: 12 }, guests: [{ id: 'g71', look: 'innB', n: 2, room: 4, from: 80, until: 82, at: 700 }],
+    stars: { last: [{ day: 79, s: 5, note: '羊好软' }] }, earn: { rooms: 4000, meals: 2500 }, job: { id: 'cabin', day: 80 } });
+  const before = JSON.stringify({ c: I.cabins, i: I.inn2, d: I.diner, g: I.guests, s: I.stars, e: I.earn, j: I.job });
+  const r = IN.migrate(I, plots, 81);
+  assert.deepStrictEqual(r, { plots: ['glade'], notice: true });
+  assert.strictEqual(plots.glade.free, 1); assert.strictEqual(plots.glade.mod, 'inn'); assert.ok(!plots.sbank.free);
+  assert.strictEqual(I.where, 'agri'); assert.strictEqual(I.moved, 81);
+  assert.strictEqual(JSON.stringify({ c: I.cabins, i: I.inn2, d: I.diner, g: I.guests, s: I.stars, e: I.earn, j: I.job }), before, 'nothing lost');
+  // round trip through the save: where / moved survive, plots keep the legacy mod and the free flag
+  const I2 = IN.valid(JSON.parse(JSON.stringify(I))); assert.strictEqual(I2.where, 'agri'); assert.strictEqual(I2.moved, 81);
+  const P2 = PL.validPlots(JSON.parse(JSON.stringify(plots))); assert.deepStrictEqual(P2.glade, { mod: 'inn', day: 70, free: 1 });
+  assert.deepStrictEqual(IN.migrate(I2, P2, 90), { plots: [], notice: false }, 'a second load does nothing');
+  // the free rezone: costs nothing, then the plot is ordinary again
+  const o = PL.rezoneOffer(P2, 'glade', 'field', 0, 0); assert.ok(o.ok && o.free && o.cost === 0 && o.wood === 0, JSON.stringify(o));
+  const pg = PL.rezoneOffer(P2, 'glade', 'playground', 0, 0); assert.ok(pg.ok && pg.cost === 0, 'even the playground setup is free once');
+  P2.glade = { mod: 'field', day: 91 };
+  const o2 = PL.rezoneOffer(P2, 'glade', 'meadow', 1e6, 999); assert.ok(!o2.free && o2.cost > 0);
+  // an old plot never blocks a rezone now
+  assert.strictEqual(IN.plotBusy('glade', { glade: { mod: 'inn', day: 70 } }, I), null);
+  // a save without an inn plot is untouched
+  const I3 = IN.empty(); assert.deepStrictEqual(IN.migrate(I3, { sbank: { mod: 'field', day: 4 } }, 50), { plots: [], notice: false }); assert.ok(!I3.moved);
+});
+
+ok('v5.11.0.5.1: every offer has a Chinese name (the shop cards showed "kitchen" / "inn2")', () => {
+  const states = [IN.empty(), (() => { const I = IN.empty(); I.cabins = 4; I.inn2 = 1; I.diner.lv = 3; I.resort = { huts: 4, parasols: 8, stall: 1, pier: 1, deck: 1 }; return I; })(),
+    (() => { const I = IN.empty(); I.cabins = 1; I.diner.lv = 1; return I; })()];
+  for (const I of states) for (const id of ['cabin', 'diner', 'kitchen', 'inn2', 'hut', 'parasol', 'stall', 'pier', 'deck']) {
+    const o = IN.offer(I, id); assert.ok(o.name && /[\u4e00-\u9fff]/.test(o.name) && !/[a-z]{3,}/i.test(o.name), id + ' ' + JSON.stringify(o));
+  }
+  assert.strictEqual(IN.offer(IN.empty(), 'kitchen').name, '厨房升级');
+  assert.strictEqual(IN.offer(IN.empty(), 'inn2').name, '二层客栈');
 });
 
 ok('east-avenue entry: the town gate when the town is open, otherwise the east-road mouth', () => {
