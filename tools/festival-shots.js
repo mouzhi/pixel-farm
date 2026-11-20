@@ -30,7 +30,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const start = id => { f.FARMER.wood = 800; const r = f.hallStart(id); if (!r.ok) throw new Error(id + ' ' + (r.why || JSON.stringify(r))); return r; };
     const wake = () => { const all = (typeof f.actors === 'function' ? f.actors() : []).concat(f.FARMER || []);
       all.forEach(a => { if (a) { a.sleeping = false; a.home = false; } }); };
-    const nearTable = a => { const t = f.FV.TABLE; return a && typeof a.x === 'number' && Math.hypot(a.x - t.x, a.y - t.y) < 18; };
+    const nearTable = a => a && typeof a.x === 'number' && (f.FV.SECTIONS || [f.FV.TABLE]).some(t => Math.hypot(a.x - t.x, a.y - t.y) < 18); // v5.11.0: three table sections
     const familyHere = () => {
       const kids = (S.family && S.family.kids) || [];
       const partner = (typeof f.actors === 'function' ? f.actors() : []).find(a => a && a.id === 'partner');
@@ -65,7 +65,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // 1. night lantern fair on the plaza: strings over the paved street, stalls, warm lights
   await shot('v51011_fair.png', `(() => { ${setup} ${toFest}
-    look(524, 100, -0.1); hide();
+    look(763, 110, 0); hide();
     const v = f.hallView(), H = S.town.hall, T = S.t % 1440;
     return { festDay: S.day, today: !!(v.festival && v.festival.today), lantern: !!(v.festival && v.festival.lantern),
       fair: !!(f.fairNow && f.fairNow()), feast: !!(f.festNow && f.festNow()), sleep: f.sleepAt && f.sleepAt(),
@@ -76,7 +76,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // 2. long-table feast with the family (south side of the table, camera-side seats)
   await shot('v51011_feast.png', `(() => { ${setup} ${toFest}
-    look(520, 110, Math.PI + 0.28); hide();
+    look(763, 130, Math.PI + 0.28); hide();
     const fam = familyHere(), T = S.t % 1440;
     return { festDay: S.day, feast: !!(f.festNow && f.festNow()), fair: !!(f.fairNow && f.fairNow()), T, fam,
       farmer: f.FARMER && { x: Math.round(f.FARMER.x), y: Math.round(f.FARMER.y), kind: f.FARMER.task && f.FARMER.task.kind, sleeping: !!f.FARMER.sleeping } }; })()`,
@@ -84,7 +84,7 @@ fs.mkdirSync(OUT, { recursive: true });
 
   // 3. wide shot of the lit town: main street lanterns, plaza, paved road
   await shot('v51011_lit.png', `(() => { ${setup} ${toFest}
-    look(524, 78, -0.16); hide();
+    look(763, 96, 0); hide();
     const v = f.hallView(), H = S.town.hall;
     return { festDay: S.day, fair: !!(f.fairNow && f.fairNow()), paved: !!(f.CL && f.CL.paved(H)), lv: v.lv, sleep: f.sleepAt && f.sleepAt() }; })()`,
     r => r.lv !== 5 ? 'lv ' + r.lv : !r.paved ? 'not paved' : !r.fair ? 'fair closed' : r.sleep !== 22 * 60 ? 'bedtime ' + r.sleep : null);
@@ -95,7 +95,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await shot(`v51011_fixture_${fx}.png`, `(() => { ${helpers} const s = f.snapshot(); f.advance(2, 10); look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, festival: s2.town.hall.festival, clinic: s2.town.hall.clinic }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.14' ? 'ver ' + r.ver : !r.festival || r.festival.last !== 0 || r.festival.gift !== 0 ? 'festival ' + JSON.stringify(r.festival) : !r.clinic ? 'missing clinic' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.1.1' ? 'ver ' + r.ver : !r.festival || r.festival.last !== 0 || r.festival.gift !== 0 ? 'festival ' + JSON.stringify(r.festival) : !r.clinic ? 'missing clinic' : null, save);
   }
 
   // 5. (local only) the real save and the friend's save load without errors
@@ -103,10 +103,10 @@ fs.mkdirSync(OUT, { recursive: true });
     const save = readSave(file), tag = file === REAL ? 'realsave' : 'friendsave';
     await shot(`v51011_${tag}.png`, `(() => { ${helpers} const s = f.snapshot(); f.advance(3, 10);
       const town = !!(S.eff && S.eff.town);
-      if (town) { f.setAngle(0); f.panTo(530, 70); f.advance(0.3, 10); } else look(96, 60, 0);
+      if (town) { f.setAngle(0); f.panTo(780, 70); f.advance(0.3, 10); } else look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, festival: s2.town.hall.festival, coins: s.coins }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.14' ? 'ver ' + r.ver : !r.festival ? 'missing festival' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.1.1' ? 'ver ' + r.ver : !r.festival ? 'missing festival' : null, save);
   }
 
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

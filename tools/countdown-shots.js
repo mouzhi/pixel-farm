@@ -1,4 +1,4 @@
-// Screenshots + browser checks for v5.10.14 (活动倒计时):  node tools/countdown-shots.js [name-filter]
+// Screenshots + browser checks for v5.11.0.1 (活动倒计时):  node tools/countdown-shots.js [name-filter]
 //   writes /workspace/pf-shots/countdown_*.png (PF_SHOTS to change); exits 1 on a page error, a console error or a failed check
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
@@ -43,7 +43,8 @@ fs.mkdirSync(OUT, { recursive: true });
     const overlaps = () => {
       // log / catches sit in the same left column as the HUD (a gap, not a collision).
       // the expanded list is a popover under the HUD, so only the head must stay inside it.
-      const ids = ['hud', 'title', 'titleS', 'minimap', 'inv', 'navBtns', 'mapBtn'];
+      // diaryBtn lives inside navBtns, so checking navBtns covers the 日记 button.
+      const ids = ['hud', 'title', 'titleS', 'minimap', 'mmJump', 'inv', 'navBtns', 'mapBtn'];
       const box = id => { const el = document.getElementById(id); if (!el || el.hidden || el.style.display === 'none') return null; const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return null; const st = getComputedStyle(el); if (st.visibility === 'hidden' || st.display === 'none') return null; return { id, x: r.left, y: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height }; };
       const boxes = ids.map(box).filter(Boolean);
       const hit = [];
@@ -55,10 +56,23 @@ fs.mkdirSync(OUT, { recursive: true });
       const list = document.querySelector('#countdown .cd-list');
       if (list) {
         const lr = list.getBoundingClientRect();
-        for (const id of ['title', 'titleS', 'minimap', 'inv', 'navBtns', 'mapBtn']) {
+        for (const id of ['title', 'titleS', 'minimap', 'mmJump', 'inv', 'navBtns', 'mapBtn']) {
           const b = box(id); if (!b) continue;
           const ov = !(lr.right <= b.x + 1 || b.r <= lr.left + 1 || lr.bottom <= b.y + 1 || b.b <= lr.top + 1);
           if (ov) hit.push('list/' + id);
+        }
+      }
+      const say = box('say');
+      if (say) {
+        for (const id of ['hud', 'title', 'titleS', 'minimap', 'mmJump', 'inv', 'navBtns', 'mapBtn']) {
+          const b = box(id); if (!b) continue;
+          const ov = !(say.r <= b.x + 1 || b.r <= say.x + 1 || say.b <= b.y + 1 || b.b <= say.y + 1);
+          if (ov) hit.push('say/' + id);
+        }
+        if (list) {
+          const lr = list.getBoundingClientRect();
+          const ov = !(say.r <= lr.left + 1 || lr.right <= say.x + 1 || say.b <= lr.top + 1 || lr.bottom <= say.y + 1);
+          if (ov) hit.push('say/list');
         }
       }
       const head = document.querySelector('#countdown .cd-head'), hud = document.getElementById('hud');
@@ -67,7 +81,11 @@ fs.mkdirSync(OUT, { recursive: true });
         const c = head.getBoundingClientRect(), h = hud.getBoundingClientRect();
         inside = c.left >= h.left - 1 && c.right <= h.right + 1 && c.top >= h.top - 1 && c.bottom <= h.bottom + 1;
       }
-      return { hit, inside, vw: innerWidth, vh: innerHeight };
+      const diaryBtn = document.getElementById('diaryBtn');
+      const jumps = [...document.querySelectorAll('#mmJump button')];
+      const jumpWrap = jumps.filter(e => e.getBoundingClientRect().height > 30).length;
+      const jumpOff = jumps.filter(e => { const q = e.getBoundingClientRect(); return q.right > innerWidth + 1 || q.left < -1; }).length;
+      return { hit, inside, vw: innerWidth, vh: innerHeight, diaryBtn: !!(diaryBtn && diaryBtn.getBoundingClientRect().width > 0), say: say ? say.w : 0, jumpWrap, jumpOff, jumps: jumps.length };
     };`;
   const shot = async (name, fn, check, save, viewport) => { if (only && !name.includes(only)) return;
     const p = await page(save, viewport); let r; try { r = await p.evaluate(fn); } catch (e) { r = { error: String(e).slice(0, 400) }; }
@@ -79,13 +97,13 @@ fs.mkdirSync(OUT, { recursive: true });
   // 1. the day-72 cottage fixture has no town projects: the chip stays hidden; save stays v15
   await shot('countdown_fixture.png', `(() => { ${helpers} look(96, 60, 0); f.advance(0.3, 10);
     const s = f.snapshot(); return Object.assign(cd(), { fxDay: s.clock.day, ov: overlaps() }); })()`,
-    r => r.fxDay !== save.clock.day ? 'day ' + r.fxDay : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.10.14' ? 'ver ' + r.ver : !r.hidden ? 'chip shown on a hall-less save: ' + r.text : r.ids.length ? 'items ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
+    r => r.fxDay !== save.clock.day ? 'day ' + r.fxDay : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.1' ? 'ver ' + r.ver : !r.hidden ? 'chip shown on a hall-less save: ' + r.text : r.ids.length ? 'items ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
     save);
 
   // 2. desktop, 3 days before a harvest festival (also a market + sports day): 「🏮丰收节 还有3天」
   await shot('countdown_desktop.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => r.ver !== '5.10.14' ? 'ver ' + r.ver : r.hidden ? 'chip hidden' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.ids.join() !== 'festival,market,sports' && r.ids.join() !== 'market,sports,festival' ? 'ids ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
+    r => r.ver !== '5.11.0.1' ? 'ver ' + r.ver : !r.ov.diaryBtn ? 'no 日记 button' : r.hidden ? 'chip hidden' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.ids.join() !== 'festival,market,sports' && r.ids.join() !== 'market,sports,festival' ? 'ids ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
     save);
 
   // 3. expanded list on desktop, staggered upcoming days
@@ -102,7 +120,7 @@ fs.mkdirSync(OUT, { recursive: true });
     save);
 
   // 5. during the feast: 「🏮丰收节 进行中」
-  await shot('countdown_live.png', `(() => { ${helpers} stampHall(40); day(56); at(20 * 60); look(524, 100, -0.1); f.advance(0.3, 10);
+  await shot('countdown_live.png', `(() => { ${helpers} stampHall(40); day(56); at(20 * 60); look((f.FV && f.FV.TABLE) ? f.FV.TABLE.x : 763, (f.FV && f.FV.TABLE) ? f.FV.TABLE.y : 130, -0.1); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
     r => r.line !== '🏮丰收节 进行中' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
     save);
@@ -110,14 +128,27 @@ fs.mkdirSync(OUT, { recursive: true });
   // 6. mobile 390x844, collapsed
   await shot('countdown_mobile.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.vw !== 390 || r.ov.vh !== 844 ? 'viewport ' + r.ov.vw + 'x' + r.ov.vh : null,
+    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : r.ov.jumps !== 4 ? 'jump n ' + r.ov.jumps : r.ov.vw !== 390 || r.ov.vh !== 844 ? 'viewport ' + r.ov.vw + 'x' + r.ov.vh : null,
     save, { width: 390, height: 844 });
 
   // 7. mobile expanded: the list stays inside the HUD and does not cover the right-side buttons
   await shot('countdown_mobile_expanded.png', `(() => { ${helpers} stampHall(40); day(58); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     if (window.PFEventsUI) PFEventsUI.toggle(true);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => !r.open ? 'not expanded' : !/运动会/.test(r.text) || !/丰收节/.test(r.text) ? 'list ' + r.text : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
+    r => !r.open ? 'not expanded' : !/运动会/.test(r.text) || !/丰收节/.test(r.text) ? 'list ' + r.text : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : null,
+    save, { width: 390, height: 844 });
+
+  // 8. morning diary toast must not cover the countdown or the 日记 button
+  await shot('countdown_toast_desktop.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
+    window.dispatchEvent(new CustomEvent('pf:say', { detail: '昨天（第52天）种了南瓜，收了6个，钓到2条鱼。日记里写着呢' }));
+    return Object.assign(cd(), { ov: overlaps() }); })()`,
+    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : !r.ov.say ? 'no toast' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
+    save);
+
+  await shot('countdown_toast_mobile.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
+    window.dispatchEvent(new CustomEvent('pf:say', { detail: '昨天（第52天）种了南瓜，收了6个，钓到2条鱼。日记里写着呢' }));
+    return Object.assign(cd(), { ov: overlaps() }); })()`,
+    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : !r.ov.say ? 'no toast' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : r.ov.vw !== 390 ? 'viewport' : null,
     save, { width: 390, height: 844 });
 
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

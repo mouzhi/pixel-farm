@@ -69,17 +69,15 @@ ok('autobuy never lists a festival, hall, school, library, clinic, rebuild, shop
   for (const id of SIM.AUTO_BUY) assert.ok(!deny.test(id), 'autobuy has ' + id);
 });
 
-ok('the long table sits on the plaza, clear of the fountain, the stalls and L11', () => {
-  const MK = require('../market.js');
-  const T = FS.TABLE, box = FS.blocks()[0];
-  assert.ok(Math.hypot(T.x - 524, T.y - 98) > 12, 'too close to the fountain');
-  for (const s of MK.STALLS) {
-    const hit = !(box[2] < s.x - MK.HW || box[0] > s.x + MK.HW || box[3] < s.y - MK.HD || box[1] > s.y + MK.HD);
-    assert.ok(!hit, 'overlaps stall ' + s.id);
-  }
-  // L11 is 546, 131 hw 8 hd 7 → y 124–138
-  assert.ok(box[3] < 124, 'overlaps L11');
-  assert.ok(FS.SEATS.length >= 8);
+ok('v5.11.0: the long table has its own square (节庆广场), 20 seats, clear of the fountain, the stalls and every building', () => {
+  const MK = require('../market.js'), TN = require('../town.js'), CR = require('../careers.js');
+  const T = FS.TABLE, box = FS.blocks()[0], q = FS.SQUARE, inQ = (x, y) => x >= q[0] && x <= q[2] && y >= q[1] && y <= q[3];
+  assert.ok(inQ(box[0], box[1]) && inQ(box[2], box[3]), 'the table stands inside the square');
+  assert.ok(Math.hypot(T.x - TN.PLAZA.x, T.y - TN.PLAZA.y) > MK.PLAZA_R + 20, 'away from the fountain plaza');
+  for (const s of MK.STALLS) assert.ok(!inQ(s.x, s.y), 'stall ' + s.id + ' is not on the feast square');
+  for (const b of [...TN.BUILDINGS, ...HL.LOTS, ...CR.LOTS]) assert.ok(b.x + b.hw < q[0] || b.x - b.hw > q[2] || b.y + b.hd < q[1] || b.y - b.hd > q[3], b.id + ' off the square');
+  assert.strictEqual(FS.SEATS.length, 20); for (const s of FS.SEATS) assert.ok(inQ(s.x, s.y) && (s.y < box[1] || s.y > box[3]), 'seat beside the table');
+  assert.strictEqual(FS.SECTIONS.length, 3);
   assert.ok(FS.STRINGS.length >= 8);
   assert.ok(FS.lights().length >= 12);
 });

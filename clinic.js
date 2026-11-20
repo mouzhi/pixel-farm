@@ -9,7 +9,7 @@
   const HOURS = { from: 8 * 60, to: 17 * 60 };
   const FLOOR = 40, CHECK = 10, CHECK_EVERY = 30;
   // lot L9: east of L8 (560, 87) and south of the main street, clear of stall s5 and 小桃家
-  const LOT = { id: 'clinic', x: 600, y: 87, hw: 8, hd: 7, door: P(600, 78), rot: Math.PI, style: 8 };
+  const LOT = { id: 'clinic', x: 870, y: 110, hw: 11, hd: 9, door: P(870, 98), rot: Math.PI, style: 8 }; // v5.11.0: south of the main street
   const STAND = P(LOT.door.x + 6, LOT.door.y - 2);
   // the original five one-storey houses (town.js), rebuilt one at a time into the three two-storey styles
   const HOUSES = [

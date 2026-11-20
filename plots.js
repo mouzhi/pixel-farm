@@ -44,7 +44,7 @@
   const BRIDGE = { x: 24, y0: 302, y1: 330, hw: 5 };
   // The ridge: a cliff edge running along the north of the map, bending down at the west and east corners. North of it is
   // the high plateau, reached only by the mountain trail.
-  function ridgeY(x) { return -158 + Math.sin(x * 0.045) * 4 + Math.sin(x * 0.013 + 1) * 3 + Math.max(0, -170 - x) * 1.1 + Math.max(0, Math.min(x, 470) - 352) * 0.45; } // v5.8.0: level off past the old map edge (the town strip)
+  function ridgeY(x) { return -158 + Math.sin(x * 0.045) * 4 + Math.sin(x * 0.013 + 1) * 3 + Math.max(0, -170 - x) * 1.1 + Math.max(0, Math.min(x, 470) - 352) * 0.45 - Math.max(0, Math.min(x, 640) - 530) * 0.12; } // v5.8.0: level off past the old map edge (the town strip); v5.11.0: step back 13 north behind the new town
   const CLIFF = 5; // world units of rock face below the ridge line
   // the trail (dirt, bought as its own special plot): up the gap between 林场 and 北牧场, through the cliff, along the plateau
   const TRAIL = [P(204, -108), P(190, -126), P(214, -144), P(196, -166), P(196, -184)];
@@ -120,7 +120,7 @@
     x_neslope: [P(204, -106), P(240, -106), P(240, -112)],
   };
   // inside a bought road plot the road runs on to the town gate at the map edge
-  const TOWN = { gate: P(440, 66), lane: [P(362, 66), P(440, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
+  const TOWN = { gate: P(596, 66), lane: [P(362, 66), P(596, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
   if (WD) for (const k in ROUTES) if (!WD.ROUTES[k]) WD.ROUTES[k] = ROUTES[k];
 
   // ---------- the grazing meadow behind the sheep fold (a fold upgrade, not a plot) ----------
@@ -147,7 +147,7 @@
     if (riverDist(x, y) < RIVER_HW + BANK + pad * 0.6) return true;
     const ry = ridgeY(x); if (y < ry + 2 + pad * 0.3 && y > ry - CLIFF - 3) return true;
     if (onTrail(x, y, 7 + pad * 0.5)) return true;
-    if (inRect(x, y, [TOWN.gate.x - 10, 40, 460, 92])) return true;
+    if (inRect(x, y, [440, 40, 460, 92])) return true;
     return false;
   }
   // a world point that is outside the old 64 x 50 map
