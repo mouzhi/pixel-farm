@@ -3053,7 +3053,7 @@ function homeParty(T) { // the party has begun: the guests who came get to know 
   for (const k of S.family.kids) { if (FAM.kidStage(k, S.day) !== 'teen' || HM.isMarried(S.home, k.id)) continue;
     const b = HM.best(S.home, k.id); if (!b || b.v < HM.REL.friend) continue; HM.clampAdd(HM.KID_IDS.includes(k.id) ? (S.home.rel[k.id] || (S.home.rel[k.id] = {})) : {}, b.id, HM.REL.party);
     const w = weddingTonight(); if (w && w.w.mate === b.id) continue; // the bride or groom comes on their own
-    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); n++; if (!seat) continue;
+    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); n++; if (!seat || GUESTS.some(g => g.id === 'f' + i)) continue;
     GUESTS.push({ id: 'f' + i, look: TN.MATES[i].look, x: from.x, y: from.y, fx: -1, fy: 0, pts: routeVia(from, seat).concat([seat]), moving: true, leaving: false, home: townOpen() ? from : null, fast: 1, friend: 1 });
     log(`${k.name}的好朋友${HM.mateName(b.id)}也来参加派对`); }
 }

@@ -27,7 +27,7 @@ fs.mkdirSync(OUT, { recursive: true });
     f.yard.length = 0; // a tidy yard (no rocks, logs or weeds lying about), like a farm that has been worked a while
     S.family.met = 1; S.family.moved = 1; S.family.love = 100; S.coins = 500000; f.FARMER.wood = 2000;
     for (const id of ['house','house','axe','forest','east','orchard','south','pasture','coast','can','can','can','can']) f.buy(id);
-    day(60); dry(); S.family.kids = [{ id: 'kid0', name: '小豆', born: 50 }, { id: 'kid1', name: '小米', born: 38 }]; f.syncFamily();
+    day(60); dry(); S.family.kids = [{ id: 'kid0', name: '小豆', born: 50 }, { id: 'kid1', name: '小米', born: 45 }]; f.syncFamily();
     at(8 * 60); const bought = f.buy('party'); until(() => !!f.partyArea() && !S.decor.orders.length, 900);
     const area = f.partyArea(); dry();
     if (area) { S.decor.party.at = S.day - 1; S.decor.party.last = S.day - 9; S.decor.party.tonight = S.day; S.decor.party.guests = 2; }
@@ -57,7 +57,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const snap = f.snapshot(), size = JSON.stringify(snap).length, keys = Object.keys(snap.decor.party).join(',');
       return { ver: f.version, sv: snap.saveVersion, size, keys, bought: bought && bought.ok, area: [area.x, area.y], lawn: L.lawn.map(l => l.kind + (l.tall ? '|' : '') + '@' + l.x + ',' + l.y), extra: L.extra.length, why: L.why, reach, cut, ...pp }; })()`,
       r => r.area === false ? 'no party area' : r.ver !== VERSION ? 'ver ' + r.ver : r.sv !== 15 ? 'saveVersion ' + r.sv : r.keys !== 'last,at,tonight,guests' ? 'save keys ' + r.keys : r.size > 64 * 1024 ? 'save ' + r.size
-        : r.lawn.length < 2 ? 'lawn ' + r.lawn : r.n < 5 ? 'only ' + r.n + ' at their places' : r.gap < 6 ? 'two people overlap (gap ' + r.gap + ')' : !r.reach ? 'a place cannot be reached' : null);
+        : r.lawn.length < 2 ? 'lawn ' + r.lawn : r.n < 6 ? 'only ' + r.n + ' at their places' : r.gap < 6 ? 'two people overlap (gap ' + r.gap + ')' : !r.reach ? 'a place cannot be reached' : null);
     // 2. the table up close: plates, a bite and crumbs, then everyone lifts a cup together
     await shot('party_eat', `(() => { ${setup} ${people} if (!area) return { area: false };
       party(18 * 60 + 30); look(area.x, area.y + 2); const seen = {};
