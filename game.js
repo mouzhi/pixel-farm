@@ -4063,24 +4063,48 @@ function waterBox() {
   const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
   return [x0, y0, x1 - x0, y1 - y0];
 }
-function waterGeom(d, bx, by, bw, bh) { // per camera angle: mask, distance to the shore, far row per column, zones
+// v5.11.0.3: the geometry is cached per camera *position* (CX, CY), not only per angle and box. The sea box is clipped to the
+// screen, so once it filled the view the box stopped changing while the camera kept scrolling and the old shoreline (mud lip,
+// foam, depth bands) stayed painted at its old screen rows: a second coastline in the open sea. The open sea also measures its
+// depth bands in world units from the shore (the pond's bands are fractions of the visible water, which slid as the view moved),
+// and the screen edges that clip it are open water, not a bank.
+function waterGeom(d, bx, by, bw, bh, open) { // per camera view: mask, distance to the shore, far row per column, zones
+  const OUT = open ? 1e4 : 1; // what lies outside the box: dry bank round the pond, more sea for the clipped ocean
   const N = bw * bh, mask = new Uint8Array(N), dist = new Float32Array(N); let n = 0, sx = 0, sy = 0, ys = [];
   for (let i = 0; i < N; i++) if (d[i] === WSENT) { mask[i] = 1; n++; sx += i % bw; sy += (i / bw) | 0; ys.push((i / bw) | 0); }
   if (!n) return { bx, by, bw, bh, n: 0, aq: AQ };
   for (let i = 0; i < N; i++) dist[i] = mask[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
-    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : 1, y > 0 ? dist[i - bw] + 1 : 1, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : 1.414, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : 1.414); dist[i] = v; }
+    v = Math.min(v, x > 0 ? dist[i - 1] + 1 : OUT, y > 0 ? dist[i - bw] + 1 : OUT, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : OUT, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : OUT); dist[i] = v; }
   for (let y = bh - 1; y >= 0; y--) for (let x = bw - 1; x >= 0; x--) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
-    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : 1, y < bh - 1 ? dist[i + bw] + 1 : 1, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : 1.414, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : 1.414); dist[i] = v; }
+    v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : OUT, y < bh - 1 ? dist[i + bw] + 1 : OUT, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : OUT, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : OUT); dist[i] = v; }
   const far = new Int16Array(bw).fill(-1), near = new Int16Array(bw).fill(-1);
   for (let x = 0; x < bw; x++) for (let y = 0; y < bh; y++) if (mask[y * bw + x]) { if (far[x] < 0) far[x] = y; near[x] = y; }
   ys.sort((a, b) => a - b); const midY = ys[ys.length >> 1], top = ys[0], pondH = ys[ys.length - 1] - top + 1, cx = sx / n, cy = sy / n;
   const along = new Float32Array(N), sky = [], deep = [], damp = [], back = [];
+  const band = open ? seaBands(mask, bx, by, bw, bh) : null; // open sea: 0 near the shore, 1 and 2 further out (world units)
   for (let i = 0; i < N; i++) { const x = i % bw, y = (i / bw) | 0;
-    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if (y - far[x] >= pondH * 0.3 && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
-    if (y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
-  for (let x = 0; x < bw; x++) if (far[x] >= 2 && far[x] < midY) back.push(x);
-  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, tone: new Uint8Array(N), aq: AQ };
+    if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if ((band ? band[i] >= 1 : y - far[x] >= pondH * 0.3) && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
+    if (open ? far[x] >= 0 && y >= far[x] : y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
+  for (let x = 0; x < bw; x++) if (far[x] >= 2 && (open ? far[x] < bh - 4 : far[x] < midY)) back.push(x);
+  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, band, open: !!open, tone: new Uint8Array(N), aq: AQ, cX: CX, cY: CY };
+}
+const SEA_B1 = 22, SEA_B2 = 50; // world units past the shoreline where the open sea turns a shade lighter, then lighter again
+let SEA_BAND = null; // one byte per world unit over the sea, built once: the band each spot of open water belongs to
+function seaBandMap() {
+  if (SEA_BAND) return SEA_BAND; const x0 = 150, y0 = 230, w = WORLD.x1 + GM - x0, h = WORLD.y1 + GM - y0, m = new Uint8Array(w * h);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const wx = x0 + i + 0.5, wy = y0 + j + 0.5, s = WD.seaShore(wx);
+    const e = wy - (250 + (s - 250) * 0.45) + (vnoise(wx / 14, wy / 9, 29) - 0.5) * 10; // contours: softer than the shore, a little noise
+    m[j * w + i] = e >= SEA_B2 ? 2 : e >= SEA_B1 ? 1 : 0; }
+  return (SEA_BAND = { x0, y0, w, h, m });
+}
+function seaBands(mask, bx, by, bw, bh) { // depth contours in world space, so they stay put on the map while the camera moves
+  const band = new Uint8Array(bw * bh), B = seaBandMap();
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue;
+    const rx = (bx + x + 0.5 - CX) / RS, ry = (by + y + 0.5 - CY) / (K * RS), wx = rx * CA + ry * SA, wy = -rx * SA + ry * CA;
+    const u = Math.floor(wx - B.x0), v = Math.floor(wy - B.y0);
+    band[i] = u < 0 || v < 0 || u >= B.w ? 0 : v >= B.h ? 2 : B.m[v * B.w + u]; }
+  return band;
 }
 function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip about the foot row, squash to 55%, cut to 3 dark tones
   const { bx, by, bw, bh, mask } = G2;
@@ -4095,12 +4119,12 @@ const pondLeaves = [], pondDecor = [];
 function paintWater(t, box, key) {
   const [bx, by, bw, bh] = box; if (bw <= 0 || bh <= 0) return;
   const img = ctx.getImageData(bx, by, bw, bh), d = new Uint32Array(img.data.buffer);
-  if (!WG[key] || WG[key].aq !== AQ || WG[key].bx !== bx || WG[key].by !== by || WG[key].bw !== bw || WG[key].bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh);
+  const g0 = WG[key]; if (!g0 || g0.aq !== AQ || g0.cX !== CX || g0.cY !== CY || g0.bx !== bx || g0.by !== by || g0.bw !== bw || g0.bh !== bh) WG[key] = waterGeom(d, bx, by, bw, bh, key === 'sea');
   const Gm = WG[key]; if (!Gm.n) return;
-  const { mask, dist, far, midY, pondH, along, tone } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
+  const { mask, dist, far, midY, pondH, along, tone, band } = Gm, N = bw * bh, S1 = Math.round(pondH * 0.25), S2 = Math.round(pondH * 0.5);
   // 1 + 2: depth and sky
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
-    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
+    let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else if (band) { if (band[i] >= 1) tn = 3; if (band[i] >= 2) tn = 4; } else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
   // 3: reflections of the trees and reeds behind the pond (their current wind pose)
   for (const o of props) { if (!o.tree) continue; const [sx, sy] = proj(o.x, o.y), X = Math.round(sx) - bx, Y = Math.round(sy);
     if (X < -40 || X > bw + 40 || Y < by - 70 || Y > by + bh) continue; const fx = clamp(X, 0, bw - 1); if (far[fx] < 0 || Y - by >= far[fx]) continue;
@@ -4112,7 +4136,7 @@ function paintWater(t, box, key) {
   // 4: shallow edge on the near side, lapping dashes, foam where things stand in the water
   const ring = Math.sin(wph(t, 2)) > 0.35 ? 3 : 2;
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
-    if (dd < 1.5 && y > midY && tone[i] >= 3) tone[i] = 7;
+    if (dd < 1.5 && (Gm.open ? y > far[i % bw] + 2 : y > midY) && tone[i] >= 3) tone[i] = 7;
     if (Math.round(dd) === ring && tone[i] >= 2 && Math.sin(along[i] * 0.55 - wph(t, 2)) + 0.6 * Math.sin(along[i] * 0.23 + 1.3 - wph(t, 1)) > 0.55) tone[i] = 5; }
   for (const s of (key === 'sea' ? SEA_SOLIDS : POND_SOLIDS)) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
     for (let a = 0; a < 6.283; a += 0.12) { const x = Math.round(cx + Math.cos(a) * (s.r + 1)), y = Math.round(cy + Math.sin(a) * (s.r * 0.5 + 1)); if (x < 0 || y < 0 || x >= bw || y >= bh || y < cy) continue;
@@ -4770,7 +4794,7 @@ function cacheBlank() { // the ground is fully painted, and a weed sprite always
 function rebuildCaches(why) {
   for (const [k, m] of STK) { m._ck.delete(k.a); } STK.clear(); stkPx = 0;
   for (const m of ALLM) { m._ck = null; m.secs = new Array(NSEC); m.slices = sliceSet(m, 0); }
-  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = null; buildGroundBase();
+  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null; discC.clear(); WG = { pond: null, sea: null }; buildGroundBase(); // v5.11.0.3: was null, which paintWater then indexed
   console.warn('[farm] caches rebuilt:', why); window.__farm.rebuilds = (window.__farm.rebuilds || 0) + 1;
   if (cacheBlank()) location.reload(); // hand-drawn sprites were lost too: start fresh
 }
@@ -4783,7 +4807,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.2';
+const GAME_VERSION = '5.11.0.3';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5100,7 +5124,7 @@ function jumpSpot(id) {
 }
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) jumpTo(b.dataset.j); }); }
-Object.assign(window.__farm, { jumpTo, jumpSpot });
+Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();
