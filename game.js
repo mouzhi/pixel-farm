@@ -2531,8 +2531,13 @@ function lawnAt(a) { // the lawn corners an area at a would get (also asked by a
     return true; };
   const lawn = DC.partyLawn(a, free), extra = [];
   for (const [dx, dy] of [[-16, 11], [16, 11], [-16, -11], [16, -11], [-8, 12.5], [8, 12.5], [0, 12.5], [-8, -12.5], [8, -12.5], [0, -12.5], [-17, 0], [17, 0]]) {
-    const x = a.x + dx, y = a.y + dy; if (free([x - 2, y - 2, x + 2, y + 2]) && !lawn.some(l => ptIn({ x, y }, l.box, 3))) extra.push({ x, y }); }
-  return { lawn, extra, why, free }; // why: how often each reason ruled a spot out (for the shots)
+    const x = a.x + dx, y = a.y + dy; if (free([x - 2, y - 2, x + 2, y + 2], { x, y }) && !DC.partySeats(a).concat(extra, lawn.flatMap(l => l.spots)).some(p => Math.hypot(x - p.x, y - p.y) < 7) && !lawn.some(l => ptIn({ x, y }, l.box, 3))) extra.push({ x, y }); }
+  // A full household and friends can outgrow a small lawn. Spare places remain on reachable grass, at least 7 units apart.
+  const all = DC.partySeats(a).concat(lawn.flatMap(l => l.spots));
+  for (const p of DC.ringSpots(a, 35, 7)) { if (extra.length >= 12) break;
+    if (all.concat(extra).some(q => Math.hypot(q.x - p.x, q.y - p.y) < 7) || ptIn(p, DC.boxOf(a.x, a.y, DC.CATALOG.party.foot), 2) || lawn.some(l => ptIn(p, l.box, 3))) continue;
+    if (free([p.x - 2, p.y - 2, p.x + 2, p.y + 2], p)) extra.push({ x: p.x, y: p.y }); }
+  return { lawn, extra, why }; // why: how often each reason ruled a spot out (for the shots)
 }
 function partyPlanNow() {
   const area = partyArea(); if (!area) return {};
@@ -2545,7 +2550,7 @@ function partySpot(a, key) { // a: the actor or guest; their place for this hour
   const area = partyArea(); if (!area) return null; key = key || partyKeyOf(a);
   if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
   if (!partyReg.keys.includes(key)) { partyReg.keys.push(key); partyReg.kid[key] = partyKid(a); }
-  const p = partyPlanNow()[key]; return p ? { x: p.x, y: p.y } : partySeat(partyReg.keys.indexOf(key));
+  const p = partyPlanNow()[key]; return p ? { x: p.x, y: p.y } : null;
 }
 const partyDur = T => Math.max(3, Math.min(30, DC.phaseEnd(T) - T, DC.PARTY.to - T));
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
@@ -2560,7 +2565,7 @@ function sunsetTask() { // v5.10.8: once the deck is up, the family sits and wat
 }
 function partyTask() { // chooseTask asks first: on a party evening everyone who is around comes over
   const T = S.t % 1440; if (!partyTonight() || !DC.partyOn(T) || F.away || F.sleeping) return null;
-  const seat = partySpot(F); // v5.11.0.15: their own place this hour (was one of 10 seats a few px apart)
+  const seat = partySpot(F); if (!seat) return null; // v5.11.0.15: their own place this hour (was one of 10 seats a few px apart)
   return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true };
 }
 function guestStep(g, dm) {
@@ -2590,7 +2595,7 @@ function decorTick(dm) {
   if ((S.decorLayout | 0) < DECOR_LAYOUT) decorRelayout();
   const T = S.t % 1440, early = townOpen() ? GUEST_WALK : 0;
   if (early && partyTonight() && T >= DC.PARTY.from - early && T < DC.PARTY.from && guestsOut !== S.day && !(WX && WX.isRaining(S.weather, S.day, S.t))) { guestsOut = S.day;
-    for (let i = 0; i < S.decor.party.guests; i++) { const seat = partySpot({ id: 'g' + i }), h = TN.BY_ID[i ? 'h4' : 'h3'].door;
+    for (let i = 0; i < S.decor.party.guests; i++) { const seat = partySpot({ id: 'g' + i }), h = TN.BY_ID[i ? 'h4' : 'h3'].door; if (!seat) continue;
       GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: h.x, y: h.y, fx: 0, fy: 1, pts: routeVia(h, seat).concat([seat]), moving: true, leaving: false, home: h, fast: 1 }); }
     if (S.decor.party.guests) log(`${GUEST_NAME.slice(0, S.decor.party.guests).map(n => n.replace('镇上的', '')).join('和')}从镇上动身，来参加今晚的派对`); }
   if (partyTonight() && T >= DC.PARTY.from && T < DC.PARTY.to && partyBegun !== S.day) { partyBegun = S.day;
@@ -2598,7 +2603,7 @@ function decorTick(dm) {
     else { const n = S.decor.party.guests, a = partyArea(); S.decor.party.last = S.day;
       log(n ? `傍晚一家人在派对区聚在一起，${GUEST_NAME.slice(0, n).join('和')}也来做客` : '傍晚一家人在派对区聚在一起，挂起了串灯');
       burst(a.x, a.y, 24, [Ac[3], Ac[1], '#fff2a8', Wt[4]], 18, 'spark'); noteProgress({ partyHeld: true }); albumSnap('party', a.x, a.y + 6, { wait: 30 });
-      for (let i = 0; i < n; i++) { const seat = partySpot({ id: 'g' + i }), e = EAST_IN[0];
+      for (let i = 0; i < n; i++) { const seat = partySpot({ id: 'g' + i }), e = EAST_IN[0]; if (!seat) continue;
         if (guestsOut === S.day) break; // v5.8.0: the town guests are already on their way
         GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: e.x + i * 3, y: e.y + i, fx: -1, fy: 0, pts: EAST_IN.slice(1).concat(routeVia(EAST_IN[EAST_IN.length - 1], seat), [seat]), moving: true, leaving: false }); } } }
   if (GUESTS.length && (!partyTonight() || T >= DC.PARTY.to || T < DC.PARTY.from - early)) for (const g of GUESTS) if (!g.leaving) { g.leaving = true; if (g.home) { g.pts = routeVia(g, g.home).concat([g.home]); continue; } const back = EAST_IN.slice().reverse(); g.pts = routeVia(g, back[0]).concat(back); }
@@ -3048,7 +3053,7 @@ function homeParty(T) { // the party has begun: the guests who came get to know 
   for (const k of S.family.kids) { if (FAM.kidStage(k, S.day) !== 'teen' || HM.isMarried(S.home, k.id)) continue;
     const b = HM.best(S.home, k.id); if (!b || b.v < HM.REL.friend) continue; HM.clampAdd(HM.KID_IDS.includes(k.id) ? (S.home.rel[k.id] || (S.home.rel[k.id] = {})) : {}, b.id, HM.REL.party);
     const w = weddingTonight(); if (w && w.w.mate === b.id) continue; // the bride or groom comes on their own
-    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); n++;
+    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); n++; if (!seat) continue;
     GUESTS.push({ id: 'f' + i, look: TN.MATES[i].look, x: from.x, y: from.y, fx: -1, fy: 0, pts: routeVia(from, seat).concat([seat]), moving: true, leaving: false, home: townOpen() ? from : null, fast: 1, friend: 1 });
     log(`${k.name}的好朋友${HM.mateName(b.id)}也来参加派对`); }
 }
@@ -3622,7 +3627,7 @@ const mainBacklog = () => { let n = 0; for (const t of tiles) if (t.open && t.cr
 function homeChoose() { // null: not one of the couple (or helping on the main farm right now); else their next job
   const h = homeOfActor(F); if (!h) return null;
   const T = S.t % 1440, L = HM.layout(h), sp = !!F._spouse, kid = F._spouse || F.id;
-  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F);
+  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F); if (!seat) return null;
     return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
   if (T >= sleepAt() || T < WAKE - 30) { if (!sp && ((F.crops.length && shopOpen(T)) || (F.gathered && T < sleepAt() + 60))) return null; const me = F;
     return { kind: 'home', label: '回新房子睡觉', to: L.door, dur: 5, done: () => { me.home = true; me.sleeping = true; } }; }
@@ -3722,7 +3727,7 @@ function homeStatus() {
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
   const own = homeChoose(); if (own) return own;
   const T = S.t % 1440;
-  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F);
+  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F); if (!seat) return null;
     return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
   const d = weddingSpot() || DOOR; return { kind: 'idle', label: '来参加婚礼', to: { x: d.x + 3, y: d.y + 6 }, dur: 10, rest: true };
 }
@@ -5566,7 +5571,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
-  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), lawnAt: a => lawnAt(a), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
+  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
 Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------

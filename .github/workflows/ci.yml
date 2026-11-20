@@ -80,7 +80,8 @@ jobs:
             scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js clinic-shots.js fill-shots.js
           # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
           - group: works-town
-            scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
+            # v5.11.0.15: party-shots (~1.5m locally); works-town 14m01s on main run 44800040270, ample headroom
+            scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js party-shots.js
           # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
           - group: home
             scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
