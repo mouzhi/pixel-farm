@@ -14,7 +14,10 @@
     if (!TN.inTown(x, y)) return null;
     const P = TN.PLAZA, d = Math.hypot(x - P.x, y - P.y), H = S && S.town && S.town.hall, r = root.PFMarket && root.PFMarket.built(H) ? root.PFMarket.PLAZA_R : P.r; // v5.10.3: the market square is bigger
     if (d < r) { const cx = Math.floor((x + 400) / 3), cy = Math.floor((y + 400) / 3), k = hash(cx, cy, 5); // cobbles, a ring of darker stones at the edge
-      if (d > r - 1.4) return [St[1], 'dirt']; return [(cx + cy) % 2 ? (k > 0.5 ? St[3] : St[2]) : (k > 0.7 ? St[2] : St[3]), 'dirt']; }
+      if (d > r - 1.4) return [St[1], 'dirt']; // v5.11.0: concentric rings of setts round the fountain (the checkerboard was loud at r 36)
+      const ring = Math.floor(d / 3), ang = Math.atan2(y - P.y, x - P.x), per = Math.max(6, Math.round(ring * 2 * Math.PI)), seg = (ang / (2 * Math.PI) + 1) * per + (ring & 1) * 0.5;
+      if (d - ring * 3 < 0.5 || seg - Math.floor(seg) < 0.5 / Math.max(1, d * 2 * Math.PI / per)) return [St[2], 'dirt']; const kk = hash(ring, Math.floor(seg), 7);
+      return [kk > 0.78 ? Wd[5] : (kk > 0.5 ? St[2] : St[3]), 'dirt']; }
     if (TN.SQUARE && TN.inRect(x, y, TN.SQUARE)) { // v5.11.0: 节庆广场 — big flagstones with a darker kerb; the feast table stands on it
       const q = TN.SQUARE, kerb = x < q[0] + 1.2 || x > q[2] - 1.2 || y < q[1] + 1.2 || y > q[3] - 1.2; if (kerb) return [St[1], 'dirt'];
       const fx = Math.floor((x - q[0]) / 6), fy = Math.floor((y - q[1]) / 4), jx = (x - q[0]) - fx * 6, jy = (y - q[1]) - fy * 4;

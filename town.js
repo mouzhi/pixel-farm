@@ -42,7 +42,7 @@
   const BY_ID = Object.fromEntries(BUILDINGS.map(b => [b.id, b]));
   const PLAZA = { x: 650, y: 120, r: 24 };                 // a cobbled square with a fountain (the market makes it r 36, market.js)
   const SCHOOLYARD = [606, -88, 716, 4];
-  const TREES = [[842, -84], [882, -72], [920, -86], [958, -72], [725, -60], [725, -22], [881, 0], [933, 0], [959, 0], [829, 121], [855, 150], [881, 165], [686, 143], [621, 154], [855, 88]]; // v5.11.0: shade on the town's grass (off streets, roofs, squares and the reserved lots)
+  const TREES = [[842, -84], [882, -72], [920, -86], [958, -72], [725, -60], [725, -22], [881, 0], [933, 0], [959, 0], [829, 121], [855, 150], [881, 165], [855, 88]]; // v5.11.0: shade on the town's grass (off streets, roofs, squares and the reserved lots)
   const SCHOOL_DOOR = BY_ID.school.door, SHOP_DOOR = BY_ID.shop.door;
   const inRect = (x, y, r, pad = 0) => x >= r[0] - pad && x <= r[2] + pad && y >= r[1] - pad && y <= r[3] + pad;
   const inTown = (x, y, pad = 0) => inRect(x, y, RECT, pad);

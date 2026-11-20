@@ -30,7 +30,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const start = id => { f.FARMER.wood = 800; const r = f.hallStart(id); if (!r.ok) throw new Error(id + ' ' + (r.why || JSON.stringify(r))); return r; };
     const wake = () => { const all = (typeof f.actors === 'function' ? f.actors() : []).concat(f.FARMER || []);
       all.forEach(a => { if (a) { a.sleeping = false; a.home = false; } }); };
-    const nearTable = a => { const t = f.FV.TABLE; return a && typeof a.x === 'number' && Math.hypot(a.x - t.x, a.y - t.y) < 18; };
+    const nearTable = a => a && typeof a.x === 'number' && (f.FV.SECTIONS || [f.FV.TABLE]).some(t => Math.hypot(a.x - t.x, a.y - t.y) < 18); // v5.11.0: three table sections
     const familyHere = () => {
       const kids = (S.family && S.family.kids) || [];
       const partner = (typeof f.actors === 'function' ? f.actors() : []).find(a => a && a.id === 'partner');

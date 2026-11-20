@@ -109,9 +109,9 @@ fs.mkdirSync(OUT, { recursive: true });
     r => r.n !== 4 ? 'buttons ' + r.n : r.out.town[0] < 700 ? 'town jump ' + r.out.town : r.out.home[0] > 200 ? 'home jump ' + r.out.home : r.out.beach[1] < 100 ? 'beach jump ' + r.out.beach : !r.out.agri ? 'agri' : r.mm[0] < 200 ? 'minimap ' + r.mm : null);
   // 7. mobile portrait (390 x 844, as on 小红书): the town, the HUD and the minimap buttons fit
   await shot('v5110_mobile.png', `(() => { ${setup} ${toLv4} at(11 * 60); const mm = document.getElementById('minimap'); mm.hidden = false; look(700, 60, 0); f.minimapDraw();
-    const vw = innerWidth, over = [...document.querySelectorAll('#mmJump button, #minimap')].filter(e => { const q = e.getBoundingClientRect(); return q.right > vw + 1 || q.left < -1; }).length;
-    return { vw, over, mm: Math.round(mm.getBoundingClientRect().width) }; })()`,
-    r => r.over ? 'off screen ' + r.over : null, null, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+    const vw = innerWidth, over = [...document.querySelectorAll('#mmJump button, #minimap')].filter(e => { const q = e.getBoundingClientRect(); return q.right > vw + 1 || q.left < -1; }).length, wrap = [...document.querySelectorAll('#mmJump button')].filter(e => e.getBoundingClientRect().height > 30).length;
+    return { vw, over, wrap, mm: Math.round(mm.getBoundingClientRect().width) }; })()`,
+    r => r.over ? 'off screen ' + r.over : r.wrap ? 'jump buttons wrap ' + r.wrap : null, null, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3 });
   // 8. routes: from the farm to every door in town, nobody walks through a building; the kid's school walk on the new avenue
   await shot('v5110_routes.png', `(() => { ${setup} ${toLv4} ${allHouses} at(9 * 60); f.ensureNav();
     const TN = window.PFTown, HLm = window.PFHall, CRm = window.PFCareers, rects = [...TN.BUILDINGS, ...HLm.LOTS, ...CRm.LOTS].map(b => ({ id: b.id, r: [b.x - b.hw + 0.6, b.y - b.hd + 0.6, b.x + b.hw - 0.6, b.y + b.hd - 0.6], door: b.door }));

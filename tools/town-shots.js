@@ -52,7 +52,7 @@ fs.mkdirSync(OUT, { recursive: true });
     r => !r.ok || !r.eff ? 'buy' : !r.open ? 'gate' : r.out.length < 3 ? 'neighbours ' + r.out : null);
   // 4. a school morning with the town open: the child walks the road, in at the gate, across to the school door
   await shot('v580_school_town.png', `(() => { ${setup} dry(); openTown(); at(7 * 60 + 50); until(() => kid().task && kid().task.kind === 'school-go', 300);
-    until(() => kid().x > 520 || kid().away, 1500); const k = kid(); look(640, 56, 0.3); return { pos: [Math.round(k.x), Math.round(k.y)], inTown: f.TN.inTown(k.x, k.y) }; })()`,
+    until(() => kid().x > f.TN.GATE.x + 12 || kid().away, 1500); const k = kid(); look(640, 56, 0.3); return { pos: [Math.round(k.x), Math.round(k.y)], inTown: f.TN.inTown(k.x, k.y) }; })()`,
     r => !r.inTown ? 'not in town ' + r.pos : !/镇上的学校/.test(r.log[0] || '') ? 'no school log' : r.away !== 'school' ? 'never got to school' : Math.hypot(r.at[0] - r.door.x, r.at[1] - r.door.y) > 2 ? 'not at the school door ' + r.at : r.home !== true ? 'not home after school' : null,
     `until(() => kid().away === 'school', 600); const at_ = [Math.round(kid().x), Math.round(kid().y)], away = kid().away; until(() => tod() >= 16 * 60, 3000);
     return { away, at: at_, door: f.TN.SCHOOL_DOOR, home: !kid().away && kid().x < 360, log: S.events.map(e => e.msg).filter(l => /学校/.test(l)).slice(0, 1) };`);
@@ -71,7 +71,7 @@ fs.mkdirSync(OUT, { recursive: true });
     let d = 31; for (; d < 80; d++) { day(d); S.town.mate.day = 0; S.town.mate.last = 0; const before = f.VISITORS.length; f.townMateHome(kid(), f.schoolRoute()); if (f.VISITORS.length > before) break; }
     const g = f.VISITORS[0]; if (!g) return { none: true }; const name = g.name; at(15 * 60 + 50); until(() => g.leaving, 400); until(() => g.x > 250 || !f.VISITORS.length, 1500);
     look(g.x + 10, 66, 0.3); return { name, midway: [Math.round(g.x), Math.round(g.y)], leaving: g.leaving }; })()`,
-    r => r.none ? 'no classmate' : r.name !== '同学' ? 'named before the town: ' + r.name : !r.leaving ? 'not leaving' : !r.gone || r.t > 18 * 60 ? 'still here at ' + r.t : null,
+    r => r.none ? 'no classmate' : r.name !== '同学' ? 'named before the town: ' + r.name : !r.leaving ? 'not leaving' : !r.gone || r.t > 18 * 60 + 30 ? 'still here at ' + r.t : null, // v5.11.0: the gate is 156 units further east
     `until(() => !f.VISITORS.length, 1500); return { gone: !f.VISITORS.length, t: tod(), log: S.events.map(e => e.msg).filter(l => /同学/.test(l)).slice(0, 2) };`);
   // 7. a day off: on a rain day now and then the child stays home (never as a punishment) and plays instead
   await shot('v580_dayoff.png', `(() => { ${setup} road(); let d = 31, off = false;
