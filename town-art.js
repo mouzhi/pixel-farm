@@ -323,24 +323,48 @@
       if (y === 26 && x >= 10 && x <= 21 && z >= 17 && z <= 22) return (z === 17 || z === 22 || x === 10 || x === 21) ? Wd[1] : (z === 20 ? '#f6ecd0' : '#2a4e88'); // 书 sign
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.15, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1, fy0: Y0, fy1: Y1 - 1, base: roof, line, ridge: line, trim: Wd[4] });
       if (r === 'fill') return Ac[0]; if (r) return r; return null; });
-    // v5.10.10: 诊所 (style 8) — pale plaster, a green roof, a red cross over the door
-    const clinic = B(W2, D2 + 6, 36, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 16, wall = '#e8eef0', roof = '#2e6b4a', cross = '#c23b2a';
+    // v5.10.10: 诊所 (style 8) — warm plaster, timber and a stone plinth, a green roof,
+    // a green-cross sign the usual south camera can read, the door and steps on the street (+y)
+    const clinic = B(W2, D2 + 6, 46, (x, y, z) => { const X0 = 2, X1 = 29, Y0 = 2, Y1 = 25, ZW = 16;
+      const wall = Ac[0], beam = Wd[2], roof = G[2], cross = G[1];
+      const plaster = () => ((x * 3 + z * 5 + y) % 9 === 0 ? Wd[5] : ((x + z) % 11 === 0 ? Wd[4] : wall));
       if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) { const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
         if (!(front || side || back)) return Wd[3];
-        if (z === 0) return St[1];
-        if (front && x >= 13 && x <= 17 && z <= 8) return z === 8 ? Wd[2] : (x === 16 && z === 4 ? Ac[1] : Wd[1]);
-        if ((front || back) && z >= 4 && z <= 10 && ((x >= 4 && x <= 9) || (x >= 21 && x <= 26))) return z === 4 || z === 10 || x === 4 || x === 9 || x === 21 || x === 26 ? Wd[1] : Wt[3];
-        if (side && y >= 8 && y <= 17 && z >= 4 && z <= 10 && (y - 8) % 6 < 4) return Wt[3];
-        return z === ZW ? Wd[2] : wall; }
-      if (y === 26 && x >= 11 && x <= 20 && z >= 18 && z <= 26) {
-        if ((z >= 21 && z <= 23) || (x >= 14 && x <= 17 && z >= 19 && z <= 25)) return cross;
-        if (z === 18 || z === 26 || x === 11 || x === 20) return Wd[1];
+        if (z <= 1) return (x + y + z) % 3 === 0 ? St[1] : St[2];
+        if (front && x >= 12 && x <= 18 && z <= 9) { // a clear wooden door on the street
+          if (z === 9 || x === 12 || x === 18) return beam;
+          if (z <= 2) return St[2];
+          if ((x === 15 || x === 16) && z >= 4 && z <= 6) return Wt[3];
+          return (x === 17 && z === 4) ? Ac[1] : Wd[1]; }
+        if ((front || back) && z >= 4 && z <= 10 && ((x >= 4 && x <= 9) || (x >= 21 && x <= 26))) {
+          if (z === 4 || z === 10 || z === 7 || x === 4 || x === 9 || x === 21 || x === 26 || x === 6 || x === 23) return beam;
+          return Wt[3]; }
+        if (side && y >= 8 && y <= 17 && z >= 4 && z <= 10 && (y - 8) % 6 < 4) {
+          if ((y - 8) % 6 === 0 || (y - 8) % 6 === 3 || z === 4 || z === 10 || z === 7) return beam;
+          return Wt[3]; }
+        if (z === ZW || z === 8 || x === X0 || x === X1 || ((front || back) && (x === 11 || x === 19))) return beam;
+        return plaster(); }
+      if (y >= 26 && y <= 30 && x >= 11 && x <= 19 && z <= Math.max(0, 3 - (y - 26))) return (z === 3 - (y - 26) ? St[3] : St[2]); // steps to the path
+      // hanging sign over the door: cream board, a thin green plus
+      if (y === 26 && x >= 11 && x <= 20 && z >= 12 && z <= 22) {
+        if (x === 11 || x === 20 || z === 12 || z === 22) return Wd[1];
+        if ((x >= 15 && x <= 16 && z >= 13 && z <= 21) || (z >= 16 && z <= 18 && x >= 13 && x <= 18)) return cross;
         return wall; }
+      // south-facing sign, the usual camera looks this way
+      if (y <= 2 && x >= 10 && x <= 21 && z >= 8 && z <= 23) {
+        if (x === 15 && y <= 1 && z <= 13) return Wd[1];
+        if (y <= 1 && z >= 13 && z <= 23 && x >= 11 && x <= 20) {
+          if (x === 11 || x === 20 || z === 13 || z === 23) return Wd[1];
+          if ((x >= 15 && x <= 16 && z >= 14 && z <= 22) || (z >= 17 && z <= 19 && x >= 13 && x <= 18)) return cross;
+          return wall; } }
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1, fy0: Y0, fy1: Y1 - 1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[4] });
-      if (r === 'fill') return wall; if (r) return r;
-      if (x >= 24 && x <= 26 && y >= 8 && y <= 10 && z <= 28) return z >= 26 ? St[1] : St[2];
-      if (x >= 14 && x <= 17 && y >= 12 && y <= 16 && z >= 28 && z <= 35) { // red cross on the ridge, readable from the usual camera
-        if ((x >= 15 && x <= 16 && z >= 28 && z <= 35) || (z >= 31 && z <= 32 && x >= 14 && x <= 17)) return cross; }
+      if (r === 'fill') return plaster(); if (r) return r;
+      if (x >= 24 && x <= 26 && y >= 8 && y <= 10 && z <= 30) return z >= 28 ? St[1] : St[2];
+      // ridge board with a thin green plus, large enough to read from the usual south camera
+      if (z >= 28 && z <= 44 && x >= 10 && x <= 21 && y >= 12 && y <= 14) {
+        if (x === 10 || x === 21 || z === 28 || z === 44) return Wd[1];
+        if ((x >= 14 && x <= 16 && z >= 29 && z <= 43) || (z >= 34 && z <= 37 && x >= 12 && x <= 19)) return cross;
+        return wall; }
       return null; });
     const yardFlag = B(6, 6, 28, (x, y, z) => {
       if (x === 2 && y === 2 && z <= 26) return St[3];
@@ -372,7 +396,7 @@
     for (let fy = R0[1]; fy < R0[3]; fy += 8) for (const fx of [R0[0], R0[2]]) { if (fx === R0[0] && Math.abs(fy + 4 - TN.GATE.y) < 10) continue; own.always.push(add(fence, fx, fy + 4, Math.PI / 2, { xp: 1, town: 'fence' })); }
     // trees on the town's grass, kept off streets, buildings and the square
     { let s = 4242; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
-      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [492, 135], [470, 146], [628, 48], [622, 4], [562, 2], [516, 4], [478, 2], [624, 96]]) {
+      for (const [tx, ty] of [[458, 46], [458, 132], [472, 132], [492, 135], [470, 146], [628, 48], [622, 4], [562, 2], [516, 4], [478, 2], [630, 138]]) {
         const defs = rnd() < 0.5 ? x.treeDefs.oak : x.treeDefs.small; x.addTree(defs[Math.floor(rnd() * defs.length)], tx + (rnd() - 0.5) * 3, ty + (rnd() - 0.5) * 3); } }
     // the strip east of the old map edge: cliff slabs where the ridge runs on
     const xmod = xm && xm.ledges; if (xmod) for (let gx = 448; gx <= 640; gx += 8) { const ry = PL.ridgeY(gx); own.always.push(add(xmod[((gx / 8) | 0) % 3], gx, ry - 1.5, 0, { xp: 1 })); }
