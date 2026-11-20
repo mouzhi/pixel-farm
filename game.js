@@ -2287,11 +2287,12 @@ function setCarried(q, on) { if (q.what === 'hive' && S.works.hives[q.ref]) S.wo
 function dropOrder(q) { S.decor.orders = S.decor.orders.filter(o => o !== q); setCarried(q, false); for (const a of actors()) if (a._carry === q.u) a._carry = null; autoCache.key = ''; }
 function settle(q) { // put it down at q.x, q.y (checked again: the ground may have changed since the click)
   const id = q.id || (q.what === 'decor' ? decorById(q.ref) : null), skip = q.op === 'move' ? { what: q.what, ref: q.ref } : null;
+  if (q.op === 'store') return storeDone(q, id); // v5.11.0.2
   if (q.what === 'home') return homeMoveDone(q);
   let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q, !q.mine && q.what === 'decor' && SLT && id !== 'party');
   if (!r.ok) { dropOrder(q); log(`${thingName(q)}没法放到那里（${r.why}），留在原处`); return false; }
   const x = q.what === 'spr' ? Math.round(q.x * 10) / 10 : r.x, y = q.what === 'spr' ? Math.round(q.y * 10) / 10 : r.y;
-  if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
+  if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } if (q.mine && keptOf(id)) { S.decor.kept[id]--; if (!S.decor.kept[id]) delete S.decor.kept[id]; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
     S.decor.placed.push({ u: S.decor.n++, id, x, y, d: S.day }); if (id === 'party') S.decor.party.at = S.day; }
   else if (q.what === 'decor') { const p = S.decor.placed.find(o => o.u === q.ref); if (p) { p.x = x; p.y = y; if (p.id === 'party') S.decor.party.at = Math.max(S.decor.party.at, 1); } }
   else if (q.what === 'work') { const w = S.works.works[q.ref], to = workYardAt(x, y); // v5.10.12: it may go to another 工坊院 (production and goods go with it)
@@ -2302,6 +2303,11 @@ function settle(q) { // put it down at q.x, q.y (checked again: the ground may h
   else if (q.what === 'spr') { const s = S.works.sprinklers[q.ref]; s.x = x; s.y = y; SPR_COVER = null; }
   dropOrder(q); markNavDirty(); DA.sync(true); PWA.sync(true); return true;
 }
+// v5.11.0.2 收回: the piece goes back to the storehouse and is kept there (the family does not set kept pieces down again by themselves)
+const keptOf = id => Math.min((S.decor.kept && S.decor.kept[id]) | 0, (S.decor.inv[id] | 0));
+function storeDone(q, id) { const i = S.decor.placed.findIndex(p => p.u === q.ref); if (i < 0 || !id) { dropOrder(q); return false; }
+  S.decor.placed.splice(i, 1); S.decor.inv[id] = (S.decor.inv[id] | 0) + 1; if (!S.decor.kept) S.decor.kept = {}; S.decor.kept[id] = (S.decor.kept[id] | 0) + 1;
+  dropOrder(q); markNavDirty(); DA.sync(true); return true; }
 function carryPickTask(q) { const at = thingNow(q);
   return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在从仓库拿${thingName(q)}` : `正在去搬${thingName(q)}`, to: { x: at.x - 5, y: at.y + 3 }, dur: 3, pose: 'pull', done: () => {
     if (!S.decor.orders.includes(q) || !thingNow(q)) return; q.st = 1; F._carry = q.u; setCarried(q, true); DA.sync(true); PWA.sync(true); } };
@@ -2309,7 +2315,7 @@ function carryPickTask(q) { const at = thingNow(q);
 function carryDropTask(q) {
   return { kind: 'carry', key: 'dc2:' + q.u, label: `正在把${thingName(q)}搬过去`, to: { x: q.x - 5, y: q.y + 3 }, dur: 4, pose: 'pull', done: () => {
     if (!S.decor.orders.includes(q)) { F._carry = null; return; } const name = thingName(q), place = q.op === 'place', who = F === FARMER ? '' : F.name;
-    if (settle(q)) { burst(q.x, q.y, 10, [Wd[3], G[4], '#fff2a8'], 8, 'leaf'); log(`${who}${place ? '把' + name + '摆好了' : '把' + name + '搬到了新地方'}`); } F._carry = null; } };
+    if (settle(q)) { burst(q.x, q.y, 10, [Wd[3], G[4], '#fff2a8'], 8, 'leaf'); log(`${who}${q.op === 'store' ? '把' + name + '收回了仓库' : place ? '把' + name + '摆好了' : '把' + name + '搬到了新地方'}`); } F._carry = null; } };
 }
 function buildTask(q) { // workshops and the party area are rebuilt where they go (nobody carries a house)
   return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在搭${thingName(q)}` : `正在把${thingName(q)}挪过去`, to: { x: q.x - 9, y: q.y + 6 }, dur: q.what === 'home' ? HM.HOUSE.build : q.what === 'work' ? 30 : 20, fx: 'wood', pose: 'hoe', done: () => {
@@ -2321,7 +2327,7 @@ function decorBoard(post, T) {
   if (F._carry) { const q = D.orders.find(o => o.u === F._carry); if (q) post('carry', 99, { x: q.x - 5, y: q.y + 3 }, () => carryDropTask(q), 'dc2:' + q.u, 'yard'); else F._carry = null; }
   if (T >= 18 * 60) return;
   // the family sets new pieces down by themselves, one at a time
-  if (!D.orders.some(q => !q.mine)) for (const id of Object.keys(D.inv)) { const want = (D.inv[id] | 0) - D.orders.filter(q => q.op === 'place' && q.id === id).length; if (want <= 0) continue;
+  if (!D.orders.some(q => !q.mine)) for (const id of Object.keys(D.inv)) { const want = (D.inv[id] | 0) - keptOf(id) - D.orders.filter(q => q.op === 'place' && q.id === id).length; if (want <= 0) continue;
     const sp = autoSpot(id); if (sp) { orderThing('place', 'decor', null, id, sp.x, sp.y, false); break; } }
   for (const q of D.orders) { if (q.st === 1 || !thingNow(q)) continue;
     const base = q.mine ? 64 : 40 + WAIT_BOOST(dcSince === null ? S.t : dcSince);
@@ -3497,7 +3503,7 @@ function decorCatchUp(pre) {
   for (let guard = 0; guard < 60; guard++) {
     let q = D.orders.find(o => !o.mine && o.op === 'place' && o.what === 'decor');
     if (!q) { if (D.orders.some(o => !o.mine)) break;
-      const id = Object.keys(D.inv).find(k => (D.inv[k] | 0) > 0 && k !== 'party' && autoSpot(k)); if (!id) break;
+      const id = Object.keys(D.inv).find(k => (D.inv[k] | 0) - keptOf(k) > 0 && k !== 'party' && autoSpot(k)); if (!id) break;
       const sp = autoSpot(id), r = orderThing('place', 'decor', null, id, sp.x, sp.y, false); if (!r.ok) break; q = r.q; }
     const name = thingName(q); if (!settle(q)) break; names.push(name); }
   if (names.length) { dcSince = null; const c = {}; names.forEach(n => { c[n] = (c[n] || 0) + 1; });
@@ -3513,7 +3519,9 @@ function movables() { const out = [];
   S.works.sprinklers.forEach((s, i) => out.push({ what: 'spr', ref: i, x: s.x, y: s.y, r: 6 }));
   if (HM) S.home.houses.forEach((h, i) => out.push({ what: 'home', ref: i, x: h.x, y: h.y, r: 12 })); // v5.9.0
   return out; }
-function movableAt(x, y) { let best = null, bd = 1e9; for (const m of movables()) { const d = Math.hypot(m.x - x, m.y - y); if (d < m.r && d < bd) { bd = d; best = m; } } return best; }
+// v5.11.0.2: a touch shell (xhs) can ask for a smallest pick radius in CSS px (TOUCH.pickCss); 0 on the web, so the mouse picks exactly as before
+function pickFloor() { if (!TOUCH.pickCss) return 0; const r = cv.getBoundingClientRect(); return r.width ? TOUCH.pickCss / (RS * r.width / W) : 0; }
+function movableAt(x, y) { let best = null, bd = 1e9; const lo = pickFloor(); for (const m of movables()) { const d = Math.hypot(m.x - x, m.y - y); if (d < Math.max(m.r, lo) && d < bd) { bd = d; best = m; } } return best; }
 const invFree = id => (S.decor.inv[id] | 0) - S.decor.orders.filter(q => q.op === 'place' && q.id === id).length;
 function decorHover(w) {
   if (INPUT.mode === 'decor') { const r = placeOk(w.x, w.y, 'decor', INPUT.kind, null); return { dec: { box: r.box, ok: r.ok } }; }
@@ -4665,7 +4673,27 @@ function clickAt(e) {
   else if (INPUT.mode === 'decor' || INPUT.mode === 'move') r = decorClick(w); // v5.7.0
   if (r && !r.ok && r.why) say(r.why);
   if (r && r.ok) saveNow();
+  return r;
 }
+// v5.11.0.2 hooks for a touch shell (platforms/xhs touch.js): aim the current tool at a screen point (the crosshair) and commit there.
+// The mouse path above is unchanged: pointermove → hoverAt, a click → clickAt. TOUCH.slop: the tap / drag threshold in CSS px (5 = the web's).
+const TOUCH = { slop: 5, pickCss: 0 };
+function aimAt(x, y) { // → { mode, ok (null: nothing to say yet), marked (砍树: already marked), pick (挪东西: the picked thing), what (挪东西: the thing under the point) }
+  const e = { clientX: x, clientY: y }; hoverAt(e); const h = INPUT.hover, m = INPUT.mode, out = { mode: m, ok: null, marked: false, pick: INPUT.mvPick || null, what: null };
+  if (!m) return out; const w = toWorld(x, y);
+  if (m === 'chop') { out.ok = !!(h && h.tree); out.marked = !!(h && h.tree && S.orders.some(o => o.type === 'chop' && o.id === h.tree.id)); }
+  else if (m === 'move' && !INPUT.mvPick) { const t = movableAt(w.x, w.y); out.what = t; out.ok = !!t; }
+  else if (h) out.ok = h.dec ? !!h.dec.ok : h.spr ? !!h.spr.ok : 'ok' in h ? !!h.ok : null;
+  return out; }
+function commitAt(x, y) { // the same as a click at (x, y) in the current tool; → { r (null: a pick / unpick step), mode, pick }
+  const r = clickAt({ clientX: x, clientY: y }); return { r: r || null, mode: INPUT.mode, pick: INPUT.mvPick || null }; }
+function canStore(m) { return !!(m && m.what === 'decor' && DC.CATALOG[m.id] && m.id !== 'party'); }
+function storeThing(m) { // 收回: a family member carries a placed decoration back to the storehouse; it stays there (S.decor.kept) until it is placed again by hand
+  if (!canStore(m)) return { ok: false, why: m && m.what === 'decor' ? '派对区不能收回' : '只有装饰能收回仓库' };
+  if (!S.decor.placed.some(p => p.u === m.ref)) return { ok: false, why: '找不到这件装饰了' };
+  S.decor.orders.filter(q => q.what === 'decor' && q.ref === m.ref).forEach(dropOrder);
+  const o = orderThing('store', 'decor', m.ref, m.id, BARN_DOOR.x, BARN_DOOR.y, true); if (!o.ok) return o;
+  if (INPUT.mvPick && INPUT.mvPick.ref === m.ref) INPUT.mvPick = null; say(`标记好了，家人会把${DC.CATALOG[m.id].name}收回仓库`); saveNow(); return { ok: true }; }
 addEventListener('keydown', e => { if (typing(e)) return; if (ROT_KEYS[e.key]) { keyRot = ROT_KEYS[e.key]; e.preventDefault(); }
   if (PAN_KEYS[e.key]) keyPan.add(e.key.toLowerCase());
   if (e.key === 'r' || e.key === 'R') { cam.ta = DEFAULT_A; panTo(HOME_CAM.x, HOME_CAM.y); }
@@ -4676,7 +4704,7 @@ cv.style.touchAction = 'none';
 cv.addEventListener('contextmenu', e => e.preventDefault());
 cv.addEventListener('pointerdown', e => { drag = { x: e.clientX, y: e.clientY, x0: e.clientX, y0: e.clientY, rot: e.button === 2 || e.shiftKey, moved: false }; cv.setPointerCapture(e.pointerId); });
 cv.addEventListener('pointermove', e => { hoverAt(e); if (!drag) return;
-  if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 5) { drag.moved = true; document.body.classList.add('grab'); }
+  if (!drag.moved && Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > TOUCH.slop) { drag.moved = true; document.body.classList.add('grab'); }
   if (drag.moved) { const r = cv.getBoundingClientRect(), k = W / r.width;
     if (drag.rot) cam.ta += (e.clientX - drag.x) * 0.008; else panScreen((e.clientX - drag.x) * k, (e.clientY - drag.y) * k); }
   drag.x = e.clientX; drag.y = e.clientY; });
@@ -4755,7 +4783,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.1';
+const GAME_VERSION = '5.11.0.2';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5073,5 +5101,6 @@ function jumpSpot(id) {
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) jumpTo(b.dataset.j); }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot });
+Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); return Object.assign({}, TOUCH); } }); // v5.11.0.2
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();
