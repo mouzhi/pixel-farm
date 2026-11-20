@@ -40,7 +40,8 @@ ok('a newer save is never overwritten', () => {
 });
 ok('export string round trip and tamper check', () => {
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')));
-  const str = SAVE.encode(s); assert(str.startsWith('PF1.')); assert.deepStrictEqual(SAVE.decode(str), s);
+  const str = SAVE.encode(s); assert(str.startsWith('PF1.')); const d = SAVE.decode(str); // v5.11.0.8: the compact form rounds floats (rot to 2 decimals)
+  assert.deepStrictEqual(d, SAVE.migrate(JSON.parse(JSON.stringify(SAVE.compact(s))))); assert.deepStrictEqual(SAVE.decode(SAVE.encode(d)), d);
   assert.throws(() => SAVE.decode(str.slice(0, -1) + (str.endsWith('a') ? 'b' : 'a'))); assert.throws(() => SAVE.decode('hello'));
 });
 ok('reset keeps one copy of the old save', () => {

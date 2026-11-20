@@ -12,10 +12,11 @@
   // ---------- models (voxel = 1 screen px = half a world unit) ----------
   // the cottage's walls are the collision block (HM.HOUSE.hw x hd world units, 2 voxels each); the model is a little wider for
   // the roof overhang and deeper for the porch. CY: how far (world units) south of the anchor the model's centre sits.
-  const W2 = HM.HOUSE.hw * 4, D2 = HM.HOUSE.hd * 4, CW = W2 + 8, CD = D2 + 14, CX0 = 4, CX1 = W2 + 3, CY0 = 3, CY1 = D2 + 2, ZW = 20;
+  const W2 = HM.HOUSE.hw * 4, D2 = HM.HOUSE.hd * 4, CW = W2 + 8, CD = D2 + 14, CX0 = 4, CX1 = W2 + 3, CY0 = 3, CY1 = D2 + 2, ZW = 28; // v5.11.0.9 (房子比例): walls a storey high (were 20), the door as tall as a grown-up
   const CY = (CD / 2 - (CY0 + CY1) / 2) / 2;
   const toWorld = (vx, vy) => ({ dx: (vx - CW / 2) / 2, dy: (vy - CD / 2) / 2 + CY });
   const CHIM = { x0: CX1 - 9, x1: CX1 - 6, y0: CY0 + 6, y1: CY0 + 9, top: ZW + 22 };
+  const DTOP = 24, WZ = 12;                     // the door's top beam; the windows' sill
   const WINS = [CX0 + 4, CX1 - 12];             // the two front windows (left edge, 9 voxels wide)
   const DOOR = { x0: Math.round((CX0 + CX1) / 2) - 4, x1: Math.round((CX0 + CX1) / 2) + 3 };
   function makeModels(x) {
@@ -37,18 +38,18 @@
         if (side && (front || back)) return Wd[1];                                                          // corner posts
         if (z >= ZW - 1) return Wd[2];                                                                      // eave beam
         if (front) {
-          if (x >= DOOR.x0 && x <= DOOR.x1 && z <= 15) { if (x === DOOR.x0 || x === DOOR.x1 || z === 15) return Wd[1]; if (x === DOOR.x1 - 2 && z === 9) return Ac[1]; return (x - DOOR.x0) % 3 === 0 ? G[1] : G[2]; }
-          for (const u0 of WINS) { const w = win(x, z, u0, 8, 9); if (w) return w; } }
-        if (side) { const w = win(y, z, Math.round((CY0 + CY1) / 2) - 4, 8, 8); if (w) return w; }
-        if (back) { const w = win(x, z, Math.round(cx) - 4, 8, 8); if (w) return w; }
+          if (x >= DOOR.x0 && x <= DOOR.x1 && z <= DTOP) { if (x === DOOR.x0 || x === DOOR.x1 || z === DTOP) return Wd[1]; if (x === DOOR.x1 - 2 && z === 13) return Ac[1]; return (x - DOOR.x0) % 3 === 0 ? G[1] : G[2]; }
+          for (const u0 of WINS) { const w = win(x, z, u0, WZ, 9); if (w) return w; } }
+        if (side) { const w = win(y, z, Math.round((CY0 + CY1) / 2) - 4, WZ, 8); if (w) return w; }
+        if (back) { const w = win(x, z, Math.round(cx) - 4, WZ, 8); if (w) return w; }
         return logs(z); }
-      if (y === CY1 + 1 && z >= 6 && z <= 7) for (const u0 of WINS) if (x >= u0 && x <= u0 + 8) return z === 6 ? Wd[1] : ((x % 3 === 0) ? Ac[3] : (x % 3 === 1) ? G[3] : Rf[3]); // flower boxes
-      if (y === CY1 + 1 && x === DOOR.x1 + 2 && z >= 12 && z <= 15) return z === 15 ? Wd[1] : z === 12 ? Wd[1] : Ac[1];               // the lantern
+      if (y === CY1 + 1 && z >= WZ - 2 && z <= WZ - 1) for (const u0 of WINS) if (x >= u0 && x <= u0 + 8) return z === WZ - 2 ? Wd[1] : ((x % 3 === 0) ? Ac[3] : (x % 3 === 1) ? G[3] : Rf[3]); // flower boxes
+      if (y === CY1 + 1 && x === DOOR.x1 + 2 && z >= 17 && z <= 20) return z === 20 ? Wd[1] : z === 17 ? Wd[1] : Ac[1];               // the lantern
       const P0 = DOOR.x0 - 6, P1 = DOOR.x1 + 6;
       if (y > CY1 && y <= CY1 + 6 && x >= P0 && x <= P1) {                                                  // the porch
         if (z <= 1) return (x & 1) ? Wd[3] : Wd[4];
-        if ((x === P0 || x === P1) && y === CY1 + 6 && z <= 16) return Wd[2];
-        if (z === 17 + Math.floor((CY1 + 1 - y) / 2) + 2 || z === 18 + Math.floor((CY1 + 1 - y) / 2) + 2) return z % 2 ? PAL.dark(roof, 1) : roof;
+        if ((x === P0 || x === P1) && y === CY1 + 6 && z <= 25) return Wd[2];
+        if (z === 26 + Math.floor((CY1 + 1 - y) / 2) + 2 || z === 27 + Math.floor((CY1 + 1 - y) / 2) + 2) return z % 2 ? PAL.dark(roof, 1) : roof;
         return null; }
       if (z === 0 && y > CY1 + 6 && y <= CY1 + 8 && x >= DOOR.x0 && x <= DOOR.x1) return St[3];             // doorstep
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 0.8, x0: CX0 - 3, x1: CX1 + 3, y0: CY0 - 2, y1: CY1 + 2, fy0: CY0, fy1: CY1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[2] });
@@ -122,8 +123,8 @@
     if (!(T >= 17 * 60 + 30 || T < 6 * 60 + 30)) return;
     const fy = toWorld(0, CY1 + 1).dy, lant = toWorld(DOOR.x1 + 2, CY1 + 1);
     for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) {
-      for (const u0 of WINS) hz(h.x + toWorld(u0 + 4.5, 0).dx, h.y + fy + 1, 12, 22, 0.85);
-      hz(h.x + lant.dx, h.y + lant.dy + 1, 14, 14, 0.8); }
+      for (const u0 of WINS) hz(h.x + toWorld(u0 + 4.5, 0).dx, h.y + fy + 1, WZ + 4, 22, 0.85);
+      hz(h.x + lant.dx, h.y + lant.dy + 1, 19, 14, 0.8); }
   }
   // the chimney top (world units, z up) of each house someone lives in, for a curl of smoke
   function smoke() { const c = toWorld((CHIM.x0 + CHIM.x1) / 2 + 0.5, (CHIM.y0 + CHIM.y1) / 2 + 0.5);

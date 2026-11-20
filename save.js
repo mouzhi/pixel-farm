@@ -251,6 +251,45 @@
     while (s.saveVersion < CURRENT) { const step = MIGRATIONS[s.saveVersion + 1]; if (!step) throw new Error('no migration to v' + (s.saveVersion + 1)); s = Object.assign({}, step(s), { saveVersion: s.saveVersion + 1 }); }
     return validate(s);
   }
+  // v5.11.0.8 compact form (same saveVersion 15): a save leaves out what validate() would fill back in anyway, so a page from
+  // before this change reads it unchanged. Tiles and trees drop default fields (open true; tilled / watered false; debris / weed /
+  // crop null; crop n 0; tree v / age / ripe / cd 0, stage 'tree'), animals drop cd 1 / ready 0 / pet 0, upgrade levels, seed counts and troughs drop 0s, the little farms' tiles
+  // drop t / w 0, n and c null, and `rot` is kept to 2 decimals (it only turns a sprite). Every other number is written exactly:
+  // clock.t, work timers, positions and prices can sit next to a boundary (clock.t 1799.9996 rounded to 1800 skipped that dawn's
+  // rollover), so nothing but rot is ever rounded. compact(validate(compact(x))) === compact(x) (tools/save-compact-test.js).
+  const r2 = v => Math.round(v * 100) / 100;
+  function roundDeep(v, k) { // copies the state; only `rot` (a sprite's turn) is rounded
+    if (typeof v === 'number') return k === 'rot' && !Number.isInteger(v) && isFinite(v) ? r2(v) : v;
+    if (Array.isArray(v)) return v.map(x => roundDeep(x));
+    if (v && typeof v === 'object') { const o = {}; for (const key of Object.keys(v)) if (v[key] !== undefined) o[key] = roundDeep(v[key], key); return o; }
+    return v;
+  }
+  const drop = (o, defs) => { for (const k of Object.keys(defs)) if (o[k] === defs[k]) delete o[k]; return o; };
+  function compactTile(t) {
+    const o = drop(Object.assign({}, t), { f: 'home', c: 0, r: 0, open: true, tilled: false, watered: false, debris: null, weed: null, crop: null });
+    if (o.tilled === true) o.tilled = 1; if (o.watered === true) o.watered = 1; // validTile reads !!x (open stays false: it reads !== false)
+    if (o.crop) o.crop = drop(Object.assign({}, o.crop), { age: 0, n: 0 });
+    if (o.debris) o.debris = drop(Object.assign({}, o.debris), { v: 0, rot: 0 });
+    if (o.weed) o.weed = drop(Object.assign({}, o.weed), { v: 0, rot: 0 });
+    return o;
+  }
+  const compactTree = t => drop(Object.assign({}, t), { v: 0, stage: 'tree', age: 0, ripe: 0, cd: 0 });
+  const compactAnimal = a => drop(Object.assign({}, a), { cd: 1, ready: 0, pet: 0 });
+  function compactHomeTile(t) { const o = drop(Object.assign({}, t), { t: 0, w: 0, c: null }); if (o.c) o.c = drop(Object.assign({}, o.c), { n: 0, age: 0, stage: 0 }); return o; }
+  function compact(state) {
+    if (!state || typeof state !== 'object') return state;
+    const s = roundDeep(state);
+    if (Array.isArray(s.tiles)) s.tiles = s.tiles.map(t => (t && typeof t === 'object' ? compactTile(t) : t));
+    if (Array.isArray(s.trees)) s.trees = s.trees.map(t => (t && typeof t === 'object' ? compactTree(t) : t));
+    if (Array.isArray(s.animals)) s.animals = s.animals.map(a => (a && typeof a === 'object' ? compactAnimal(a) : a));
+    if (s.home && Array.isArray(s.home.houses)) s.home.houses = s.home.houses.map(h => (h && Array.isArray(h.tiles) ? Object.assign({}, h, { tiles: h.tiles.map(t => (t && typeof t === 'object' ? compactHomeTile(t) : t)) }) : h));
+    const zeros = o => { if (!o || typeof o !== 'object' || Array.isArray(o)) return o; const out = {}; for (const k of Object.keys(o)) if (o[k] !== 0) out[k] = o[k]; return out; };
+    if (s.upgrades) s.upgrades = zeros(s.upgrades); // levels: a missing one reads as 0
+    if (s.inventory) s.inventory = Object.assign({}, s.inventory, s.inventory.store ? { store: zeros(s.inventory.store) } : {}, s.inventory.bag ? { bag: zeros(s.inventory.bag) } : {});
+    if (Array.isArray(s.members)) s.members = s.members.map(m => (m && m.bag ? Object.assign({}, m, { bag: zeros(m.bag) }) : m));
+    if (s.troughs && typeof s.troughs === 'object') { const t = {}; for (const k of Object.keys(s.troughs)) { const v = zeros(s.troughs[k]); if (v && Object.keys(v).length) t[k] = v; } s.troughs = t; }
+    return s;
+  }
   let blocked = false;
   function quarantine(store, raw, why) { // keep a broken save for inspection (at most 3), never just delete it
     try {
@@ -279,7 +318,7 @@
     store = store || root.localStorage;
     if (blocked) return { ok: false, error: 'blocked: a newer save exists' };
     try {
-      const json = JSON.stringify(state), cur = store.getItem(KEY);
+      const json = JSON.stringify(compact(state)), cur = store.getItem(KEY); // v5.11.0.8: the compact form
       if (cur && cur !== json) { try { migrate(JSON.parse(cur)); store.setItem(BAK, cur); } catch (e) { /* never let a broken save replace the good backup */ } }
       store.setItem(KEY, json); return { ok: true, bytes: json.length };
     } catch (e) { return { ok: false, error: String(e && e.message || e) }; }
@@ -293,13 +332,13 @@
   const b64e = s => (typeof btoa === 'function' ? btoa(unescape(encodeURIComponent(s))) : Buffer.from(s, 'utf8').toString('base64'));
   const b64d = s => (typeof atob === 'function' ? decodeURIComponent(escape(atob(s))) : Buffer.from(s, 'base64').toString('utf8'));
   const sum = s => { let h = 5381; for (let i = 0; i < s.length; i++) h = (h * 33 + s.charCodeAt(i)) >>> 0; return h.toString(36); };
-  function encode(state) { const b = b64e(JSON.stringify(state)); return `PF1.${b}.${sum(b)}`; }
+  function encode(state) { const b = b64e(JSON.stringify(compact(state))); return `PF1.${b}.${sum(b)}`; }
   function decode(str) {
     const m = /^PF1\.([A-Za-z0-9+/=]+)\.([0-9a-z]+)$/.exec(String(str || '').replace(/\s+/g, ''));
     if (!m) throw new Error('不是像素农场的存档字符串');
     if (sum(m[1]) !== m[2]) throw new Error('存档字符串不完整或被改动过');
     return migrate(JSON.parse(b64d(m[1])));
   }
-  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, ANIMAL_IDS, PRODUCT_IDS, FISH_IDS, PEN_IDS, validate, migrate, read, write, reset, encode, decode, isBlocked: () => blocked };
+  const api = { PREFIX, KEY, BAK, CURRENT, MIGRATIONS, CROP_IDS, UPGRADE_IDS, FRUIT_IDS, FIELD_IDS, ANIMAL_IDS, PRODUCT_IDS, FISH_IDS, PEN_IDS, validate, migrate, compact, read, write, reset, encode, decode, isBlocked: () => blocked };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSave = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -36,6 +36,87 @@ const aveWalk = (x, y) => (TN && TN.onAvenue && TN.onAvenue(x, y) && roadBuilt()
 const DY = window.PFDiary; // v5.10.13: the family's daily diary (diary.js rules, diary-ui.js panel)
 const ALB = window.PFAlbum; // v5.11.0.11: the photo album (album.js rules, album-ui.js panel)
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
+// ---------- v5.11.0.6 未开放区域的阴影 (fog.js): a dithered dark shade over the 农家乐区 / 小镇 until each one opens ----------
+// One RGBA canvas, one pixel per world unit over fog.js BOUNDS, drawn with the ground's own transform after the objects, so it
+// sits in world space (correct under scroll and rotation, the dither never crawls). Rebuilt only when a lock changes; the
+// fade repaints it for FADE seconds. Nothing is saved: the locks are read from the shop / town / inn state.
+const FG = window.PFFog || null;
+const FOG = { on: !!FG, init: false, key: '', shut: null, L: null, road: false, F: null, from: null, to: null, buf: null, t0: 0, fading: false,
+  c: null, img: null, memb: {}, next: 0, empty: true, mmDirty: false, lockA: { agri: 0, town: 0 }, lockFrom: null, btnKey: '' };
+function fogCtx() {
+  const I = S.inn, inn = !!(IN && I && (IN.anyInn ? IN.anyInn(I) : ((I.cabins | 0) > 0 || (I.inn2 | 0) > 0 || IN.dinerUp(I) || (I.job && /^(cabin|diner|kitchen|inn2)$/.test(I.job.id)))) || (IN && S.plots && IN.innPlotOf(S.plots)));
+  return { town: townOpen(), lv: TN && S.town ? townLv() : 0, inn, coast: !!(S.eff && S.eff.regions && S.eff.regions.includes('coast')),
+    plots: S.plots || {}, schoolDays: TN && S.town ? TN.schoolDays(S.town) : 0 };
+}
+function fogReset() { FOG.init = false; FOG.key = ''; FOG.next = 0; FOG.fading = false; FOG.from = FOG.to = null; }
+function fogPaint(F, box) {
+  if (!FOG.c) { FOG.c = mkc(FG.GW, FG.GH); FOG.img = FOG.c.getContext('2d').createImageData(FG.GW, FG.GH); box = null; }
+  FG.paint(F, FOG.img.data, box); const g = FOG.c.getContext('2d');
+  if (box) g.putImageData(FOG.img, 0, 0, box[0], box[1], box[2] - box[0], box[3] - box[1]); else g.putImageData(FOG.img, 0, 0);
+  // v5.11.0.6 (variable framebuffer): a tall or wide window sees past the north / east edge of the map, so the shade carries on there:
+  // EDGE cells deep strips made by repeating the outer 4 rows / columns (one dither period, so no seam), plus the corner
+  if (!FOG.eN) { FOG.eN = mkc(FG.GW, FOG_EDGE); FOG.eE = mkc(FOG_EDGE, FG.GH); FOG.eNE = mkc(FOG_EDGE, FOG_EDGE); }
+  const n = FOG.eN.getContext('2d'), e = FOG.eE.getContext('2d'), c = FOG.eNE.getContext('2d'); n.clearRect(0, 0, FG.GW, FOG_EDGE); e.clearRect(0, 0, FOG_EDGE, FG.GH); c.clearRect(0, 0, FOG_EDGE, FOG_EDGE);
+  for (let k = 0; k < FOG_EDGE; k += 4) { n.drawImage(FOG.c, 0, 0, FG.GW, 4, 0, k, FG.GW, 4); e.drawImage(FOG.c, FG.GW - 4, 0, 4, FG.GH, k, 0, 4, FG.GH);
+    for (let m = 0; m < FOG_EDGE; m += 4) c.drawImage(FOG.c, FG.GW - 4, 0, 4, 4, k, m, 4, 4); }
+}
+const FOG_EDGE = 64;
+function fogUpdate(force) {
+  if (!FOG.on || !S.eff) return;
+  if (force || !FOG.init || realT >= FOG.next || realT < FOG.next - 1) { FOG.next = realT + 0.25;
+    const c = fogCtx(), L = FG.locked(c), road = roadBuilt(), shut = { agri: L.agri, town: L.town }, key = [shut.agri, shut.town, road].join();
+    FOG.L = L; FOG.ctxv = c; FOG.road = road;
+    if (key !== FOG.key) {
+      const memb = FOG.memb[road] || (FOG.memb[road] = FG.membership({ road })), nf = FG.field(memb, shut), was = FOG.shut;
+      const lifts = FOG.init && was && FOG.F && ((was.agri && !shut.agri) || (was.town && !shut.town) || (road && !FOG.road0));
+      if (lifts) { if (FOG.fading) FOG.F = FG.blend(FOG.from, FOG.to, FOG.e || 0, FOG.buf, FOG.fbox); FOG.from = FOG.F === FOG.buf ? FOG.buf.slice() : FOG.F; FOG.to = nf; FOG.fbox = FG.diffBox(FOG.from, nf); FOG.buf = FOG.from.slice(); FOG.t0 = realT; FOG.e = 0; FOG.fading = true; FOG.lockFrom = Object.assign({}, FOG.lockA); FOG.dirty = true; }
+      else { FOG.F = nf; FOG.fading = false; FOG.dirty = true; FOG.box = null; for (const id of FG.ZONE_IDS) FOG.lockA[id] = shut[id] ? 1 : 0; }
+      FOG.shut = shut; FOG.key = key; FOG.road0 = road; FOG.init = true; FOG.empty = !shut.agri && !shut.town && !FOG.fading; FOG.mmDirty = true;
+    }
+    fogButtons();
+  }
+  if (FOG.fading) {
+    const u = Math.min(1, (realT - FOG.t0) / FG.FADE), e = u * u * (3 - 2 * u);
+    for (const id of FG.ZONE_IDS) FOG.lockA[id] = FOG.shut[id] ? 1 : (FOG.lockFrom ? FOG.lockFrom[id] : 0) * (1 - e);
+    if (u >= 1) { FOG.F = FOG.to; FOG.from = FOG.to = null; FOG.fading = false; FOG.dirty = true; FOG.box = FOG.fbox; FOG.empty = !FOG.shut.agri && !FOG.shut.town; FOG.mmDirty = true; }
+    else { FOG.e = e; FOG.dirty = true; if (((realT * 4) | 0) !== ((FOG.mmT * 4) | 0)) { FOG.mmT = realT; FOG.mmDirty = true; } }
+  }
+}
+// the canvas is repainted at most once per drawn frame, only while something changed (a fade step or a new lock state)
+function fogRepaint() { if (!FOG.dirty) return; FOG.dirty = false; const box = FOG.box; FOG.box = null;
+  if (FOG.fading) { FOG.F = FG.blend(FOG.from, FOG.to, FOG.e || 0, FOG.buf, FOG.fbox); fogPaint(FOG.F, FOG.fbox); } else fogPaint(FOG.F, box); }
+function drawFog() {
+  if (!FOG.on) return; fogRepaint(); if (!FOG.c || FOG.empty) return;
+  const [gx, gy] = proj(GX0, GY0), B = FG.BOUNDS, s = FG.CELL * RS;
+  // only the cells under the screen (like the ground): invert the four corners into fog cells, one cell of margin
+  let x0 = 1e9, y0 = 1e9, x1 = -1e9, y1 = -1e9;
+  for (const [px, py] of [[0, 0], [W, 0], [0, H], [W, H]]) { const rx = (px - CX) / RS, ry = (py - CY) / (K * RS), u = (rx * CA + ry * SA - B[0]) / FG.CELL, v = (-rx * SA + ry * CA - B[1]) / FG.CELL;
+    x0 = Math.min(x0, u); y0 = Math.min(y0, v); x1 = Math.max(x1, u); y1 = Math.max(y1, v); }
+  const vN = Math.floor(y0) - 1, uE = Math.ceil(x1) + 1; // how far the screen reaches past the north / east edge (in cells)
+  x0 = clamp(Math.floor(x0) - 1, 0, FG.GW); y0 = clamp(Math.floor(y0) - 1, 0, FG.GH); x1 = clamp(Math.ceil(x1) + 1, 0, FG.GW); y1 = clamp(Math.ceil(y1) + 1, 0, FG.GH);
+  const ox = (B[0] - GX0) * RS, oy = (B[1] - GY0) * RS;
+  ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
+  if (x1 > x0 && y1 > y0) ctx.drawImage(FOG.c, x0, y0, x1 - x0, y1 - y0, ox + x0 * s, oy + y0 * s, (x1 - x0) * s, (y1 - y0) * s);
+  const E = FOG_EDGE, far = 8 * E; // at most 512 cells out, far more than any window shows
+  if (FOG.eN && x1 > x0) for (let v = 0; v > Math.max(vN, -far); v -= E) ctx.drawImage(FOG.eN, x0, 0, x1 - x0, E, ox + x0 * s, oy + (v - E) * s, (x1 - x0) * s, E * s);
+  if (FOG.eE && y1 > y0) for (let u = FG.GW; u < Math.min(uE, FG.GW + far); u += E) ctx.drawImage(FOG.eE, 0, y0, E, y1 - y0, ox + u * s, oy + y0 * s, E * s, (y1 - y0) * s);
+  if (FOG.eNE && vN < 0 && uE > FG.GW) for (let u = FG.GW; u < Math.min(uE, FG.GW + far); u += E) for (let v = 0; v > Math.max(vN, -far); v -= E) ctx.drawImage(FOG.eNE, ox + u * s, oy + (v - E) * s, E * s, E * s);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  const bob = Math.round(Math.sin(realT * 2)); // a padlock over each district still shut (the same one the farm's plots wear), 2x
+  for (const z of FG.ZONES) { const a = FOG.lockA[z.id] || 0; if (a <= 0.02 || !onScreen(z.label.x, z.label.y, 20)) continue; const [sx, sy] = proj(z.label.x, z.label.y);
+    if (a < 1) ctx.globalAlpha = a; ctx.drawImage(LOCK, Math.round(sx) - LOCK.width, Math.round(sy) - 2 * LOCK.height + bob, LOCK.width * 2, LOCK.height * 2); if (a < 1) ctx.globalAlpha = 1; }
+}
+const fogZone = (x, y) => (FOG.on && FOG.shut ? FG.zoneAt(x, y, FOG.shut, { road: FOG.road }) : null);
+const fogHint = id => (FOG.on && FOG.ctxv ? FG.hint(id, FOG.ctxv) : null);
+function fogTap(w) { const id = fogZone(w.x, w.y), h = id && fogHint(id); if (h) { say(h); return true; } return false; }
+function fogHover(e) { const w = toWorld(e.clientX, e.clientY), id = fogZone(w.x, w.y), t = (id && fogHint(id)) || ''; if (cv.title !== t) cv.title = t; }
+// the jump buttons under the minimap: dimmed (still clickable, to have a look) while their place is shut
+function fogButtons() {
+  if (!FOG.L) return; const L = FOG.L, key = [L.agri, L.town, L.beach, fogHint('town'), fogHint('agri')].join('|'); if (key === FOG.btnKey) return; FOG.btnKey = key;
+  const jb = document.getElementById('mmJump'); if (!jb) return;
+  for (const b of jb.querySelectorAll('button[data-j]')) { const id = b.dataset.j; if (!(id in L)) continue; if (b.dataset.t0 === undefined) b.dataset.t0 = b.title || '';
+    b.classList.toggle('locked', !!L[id]); b.title = L[id] ? (fogHint(id) || b.dataset.t0) : b.dataset.t0; }
+}
 const Q = new URLSearchParams(location.search);
 // ?speed= is a test-only clock multiplier for the tools (tools/soak.js, rec2.js); v5.10.2 keeps it to a local server so players have one speed
 const DEV_HOST = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname) || location.protocol === 'file:';
@@ -734,7 +815,7 @@ function syncAnimals() { // the shop says how many of each kind; new ones arrive
 }
 function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
   S.eff = SIM.effects(S.up); if (SM && S.town && S.town.hall) { const e = SM.effects((S.town.hall.smithy || {}).up); S.eff.sprReach = e.sprReach; S.eff.workSpeed = e.workSpeed; S.eff.smithAxe = e.axeBonus; S.eff.smithAxeCut = e.axeCut; S.eff.smithRod = e.rod; S.eff.marketExtra = e.cartExtra; } XP.applyEff(S); S.waterMax = S.eff.waterMax;
-  SPR_COVER = null;
+  SPR_COVER = null; FOG.next = 0; // v5.11.0.6: look at the locks again on the next frame
   for (const t of tiles) if (!t.open && tileOpen(t, S.eff)) t.open = true;
   syncAnimals();
   groundDirty = true;
@@ -3510,7 +3591,7 @@ function homeRestore(s) {
 }
 // the panel lines: who each child is close to, and the neighbours the family knows
 function homeStatus() {
-  const kids = S.family.kids.map(k => ({ id: k.id, name: k.name, note: HM.kidNote(S.home, k.id, k.name), rel: HM.kidRel(S.home, k.id), married: HM.isMarried(S.home, k.id), wed: S.home.wed[k.id] || null, path: CR ? CR.pathOf(S.home, k.id) : null }));
+  const kids = S.family.kids.map(k => ({ id: k.id, name: k.name, stage: FAM.kidStage(k, S.day), note: HM.kidNote(S.home, k.id, k.name), rel: HM.kidRel(S.home, k.id), married: HM.isMarried(S.home, k.id), wed: S.home.wed[k.id] || null, path: CR ? CR.pathOf(S.home, k.id) : null }));
   return { kids, nb: HM.nbRel(S.home), houses: S.home.houses.map(h => ({ site: h.site, name: PL.plot(h.site).name, built: h.built, kid: h.kid })), earn: S.home.earn, wage: S.home.wage || 0, open: townOpen() };
 }
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
@@ -4472,6 +4553,7 @@ function render() {
     drawStack(ctx, o.m, o.x, o.y, o.z || 0, o.rot || 0); tick(o.m.w * o.m.d * o.m.h >= 3000 ? 'o.big' : 'o.small');
   }
   tick('objects');
+  fogUpdate(); drawFog(); tick('fog');
   if (farmerD) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
   for (const d of familyD) drawBillboard(ctx, d, 0.35);
   drawMarks(); tick('marks');
@@ -4647,8 +4729,8 @@ function hud() {
   if (document.getElementById('loveLab')) document.getElementById('loveLab').textContent = love.title;
   if (loveFill) loveFill.style.width = (love.moved ? 72 : Math.round(72 * love.love / love.max)) + 'px';
   if (loveHud) { loveHud.title = [love.todayText, love.hint].filter(Boolean).join(' · '); loveHud.classList.toggle('dim', !love.met && !love.moved); }
-  const loveTip = document.getElementById('loveTip');
-  if (loveTip && !loveTip.hidden) loveTip.innerHTML = (love.todayText ? `<div>${love.todayText}</div>` : '') + `<div class="hint">${love.hint}</div>`;
+  // v5.11.0.10: the open heart tip belongs to ui.js (drawLoveTip: hint + each child's classmates + 镇上的人 + 民宿留言本). Rewriting it
+  // here every frame with only the hint wiped the closeness rows a frame after ui.js drew them, so the hearts never stayed on screen.
   document.getElementById('log').innerHTML = S.log.map((s, i) => {
     if (i === 0 && lastCatch && lastCatch.line === s && lastCatch.url) return `<div><img class="log-bug" alt="" src="${lastCatch.url}">${s}</div>`;
     return `<div>${s}</div>`;
@@ -4871,7 +4953,8 @@ function orderPlant(kind, x, y) {
 function setMode(mode, kind) { INPUT.mode = mode || null; INPUT.sprPick = null; INPUT.mvPick = null; if (kind) INPUT.kind = kind; INPUT.hover = null; cv.style.cursor = mode ? 'crosshair' : '';
   window.dispatchEvent(new CustomEvent('pf:mode', { detail: { mode: INPUT.mode, kind: INPUT.kind } })); }
 function hoverAt(e) {
-  if (!INPUT.mode) { INPUT.hover = null; return; }
+  if (!INPUT.mode) { INPUT.hover = null; if (FOG.on) fogHover(e); return; }
+  if (cv.title) cv.title = '';
   const w = toWorld(e.clientX, e.clientY);
   if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); INPUT.hover = t ? { tree: t } : null; }
   else if (INPUT.mode === 'release') INPUT.hover = { release: 1, ok: inHomePond(w.x, w.y) };
@@ -4929,7 +5012,7 @@ function takeDoorGift() {
   else log('把门口的树枝收起来了');
   S.doorGift = null;
 }
-const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (TOUCH.onTap && TOUCH.onTap(e, INPUT.mode)) { /* v5.11.0.2: the touch shell took this tap */ } else if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift) { const [sx, sy] = (setCam(), proj(DOOR.x + 7, DOOR.y + 5)); if (Math.hypot(sx - w.px, sy - w.py) < 12) takeDoorGift(); } } } drag = null; document.body.classList.remove('grab'); };
+const endDrag = e => { if (drag && !drag.moved && e.type === 'pointerup' && e.button === 0) { if (TOUCH.onTap && TOUCH.onTap(e, INPUT.mode)) { /* v5.11.0.2: the touch shell took this tap */ } else if (INPUT.mode) clickAt(e); else { const w = toWorld(e.clientX, e.clientY), p = petAtScreen(w.px, w.py); if (p) say(`摸了摸${patPet(p)}`); else if (hallTap(w)) { if (window.__farm.openHall) window.__farm.openHall(); } else if (S.doorGift && (setCam(), Math.hypot(proj(DOOR.x + 7, DOOR.y + 5)[0] - w.px, proj(DOOR.x + 7, DOOR.y + 5)[1] - w.py) < 12)) takeDoorGift(); else fogTap(w); } } drag = null; document.body.classList.remove('grab'); };
 cv.addEventListener('pointerup', endDrag); cv.addEventListener('pointercancel', endDrag);
 addEventListener('wheel', e => { if (e.target !== cv) return; zoom = clamp(zoom + (e.deltaY < 0 ? 1 : -1), 0, 3); fit(); }, { passive: true });
 if (Q.has('cursor')) { // visible pointer for recordings
@@ -4940,6 +5023,7 @@ if (Q.has('cursor')) { // visible pointer for recordings
 // ---------- main loop ----------
 function advance(dt) {
   realT += dt;
+  if (FOG.on) fogUpdate(); // v5.11.0.6
   if (keyRot) cam.ta += keyRot * dt * 1.8;
   if (keyPan.size) { let x = 0, y = 0; for (const k of keyPan) { x += PAN_KEYS[k][0]; y += PAN_KEYS[k][1]; } panScreen(-x * 170 * dt, -y * 170 * dt); }
   cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;
@@ -5081,6 +5165,7 @@ function snapshot() {
   };
 }
 function restore(s) { // s has been migrated and validated by PFSave
+  fogReset(); // v5.11.0.6: a loaded save shows its districts as they are, no fade
   RNG.a = s.rng | 0; S.day = s.clock.day; S.t = s.clock.t; S.coins = s.coins; S.createdAt = s.createdAt;
   Object.assign(S, { totalSold: s.stats.totalSold, cleared: s.stats.cleared, earned: s.stats.earned, soldToday: s.stats.soldToday, todayEarn: s.stats.todayEarn, dayEarn: s.stats.dayEarn.slice() });
   S.prices = Object.assign(SIM.startPrices(), { egg: 1, wool: 1, milk: 1 }, s.prices); S.hay = s.inventory.hay || 0;
@@ -5186,13 +5271,18 @@ function clockText(at, now) {
   const day = x => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(), diff = Math.round((day(d) - day(n)) / 86400000);
   return (diff <= 0 ? '今天 ' : diff === 1 ? '明天 ' : '') + hm;
 }
+// v5.11.0.8: when the used-up offline allowance comes back. The 24-hour window rolls, so the oldest record frees its days first.
+function offBack(r) {
+  return r.nextPartAt && r.nextPartAt < r.nextFullAt ? `${r.nextPartText} 起恢复 ${r.nextPartDays} 天` : `${r.nextText} 起恢复全部 3 天`;
+}
 function settleOffline(sec) { // decision: estimate at 50% of the online rate, at most 3 game days; gold, plus a little wood (v5.3.1)
   // v5.10.1: and at most 3 days in any 24 real hours (S.offlineWin); a clock turned back pays nothing and keeps the window
   if (sec < -60) { log('电脑的时钟好像往回调过，这次不算离线收益'); noteLog('event', { type: 'clockBack', sec: Math.round(sec), day: S.day }); return null; }
   const now = Date.now(), r = SIM.offlineSettle(sec, S.dayEarn, S.offlineWin, now); if (!r) return null;
-  S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now);
+  S.offlineWin = r.win; r.nextText = clockText(r.nextFullAt, now); if (r.nextPartAt) r.nextPartText = clockText(r.nextPartAt, now); // v5.11.0.8: when the first part comes back
+  const T = Math.floor(S.t % 1440); r.day = S.day; r.clock = String(Math.floor(T / 60)).padStart(2, '0') + ':' + String(T % 60).padStart(2, '0'); // v5.11.0.8: the clock stood still (还是第 N 天 HH:MM)
   if (r.limited && r.days <= 0) { // the window is used up: a log line only, no box
-    log(`离开了 ${Math.round(sec / 60)} 分钟；过去 24 小时的 3 天离线收益已经领过，${r.nextText} 以后再算`);
+    log(`离开了 ${Math.round(sec / 60)} 分钟；过去 24 小时的 3 天离线收益已经领过，${offBack(r)}`); // v5.11.0.8: the window rolls (the old 「X 以后再算」 named the time it was full again)
     noteLog('offline', r, logSnap()); SAVE.offline = r; window.dispatchEvent(new CustomEvent('pf:offline', { detail: r })); saveNow(); return r;
   }
   S.coins += r.gold; S.earned += r.gold;
@@ -5200,7 +5290,7 @@ function settleOffline(sec) { // decision: estimate at 50% of the online rate, a
   offlineWood(r); // v5.3.1: the family also chopped a little in 林场
   if (WX && r.days > 0) {
     const off = WX.advanceDays(S.weather || WX.emptyWeather(), S.day, r.days, (S.createdAt | 0) || 1);
-    S.weather = off.weather;
+    S.weather = off.weather; r.wxDays = Math.floor(r.days); // v5.11.0.8: the weather walked these days although the calendar did not
     if (off.rainDays.length) {
       r.rain = true; r.rainDays = off.rainDays.slice();
       for (const tile of tiles) if (tile.crop && tile.open) tile.watered = true;
@@ -5232,7 +5322,7 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { ALB, albumSnap: (id, x, y, o) => albumSnap(id, x, y, o), albumView: () => albumView(), albumRestage: id => albumRestage(id), albumBackfill: () => albumBackfill(), albumFacts: () => albumFacts(), albumPlace: at => albumPlace(at), albumQueue: () => albumQ.length, albumPending: () => albumQ.map(q => [q.e.id, q.at]), albumMs: () => albumMs }); // v5.11.0.11
 Object.assign(window.__farm, { snapshot: () => snapshot(), YD, yardTodo: () => yardTodo(), yardWalk: (x, y) => yardWalk(x, y), yardNight: () => yardNight(), clothesOut: () => clothesOut(), petBed: (d, k) => petBed(d, k), yardSetup: id => { const q = yardSetupTask(id); q.done(); }, priceMult: () => YD.stallMult(S.homeyard.put) });
-Object.assign(window.__farm, { slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, pondRoom: () => pondRoom(), pondCatchUp: () => pondCatchUp(), DY, diaryView: d => diaryView(d), diaryMorning: () => diaryMorning(), KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
@@ -5293,13 +5383,14 @@ function minimapBase() {
     g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; g.fillStyle = '#fff6dc'; g.fillText('未解锁 · ' + r.name, (x0 + x1) / 2, (y0 + y1) / 2 - 2);
     fillCoinPrice(g, SIM.shopItem(r.id).levels[0].cost, (x0 + x1) / 2, (y0 + y1) / 2 + 8); }
   XP.minimap(g, P, fillCoinPrice); // v5.5.0: the ring's plots
+  if (FOG.on) fogRepaint(); if (FOG.on && FOG.c && !FOG.empty) { const B = FG.BOUNDS, [bx, by] = P(B[0], B[1]); g.drawImage(FOG.c, bx, by, FG.GW * FG.CELL * MM.s, FG.GH * FG.CELL * MM.s); g.drawImage(FOG.c, bx, by, FG.GW * FG.CELL * MM.s, FG.GH * FG.CELL * MM.s); } // v5.11.0.6: the same shade (twice: the dither averages out when shrunk)
   if (TN && TN.AGRI) { g.font = '600 10px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'alphabetic'; // v5.11.0: the town's name and the reserved 农家乐区
     const [ax0, ay0] = P(TN.AGRI[0], TN.AGRI[1]), [ax1, ay1] = P(TN.AGRI[2], TN.AGRI[3]); g.strokeStyle = 'rgba(255,246,220,0.55)'; g.setLineDash([3, 3]); g.strokeRect(ax0 + 0.5, ay0 + 0.5, ax1 - ax0 - 1, ay1 - ay0 - 1); g.setLineDash([]);
-    g.fillStyle = 'rgba(255,246,220,0.8)'; g.fillText(innPlot() ? '农家乐区' : '农家乐区 · 开镇门后可建', (ax0 + ax1) / 2, (ay0 + ay1) / 2);
+    g.fillStyle = 'rgba(255,246,220,0.8)'; g.fillText(FOG.shut && FOG.shut.agri ? '农家乐区 · 未开放' : innPlot() ? '农家乐区' : '农家乐区 · 开镇门后可建', (ax0 + ax1) / 2, (ay0 + ay1) / 2);
     const [tx, ty] = P((TN.RECT[0] + TN.RECT[2]) / 2, TN.RECT[1] + 10); g.fillStyle = '#fff6dc'; g.fillText(S.eff && S.eff.town ? '小镇' : '小镇 · 未开放', tx, ty); }
 }
 function minimapDraw() {
-  if (!MM.el || MM.el.offsetParent === null) return; if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
+  if (!MM.el || MM.el.offsetParent === null) return; if (FOG.mmDirty) { FOG.mmDirty = false; MM.base = null; } if (!MM.base) minimapBase(); const g = MM.el.getContext('2d');
   const P = (x, y) => [(x - WORLD.x0) * MM.s, (y - WORLD.y0) * MM.s];
   g.drawImage(MM.base, 0, 0);
   for (const t of tiles) if (t.open) { const [x, y] = P(t.x - 4, t.y - 4); g.fillStyle = t.crop ? (SIM.ripe(t.crop) ? '#ffd76a' : G[3]) : t.tilled ? Wd[1] : t.debris || t.weed ? G[2] : Wd[3]; g.fillRect(x, y, 4, 4); }
@@ -5327,8 +5418,10 @@ function jumpSpot(id) {
   return null;
 }
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
-{ const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) jumpTo(b.dataset.j); }); }
+{ const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
+window.__farm.art = { models, pasture: pastureModels, props, stackCanvas, SPR, ALLM }; // v5.11.0.9 test hook: tools/scale-audit.js renders every building beside a grown-up
+Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); if (i < 0 || j >= FG.GH) return 0; return FOG.F[Math.max(j, 0) * FG.GW + Math.min(i, FG.GW - 1)]; } /* past the north / east edge the shade carries on, as drawn */ }); // v5.11.0.6 test hooks
 if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);
 })();
