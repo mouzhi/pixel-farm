@@ -339,6 +339,8 @@
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 1.1, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 1, y1: Y1, fy0: Y0, fy1: Y1 - 1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[4] });
       if (r === 'fill') return wall; if (r) return r;
       if (x >= 24 && x <= 26 && y >= 8 && y <= 10 && z <= 28) return z >= 26 ? St[1] : St[2];
+      if (x >= 14 && x <= 17 && y >= 12 && y <= 16 && z >= 28 && z <= 35) { // red cross on the ridge, readable from the usual camera
+        if ((x >= 15 && x <= 16 && z >= 28 && z <= 35) || (z >= 31 && z <= 32 && x >= 14 && x <= 17)) return cross; }
       return null; });
     const yardFlag = B(6, 6, 28, (x, y, z) => {
       if (x === 2 && y === 2 && z <= 26) return St[3];
