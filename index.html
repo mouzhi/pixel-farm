@@ -132,7 +132,7 @@
   #loveHud .meter .ticks{left:9px;background:#2a1d16;box-shadow:9px 0 #2a1d16,18px 0 #2a1d16,27px 0 #2a1d16,36px 0 #2a1d16,45px 0 #2a1d16,54px 0 #2a1d16}
   #loveTip{position:relative;left:auto;top:auto;padding:8px 10px;min-width:0;max-width:100%;box-sizing:border-box;z-index:4;font-weight:500;font-size:13px;line-height:1.5;flex:none}
   #loveTip .hint{opacity:.9;margin-top:3px}#loveTip .rel{margin-top:5px;border-top:1px solid rgba(255,255,255,.15);padding-top:4px}#loveTip .rk{margin-top:3px}#loveTip .rr{display:flex;gap:6px;align-items:center;font-size:12px}#loveTip .rr>span:first-child{min-width:4.5em}#loveTip .rh{color:#e57fa0;letter-spacing:-1px}#loveTip .rh i{color:rgba(255,255,255,.22);font-style:normal}#loveTip .rl{opacity:.75}#loveTip b, #loveVal{color:#ffd76a}
-  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #mmJump,#ui #tools,#ui #audioBar,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
+  #ui #hud,#ui #log,#ui #catches,#ui #title,#ui #inv,#ui #loveTip,#ui #shop,#ui #store,#ui #codex,#ui #menu,#ui #minimap,#ui #mmJump,#ui #tools,#ui #audioBar,#ui #menuBtn,#ui #shopBtn,#ui #storeBtn,#ui #codexBtn,#ui #diaryBtn,#ui #diary,#ui #mapBtn,#ui #syncHint{pointer-events:auto}
   /* narrow / portrait: shop, store and menu become a full-width overlay so tabs and cards stay usable */
   @media (max-width:720px){
     #shop,#store,#codex,#menu{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}
@@ -200,6 +200,7 @@
     <div id="navBtns">
       <button id="storeBtn" class="pbtn" title="仓库（I）">仓库 I</button>
       <button id="codexBtn" class="pbtn" title="图鉴（J）">图鉴 J</button>
+      <button id="diaryBtn" class="pbtn" title="日记（K）：这几天家里每个人干了什么">日记 K</button>
       <button id="shopBtn" class="pbtn" title="商店（B）">商店 B</button>
       <button id="menuBtn" class="pbtn" title="存档菜单">存档 ▾</button>
     </div>
@@ -209,6 +210,7 @@
     <div id="shop" class="panel" hidden></div>
     <div id="store" class="panel" hidden></div>
     <div id="codex" class="panel" hidden></div>
+    <div id="diary" class="panel" hidden></div>
     <div id="menu" class="panel" hidden></div>
   </div>
   <div id="inv" class="panel"></div>
@@ -255,6 +257,7 @@
 <script src="insects.js?v=5.11.0"></script>
 <script src="codex.js?v=5.11.0"></script>
   <script src="codex_icons.js?v=5.11.0"></script>
+<script src="diary.js?v=5.11.0"></script>
 <script src="save.js?v=5.11.0"></script>
 <script src="playlog.js?v=5.11.0"></script>
 <script src="fx.js?v=5.11.0"></script>
@@ -268,6 +271,7 @@
 <script src="game.js?v=5.11.0"></script>
 <script src="ui.js?v=5.11.0"></script>
 <script src="plots-ui.js?v=5.11.0"></script>
+<script src="diary-ui.js?v=5.11.0"></script>
 <script src="audio.js?v=5.11.0"></script>
 </body>
 </html>
