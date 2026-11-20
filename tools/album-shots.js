@@ -156,6 +156,39 @@ fs.mkdirSync(OUT, { recursive: true });
       return { fb: [W0, H0], after: [document.getElementById('game').width, document.getElementById('game').height], w: img.width, h: img.height, blank }; }); },
     r => r.fb[0] >= 160 && r.fb[1] >= 110 ? 'framebuffer not small ' + r.fb : r.w !== 160 || r.h !== 110 ? 'size' : r.blank > 0 ? 'blank pixels ' + r.blank : r.after[0] !== r.fb[0] || r.after[1] !== r.fb[1] ? 'framebuffer not restored' : null);
 
+  // 11. v5.11.0.9 bigger buildings: every place's frame on the farm-stay save, as one contact sheet (album_frames.png). The
+  //     diner and the kids' cottage got taller: their roofs must stay in the 160×110 frame (album_frames_sheet.png shows them all)
+  const sheet = async (p, ids) => p.evaluate(async ids => { const f = __farm, c = document.createElement('canvas'); c.width = 6 * 164; c.height = Math.ceil(ids.length / 6) * 126;
+    const g = c.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.font = '11px sans-serif'; const out = {};
+    for (let i = 0; i < ids.length; i++) { const P = f.albumPlace(ids[i]), u = f.albumShot(P.x, P.y, { who: ['farmer'], t: 630 }); if (!u) { out[ids[i]] = null; continue; }
+      const im = new Image(); im.src = u; await im.decode(); const X = (i % 6) * 164 + 2, Y = ((i / 6) | 0) * 126 + 14; g.drawImage(im, X, Y); g.fillStyle = '#000'; g.fillText(ids[i] + ' ' + Math.round(P.x) + ',' + Math.round(P.y), X, Y - 3);
+      const d = g.getImageData(X, Y, 160, 110).data; let lum = 0, sq = 0; for (let k = 0; k < d.length; k += 4) { const l = (d[k] + d[k + 1] + d[k + 2]) / 3; lum += l; sq += l * l; } const n = d.length / 4;
+      out[ids[i]] = { lum: Math.round(lum / n), sd: Math.round(Math.sqrt(sq / n - (lum / n) ** 2)) }; }
+    return { url: c.toDataURL(), out }; }, ids);
+  await shot('frames.png', null, readSave(FIX('save-v15-inn-resort.json')), async p => {
+    const r = await sheet(p, ['door', 'house', 'porch', 'barn', 'pond', 'stall', 'meadow', 'field', 'gate', 'school', 'plaza', 'track', 'feast', 'inn', 'newhouse']);
+    fs.writeFileSync(path.join(OUT, 'album_frames_sheet.png'), Buffer.from(r.url.split(',')[1], 'base64'));
+    // the diner's roof: the photo's top 12 rows over the diner hold roof / sky-line pixels, not only the plain grass of the frame below
+    r.inn = await p.evaluate(async () => { const f = __farm, P = f.albumPlace('inn'), u = f.albumShot(P.x, P.y, { who: [], t: 630 }), im = new Image(); im.src = u; await im.decode();
+      const c = document.createElement('canvas'); c.width = 160; c.height = 110; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      const row = y => { const d = g.getImageData(40, y, 80, 1).data; let red = 0; for (let k = 0; k < d.length; k += 4) if (d[k] > d[k + 1] + 30 && d[k] > 110) red++; return red; };
+      let first = -1; for (let y = 0; y < 110; y++) if (row(y) > 6) { first = y; break; } return { P, roofTop: first }; });
+    delete r.url; return r; },
+    r => Object.entries(r.out).filter(([, v]) => !v || v.sd < 12).map(([k]) => k).join() ? 'flat / missing frames ' + JSON.stringify(r.out) : r.inn.roofTop <= 0 ? 'diner roof cut at the top (first roof row ' + r.inn.roofTop + ')' : null);
+
+  // 12. fog (v5.11.0.6): 「镇门打开」 is shot the moment the gate opens, while the town's shade is still lifting; the photo shows it lifted
+  //     (lum: the frame's mean brightness under the shade, in the photo, and with no shade at all; other districts may stay shaded)
+  await shot('towngate_fog.png', null, save72, async p => p.evaluate(async () => { const f = __farm, S = f.S; S.coins = 1e8; f.FARMER.wood = 1e4;
+    f.buyPlot('eroad', 'road'); S.town.school.kid0 = Math.max(1, S.town.school.kid0 | 0); f.render(); await new Promise(z => setTimeout(z, 1600)); f.render(); // the road's own fade first
+    f.ALB.remove(S.album, 'towngate'); f.panTo(f.albumPlace('gate').x, f.albumPlace('gate').y); f.render();
+    const lum = async u => { const im = new Image(); im.src = u; await im.decode(); const c = document.createElement('canvas'); c.width = 160; c.height = 110; const g = c.getContext('2d'); g.drawImage(im, 0, 0);
+      const d = g.getImageData(0, 0, 160, 110).data; let s = 0; for (let k = 0; k < d.length; k += 4) s += (d[k] + d[k + 1] + d[k + 2]) / 3; return Math.round(s / (d.length / 4)); };
+    const P = f.albumPlace('gate'), shut = await lum(f.albumShot(P.x, P.y, { who: ['farmer'], t: 630 }));
+    const r = f.buy('town'); f.render(); const v = f.albumView().shots.find(x => x.id === 'towngate'); if (!r.ok || !v || !v.url) return { error: 'buy ' + JSON.stringify(r) + ' photo ' + !!(v && v.url) };
+    const live = await lum(v.url), fading = f.fog().fading; f.fogSet(false); f.render(); const open = await lum(f.albumShot(P.x, P.y, { who: ['farmer'], t: 630 })); f.fogSet(true); // no shade at all
+    return { shut, live, open, fading }; }),
+    r => r.live < r.shut + (r.open - r.shut) * 0.6 ? `photo under the lifting shade: lum shut ${r.shut} live ${r.live} open ${r.open}` : null);
+
   await b.close(); server.close();
   const real = errs.filter(e => !/favicon|404/.test(e)); if (real.length) { console.log('page errors:', real.slice(0, 5)); fails.push('page errors'); }
   if (fails.length) { console.log('FAILED:', fails.join(' | ')); process.exit(1); } console.log('album-shots: all ok');
