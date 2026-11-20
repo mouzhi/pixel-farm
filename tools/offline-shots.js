@@ -58,7 +58,18 @@ fs.mkdirSync(OUT, { recursive: true });
   // 5. half an hour away with the 24-hour window used up: no gold, a toast that says when it pays again
   { const s = fresh(30 * MIN, [{ at: Date.now() - H, days: 3 }]); const p = await page(s); const r = await p.evaluate(state);
     await p.waitForTimeout(500); await p.screenshot({ path: path.join(OUT, 'offline_toast_used.png') });
-    check('offline_toast_used.png', r.box ? 'box shown' : r.coins !== s.coins ? 'coins' : !/^离开 30 分钟，时间暂停中（离线收益 (今天|明天) \d\d:\d\d 以后再算）$/.test(r.toast || '') ? 'toast ' + r.toast : null, r); await p.context().close(); }
+    check('offline_toast_used.png', r.box ? 'box shown' : r.coins !== s.coins ? 'coins' : !/^离开 30 分钟，时间暂停中（离线额度 (今天|明天) \d\d:\d\d 起恢复全部 3 天）$/.test(r.toast || '') ? 'toast ' + r.toast : null, r); await p.context().close(); }
+  // 5b. review: two 1.5-day records (23 h and 1 h ago): the toast names the time the first 1.5 days come back (in 1 hour), not the full window (23 h)
+  { const t0 = Date.now(), s = fresh(30 * MIN, [{ at: t0 - 23 * H, days: 1.5 }, { at: t0 - H, days: 1.5 }]); const p = await page(s); const r = await p.evaluate(state);
+    const want = await p.evaluate(at => { const d = new Date(at); return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0'); }, r.off.nextPartAt);
+    await p.waitForTimeout(500); await p.screenshot({ path: path.join(OUT, 'offline_toast_rolling.png') });
+    check('offline_toast_rolling.png', r.box ? 'box shown' : r.coins !== s.coins ? 'coins' : Math.abs(r.off.nextPartAt - (t0 + H)) > 60e3 ? 'nextPartAt ' + r.off.nextPartAt
+      : !new RegExp('^离开 30 分钟，时间暂停中（离线额度 (今天|明天) ' + want + ' 起恢复 1.5 天）$').test(r.toast || '') ? 'toast ' + r.toast : null, r); await p.context().close(); }
+  // 5c. review: a save written a hair before 6:00 is written exactly (no rounding of clock.t), so the dawn rollover still happens after loading
+  { const s = fresh(0, [], s => { s.clock = { day: 72, t: 73 * 1440 + 360 - 0.0004 }; }); const p = await page(s);
+    await p.evaluate(() => { __farm.SAVE.off = false; __farm.saveNow(); __farm.SAVE.off = true; }); const stored = await p.evaluate(k => JSON.parse(localStorage.getItem(k)).clock, KEY);
+    await p.reload(); await ready(p); const r = await p.evaluate(() => { const d0 = __farm.S.day; __farm.advance(5, 5); return { d0, d1: __farm.S.day, t: __farm.S.t }; });
+    check('dawn rollover after a save at 05:59.9996', stored.t !== s.clock.t ? 'clock.t rounded to ' + stored.t : r.d0 !== 72 || r.d1 !== 73 ? 'day ' + r.d0 + ' -> ' + r.d1 : null, Object.assign({ stored }, r)); await p.context().close(); }
   // 6. phone portrait (the xhs size): box and toast stay on screen
   { const s = fresh(2 * H, []); const p = await page(s, 390, 844); const r = await p.evaluate(state); await p.screenshot({ path: path.join(OUT, 'offline_phone_popup.png') });
     check('offline_phone_popup.png', boxOk(r, s, r => !onScreen(r, 'boxRect') ? 'box off screen ' + r.boxRect : null), r); await p.context().close(); }

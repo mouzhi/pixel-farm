@@ -31,7 +31,7 @@ fs.mkdirSync(OUT, { recursive: true });
     check('v5101_offline_full.png', r1.v !== VERSION ? 'version ' + r1.v : !r1.shown ? 'no box' : r1.r.days !== 3 || r1.r.limited ? 'days' : r1.r.gold !== 12000 ? 'gold ' + r1.r.gold : r1.win !== 1 ? 'window' : /24 小时/.test(r1.box) ? 'window note on a normal visit' : null, r1);
     const r2 = await p.evaluate(() => { document.getElementById('offline').hidden = true; const c0 = __farm.S.coins, r = __farm.settleOffline(2400); return Object.assign({ got: __farm.S.coins - c0, next: r && r.nextText }, (() => ({ shown: !document.getElementById('offline').hidden, log: __farm.S.log.slice(0, 2) }))()); });
     await p.evaluate(() => { __farm.setAngle(0); __farm.render(); }); await p.screenshot({ path: path.join(OUT, 'v5101_offline_used.png') });
-    check('v5101_offline_used.png', r2.got !== 0 ? 'paid ' + r2.got : r2.shown ? 'box shown' : !r2.log.some(l => /3 天离线收益已经领过/.test(l) && /以后再算/.test(l)) ? 'log line' : null, r2);
+    check('v5101_offline_used.png', r2.got !== 0 ? 'paid ' + r2.got : r2.shown ? 'box shown' : !r2.log.some(l => /3 天离线收益已经领过/.test(l) && /起恢复全部 3 天/.test(l) /* v5.11.0.8 review: rolling-window wording */) ? 'log line' : null, r2);
     await p.context().close(); }
   // 2. 2 days already settled 3 hours ago, away 2 hours now: 1 day, the box says so and when the window is full again
   { const p = await page(away(120, [[-3 * H, 2]])); const r = await p.evaluate(offState); await p.screenshot({ path: path.join(OUT, 'v5101_offline_partial.png') });

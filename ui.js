@@ -762,7 +762,7 @@
   // a short break (no box): a small line that floats up under the gold, e.g. 「+4,001 金（离开 4 分钟，时间暂停中）」
   function offToast(r) {
     const away = dur(r.awaySec), text = r.gold > 0 ? `+${gold(r.gold)} 金（离开 ${away}，时间暂停中）`
-      : r.limited && r.nextText ? `离开 ${away}，时间暂停中（离线收益 ${r.nextText} 以后再算）` : '';
+      : r.limited && r.nextText ? `离开 ${away}，时间暂停中（离线额度 ${G.offBack ? G.offBack(r) : r.nextText + ' 起恢复全部 3 天'}）` : ''; // v5.11.0.8 review: the rolling window frees the oldest days first
     if (!text) return;
     let el = $('offToast'); if (!el) { el = document.createElement('div'); el.id = 'offToast'; document.body.appendChild(el); }
     const c = $('coins'), b = c && c.getBoundingClientRect();
