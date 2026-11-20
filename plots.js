@@ -20,7 +20,7 @@
     orchard: { name: '果园', icon: 'orchard', desc: '能移植仓库里的果树苗（用「种树」工具点这块地）', now: '空出成排的移植位' },
     meadow: { name: '花甸', icon: 'flower', desc: '一片野花，能放 6 个蜂箱（商店「工坊」里买），以后还能摆装饰', now: '开满野花' },
     woodland: { name: '林地', icon: 'forest', desc: '种上一片会再生的树，砍了会长回来', now: '一片会长回来的树（最多 10 棵）' },
-    workshop: { name: '工坊院', icon: 'workshop', desc: '平整的空院子，能盖三座加工坊：磨坊、果酱铺、奶酪坊（商店「工坊」里买）', now: '先铺好院子' },
+    workshop: { name: '工坊院', icon: 'workshop', desc: '平整的空院子，能盖三座加工坊：磨坊、果酱铺、奶酪坊（商店「工坊」里买）。加工坊能用「挪东西」挪到别的工坊院；改建这块地时加工坊会搬走或先收进仓库', now: '先铺好院子' },
     dam: { name: '动力坝', icon: 'dam', desc: '河边的水车。在商店「工坊」里修好以后转起来，给农场供电', now: '河边立起一架水车，修好以后转起来' },
     road: { name: '大道', icon: 'road', desc: '通向隔壁镇子的大路，孩子以后上学走这里', now: '路修通到镇口；镇门还关着，孩子上过一天学后在「地块」里开镇门' },
     playground: { name: '乐园', icon: 'playground', desc: '滑梯、沙坑（能堆沙堡）和秋千，孩子会自己来玩', now: '滑梯、沙坑和秋千', cost: 800, wood: 40 },

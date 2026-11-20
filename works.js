@@ -85,6 +85,27 @@
       if (!Object.values(works || {}).some(w => w && w.at === id && w.slot === i)) return { at: id, slot: i };
     return null;
   }
+  // v5.10.12: workshops move between 工坊院 plots and a 工坊院 can be re-zoned.
+  // the first free slot in one yard (skip: the workshop being moved does not take its own slot), or -1
+  function slotIn(works, at, skip) {
+    for (let i = 0; i < YARD_SLOTS; i++) if (!WORK_IDS.some(k => k !== skip && works && works[k] && works[k].at === at && works[k].slot === i)) return i;
+    return -1;
+  }
+  // a 工坊院 is re-zoned: where each of its workshops goes -> [{ id, to, slot }] (to null: into the storehouse until a yard is
+  // free). Only other yards (bought order); production state stays with the workshop (the caller keeps inp / left / ready).
+  function evacuate(plots, works, from) {
+    const out = [], tmp = {}; for (const k of WORK_IDS) if (works && works[k]) tmp[k] = Object.assign({}, works[k]);
+    for (const k of WORK_IDS) { const w = tmp[k]; if (!w || w.at !== from) continue; w.at = null; let to = null, slot = -1;
+      for (const id of ownedSorted(plots, 'workshop')) { if (id === from) continue; const i = slotIn(tmp, id, k); if (i >= 0) { to = id; slot = i; break; } }
+      if (to) { w.at = to; w.slot = slot; } out.push({ id: k, to, slot: to ? slot : 0 }); }
+    return out;
+  }
+  // workshops waiting in the storehouse (at: null) go back up in the first free yard slots -> [{ id, to, slot }]
+  function restock(plots, works) {
+    const out = [], tmp = {}; for (const k of WORK_IDS) if (works && works[k]) tmp[k] = Object.assign({}, works[k]);
+    for (const k of WORK_IDS) { const w = tmp[k]; if (!w || w.at) continue; const sl = freeSlot(plots, tmp); if (!sl) break; w.at = sl.at; w.slot = sl.slot; out.push({ id: k, to: sl.at, slot: sl.slot }); }
+    return out;
+  }
   const hasOrchard = (plots, regions) => (regions || []).includes('orchard') || ownedSorted(plots, 'orchard').length > 0;
   // why a workshop cannot be built yet (null: it can). ctx: { plots, regions, works, cows, fruit }
   function workGate(id, ctx) {
@@ -191,7 +212,7 @@
   // a plot that has phase-8 buildings on it cannot be re-zoned (nothing would know where to go): returns why, or null
   function plotBusy(id, st) {
     if (!st) return null;
-    if (Object.values(st.works || {}).some(w => w && w.at === id)) return '院子里有加工坊，暂时不能改建';
+    if (!st.worksMove && Object.values(st.works || {}).some(w => w && w.at === id)) return '院子里有加工坊，暂时不能改建'; // v5.10.12: the game moves them (worksMove)
     if ((st.hives || []).some(h => h && h.at === id)) return '花甸里有蜂箱，暂时不能改建';
     if (st.penHost === id && st.pens2) return '草场上有第二套棚舍，暂时不能改建';
     return null;
@@ -219,7 +240,7 @@
   if (AN && AN.PEN_IDS) for (const k of PEN2_IDS) if (!AN.PEN_IDS.includes(k)) AN.PEN_IDS.push(k);
 
   const api = { TILE, SPRINKLER, reachOf, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
-    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, workGate, hasOrchard,
+    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, slotIn, evacuate, restock, workGate, hasOrchard,
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,

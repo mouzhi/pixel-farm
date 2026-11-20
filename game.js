@@ -726,6 +726,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { const dirty = XP.dirtyRect(OPEN_REGIONS, S.eff.regions); OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(dirty); } // v5.5.0: a plot only repaints its own patch
   if (typeof syncLumberProps === 'function') syncLumberProps();
   syncAvenue();
+  if (S.works && S.works.works) worksRestock(); // v5.10.12: stored workshops go back up once a yard has room
   XP.sync(); if (WORKS_ON) PWA.sync(); if (INN_ON) IA.sync(); SPR_COVER = null;
   markNavDirty();
 }
@@ -1720,7 +1721,7 @@ const pierDeck = buildModel(14, 16, 4, Object.assign((x, y, z) => {
 // v5.5.0: the outer ring's props (expansion.js): cliffs, the bridge, wheels, the town, plot fences and signs, the modules
 const XPM = XP.mount({ S, inHomeYard: (x, y) => !!(HA && HA.inYard(x, y)), buildModel, gableY, addProp, addTree, props, billboards, decals, regionProps, models, treeDefs, mulberry32, SIGN, LOCK, SPRITES, pierDeck, barrelModel, crateModel, logsModel,
   stackCanvas, ASTEP, cam, manual: MANUAL, tiles, FARMER, log: m => log(m), popText: (...a) => popText(...a), burst: (...a) => burst(...a), emit: (...a) => emit(...a), applyUpgrades: () => applyUpgrades(), saveNow: () => saveNow(), woodCap: () => woodCap(),
-  plotBusy: id => worksBusy(id), treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
+  plotBusy: id => worksBusy(id), plotVacate: (id, mod) => worksVacate(id, mod), treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
 // ---------- the pasture (v4.5): coop, shed, trough, hay; animals are billboards that wander slowly ----------
 function coopModel() { // a small red-roofed hen house with a ramp to its door
   const X0 = 3, X1 = 22, Y0 = 4, Y1 = 17, ZW = 12;
@@ -1876,6 +1877,28 @@ function worksBought(id) { // before applyUpgrades: put the new thing in its pla
     if (W.hives.length === 1) { BOOK.record(S.codex, 'bug:bee', S.day); log('蜜蜂飞起来了，图鉴「昆虫」页记下了蜜蜂'); } }
   if (PW.PEN2[id] && !W.penHost) { W.penHost = PW.pastureHost(S.plots, null); PW.applyPenLayout(PENS, W.penHost); }
 }
+// v5.10.12: a 工坊院 being re-zoned: its workshops move to another yard (same state), or wait in the storehouse until one is free
+function worksVacate(id, mod) {
+  if (mod === 'workshop') return [];
+  const moves = PW.evacuate(S.plots, S.works.works, id), names = [], stored = [];
+  for (const m of moves) { const w = S.works.works[m.id]; for (const q of S.decor.orders.slice()) if (q.what === 'work' && q.ref === m.id) dropOrder(q);
+    w.at = m.to; w.slot = m.slot; delete w.x; delete w.y; (m.to ? names : stored).push(PW.WORKS[m.id].name + (m.to ? '搬到了' + PL.plot(m.to).name : '')); }
+  if (names.length) log(`改建前家人把加工坊挪走了：${names.join('、')}，原料和成品都在`);
+  if (stored.length) log(`${stored.join('、')}先拆下来收进仓库（原料和成品都留着），等有新的工坊院空位，家人会盖回去`);
+  if (moves.length) { markNavDirty(); if (WORKS_ON) PWA.sync(true); }
+  return moves;
+}
+function worksRestock() { // v5.10.12: stored workshops go back up in a free yard slot
+  if (!S.works || !S.works.works) return; const moves = PW.restock(S.plots, S.works.works); if (!moves.length) return;
+  for (const m of moves) { const w = S.works.works[m.id]; w.at = m.to; w.slot = m.slot; delete w.x; delete w.y; log(`${PW.WORKS[m.id].name}在${PL.plot(m.to).name}重新盖好了，原料和成品都还在`); }
+  markNavDirty();
+}
+// what re-zoning a plot does to its workshops (shop text): null when there are none
+function worksVacateNote(id) {
+  if (!S.works || !Object.values(S.works.works).some(w => w && w.at === id)) return null;
+  const moves = PW.evacuate(S.plots, S.works.works, id);
+  return '院子里的加工坊会跟着走：' + moves.map(m => PW.WORKS[m.id].name + (m.to ? '搬到' + PL.plot(m.to).name : '先收进仓库，有空的工坊院再盖回去')).join('；') + '（原料和成品都留着）';
+}
 function worksBoughtLog(id) {
   if (id === 'sprinkler') log('浇水器买好了，家里人会把它装到田边');
   if (PW.WORKS[id] && S.works.works[id]) log(`${PW.WORKS[id].name}在${PL.plot(S.works.works[id].at).name}的院子里盖好了`);
@@ -1999,7 +2022,7 @@ function sprinklerClick(w) {
 }
 let worksSyncT = 0;
 function worksFrame() { if (!WORKS_ON) return; if (realT - worksSyncT > 0.2 || realT < worksSyncT) { worksSyncT = realT; PWA.sync(); } PWA.frame(realT); } // the key check is a few JSON strings: 5 times a second is plenty
-function worksBusy(id) { return PW.plotBusy(id, { works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }) || (DECOR_ON ? decorBusy(id) : null) || (HM ? homeBusy(id) : null) || (IN ? IN.plotBusy(id, S.plots, S.inn) : null); }
+function worksBusy(id) { return PW.plotBusy(id, { worksMove: true, works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }) || (DECOR_ON ? decorBusy(id) : null) || (HM ? homeBusy(id) : null) || (IN ? IN.plotBusy(id, S.plots, S.inn) : null); }
 PWA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, tiles, markNavDirty: () => markNavDirty(), wheelProp: id => XP.wheelProp(id),
   wheelFrames: () => { const md = XP.models(); return md ? [md.wheelFull, ...md.wheelTurn] : []; } });
 WORKS_ON = true;
@@ -2163,10 +2186,12 @@ function placeOk(x, y, what, id, skip, self, slot) { // self: the order being ca
   if (blk && !DC.keepsPaths(g, blk, entrySpots(), NAV.LAYOUT.DOOR)) return res(false, '放在这里会把路堵上');
   return res(true, null);
 }
+const workYardAt = (x, y) => { const p = PL.plotAt(x, y); return p && S.plots[p.id] && S.plots[p.id].mod === 'workshop' ? p.id : null; }; // v5.10.12
 // things tied to a plot's use stay inside it: a workshop in its 工坊院, a hive in its 花甸 (or on 果园坡 for the orchard pair)
 function thingZone(what, skip) {
   const inPlot = (id, mod) => { const p = PL.plot(id), st = S.plots[id]; return p && st && st.mod === mod ? (x, y) => WD.inRect(x, y, p.rect) : () => false; };
-  if (what === 'work' && skip) { const w = S.works.works[skip.ref]; if (!w || !w.at) return null; return { ok: inPlot(w.at, 'workshop'), why: `${PW.WORKS[skip.ref].name}只能挪到它所在的工坊院里` }; }
+  if (what === 'work' && skip) { const w = S.works.works[skip.ref]; if (!w || !w.at) return null; // v5.10.12: any 工坊院 with a free slot (each holds 3)
+    return { ok: (x, y) => { const id = workYardAt(x, y); return !!id && (id === w.at || PW.slotIn(S.works.works, id, skip.ref) >= 0); }, why: `${PW.WORKS[skip.ref].name}只能挪到工坊院里（哪一块都行，每块最多 3 座）` }; }
   if (what === 'hive' && skip) { const h = S.works.hives[skip.ref]; if (!h) return null;
     if (h.at === 'orchard') return { ok: (x, y) => WD.areaAt(x, y) === 'orchard', why: '这箱蜂只能在果园坡里挪' };
     return { ok: inPlot(h.at, 'meadow'), why: '蜂箱只能挪到它所在的花甸里' }; }
@@ -2222,7 +2247,10 @@ function settle(q) { // put it down at q.x, q.y (checked again: the ground may h
   if (q.op === 'place') { if (!((S.decor.inv[id] | 0) > 0)) { dropOrder(q); return false; } S.decor.inv[id]--; if (!S.decor.inv[id]) delete S.decor.inv[id];
     S.decor.placed.push({ u: S.decor.n++, id, x, y, d: S.day }); if (id === 'party') S.decor.party.at = S.day; }
   else if (q.what === 'decor') { const p = S.decor.placed.find(o => o.u === q.ref); if (p) { p.x = x; p.y = y; if (p.id === 'party') S.decor.party.at = Math.max(S.decor.party.at, 1); } }
-  else if (q.what === 'work') { const w = S.works.works[q.ref]; w.x = x; w.y = y; }
+  else if (q.what === 'work') { const w = S.works.works[q.ref], to = workYardAt(x, y); // v5.10.12: it may go to another 工坊院 (production and goods go with it)
+    if (to && to !== w.at) { const sl = PW.slotIn(S.works.works, to, q.ref); if (sl < 0) { dropOrder(q); log(`${thingName(q)}没法挪过去（那块工坊院满了），留在原处`); return false; }
+      log(`${thingName(q)}从${PL.plot(w.at).name}搬到了${PL.plot(to).name}，里面的原料和成品一起带过去了`); w.at = to; w.slot = sl; }
+    w.x = x; w.y = y; }
   else if (q.what === 'hive') { const h = S.works.hives[q.ref]; h.x = x; h.y = y; }
   else if (q.what === 'spr') { const s = S.works.sprinklers[q.ref]; s.x = x; s.y = y; SPR_COVER = null; }
   dropOrder(q); markNavDirty(); DA.sync(true); PWA.sync(true); return true;
@@ -3453,17 +3481,31 @@ function decorClick(w) {
     const o = orderThing('place', 'decor', null, id, r.x, r.y, true); if (!o.ok) return o;
     say(`标记好了，家人会把${DC.CATALOG[id].name}搬过去`); if (invFree(id) <= 0) setMode(null); return { ok: true }; }
   if (INPUT.mode === 'move') {
-    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器或新房子（老房子不能挪）' }; INPUT.mvPick = m; say(`选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
+    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器或新房子（老房子不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
     const m = INPUT.mvPick; const again = movableAt(w.x, w.y); if (again && again.what === m.what && again.ref === m.ref) { INPUT.mvPick = null; say('取消选择'); return null; }
     const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : m.what === 'home' ? homeMoveOk(w.x, w.y, m.ref) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
     const o = orderThing('move', m.what, m.ref, m.what === 'decor' ? null : null, m.what === 'spr' ? w.x : r.x, m.what === 'spr' ? w.y : r.y, true); if (!o.ok) return o;
     INPUT.mvPick = null; say(`标记好了，家人会把${thingName({ what: m.what, ref: m.ref, id: m.id })}挪过去`); return { ok: true }; }
   return null;
 }
+// v5.10.12: with a workshop picked in 挪东西, every 工坊院 is outlined: green with room (any region), red when full
+function workYardsDraw(ref) {
+  const w = S.works.works[ref]; if (!w) return;
+  for (const id of PW.ownedSorted(S.plots, 'workshop')) { const r = PL.plot(id).rect, n = PW.WORK_IDS.filter(k => k !== ref && S.works.works[k] && S.works.works[k].at === id).length;
+    const ok = id === w.at || PW.slotIn(S.works.works, id, ref) >= 0, c = [proj(r[0], r[1]), proj(r[2], r[1]), proj(r[2], r[3]), proj(r[0], r[3])];
+    ctx.save(); ctx.beginPath(); c.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath();
+    ctx.fillStyle = ok ? 'rgba(120, 220, 120, 0.16)' : 'rgba(230, 80, 70, 0.16)'; ctx.fill();
+    ctx.setLineDash([4, 3]); ctx.lineWidth = 2; ctx.strokeStyle = ok ? 'rgba(150, 240, 140, 0.9)' : 'rgba(240, 110, 100, 0.9)'; ctx.stroke(); ctx.setLineDash([]);
+    const m = proj((r[0] + r[2]) / 2, r[1] + 4), t = `${PL.plot(id).name} · ${id === w.at ? '现在在这里' : ok ? `能放（${n}/${PW.YARD_SLOTS}）` : `满了（${n}/${PW.YARD_SLOTS}）`}`;
+    ctx.font = '600 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const tw = ctx.measureText(t).width + 10;
+    ctx.fillStyle = 'rgba(30, 20, 12, 0.78)'; ctx.fillRect(Math.round(m[0] - tw / 2), Math.round(m[1] - 8), Math.round(tw), 16);
+    ctx.fillStyle = ok ? '#c8f5b8' : '#ffc0b8'; ctx.fillText(t, Math.round(m[0]), Math.round(m[1])); ctx.restore(); }
+}
 function decorDraw() {
   if (!DECOR_ON) return; const T = S.t % 1440, carriers = actors().filter(a => a._carry && !schoolWalk(a)).map(a => { const q = S.decor.orders.find(o => o.u === a._carry); return q ? { x: a.x, y: a.y, id: q.what === 'decor' ? (q.id || decorById(q.ref)) : q.what === 'hive' ? 'hive' : q.what === 'spr' ? 'sprinkler' : null } : null; }).filter(Boolean);
   const on = INPUT.mode === 'decor' || INPUT.mode === 'move', mode = { on, hover: on && INPUT.hover && INPUT.hover.dec, pick: INPUT.mode === 'move' ? INPUT.mvPick : null, items: INPUT.mode === 'move' ? movables() : [] };
   DA.draw(ctx, proj, onScreen, realT, T, dayLight(T), mode, carriers);
+  if (mode.pick && mode.pick.what === 'work') workYardsDraw(mode.pick.ref); // v5.10.12: where a workshop may go
   if (TOWN_ON && TA.draw) { const nt = fairNow() ? Math.min(dayLight(T), 0.58) : dayLight(T); TA.draw(ctx, proj, onScreen, realT, T, nt); } // v5.10.11: lantern strings over the streets
 }
 DA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, markNavDirty: () => markNavDirty(),
@@ -4895,7 +4937,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
-Object.assign(window.__farm, { plotBusy: id => worksBusy(id), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
+Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
