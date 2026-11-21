@@ -17,6 +17,8 @@
   let dirHandle = null, perm = 'prompt', lastWrite = 0, lastError = null, syncTimer = null, syncQueued = null;
   let needsRepick = false, pickFn = null; // v5.11.0.22: a stale handle needs a fresh folder pick, not another silent requestPermission
   let folderChecked = false; // first write has already preserved any pre-existing folder save
+  let folderBlocked = false; // existing latest is unreadable; do not write over it
+  const FOLDER_UNREADABLE = '文件夹里的存档读不出来，先没有写入，以免覆盖。';
   let fps = { sum: 0, n: 0, min: Infinity }, getSave = null;
 
   function emptyIncome() { const o = {}; for (const k of INCOME) o[k] = 0; return o; }
@@ -359,7 +361,7 @@
   async function readFolderText(handle, name) {
     try { return await readFromDir(handle, name); }
     catch (e) {
-      if (/not found|NotFoundError/i.test(errText(e))) return null;
+      if (isNotFound(e)) return null;
       throw e;
     }
   }
@@ -371,7 +373,10 @@
   }
   async function existsName(handle, name) {
     try { await handle.getFileHandle(name); return true; }
-    catch (e) { return false; }
+    catch (e) {
+      if (isNotFound(e)) return false;
+      throw e;
+    }
   }
   async function uniqueName(handle, base) {
     if (!(await existsName(handle, base))) return base;
@@ -394,22 +399,65 @@
       throw e;
     }
   }
-  function sameSnapText(a, b) {
+  function parseMaybe(x) {
+    if (x == null) return null;
+    if (typeof x === 'object') return x;
+    try { return JSON.parse(x); } catch (e) { return null; }
+  }
+  // Compare the actual farm save. Export-only meta (exportedAt / syncedAt, and the
+  // wrapper's meta object) is ignored; peek fields like day/clock/coins/createdAt
+  // are for display, not for "is this the same save?".
+  function saveBody(obj) {
+    const o = parseMaybe(obj);
+    if (!o || typeof o !== 'object') return o;
+    if (o.save && typeof o.save === 'object') return o.save;
+    const body = Object.assign({}, o);
+    delete body.exportedAt;
+    delete body.syncedAt;
+    if (body.meta && typeof body.meta === 'object') {
+      const m = Object.assign({}, body.meta);
+      delete m.exportedAt;
+      delete m.syncedAt;
+      body.meta = m;
+    }
+    return body;
+  }
+  function deepEqual(a, b) {
+    if (a === b) return true;
+    if (a == null || b == null) return a === b;
+    if (typeof a !== typeof b) return false;
+    if (Array.isArray(a)) {
+      if (!Array.isArray(b) || a.length !== b.length) return false;
+      for (let i = 0; i < a.length; i++) if (!deepEqual(a[i], b[i])) return false;
+      return true;
+    }
+    if (typeof a === 'object') {
+      if (typeof b !== 'object' || Array.isArray(b)) return false;
+      const ka = Object.keys(a), kb = Object.keys(b);
+      if (ka.length !== kb.length) return false;
+      for (const k of ka) {
+        if (!Object.prototype.hasOwnProperty.call(b, k) || !deepEqual(a[k], b[k])) return false;
+      }
+      return true;
+    }
+    return false;
+  }
+  function sameSaveContent(a, b) {
     if (a == null || b == null) return false;
-    if (a === b || String(a).trim() === String(b).trim()) return true;
-    try {
-      const pa = peekSave(JSON.parse(a)), pb = peekSave(JSON.parse(b));
-      return !!(pa && pb && peekEqual(pa, pb));
-    } catch (e) { return false; }
+    if (a === b || (typeof a === 'string' && typeof b === 'string' && a.trim() === b.trim())) return true;
+    const sa = saveBody(a), sb = saveBody(b);
+    if (sa == null || sb == null) return false;
+    return deepEqual(sa, sb);
   }
   function sameFarm(existingText, snap) {
     const peek = peekSave(snap);
     if (!peek) return false;
     try {
-      const ep = peekSave(JSON.parse(existingText));
+      const ep = peekSave(parseMaybe(existingText));
       return !!(ep && peek.createdAt != null && ep.createdAt === peek.createdAt);
     } catch (e) { return false; }
   }
+  function isNotFound(e) { return /not found|NotFoundError/i.test(errText(e)); }
   function nextLetter(tl) {
     const cur = tl || 'a';
     if (cur === 'z' || !/^[a-z]$/.test(cur)) return 't' + Date.now().toString(36).slice(-4);
@@ -430,17 +478,34 @@
   // identical. If that day file already exists with different content, add a
   // timeline suffix. The folder is write-only after this; the browser save is
   // the one that continues.
+  // If the latest file exists but cannot be read or parsed, do not write anything.
+  // Only a confirmed absence (NotFoundError) means the folder is empty.
   async function preserveExistingSave(handle) {
-    const text = await readFolderText(handle, SAVE_FILE);
-    if (text == null || !String(text).trim()) return null;
-    let peek = null;
-    try { peek = peekSave(JSON.parse(text)); } catch (e) {}
-    const day = peek && peek.day != null ? peek.day : 0;
+    // Only a confirmed NotFoundError means "no file, safe to write". A stale
+    // handle or other getFileHandle failure is a sync error, not a parse pause.
+    // Once the file is known to exist, a read/parse failure pauses writing.
+    let fh;
+    try { fh = await handle.getFileHandle(SAVE_FILE); }
+    catch (e) {
+      if (isNotFound(e)) return { missing: true };
+      throw e;
+    }
+    let text;
+    try {
+      const f = await fh.getFile();
+      text = await f.text();
+    } catch (e) { return { blocked: true, error: errText(e) }; }
+    if (text == null || !String(text).trim()) return { blocked: true, error: 'empty' };
+    let obj = null, peek = null;
+    try { obj = JSON.parse(text); peek = peekSave(obj); }
+    catch (e) { return { blocked: true, error: 'parse' }; }
+    if (!peek) return { blocked: true, error: 'invalid' };
+    const day = peek.day != null ? peek.day : 0;
     const saves = await getSavesDir(handle, true);
     let name = daySnapName(day, 'a');
     if (await existsName(saves, name)) {
       const existing = await readFolderText(saves, name);
-      if (sameSnapText(existing, text)) return { name, dir: SNAP_DIR };
+      if (sameSaveContent(existing, text)) return { name, dir: SNAP_DIR };
       const free = await nextFreeDayName(saves, day, 'b');
       name = free.name;
     }
@@ -498,7 +563,7 @@
     try { await idbPut(h); } catch (e) { /* node / test handles may have no IndexedDB */ }
     data.syncDirName = h.name || null; flush();
     needsRepick = false;
-    folderChecked = false;
+    folderChecked = false; folderBlocked = false;
     if (perm === 'granted') await syncNow('pick');
     emitSync();
     return status();
@@ -538,7 +603,7 @@
   }
   async function forgetDir() {
     dirHandle = null; perm = 'prompt'; needsRepick = false; lastError = null;
-    folderChecked = false;
+    folderChecked = false; folderBlocked = false;
     data.syncDirName = null; flush();
     await idbDel();
     emitSync();
@@ -549,7 +614,7 @@
     perm = permission || 'prompt';
     needsRepick = false;
     lastError = null;
-    folderChecked = false;
+    folderChecked = false; folderBlocked = false;
     if (handle && handle.name) data.syncDirName = handle.name;
     return status();
   }
@@ -563,7 +628,7 @@
     }
     return names;
   }
-  async function writeDaySnap(handle, snap) {
+  async function writeDaySnap(handle, snap, opts) {
     const s = snap || (getSave && getSave());
     if (!s) return null;
     const peek = peekSave(s);
@@ -572,13 +637,18 @@
     let name = daySnapName(peek.day, currentTimeline());
     if (await existsName(saves, name)) {
       const existing = await readFolderText(saves, name);
-      // Same farm (or identical bytes): update that day's file. A different farm
-      // at the same day number gets a timeline suffix so the older snapshot stays.
-      if (existing != null && !sameFarm(existing, s) && !sameSnapText(existing, JSON.stringify(wrapSave(s), null, 2) + '\n')) {
-        const free = await nextFreeDayName(saves, peek.day, nextLetter(currentTimeline()));
-        data.timeline = free.timeline;
-        flush();
-        name = free.name;
+      const incoming = JSON.stringify(wrapSave(s), null, 2) + '\n';
+      // First write after preserving the folder's latest: never clobber a snapshot
+      // whose actual save content differs, even if day/clock/coins/createdAt match.
+      // Later writes on the same farm may update that day's current-timeline file.
+      if (existing != null && !sameSaveContent(existing, incoming)) {
+        const protect = opts && opts.protectExisting;
+        if (protect || !sameFarm(existing, s)) {
+          const free = await nextFreeDayName(saves, peek.day, nextLetter(currentTimeline()));
+          data.timeline = free.timeline;
+          flush();
+          name = free.name;
+        }
       }
     }
     await writeRaw(saves, name, JSON.stringify(wrapSave(s), null, 2) + '\n');
@@ -700,14 +770,25 @@
     if (!h) return { ok: false, reason: 'no-handle' };
     if (handle !== h && perm !== 'granted' && !handle) return { ok: false, reason: 'no-permission' };
     if (!folderChecked) {
-      try { await preserveExistingSave(h); }
-      catch (e) { logErr(e); return { ok: false, reason: 'error', error: lastError }; }
+      try {
+        const p = await preserveExistingSave(h);
+        if (p && p.blocked) {
+          folderBlocked = true;
+          lastError = FOLDER_UNREADABLE;
+          emitSync();
+          return { ok: false, reason: 'unreadable', error: lastError, folderBlocked: true };
+        }
+      } catch (e) {
+        logErr(e);
+        return { ok: false, reason: 'error', error: lastError };
+      }
     }
     try {
       const files = filesForSync(snap);
       await writeToDir(h, files);
-      try { await writeDaySnap(h, snap); } catch (e) { try { console.warn('[pixel-farm sync] day snapshot', e); } catch (x) {} }
+      try { await writeDaySnap(h, snap, { protectExisting: !folderChecked }); } catch (e) { try { console.warn('[pixel-farm sync] day snapshot', e); } catch (x) {} }
       folderChecked = true;
+      folderBlocked = false;
       lastWrite = Date.now(); lastError = null;
       data.lastSyncAt = lastWrite; flush();
       return { ok: true, reason: reason || 'sync', at: lastWrite };
@@ -738,7 +819,8 @@
       needsRepick: !!needsRepick,
       lastSyncAt: data.lastSyncAt || null,
       lastError: lastError,
-      dirName: (dirHandle && dirHandle.name) || data.syncDirName || null
+      dirName: (dirHandle && dirHandle.name) || data.syncDirName || null,
+      folderBlocked: !!folderBlocked
     };
   }
 
@@ -757,7 +839,7 @@
 
   function reset(store) {
     if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false; folderChecked = false;
+    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false; folderChecked = false; folderBlocked = false;
     lastWrite = 0; lastError = null; fps = { sum: 0, n: 0, min: Infinity };
     if (store || storage) load(store || storage);
     return data;
@@ -811,7 +893,10 @@
             let buf = '';
             return { async write(s) { buf += typeof s === 'string' ? s : (s && s.byteLength != null ? new TextDecoder().decode(s) : String(s)); }, async close() { rec.text = buf; } };
           },
-          async getFile() { return { async text() { return rec.text; }, text: async () => rec.text }; }
+          async getFile() {
+            if (rec.readThrow) throw rec.readThrow;
+            return { async text() { if (rec.readThrow) throw rec.readThrow; return rec.text; }, text: async () => { if (rec.readThrow) throw rec.readThrow; return rec.text; } };
+          }
         };
       }
     };
@@ -823,7 +908,7 @@
     load, flush, boot, reset, get, current, exportObject, wrapSave,
     openDay, closeDay, startSession, endSession,
     income, spend, purchase, event, tick, work, sampleFps, offline, classify,
-    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker, peekSave,
+    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker, peekSave, sameSaveContent,
     listRewind, openRewind, rewindTo, daySnapName, currentTimeline,
     writeToDir, readFromDir, syncNow, syncSoon, syncMorning, filesForSync,
     download, downloadLog, memoryDir

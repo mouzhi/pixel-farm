@@ -1,6 +1,7 @@
 // Node unit tests for playlog aggregation and folder-file writing (no browser).
 'use strict';
 const assert = require('assert');
+const fs = require('fs'), path = require('path');
 const LOG = require('../playlog.js');
 
 function mem() {
@@ -518,6 +519,142 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.ok(st.entries.some(x => x.day === 12), JSON.stringify(st.entries));
     // auto path must not have imported that day into the "browser" — getSave is still day 2, and we never called rewindTo
     assert.ok(st.entries.every(x => x.role !== 'before-rewind') || true);
+  });
+
+
+  await testAsync('same peek meta but different house and eggs is not the same save; folder snapshot stays intact', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const createdAt = 1_000_000, day = 8, t = 800, coins = 400, savedAt = 12_000;
+    const folder = {
+      meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T02:02:00.000Z', gameVersion: '5.11.0.22', saveVersion: 15 },
+      save: { saveVersion: 15, gameVersion: '5.11.0.22', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-field' }, basket: { egg: 3 } }
+    };
+    const browser = { saveVersion: 15, gameVersion: '5.11.0.22', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-shore' }, basket: { egg: 0 } };
+    LOG.boot(snap({ day, coins }), { store: s, getSave: () => browser });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    const before = JSON.stringify(folder, null, 2) + '\n';
+    dir.files['pixel-farm-save.json'] = { text: before };
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.ok(!st.folderBlocked, JSON.stringify(st));
+    assert.ok(LOG.sameSaveContent(before, before));
+    assert.ok(LOG.sameSaveContent(before, JSON.stringify({ meta: { kind: 'pixel-farm-save', exportedAt: '2099-01-01T00:00:00.000Z' }, save: folder.save }, null, 2)));
+    assert.ok(!LOG.sameSaveContent(before, JSON.stringify({ meta: { exportedAt: '2026-11-21T02:02:00.000Z' }, save: browser }, null, 2)));
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day008.json'), before, 'folder farm must be preserved byte-for-byte under its own day');
+    const preserved = JSON.parse(snapText(dir, 'pixel-farm-save-day008.json'));
+    assert.strictEqual(preserved.save.home.house, 'east-field');
+    assert.strictEqual(preserved.save.basket.egg, 3);
+    const latest = JSON.parse(dir.files['pixel-farm-save.json'].text);
+    assert.strictEqual(latest.save.home.house, 'east-shore');
+    assert.strictEqual(latest.save.basket.egg, 0);
+    const list = await LOG.listRewind(dir);
+    assert.ok(list.some(x => x.day === 8 && x.role === 'day'), JSON.stringify(list));
+  });
+
+  await testAsync('unreadable folder save (bad JSON) pauses writing and leaves the file alone', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    const before = '{not-json';
+    dir.files['pixel-farm-save.json'] = { text: before };
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(st.folderBlocked, true, JSON.stringify(st));
+    assert.ok(/读不出来|没有写入/.test(st.lastError || ''), st.lastError);
+    assert.strictEqual(dir.files['pixel-farm-save.json'].text, before);
+    assert.ok(!dir.files['pixel-farm-playlog.json'], 'must not write the playlog over an unreadable save');
+    assert.ok(!dir.dirs.saves || !Object.keys(dir.dirs.saves.files || {}).length, 'must not write snapshots either');
+    const again = await LOG.syncNow('manual');
+    assert.strictEqual(again.reason, 'unreadable');
+    assert.strictEqual(dir.files['pixel-farm-save.json'].text, before);
+  });
+
+  await testAsync('empty folder save is treated as unreadable, not as a missing file', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    dir.files['pixel-farm-save.json'] = { text: '  \n' };
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(st.folderBlocked, true);
+    assert.strictEqual(dir.files['pixel-farm-save.json'].text, '  \n');
+    assert.ok(!dir.files['pixel-farm-playlog.json']);
+  });
+
+  await testAsync('a read error on an existing folder save pauses writing', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    const err = new Error('backend failed'); err.name = 'TypeError';
+    dir.files['pixel-farm-save.json'] = { text: JSON.stringify(wrapDay(12, 999), null, 2) + '\n', readThrow: err };
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(st.folderBlocked, true, JSON.stringify(st));
+    assert.ok(!dir.files['pixel-farm-playlog.json']);
+    assert.ok(dir.files['pixel-farm-save.json'].text, 'original record stays');
+  });
+
+  await testAsync('a confirmed missing folder save (NotFoundError) may write the browser save', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.ok(!st.folderBlocked, JSON.stringify(st));
+    assert.strictEqual(folderDay(dir), 1);
+    assert.ok(dir.files['pixel-farm-playlog.json']);
+  });
+
+  await testAsync('full-structure v15 fixture: same peek meta, house in 东田 with 3 eggs vs east shore with 0 eggs', async () => {
+    const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/save-v15-day72-cottage.json'), 'utf8'));
+    const folderSave = JSON.parse(JSON.stringify(raw));
+    const browserSave = JSON.parse(JSON.stringify(raw));
+    assert.strictEqual(folderSave.saveVersion, 15);
+    assert.ok(folderSave.home && folderSave.home.houses && folderSave.home.houses[0], 'fixture must have a house');
+    folderSave.home.houses[0].site = 'east-field';
+    folderSave.home.houses[0].eggs = 3;
+    browserSave.home.houses[0].site = 'east-shore';
+    browserSave.home.houses[0].eggs = 0;
+    // peek meta stays identical
+    assert.strictEqual(folderSave.createdAt, browserSave.createdAt);
+    assert.strictEqual(folderSave.clock.day, browserSave.clock.day);
+    assert.strictEqual(folderSave.clock.t, browserSave.clock.t);
+    assert.strictEqual(folderSave.coins, browserSave.coins);
+    const folderWrap = {
+      meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T02:02:00.000Z', gameVersion: folderSave.gameVersion, saveVersion: 15 },
+      save: folderSave
+    };
+    const before = JSON.stringify(folderWrap, null, 2) + '\n';
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: folderSave.clock.day, coins: folderSave.coins }), { store: s, getSave: () => browserSave });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    dir.files['pixel-farm-save.json'] = { text: before };
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.ok(!st.folderBlocked, JSON.stringify(st));
+    const dayName = LOG.daySnapName(folderSave.clock.day, 'a');
+    assert.strictEqual(snapText(dir, dayName), before, 'full folder save must be preserved intact');
+    const preserved = JSON.parse(snapText(dir, dayName));
+    assert.strictEqual(preserved.save.home.houses[0].site, 'east-field');
+    assert.strictEqual(preserved.save.home.houses[0].eggs, 3);
+    const latest = JSON.parse(dir.files['pixel-farm-save.json'].text);
+    const latestBody = latest.save || latest;
+    assert.strictEqual(latestBody.home.houses[0].site, 'east-shore');
+    assert.strictEqual(latestBody.home.houses[0].eggs, 0);
+    const list = await LOG.listRewind(dir);
+    assert.ok(list.some(x => x.day === folderSave.clock.day && x.role === 'day'), JSON.stringify(list.map(x => ({ day: x.day, role: x.role, name: x.name }))));
   });
 
   console.log(n + ' passed');

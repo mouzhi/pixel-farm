@@ -796,6 +796,7 @@
   // v5.11.0.22: never leave a click silent — tell the player it worked, or why it didn't.
   function announceSync(st) {
     if (!st || st.aborted) return;
+    if (st.folderBlocked) return; // toast comes from pf:sync so a boot hydrate is not silent
     const msg = st.granted && !st.lastError ? '本地同步已恢复'
       : st.lastError ? '本地同步没能恢复：' + st.lastError
       : st.needsRepick ? '请再点一次，重新选择同步文件夹'
@@ -807,6 +808,7 @@
     if (!L) return '';
     const st = L.status();
     if (!st.supported) return `<div class="note">当前浏览器不能把文件写到本机文件夹（Chrome 可以）。可以用「导出游玩记录」下载 JSON。</div>`;
+    if (st.folderBlocked) return `<div class="note bad">${esc(st.lastError || '文件夹里的存档读不出来，先没有写入，以免覆盖。')}</div>`;
     if (st.granted) return `<div class="note">已同步到本机「${esc(st.dirName || '文件夹')}」· <span id="syncAgo">${agoSync(st.lastSyncAt)}</span>${st.lastError ? ` <span class="bad">上次出错：${esc(st.lastError)}</span>` : ''}</div>`;
     if (st.needGesture) return `<div class="note">本地同步需要点一下重新授权。${st.lastError ? ` <span class="bad">原因：${esc(st.lastError)}</span>` : ''}${st.needsRepick ? ' 请重新选择一次文件夹。' : ''}</div>`;
     return `<div class="note">选一个本机文件夹后，存档和游玩记录会自动写进去（建议放在「文稿 / pixel-farm-sync」）。</div>`;
@@ -907,7 +909,11 @@
   });
   hintSync();
   paintSync();
-  addEventListener('pf:sync', () => { paintSync(); });
+  addEventListener('pf:sync', ev => {
+    paintSync();
+    const st = ev.detail;
+    if (st && st.folderBlocked) dispatchEvent(new CustomEvent('pf:say', { detail: st.lastError || '文件夹里的存档读不出来，先没有写入，以免覆盖。' }));
+  });
   // v5.11.0.22: if Chrome already granted the folder (site settings still lists it) but the
   // warning is stuck, re-query when the window is focused and clear it if the handle can write.
   const recanSync = () => { if (!L || !L.refreshPerm) return; L.refreshPerm().then(st => { paintSync(); }); };
