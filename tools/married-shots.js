@@ -1,4 +1,4 @@
-// v5.11.0.19 browser checks: a married child who picked 经营民宿 / 菜馆 works in the 农家乐区 by day with their spouse (it used to
+// v5.11.0.22 browser checks: a married child who picked 经营民宿 / 菜馆 works in the 农家乐区 by day with their spouse (it used to
 // sit on the new house's bench all day), comes home once in the evening, and the spouse counts as family (HUD 一家 N/M, 家人 slot).
 //   node tools/married-shots.js [name-filter]  ->  married_*.png in PF_SHOTS (default /workspace/pf-shots); exits 1 on any failure
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -43,7 +43,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.waitForTimeout(400); await p.screenshot({ path: path.join(OUT, name) });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
 
-  const VER = '5.11.0.21';
+  const VER = '5.11.0.22';
   // a cabin in the 农家乐区 (paid, then put up) so the inn path is open, then the wedding morning
   const innReady = `{ const r = f.innStart('cabin'); if (!r.ok) throw new Error('cabin ' + r.why); nextMorning(); at(9 * 60); S.inn.job = null; S.inn.cabins = Math.max(1, S.inn.cabins | 0); f.FARMER.wood = Math.max(f.FARMER.wood, 800); S.coins = Math.max(S.coins, 80000); }`;
   // per game minute, what kid0 and the spouse are doing; on shift = 9:00–17:00, evening = 18:00–21:00
