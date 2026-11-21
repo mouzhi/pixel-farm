@@ -226,61 +226,58 @@ async function testAsync(name, fn) { await fn(); n++; }
   // v5.11.0.22: resumeDir / refreshPerm against a mock File System Access handle
   function err(name, message) { const e = new Error(message || name); e.name = name; return e; }
 
-  await testAsync('resumeDir: requestPermission granted clears needGesture and writes', async () => {
+  await testAsync('resumeDir: cached grant writes without opening the picker', async () => {
     const s = mem();
     LOG.reset(s);
     LOG.boot(snap({ coins: 3 }), { store: s, getSave: () => snap({ coins: 3, saveVersion: 15 }) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
-    const st0 = LOG.installDir(dir, 'prompt');
-    assert.strictEqual(st0.needGesture, true);
-    assert.strictEqual(st0.granted, false);
-    const st = await LOG.resumeDir();
-    assert.strictEqual(dir.requestCalls, 1, 'requestPermission called');
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    const st0 = LOG.installDir(dir, 'granted');
+    assert.strictEqual(st0.needGesture, false);
+    let picked = 0;
+    LOG.setPicker(async () => { picked++; return dir; });
+    try {
+      const st = await LOG.resumeDir();
+      assert.strictEqual(picked, 0, 'already granted: do not open the picker');
+      assert.strictEqual(dir.requestCalls, 0, 'do not call requestPermission on a granted handle');
+      assert.strictEqual(st.granted, true);
+      assert.strictEqual(st.needGesture, false);
+      assert.strictEqual(st.lastError, null);
+      assert.ok(dir.files['pixel-farm-save.json'].text.includes('pixel-farm-save'));
+    } finally { LOG.setPicker(null); }
+  });
+
+  await testAsync('resumeDir: a hanging requestPermission still opens the picker in the same click', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    dir.requestPermission = () => new Promise(() => {}); // never settles — the live Chrome hang
+    LOG.installDir(dir, 'prompt');
+    let picked = 0, startIn = null, pickAt = -1, tick = 0;
+    const origQuery = dir.queryPermission.bind(dir);
+    dir.queryPermission = async function () { ++tick; return origQuery(); };
+    const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    LOG.setPicker(async (opts) => { pickAt = ++tick; picked++; startIn = opts && opts.startIn; return fresh; });
+    let st;
+    try {
+      st = await Promise.race([
+        LOG.resumeDir(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('resumeDir hung waiting on requestPermission')), 400))
+      ]);
+    } finally { LOG.setPicker(null); }
+    assert.strictEqual(picked, 1, 'picker must run even if requestPermission never settles');
+    assert.strictEqual(pickAt, 1, 'showDirectoryPicker is the first await in the click');
+    assert.strictEqual(startIn, dir, 'picker startIn is the stored handle');
+    assert.strictEqual(fresh.sameEntryCalls, 1, 'isSameEntry confirms the picked folder');
     assert.strictEqual(st.granted, true);
     assert.strictEqual(st.needGesture, false);
     assert.strictEqual(st.lastError, null);
-    assert.ok(dir.files['pixel-farm-save.json'].text.includes('pixel-farm-save'));
-  });
-
-  await testAsync('resumeDir calls requestPermission before any other await when the handle is in memory', async () => {
-    const s = mem();
-    LOG.reset(s);
-    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
-    await LOG.hydrateDir();
-    let requestAt = -1, queryAt = -1, tick = 0;
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
-    const origReq = dir.requestPermission.bind(dir);
-    dir.requestPermission = async function () { requestAt = ++tick; return origReq(); };
-    const origQuery = dir.queryPermission.bind(dir);
-    dir.queryPermission = async function () { queryAt = ++tick; return origQuery(); };
-    LOG.installDir(dir, 'prompt');
-    await LOG.resumeDir();
-    assert.strictEqual(requestAt, 1, 'requestPermission is the first async call in the click');
-    assert.ok(queryAt === -1 || queryAt > requestAt, 'queryPermission must not precede requestPermission');
-  });
-
-  await testAsync('resumeDir: requestPermission throw opens the picker in the same click', async () => {
-    const s = mem();
-    LOG.reset(s);
-    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
-    await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestThrow: err('NotFoundError', 'handle gone') });
-    LOG.installDir(dir, 'prompt');
-    let picked = 0, startIn = null;
-    const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
-    LOG.setPicker(async (opts) => { picked++; startIn = opts && opts.startIn; return fresh; });
-    const st = await LOG.resumeDir();
-    LOG.setPicker(null);
-    assert.strictEqual(dir.requestCalls, 1, 'requestPermission still ran');
-    assert.strictEqual(picked, 1, 'picker ran in the same resumeDir call');
-    assert.strictEqual(startIn, dir, 'picker startIn is the stored handle');
-    assert.strictEqual(st.granted, true);
-    assert.strictEqual(st.needsRepick, false);
     assert.ok(fresh.files['pixel-farm-save.json']);
   });
 
-  await testAsync('resumeDir: a prompt-state handle requests permission first, then opens the picker in the same click', async () => {
+  await testAsync('resumeDir: a prompt-state handle opens the picker as the first await, skipping requestPermission', async () => {
     const s = mem();
     LOG.reset(s);
     LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
@@ -294,54 +291,77 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.installDir(dir, 'prompt');
     const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     LOG.setPicker(async (opts) => { pickAt = ++tick; startIn = opts && opts.startIn; return fresh; });
-    const st = await LOG.resumeDir();
-    LOG.setPicker(null);
-    assert.strictEqual(requestAt, 1, 'requestPermission is the first async call in the click');
-    assert.ok(queryAt === -1 || queryAt > requestAt, 'queryPermission must not precede requestPermission');
-    assert.ok(pickAt > requestAt, 'picker follows requestPermission in the same click, got pickAt=' + pickAt);
-    assert.strictEqual(startIn, dir, 'picker startIn is the stored handle');
-    assert.strictEqual(st.granted, true);
-    assert.strictEqual(st.needGesture, false);
-    assert.strictEqual(st.lastError, null);
-    assert.ok(fresh.files['pixel-farm-save.json']);
+    try {
+      const st = await LOG.resumeDir();
+      assert.strictEqual(requestAt, -1, 'must not await requestPermission on the stored handle');
+      assert.ok(queryAt === -1, 'must not await queryPermission in the click (would drop the gesture)');
+      assert.strictEqual(pickAt, 1, 'showDirectoryPicker is the first async call');
+      assert.strictEqual(startIn, dir, 'picker startIn is the stored handle');
+      assert.strictEqual(st.granted, true);
+      assert.strictEqual(st.needGesture, false);
+      assert.strictEqual(st.lastError, null);
+      assert.ok(fresh.files['pixel-farm-save.json']);
+    } finally { LOG.setPicker(null); }
   });
 
-  await testAsync('resumeDir: requestPermission denied also opens the picker in the same click', async () => {
+  await testAsync('resumeDir: requestPermission throw on the stored handle still opens the picker (it is skipped)', async () => {
     const s = mem();
     LOG.reset(s);
     LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'denied' });
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestThrow: err('NotFoundError', 'handle gone') });
     LOG.installDir(dir, 'prompt');
     let picked = 0, startIn = null;
     const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     LOG.setPicker(async (opts) => { picked++; startIn = opts && opts.startIn; return fresh; });
-    const st = await LOG.resumeDir();
-    LOG.setPicker(null);
-    assert.strictEqual(dir.requestCalls, 1);
-    assert.strictEqual(picked, 1);
-    assert.strictEqual(startIn, dir);
-    assert.strictEqual(st.granted, true);
-    assert.strictEqual(st.lastError, null);
+    try {
+      const st = await LOG.resumeDir();
+      assert.strictEqual(dir.requestCalls, 0, 'stored handle requestPermission is skipped');
+      assert.strictEqual(picked, 1, 'picker ran in the same resumeDir call');
+      assert.strictEqual(startIn, dir, 'picker startIn is the stored handle');
+      assert.strictEqual(st.granted, true);
+      assert.strictEqual(st.needsRepick, false);
+      assert.ok(fresh.files['pixel-farm-save.json']);
+    } finally { LOG.setPicker(null); }
   });
 
-  await testAsync('resumeDir: picker AbortError in the same click asks to pick again', async () => {
+  await testAsync('resumeDir: denied permission also opens the picker in the same click', async () => {
     const s = mem();
     LOG.reset(s);
     LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'prompt' });
-    LOG.installDir(dir, 'prompt');
-    let picked = 0;
-    LOG.setPicker(async () => { picked++; const e = new Error('cancel'); e.name = 'AbortError'; throw e; });
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'denied', requestResult: 'denied' });
+    LOG.installDir(dir, 'denied');
+    let picked = 0, startIn = null;
+    const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    LOG.setPicker(async (opts) => { picked++; startIn = opts && opts.startIn; return fresh; });
     try {
       const st = await LOG.resumeDir();
-      assert.strictEqual(dir.requestCalls, 1);
+      assert.strictEqual(dir.requestCalls, 0);
+      assert.strictEqual(picked, 1);
+      assert.strictEqual(startIn, dir);
+      assert.strictEqual(st.granted, true);
+      assert.strictEqual(st.lastError, null);
+    } finally { LOG.setPicker(null); }
+  });
+
+  await testAsync('resumeDir: picker AbortError in the same click is a clean cancel', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    LOG.installDir(dir, 'prompt');
+    let picked = 0;
+    LOG.setPicker(async () => { picked++; const e = new Error('The picker was closed.'); e.name = 'AbortError'; throw e; });
+    try {
+      const st = await LOG.resumeDir();
+      assert.strictEqual(dir.requestCalls, 0);
       assert.strictEqual(picked, 1);
       assert.strictEqual(st.aborted, true);
       assert.strictEqual(st.granted, false);
       assert.strictEqual(st.needsRepick, true);
-      assert.ok(st.lastError, 'panel must show a reason, got ' + st.lastError);
+      assert.strictEqual(st.lastError, null, 'closing the picker is not a failure: ' + st.lastError);
     } finally { LOG.setPicker(null); }
   });
 
@@ -350,12 +370,12 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.reset(s);
     LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'prompt' });
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
     LOG.installDir(dir, 'prompt');
     LOG.setPicker(async () => { const e = new Error('no gesture'); e.name = 'NotAllowedError'; throw e; });
     try {
       const st = await LOG.resumeDir();
-      assert.strictEqual(dir.requestCalls, 1);
+      assert.strictEqual(dir.requestCalls, 0);
       assert.strictEqual(st.granted, false);
       assert.strictEqual(st.needsRepick, true);
       assert.ok(!st.aborted);
@@ -368,14 +388,14 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.reset(s);
     LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted', writeThrow: err('InvalidStateError', 'stale file handle') });
-    LOG.installDir(dir, 'prompt');
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted', writeThrow: err('InvalidStateError', 'stale file handle') });
+    LOG.installDir(dir, 'granted');
     let picked = 0, startIn = null;
     const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     LOG.setPicker(async (opts) => { picked++; startIn = opts && opts.startIn; return fresh; });
     try {
       const st = await LOG.resumeDir();
-      assert.strictEqual(dir.requestCalls, 1);
+      assert.strictEqual(dir.requestCalls, 0);
       assert.strictEqual(picked, 1, 'stale handle falls back to the picker in the same click');
       assert.strictEqual(startIn, dir);
       assert.strictEqual(st.granted, true);
@@ -389,10 +409,10 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.reset(s);
     LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted', writeThrow: err('InvalidStateError', 'stale file handle') });
-    LOG.installDir(dir, 'prompt');
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted', writeThrow: err('InvalidStateError', 'stale file handle') });
+    LOG.installDir(dir, 'granted');
     const st = await LOG.resumeDir();
-    assert.strictEqual(st.granted, true, 'permission itself was granted');
+    assert.strictEqual(st.granted, true, 'cached permission itself was granted');
     assert.strictEqual(st.needsRepick, true);
     assert.ok(/InvalidStateError/.test(st.lastError), st.lastError);
   });
@@ -446,7 +466,7 @@ async function testAsync(name, fn) { await fn(); n++; }
       save: Object.assign({ saveVersion: 15, gameVersion: '5.11.0.16', createdAt: 1_000_000, savedAt: savedAt || (day * 1000), clock: { day, t: day === 12 ? 800 : 360 }, coins }, extra) };
   }
   function browserDay(day, coins) {
-    return { saveVersion: 15, gameVersion: '5.11.0.24', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
+    return { saveVersion: 15, gameVersion: '5.11.0.25', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
   }
   function seedFolder(dir, day, coins) {
     dir.files['pixel-farm-save.json'] = { text: JSON.stringify(wrapDay(day, coins), null, 2) + '\n' };
@@ -605,20 +625,68 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.ok(list.filter(x => x.day === 12 && x.role === 'day').length >= 2, 'both timelines listed');
   });
 
-  await testAsync('openRewind requests permission inside the call when the handle is in memory', async () => {
+  await testAsync('openRewind: a hanging requestPermission returns immediately with a restore hint', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const browser = browserDay(2, 10);
+    LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browser });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    dir.requestPermission = () => new Promise(() => {}); // never settles — the live Chrome hang
+    const saves = await dir.getDirectoryHandle('saves', { create: true });
+    saves.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
+    LOG.installDir(dir, 'prompt');
+    let picked = 0;
+    LOG.setPicker(async () => { picked++; return dir; });
+    let st;
+    try {
+      st = await Promise.race([
+        LOG.openRewind(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('openRewind hung waiting on requestPermission')), 400))
+      ]);
+    } finally { LOG.setPicker(null); }
+    assert.strictEqual(picked, 0, 'rewind must not open the folder picker');
+    assert.strictEqual(st.granted, false);
+    assert.deepStrictEqual(st.entries, []);
+    assert.ok(/恢复本地同步/.test(st.rewindHint), st.rewindHint);
+    assert.ok(!dir.files['pixel-farm-save.json'], 'must not write the latest save');
+    assert.ok(!dir.files['pixel-farm-playlog.json'], 'must not write the playlog');
+    assert.strictEqual(browser.clock.day, 2, 'must not touch the browser save');
+  });
+
+  await testAsync('openRewind: no folder handle returns a hint and does not pick or write', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const browser = browserDay(2, 10);
+    LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browser });
+    await LOG.hydrateDir();
+    let picked = 0;
+    LOG.setPicker(async () => { picked++; return LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' }); });
+    try {
+      const st = await LOG.openRewind();
+      assert.strictEqual(picked, 0, 'must not open the picker from rewind');
+      assert.strictEqual(st.granted, false);
+      assert.deepStrictEqual(st.entries, []);
+      assert.ok(/同步到本地文件夹/.test(st.rewindHint), st.rewindHint);
+      assert.strictEqual(browser.clock.day, 2);
+    } finally { LOG.setPicker(null); }
+  });
+
+  await testAsync('openRewind lists daily snapshots only when permission is already granted', async () => {
     const s = mem();
     LOG.reset(s);
     LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browserDay(2, 10) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     const saves = await dir.getDirectoryHandle('saves', { create: true });
     saves.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
-    LOG.installDir(dir, 'prompt');
+    LOG.installDir(dir, 'granted');
+    const before = Object.keys(dir.files).slice();
     const st = await LOG.openRewind();
-    assert.strictEqual(dir.requestCalls, 1);
+    assert.strictEqual(dir.requestCalls, 0, 'already granted: do not call requestPermission');
     assert.strictEqual(st.granted, true);
     assert.ok(st.entries.some(x => x.day === 12), JSON.stringify(st.entries));
-    // auto path must not have imported that day into the "browser" — getSave is still day 2, and we never called rewindTo
+    assert.deepStrictEqual(Object.keys(dir.files).sort(), before.sort(), 'listing must not write');
     assert.ok(st.entries.every(x => x.role !== 'before-rewind') || true);
   });
 
@@ -628,10 +696,10 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.reset(s);
     const createdAt = 1_000_000, day = 8, t = 800, coins = 400, savedAt = 12_000;
     const folder = {
-      meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T02:02:00.000Z', gameVersion: '5.11.0.24', saveVersion: 15 },
-      save: { saveVersion: 15, gameVersion: '5.11.0.24', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-field' }, basket: { egg: 3 } }
+      meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T02:02:00.000Z', gameVersion: '5.11.0.25', saveVersion: 15 },
+      save: { saveVersion: 15, gameVersion: '5.11.0.25', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-field' }, basket: { egg: 3 } }
     };
-    const browser = { saveVersion: 15, gameVersion: '5.11.0.24', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-shore' }, basket: { egg: 0 } };
+    const browser = { saveVersion: 15, gameVersion: '5.11.0.25', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-shore' }, basket: { egg: 0 } };
     LOG.boot(snap({ day, coins }), { store: s, getSave: () => browser });
     await LOG.hydrateDir();
     const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });

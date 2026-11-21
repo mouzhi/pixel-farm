@@ -110,14 +110,23 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs, []);
   });
 
-  // v5.11.0.22: a stored folder handle whose queryPermission is 'prompt' (Chrome after a reload,
-  // even when site settings still list the folder) must re-grant inside the click and resume writing.
+  // v5.11.0.25: a stored handle whose permission is not granted must open the folder
+  // picker in the same click (do not wait on requestPermission — it can hang forever).
   const OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
   await test('clicking 点此恢复本地同步 re-grants and toasts 本地同步已恢复', async ctx => {
     const p = await open(ctx);
     const r0 = await p.evaluate(async () => {
-      const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+      const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+      dir.requestPermission = () => new Promise(() => {});
       window.__syncDir = dir;
+      window.__picked = 0;
+      const fresh = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+      window.__freshDir = fresh;
+      PFPlaylog.setPicker(async (opts) => {
+        window.__picked++;
+        window.__startInSame = !!(opts && opts.startIn === dir);
+        return fresh;
+      });
       const st = PFPlaylog.installDir(dir, 'prompt');
       document.getElementById('menuBtn').click();
       if (document.getElementById('menu').hidden) document.getElementById('menuBtn').click();
@@ -134,7 +143,7 @@ async function test(name, fn) {
     assert.ok(/点此恢复本地同步/.test(r0.hintText), r0.hintText);
     assert.ok(/本地同步需要点一下重新授权/.test(r0.menu), r0.menu);
     assert.ok(/点此恢复本地同步/.test(r0.menu), r0.menu);
-    assert.strictEqual(r0.ver, '5.11.0.24', r0.ver);
+    assert.strictEqual(r0.ver, '5.11.0.25', r0.ver);
     fs.mkdirSync(OUT, { recursive: true });
     await p.screenshot({ path: path.join(OUT, 'sync_before.png') });
 
@@ -154,7 +163,9 @@ async function test(name, fn) {
         say: say && !say.hidden ? say.textContent : '',
         says: window.__syncSays || [],
         requestCalls: window.__syncDir.requestCalls,
-        wrote: !!(window.__syncDir.files['pixel-farm-save.json'] && window.__syncDir.files['pixel-farm-save.json'].text)
+        picked: window.__picked,
+        startInSame: window.__startInSame,
+        wrote: !!(window.__freshDir.files['pixel-farm-save.json'] && window.__freshDir.files['pixel-farm-save.json'].text)
       };
     });
     assert.strictEqual(r1.st.granted, true, JSON.stringify(r1.st));
@@ -163,44 +174,35 @@ async function test(name, fn) {
     assert.ok(/已同步到本机/.test(r1.menu) && /pixelfarm/.test(r1.menu), r1.menu);
     assert.ok(!/需要点一下重新授权/.test(r1.menu), r1.menu);
     assert.ok(r1.say === '本地同步已恢复' || r1.says.includes('本地同步已恢复'), 'toast missing: ' + r1.say + ' ' + JSON.stringify(r1.says));
-    assert.ok(r1.requestCalls >= 1, 'requestPermission must run inside the click');
+    assert.strictEqual(r1.picked, 1, 'picker must open in the same click');
+    assert.ok(r1.startInSame, 'picker startIn is the stored handle');
+    assert.strictEqual(r1.requestCalls, 0, 'must not wait on a hanging requestPermission');
     assert.ok(r1.wrote, 'save file written after resume');
     await p.screenshot({ path: path.join(OUT, 'sync_after.png') });
     assert.deepStrictEqual(p.errs.filter(e => !/pixel-farm sync/.test(e)), []);
   });
 
-  await test('a stale handle surfaces the real error and the next click re-picks the folder', async ctx => {
+  await test('a stale handle opens the folder picker in the same click', async ctx => {
     const p = await open(ctx);
-    const first = await p.evaluate(async () => {
+    const r = await p.evaluate(async () => {
       const gone = new Error('handle gone'); gone.name = 'NotFoundError';
       const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestThrow: gone });
       PFPlaylog.installDir(dir, 'prompt');
       document.getElementById('menuBtn').click();
       if (document.getElementById('menu').hidden) document.getElementById('menuBtn').click();
-      await PFPlaylog.resumeDir(); // same path as the button; throws inside requestPermission
-      const st = PFPlaylog.status();
-      return { st, menu: document.getElementById('menu').innerText, hint: document.getElementById('syncHint').textContent };
-    });
-    // redraw from status
-    await p.evaluate(() => { document.getElementById('menuBtn').click(); document.getElementById('menuBtn').click(); });
-    const painted = await p.evaluate(() => ({ menu: document.getElementById('menu').innerText, hint: document.getElementById('syncHint').textContent, hidden: document.getElementById('syncHint').hidden }));
-    assert.strictEqual(first.st.needsRepick, true);
-    assert.ok(/NotFoundError/.test(first.st.lastError), first.st.lastError);
-    assert.ok(/NotFoundError/.test(painted.menu) || /重新选择/.test(painted.menu), painted.menu);
-    assert.ok(/重新选择同步文件夹/.test(painted.hint) || /重新选择同步文件夹/.test(painted.menu), painted.hint + ' | ' + painted.menu);
-
-    const second = await p.evaluate(async () => {
       const fresh = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
       window.__picked = 0;
-      PFPlaylog.setPicker(async () => { window.__picked++; return fresh; });
+      PFPlaylog.setPicker(async (opts) => { window.__picked++; window.__startInSame = !!(opts && opts.startIn === dir); return fresh; });
       const st = await PFPlaylog.resumeDir();
-      return { st, picked: window.__picked, wrote: !!(fresh.files['pixel-farm-save.json'] && fresh.files['pixel-farm-save.json'].text) };
+      return { st, picked: window.__picked, startInSame: window.__startInSame, storedRequests: dir.requestCalls, wrote: !!(fresh.files['pixel-farm-save.json'] && fresh.files['pixel-farm-save.json'].text) };
     });
-    assert.strictEqual(second.picked, 1);
-    assert.strictEqual(second.st.granted, true);
-    assert.strictEqual(second.st.needsRepick, false);
-    assert.ok(second.wrote);
-    assert.ok(p.errs.every(e => /pixel-farm sync|NotFoundError/.test(e)), p.errs.join('\n'));
+    assert.strictEqual(r.picked, 1, 'picker must run in the same resumeDir call');
+    assert.ok(r.startInSame, 'picker startIn is the stored handle');
+    assert.strictEqual(r.storedRequests, 0, 'must not wait on requestPermission of a stale handle');
+    assert.strictEqual(r.st.granted, true);
+    assert.strictEqual(r.st.needsRepick, false);
+    assert.ok(r.wrote);
+    assert.deepStrictEqual(p.errs.filter(e => !/pixel-farm sync/.test(e)), []);
   });
 
   await test('opening the game preserves folder day 12 under saves/ and writes the browser latest', async ctx => {
@@ -300,8 +302,8 @@ async function test(name, fn) {
     await p.evaluate(async () => {
       const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
       const wrap = (day, coins, at, t) => ({
-        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.24', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
-        save: { saveVersion: 15, gameVersion: '5.11.0.24', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
+        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.25', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
+        save: { saveVersion: 15, gameVersion: '5.11.0.25', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
       });
       const w8 = wrap(8, 200, Date.parse('2026-11-15T12:00:00-08:00'), 800);
       const w12 = wrap(12, 999, Date.parse('2026-11-21T02:02:00-08:00'), 800); // wedding day in the fixture story
