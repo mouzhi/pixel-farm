@@ -554,10 +554,22 @@
     emitSync();
     return status();
   }
-  async function pickDir() {
+  async function pickDir(opts) {
     const fn = getPicker();
     if (typeof fn !== 'function') throw new Error('unsupported');
-    const h = await fn({ id: 'pixel-farm-sync', mode: 'readwrite', startIn: 'documents' });
+    // Prefer the stored handle so the picker opens on the folder already chosen.
+    const start = (opts && Object.prototype.hasOwnProperty.call(opts, 'startIn')) ? opts.startIn : (dirHandle || 'documents');
+    const arg = s => ({ id: 'pixel-farm-sync', mode: 'readwrite', startIn: s || 'documents' });
+    let h;
+    try { h = await fn(arg(start || 'documents')); }
+    catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      // Activation is already gone; a retry will not bring the picker back.
+      if (e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')) throw e;
+      // A stale startIn handle can make the picker throw; try again from documents.
+      if (start && start !== 'documents') h = await fn(arg('documents'));
+      else throw e;
+    }
     dirHandle = h; perm = 'granted';
     try { perm = await h.requestPermission({ mode: 'readwrite' }); } catch (e) { logErr(e); }
     try { await idbPut(h); } catch (e) { /* node / test handles may have no IndexedDB */ }
@@ -568,38 +580,61 @@
     emitSync();
     return status();
   }
-  // v5.11.0.22: requestPermission / showDirectoryPicker must be the first await inside the
+  // v5.11.0.24: requestPermission / showDirectoryPicker must be the first await inside the
   // click. Reading IndexedDB first drops Chrome's transient user activation, and the
-  // permission call then fails silently — the button looks like it does nothing. If the
-  // stored handle is stale or requestPermission does not grant, the next click opens the
-  // folder picker so the player can re-choose.
+  // permission call then fails silently — the button looks like it does nothing.
+  // After reload, queryPermission is often 'prompt' even if the site still lists the folder.
+  // requestPermission may also return 'prompt' with no UI. If it does not grant (prompt,
+  // denied, or a throw), or the handle is missing/stale, open showDirectoryPicker in this
+  // same click (startIn: the stored handle when we have one). Never fail the click silently.
+  function isActivationLost(e) {
+    return !!(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError'));
+  }
+  const PICKER_AGAIN = '没能打开文件夹选择框，请再点一次「重新选择同步文件夹」。';
+  function failPick(e, aborted) {
+    if (aborted) {
+      needsRepick = true;
+      emitSync();
+      return Object.assign(status(), { aborted: true });
+    }
+    if (isActivationLost(e)) lastError = PICKER_AGAIN;
+    else if (!lastError) logErr(e);
+    else try { console.warn('[pixel-farm sync]', errText(e), e); } catch (x) {}
+    needsRepick = true;
+    emitSync();
+    return status();
+  }
+  async function pickAfterRequest(startIn) {
+    try { return await pickDir({ startIn: startIn || dirHandle || 'documents' }); }
+    catch (e) {
+      return failPick(e, e && e.name === 'AbortError');
+    }
+  }
   async function resumeDir() {
     if (needsRepick || !dirHandle) {
-      try { return await pickDir(); }
+      try { return await pickDir({ startIn: dirHandle || 'documents' }); }
       catch (e) {
-        if (e && e.name === 'AbortError') return Object.assign(status(), { aborted: true });
-        logErr(e);
-        return status();
+        return failPick(e, e && e.name === 'AbortError');
       }
     }
-    try { perm = await requestPerm(dirHandle); }
+    // The handle is in memory: requestPermission is the first await (keeps the user gesture).
+    let next;
+    try { next = await requestPerm(dirHandle); perm = next; }
     catch (e) {
       logErr(e);
       perm = 'prompt';
-      needsRepick = true;
-      return status();
+      next = null;
     }
-    if (perm === 'granted') {
+    if (next === 'granted') {
       folderChecked = false;
       const w = await syncNow('resume');
-      if (w.ok) { needsRepick = false; lastError = null; }
-      else if (isStaleMsg(w.error)) needsRepick = true;
-      emitSync();
-      return status();
+      if (w.ok) { needsRepick = false; lastError = null; emitSync(); return status(); }
+      if (!isStaleMsg(w.error)) { emitSync(); return status(); }
+      return await pickAfterRequest(dirHandle);
     }
-    needsRepick = true;
-    try { console.warn('[pixel-farm sync]', 'requestPermission →', perm); } catch (x) {}
-    return status();
+    if (!lastError) lastError = next === 'denied' ? '浏览器没有允许写入这个文件夹。' : '文件夹权限还没有恢复。';
+    try { console.warn('[pixel-farm sync]', 'requestPermission →', next); } catch (x) {}
+    return await pickAfterRequest(dirHandle);
   }
   async function forgetDir() {
     dirHandle = null; perm = 'prompt'; needsRepick = false; lastError = null;

@@ -1,5 +1,6 @@
-// v5.11.0.22: screenshots of the stuck "需要重新授权" panel and the restored state.
-//   node tools/sync-shots.js   writes $PF_SHOTS/sync_{before,after}.png
+// v5.11.0.24: screenshots of the stuck "需要重新授权" panel, the granted-on-click path,
+// the silent-prompt same-click picker fallback, and a clear status when the picker cannot open.
+//   node tools/sync-shots.js   writes $PF_SHOTS/sync_{before,after,reauth_prompt,reauth_fallback,reauth_fail}.png
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
 const { chromium } = require('playwright-core');
@@ -54,15 +55,105 @@ fs.mkdirSync(OUT, { recursive: true });
     say: (document.getElementById('say') || {}).textContent,
     wrote: !!(window.__syncDir.files['pixel-farm-save.json'] && window.__syncDir.files['pixel-farm-save.json'].text)
   }));
+
+  // Silent 'prompt' (no permission UI): same click must open the folder picker.
+  const p2 = await ctx.newPage();
+  const errs2 = [];
+  p2.on('pageerror', e => errs2.push(String(e))); p2.on('console', m => { if (m.type() === 'error') errs2.push(m.text()); });
+  await p2.goto(base + '/index.html?manual');
+  await p2.waitForFunction(() => window.__farm && __farm.spritesReady() && window.PFPlaylog, null, { timeout: 20000 });
+  await p2.evaluate(() => {
+    const o = document.getElementById('offline'); if (o) o.hidden = true;
+    __farm.SAVE.off = true; __farm.setAngle(0); __farm.panTo(96, 70); __farm.advance(0.2, 10);
+    const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'prompt' });
+    window.__syncDir = dir;
+    window.__picked = 0;
+    window.__startInSame = false;
+    PFPlaylog.installDir(dir, 'prompt');
+    const fresh = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    window.__freshDir = fresh;
+    PFPlaylog.setPicker(async (opts) => {
+      window.__picked++;
+      window.__startInSame = !!(opts && opts.startIn === dir);
+      return fresh;
+    });
+    const btn = document.getElementById('menuBtn'); if (document.getElementById('menu').hidden) btn.click();
+  });
+  await p2.waitForFunction(() => {
+    const h = document.getElementById('syncHint'), m = document.getElementById('menu');
+    return h && !h.hidden && m && !m.hidden && /点此恢复本地同步/.test(m.innerText);
+  }, null, { timeout: 3000 });
+  await p2.waitForTimeout(200);
+  await p2.screenshot({ path: path.join(OUT, 'sync_reauth_prompt.png') });
+  await p2.evaluate(() => { addEventListener('pf:say', e => { window.__syncSays = (window.__syncSays || []).concat(String(e.detail)); }); });
+  await p2.click('#menu button[data-a="syncresume"]');
+  await p2.waitForFunction(() => PFPlaylog.status().granted && document.getElementById('syncHint').hidden, null, { timeout: 5000 });
+  await p2.waitForFunction(() => {
+    const s = document.getElementById('say');
+    return (s && !s.hidden && s.textContent === '本地同步已恢复') || (window.__syncSays || []).includes('本地同步已恢复');
+  }, null, { timeout: 3000 });
+  await p2.waitForTimeout(200);
+  await p2.screenshot({ path: path.join(OUT, 'sync_reauth_fallback.png') });
+  const r2 = await p2.evaluate(() => ({
+    st: PFPlaylog.status(),
+    hintHidden: document.getElementById('syncHint').hidden,
+    picked: window.__picked,
+    startInSame: window.__startInSame,
+    wroteFresh: !!(window.__freshDir.files['pixel-farm-save.json'] && window.__freshDir.files['pixel-farm-save.json'].text),
+    requestCalls: window.__syncDir.requestCalls,
+    say: (document.getElementById('say') || {}).textContent
+  }));
+
+  // Same silent prompt, but the picker cannot open (activation lost): show a clear status.
+  const p3 = await ctx.newPage();
+  const errs3 = [];
+  p3.on('pageerror', e => errs3.push(String(e))); p3.on('console', m => { if (m.type() === 'error') errs3.push(m.text()); });
+  await p3.goto(base + '/index.html?manual');
+  await p3.waitForFunction(() => window.__farm && __farm.spritesReady() && window.PFPlaylog, null, { timeout: 20000 });
+  await p3.evaluate(() => {
+    const o = document.getElementById('offline'); if (o) o.hidden = true;
+    __farm.SAVE.off = true; __farm.setAngle(0); __farm.panTo(96, 70); __farm.advance(0.2, 10);
+    const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'prompt' });
+    PFPlaylog.installDir(dir, 'prompt');
+    PFPlaylog.setPicker(async () => { const e = new Error('no gesture'); e.name = 'NotAllowedError'; throw e; });
+    const btn = document.getElementById('menuBtn'); if (document.getElementById('menu').hidden) btn.click();
+  });
+  await p3.waitForFunction(() => {
+    const h = document.getElementById('syncHint'), m = document.getElementById('menu');
+    return h && !h.hidden && m && !m.hidden && /点此恢复本地同步/.test(m.innerText);
+  }, null, { timeout: 3000 });
+  await p3.click('#menu button[data-a="syncresume"]');
+  await p3.waitForFunction(() => {
+    const st = PFPlaylog.status(), m = document.getElementById('menu');
+    return st.needsRepick && st.lastError && m && /重新选择同步文件夹/.test(m.innerText) && /原因：/.test(m.innerText);
+  }, null, { timeout: 5000 });
+  await p3.waitForTimeout(200);
+  await p3.screenshot({ path: path.join(OUT, 'sync_reauth_fail.png') });
+  const r3 = await p3.evaluate(() => ({
+    st: PFPlaylog.status(),
+    menu: document.getElementById('menu').innerText,
+    hint: (document.getElementById('syncHint') || {}).textContent
+  }));
+
   await b.close();
   await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
-  const bad = r.ver !== '5.11.0.23' ? 'ver ' + r.ver
+  const allErrs = errs.concat(errs2, errs3);
+  const bad = r.ver !== '5.11.0.24' ? 'ver ' + r.ver
     : !r.st.granted ? 'not granted'
     : !r.hintHidden ? 'hint still shown'
     : !/已同步到本机/.test(r.menu) ? 'menu ' + r.menu
     : !r.wrote ? 'no file written'
-    : (errs.length ? 'errors ' + errs.join(' | ') : null);
-  console.log(bad ? 'FAIL' : 'ok  ', 'sync-shots', JSON.stringify({ ver: r.ver, granted: r.st.granted, say: r.say }));
+    : r2.picked !== 1 ? 'prompt path did not open picker'
+    : !r2.startInSame ? 'picker startIn was not the stored handle'
+    : r2.requestCalls !== 1 ? 'requestCalls ' + r2.requestCalls
+    : !r2.st.granted ? 'prompt fallback not granted'
+    : !r2.hintHidden ? 'prompt fallback hint still shown'
+    : !r2.wroteFresh ? 'prompt fallback wrote no file'
+    : !r3.st.needsRepick ? 'fail path did not set needsRepick'
+    : !/重新选择同步文件夹/.test(r3.st.lastError || '') ? 'fail lastError ' + r3.st.lastError
+    : !/原因：/.test(r3.menu) ? 'fail menu missing reason ' + r3.menu
+    : (allErrs.length ? 'errors ' + allErrs.join(' | ') : null);
+  console.log(bad ? 'FAIL' : 'ok  ', 'sync-shots', JSON.stringify({ ver: r.ver, granted: r.st.granted, say: r.say, fallback: r2, fail: { lastError: r3.st.lastError } }));
   if (bad) { console.error(bad); process.exit(1); }
   console.log('sync-shots ok');
 })().catch(err => { console.error(err); process.exit(1); });
