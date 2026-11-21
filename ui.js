@@ -783,22 +783,55 @@
   function hintSync() {
     const b = $('syncHint'); if (!b || !L) return;
     const st = L.status();
+    if (st.conflict) { b.hidden = false; b.textContent = '本地存档有两份，点这里选择'; return; }
     b.hidden = !st.needGesture;
     b.textContent = st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步';
+  }
+  function conflictWhen(p) {
+    if (!p) return { title: '未知存档', at: '' };
+    const day = p.day != null ? '第' + p.day + '天' : '未知天数';
+    const clock = p.clock ? ' ' + p.clock : '';
+    const at = p.savedAt ? new Date(p.savedAt).toLocaleString('zh-CN') : '';
+    return { title: day + clock, at };
+  }
+  function showConflict(c) {
+    const box = $('syncConflict'); if (!box || !c) return;
+    const f = conflictWhen(c.folder), b = conflictWhen(c.browser);
+    box.innerHTML = `<h3>两份存档不一样</h3>
+      <div class="csub">本地文件夹和浏览器里的进度不同，先都留着，请选要继续玩的那份。没选之前不会覆盖任何一份。</div>
+      <button class="pbtn copt" data-sync="folder">恢复文件夹存档 ${esc(f.title)}<span class="cd">${c.folder && c.folder.unreadable ? '文件读不出来，先别覆盖' : (f.at ? '保存于 ' + esc(f.at) : '')}${c.folder && c.folder.coins != null ? ' · ' + esc(String(c.folder.coins)) + ' 金' : ''}</span></button>
+      <button class="pbtn copt" data-sync="browser">保留浏览器存档 ${esc(b.title)}<span class="cd">${b.at ? '保存于 ' + esc(b.at) : ''}${c.browser && c.browser.coins != null ? ' · ' + esc(String(c.browser.coins)) + ' 金' : ''}</span></button>`;
+    box.hidden = false;
+  }
+  function hideConflict() { const box = $('syncConflict'); if (box) box.hidden = true; }
+  function paintSync() {
+    hintSync();
+    if (!menu.hidden) drawMenu();
+    const st = L && L.status();
+    if (st && st.conflict) showConflict(st.conflict); else hideConflict();
   }
   // v5.11.0.20: never leave a click silent — tell the player it worked, or why it didn't.
   function announceSync(st) {
     if (!st || st.aborted) return;
+    if (st.conflict) {
+      dispatchEvent(new CustomEvent('pf:say', { detail: '本地同步已授权，两份存档不一样，请选要留的那份' }));
+      showConflict(st.conflict);
+      return;
+    }
     const msg = st.granted && !st.lastError ? '本地同步已恢复'
       : st.lastError ? '本地同步没能恢复：' + st.lastError
       : st.needsRepick ? '请再点一次，重新选择同步文件夹'
       : '';
     if (msg) dispatchEvent(new CustomEvent('pf:say', { detail: msg }));
   }
-  function afterResume(st) { hintSync(); if (!menu.hidden) drawMenu(); announceSync(st); }
+  function afterResume(st) { paintSync(); announceSync(st); }
   function syncLine() {
     if (!L) return '';
     const st = L.status();
+    if (st.conflict) {
+      const f = conflictWhen(st.conflict.folder), b = conflictWhen(st.conflict.browser);
+      return `<div class="note bad">文件夹里是${esc(f.title)}，浏览器里是${esc(b.title)}。先都留着，请选要继续玩的那份。</div>`;
+    }
     if (!st.supported) return `<div class="note">当前浏览器不能把文件写到本机文件夹（Chrome 可以）。可以用「导出游玩记录」下载 JSON。</div>`;
     if (st.granted) return `<div class="note">已同步到本机「${esc(st.dirName || '文件夹')}」· <span id="syncAgo">${agoSync(st.lastSyncAt)}</span>${st.lastError ? ` <span class="bad">上次出错：${esc(st.lastError)}</span>` : ''}</div>`;
     if (st.needGesture) return `<div class="note">本地同步需要点一下重新授权。${st.lastError ? ` <span class="bad">原因：${esc(st.lastError)}</span>` : ''}${st.needsRepick ? ' 请重新选择一次文件夹。' : ''}</div>`;
@@ -808,6 +841,12 @@
     if (!L) return '';
     const st = L.status();
     let h = `<div class="row">`;
+    if (st.conflict) {
+      const f = conflictWhen(st.conflict.folder), b = conflictWhen(st.conflict.browser);
+      h += `<button class="pbtn" data-a="syncfold">恢复文件夹存档 ${esc(f.title)}</button>`;
+      h += `<button class="pbtn" data-a="syncbrowse">保留浏览器存档 ${esc(b.title)}</button></div>`;
+      return h;
+    }
     if (st.supported && !st.granted && !st.needGesture) h += `<button class="pbtn" data-a="syncpick">同步到本地文件夹…</button>`;
     if (st.supported && st.granted) h += `<button class="pbtn" data-a="syncpick">更换本地文件夹…</button>`;
     if (st.needGesture) h += `<button class="pbtn" data-a="syncresume">${st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步'}</button>`;
@@ -841,16 +880,39 @@
     else if (a === 'reset') { if (resetArm > Date.now()) G.reset(); else { resetArm = Date.now() + 4000; drawMenu(); setTimeout(() => { if (!menu.hidden) drawMenu(); }, 4100); } }
     else if (a === 'syncpick' && L) { L.pickDir().then(st => { drawMenu(); hintSync(); announceSync(st); }).catch(err => { if (err && err.name === 'AbortError') return; drawMenu(); dispatchEvent(new CustomEvent('pf:say', { detail: '本地同步没能恢复：' + (err && err.message || err) })); }); }
     else if (a === 'syncresume' && L) { L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); }); }
-    else if (a === 'syncnow' && L) { G.saveNow(); L.syncNow('manual').then(() => drawMenu()); }
-    else if (a === 'syncstop' && L) { L.forgetDir().then(() => { drawMenu(); hintSync(); }); }
+    else if (a === 'syncnow' && L) { G.saveNow(); L.syncNow('manual').then(st => { paintSync(); if (st && st.conflict) announceSync(st); else drawMenu(); }); }
+    else if (a === 'syncstop' && L) { L.forgetDir().then(() => { paintSync(); }); }
+    else if (a === 'syncfold' && L) { chooseSync('folder'); }
+    else if (a === 'syncbrowse' && L) { chooseSync('browser'); }
     else if (a === 'exportlog' && L) { L.downloadLog(G.version); }
   });
+  async function chooseSync(which) {
+    if (!L || !L.resolveConflict) return;
+    const r = await L.resolveConflict(which);
+    paintSync();
+    if (!r.ok) { dispatchEvent(new CustomEvent('pf:say', { detail: '没能处理存档：' + (r.error || r.reason || '') })); return; }
+    if (which === 'folder' && r.save && G.importState) {
+      dispatchEvent(new CustomEvent('pf:say', { detail: '正在恢复文件夹存档…' }));
+      const ir = G.importState(r.save);
+      if (ir && ir.ok === false) dispatchEvent(new CustomEvent('pf:say', { detail: '导入失败：' + (ir.error || '') }));
+      return;
+    }
+    dispatchEvent(new CustomEvent('pf:say', { detail: which === 'browser' ? '已保留浏览器存档，文件夹里的那份另存了备份' : '已恢复文件夹存档' }));
+  }
   $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) { shop.hidden = true; store.hidden = true; } mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
-  if ($('syncHint') && L) $('syncHint').addEventListener('click', () => { L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); }); });
+  if ($('syncHint') && L) $('syncHint').addEventListener('click', () => {
+    const st = L.status();
+    if (st.conflict) { showConflict(st.conflict); return; }
+    L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); });
+  });
+  const boxC = $('syncConflict');
+  if (boxC) boxC.addEventListener('click', e => { const b = e.target && e.target.closest && e.target.closest('[data-sync]'); if (b) chooseSync(b.getAttribute('data-sync')); });
   hintSync();
+  paintSync();
+  addEventListener('pf:sync', ev => { paintSync(); const st = ev.detail; if (st && st.conflict) showConflict(st.conflict); });
   // v5.11.0.20: if Chrome already granted the folder (site settings still lists it) but the
   // warning is stuck, re-query when the window is focused and clear it if the handle can write.
-  const recanSync = () => { if (!L || !L.refreshPerm) return; L.refreshPerm().then(st => { hintSync(); if (!menu.hidden) drawMenu(); }); };
+  const recanSync = () => { if (!L || !L.refreshPerm) return; L.refreshPerm().then(st => { paintSync(); }); };
   addEventListener('focus', recanSync);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) recanSync(); });
   // ---- offline summary ----
@@ -931,7 +993,7 @@
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };
   if (loveHud) loveHud.addEventListener('click', e => { e.stopPropagation(); toggleLoveTip(); });
   addEventListener('pointerdown', e => { if (!loveTip || loveTip.hidden) return; if (loveTip.contains(e.target) || (loveHud && loveHud.contains(e.target))) return; toggleLoveTip(false); });
-  setInterval(() => { inv(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (codexEl && !codexEl.hidden) drawCodex(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv();
+  setInterval(() => { inv(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (codexEl && !codexEl.hidden) drawCodex(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); const stc = L && L.status(); const box = $('syncConflict'); if (box && stc && stc.conflict && box.hidden) showConflict(stc.conflict); }, 250); inv();
   if (loveTip) loveTip.addEventListener('click', e => { const b = e.target.closest('[data-cr]'); if (!b) return; e.stopPropagation(); const v = G.careerView && G.careerView(b.getAttribute('data-cr'), 'change'); if (v) showCareer(v); });
 
   // v5.10.6: wedding-morning path, or later 「换个活法」 from the family panel

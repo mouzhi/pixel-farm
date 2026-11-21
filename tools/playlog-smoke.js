@@ -134,8 +134,7 @@ async function test(name, fn) {
     assert.ok(/点此恢复本地同步/.test(r0.hintText), r0.hintText);
     assert.ok(/本地同步需要点一下重新授权/.test(r0.menu), r0.menu);
     assert.ok(/点此恢复本地同步/.test(r0.menu), r0.menu);
-    assert.strictEqual(r0.ver, require('../save.js') && null || r0.ver); // keep r0.ver for the shot check
-    assert.ok(/^5\.11\.0\.20$/.test(r0.ver) || true);
+    assert.strictEqual(r0.ver, '5.11.0.20', r0.ver);
     fs.mkdirSync(OUT, { recursive: true });
     await p.screenshot({ path: path.join(OUT, 'sync_before.png') });
 
@@ -202,6 +201,55 @@ async function test(name, fn) {
     assert.strictEqual(second.st.needsRepick, false);
     assert.ok(second.wrote);
     assert.ok(p.errs.every(e => /pixel-farm sync|NotFoundError/.test(e)), p.errs.join('\n'));
+  });
+
+  await test('opening the game does not overwrite a folder day-12 save with the browser day-1 save', async ctx => {
+    const p = await open(ctx);
+    const r = await p.evaluate(async () => {
+      const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+      const folder = { meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.16', saveVersion: 15 },
+        save: { saveVersion: 15, gameVersion: '5.11.0.16', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: Date.parse('2026-11-21T02:02:00-08:00'), clock: { day: 12, t: 800 }, coins: 999 } };
+      dir.files['pixel-farm-save.json'] = { text: JSON.stringify(folder, null, 2) + '\n' };
+      window.__syncDir = dir;
+      PFPlaylog.installDir(dir, 'prompt');
+      // no button clicks — just the boot/hydrate path
+      const st = await PFPlaylog.hydrateDir();
+      const after = JSON.parse(dir.files['pixel-farm-save.json'].text);
+      return {
+        st,
+        folderDay: after.save.clock.day,
+        folderCoins: after.save.coins,
+        wrotePlaylog: !!dir.files['pixel-farm-playlog.json'],
+        probeLeft: !!dir.files[PFPlaylog.PROBE_FILE],
+        ver: __farm.version,
+        browserDay: __farm.S.day
+      };
+    });
+    assert.strictEqual(r.folderDay, 12, 'folder day 12 must still be intact, got ' + r.folderDay);
+    assert.strictEqual(r.folderCoins, 999);
+    assert.strictEqual(r.wrotePlaylog, false, 'must not write the playlog either');
+    assert.strictEqual(r.probeLeft, false);
+    assert.ok(r.st.conflict && r.st.conflict.paused, JSON.stringify(r.st.conflict));
+    assert.strictEqual(r.st.conflict.folder.day, 12);
+    assert.ok(r.browserDay !== 12, 'browser should still be the early-game save, day ' + r.browserDay);
+    await p.waitForFunction(() => {
+      const box = document.getElementById('syncConflict');
+      return box && !box.hidden && /恢复文件夹存档/.test(box.innerText) && /第12天/.test(box.innerText) && /保留浏览器存档/.test(box.innerText);
+    }, null, { timeout: 3000 });
+    const ui = await p.evaluate(() => ({
+      box: document.getElementById('syncConflict').innerText,
+      hint: document.getElementById('syncHint').textContent,
+      hintHidden: document.getElementById('syncHint').hidden
+    }));
+    assert.ok(/第12天/.test(ui.box) && /恢复文件夹存档/.test(ui.box) && /保留浏览器存档/.test(ui.box), ui.box);
+    assert.strictEqual(ui.hintHidden, false);
+    assert.ok(/两份/.test(ui.hint), ui.hint);
+    fs.mkdirSync(OUT, { recursive: true });
+    await p.screenshot({ path: path.join(OUT, 'sync_conflict.png') });
+    // still day 12 after the UI appeared
+    const day = await p.evaluate(() => JSON.parse(window.__syncDir.files['pixel-farm-save.json'].text).save.clock.day);
+    assert.strictEqual(day, 12);
+    assert.deepStrictEqual(p.errs.filter(e => !/pixel-farm sync/.test(e)), []);
   });
 
   await browser.close();

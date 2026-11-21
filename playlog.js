@@ -9,12 +9,13 @@
   const MAX_DAYS = 365, MAX_EVENTS = 2000, MAX_SESSIONS = 60;
   const SYNC_MIN_MS = 60000;
   const IDB_NAME = 'mouzhi-pixel-farm', IDB_STORE = 'fs', IDB_KEY = 'dir';
-  const SAVE_FILE = 'pixel-farm-save.json', LOG_FILE = 'pixel-farm-playlog.json';
+  const SAVE_FILE = 'pixel-farm-save.json', LOG_FILE = 'pixel-farm-playlog.json', PROBE_FILE = 'pixel-farm-sync-probe';
   const INCOME = ['crops', 'fruit', 'animals', 'fish', 'wood', 'yard', 'offline'];
 
   let storage = null, data = emptyData(), cur = null, session = null;
   let dirHandle = null, perm = 'prompt', lastWrite = 0, lastError = null, syncTimer = null, syncQueued = null;
   let needsRepick = false, pickFn = null; // v5.11.0.20: a stale handle needs a fresh folder pick, not another silent requestPermission
+  let conflict = null, folderChecked = false;
   let fps = { sum: 0, n: 0, min: Infinity }, getSave = null;
 
   function emptyIncome() { const o = {}; for (const k of INCOME) o[k] = 0; return o; }
@@ -305,27 +306,124 @@
     if (!h || typeof h.requestPermission !== 'function') return 'prompt';
     return await h.requestPermission({ mode: 'readwrite' });
   }
-  // If queryPermission says 'prompt' but Chrome already granted the folder (the site-settings
-  // bubble still lists it), a write often just works. Recover quietly; only keep the reauth
-  // warning for a real NotAllowedError, and mark a broken handle so the next click re-picks.
-  async function probeWrite() {
+  function peekSave(obj) {
+    if (!obj || typeof obj !== 'object') return null;
+    const s = obj.save && typeof obj.save === 'object' ? obj.save : obj;
+    const clock = (s && s.clock) || {};
+    const day = clock.day != null ? clock.day : (s.day != null ? s.day : null);
+    const t = clock.t != null ? clock.t : (s.t != null ? s.t : null);
+    if (day == null && t == null && (s.coins == null) && (s.savedAt == null)) return null;
+    return {
+      day, t,
+      savedAt: s.savedAt || null,
+      coins: s.coins,
+      createdAt: s.createdAt || null,
+      gameVersion: s.gameVersion || (obj.meta && obj.meta.gameVersion) || null
+    };
+  }
+  function peekEqual(a, b) {
+    if (!a || !b) return false;
+    const rt = v => v == null ? v : Math.round(v);
+    return a.day === b.day && rt(a.t) === rt(b.t) && a.coins === b.coins && a.createdAt === b.createdAt;
+  }
+  function peekClock(p) {
+    if (!p || p.t == null) return '';
+    const t = Math.max(0, Math.round(Number(p.t) || 0));
+    const h = Math.floor(t / 60) % 24, m = t % 60;
+    return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+  }
+  function publicConflict() {
+    if (!conflict) return null;
+    const slim = p => p ? { day: p.day, t: p.t, savedAt: p.savedAt, coins: p.coins, clock: peekClock(p), unreadable: !!p.unreadable } : null;
+    return { folder: slim(conflict.folder), browser: slim(conflict.browser), paused: true };
+  }
+  function emitSync() {
+    if (typeof dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
+    try { dispatchEvent(new CustomEvent('pf:sync', { detail: status() })); } catch (e) {}
+  }
+  async function readFolderText(handle, name) {
+    try { return await readFromDir(handle, name); }
+    catch (e) {
+      if (/not found|NotFoundError/i.test(errText(e))) return null;
+      throw e;
+    }
+  }
+  // First write of the real save/playlog files: if the folder already has a different
+  // farm save, keep both, pause overwriting, and let the player choose.
+  async function detectConflict(handle, snap) {
+    const h = handle || dirHandle;
+    if (!h) return null;
+    let text = null;
+    try { text = await readFolderText(h, SAVE_FILE); }
+    catch (e) { logErr(e); return null; }
+    if (text == null || !String(text).trim()) return null;
+    const browser = peekSave(snap || (getSave && getSave()));
+    let obj = null;
+    try { obj = JSON.parse(text); }
+    catch (e) { return { folder: { day: null, t: null, savedAt: null, coins: null, unreadable: true }, browser, raw: text, obj: null }; }
+    const folder = peekSave(obj);
+    if (!folder || !browser) return null;
+    if (peekEqual(folder, browser)) return null;
+    return { folder, browser, raw: text, obj };
+  }
+  async function writeRaw(handle, name, text) {
+    const fh = await handle.getFileHandle(name, { create: true });
+    const w = await fh.createWritable();
+    await w.write(typeof text === 'string' ? text : JSON.stringify(text, null, 2) + '\n');
+    await w.close();
+  }
+  async function existsName(handle, name) {
+    try { await handle.getFileHandle(name); return true; }
+    catch (e) { return false; }
+  }
+  async function uniqueName(handle, base) {
+    if (!(await existsName(handle, base))) return base;
+    const dot = base.lastIndexOf('.'), stem = dot >= 0 ? base.slice(0, dot) : base, ext = dot >= 0 ? base.slice(dot) : '';
+    for (let n = 2; n < 50; n++) {
+      const name = stem + '-' + n + ext;
+      if (!(await existsName(handle, name))) return name;
+    }
+    return stem + '-' + Date.now() + ext;
+  }
+  function backupFileName(kind, peek) {
+    const day = peek && peek.day != null ? 'day' + peek.day : 'unknown';
+    return kind === 'log' ? 'pixel-farm-playlog-backup-' + day + '.json' : 'pixel-farm-save-backup-' + day + '.json';
+  }
+  async function backupExisting(handle, name, peek) {
+    const text = await readFolderText(handle, name);
+    if (text == null) return null;
+    const dest = await uniqueName(handle, backupFileName(name === LOG_FILE ? 'log' : 'save', peek));
+    await writeRaw(handle, dest, text);
+    return dest;
+  }
+  // Permission probe must NEVER write pixel-farm-save.json or the playlog. A tiny
+  // throwaway file is enough to see whether Chrome will actually let us write.
+  async function probePerm() {
     if (!dirHandle) return;
-    const r = await syncNow('boot-probe', dirHandle);
-    if (r.ok) { perm = 'granted'; needsRepick = false; lastError = null; }
-    else if (isStaleMsg(r.error)) needsRepick = true;
-    else lastError = null;
+    try {
+      const fh = await dirHandle.getFileHandle(PROBE_FILE, { create: true });
+      const w = await fh.createWritable();
+      await w.write('ok\n');
+      await w.close();
+      if (typeof dirHandle.removeEntry === 'function') {
+        try { await dirHandle.removeEntry(PROBE_FILE); } catch (e) {}
+      }
+      perm = 'granted'; needsRepick = false; lastError = null;
+    } catch (e) {
+      if (isStaleErr(e)) { logErr(e); needsRepick = true; }
+      else lastError = null;
+    }
   }
   async function hydrateDir() {
     if (!dirHandle) { const h = await idbGet(); if (!dirHandle) dirHandle = h; }
     if (!dirHandle) { perm = 'prompt'; needsRepick = false; return status(); }
     try { perm = await queryPerm(dirHandle); }
     catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; }
-    if (perm === 'granted') { needsRepick = false; syncSoon('boot'); }
-    else await probeWrite();
+    if (perm !== 'granted') await probePerm();
+    if (perm === 'granted') { needsRepick = false; await syncNow('boot'); }
+    emitSync();
     return status();
   }
-  // Re-read the handle's permission (no gesture needed). Used on window focus so a grant that
-  // landed in Chrome's site settings actually clears the "需要重新授权" warning.
   async function refreshPerm() {
     if (!dirHandle) { const h = await idbGet(); if (!dirHandle) dirHandle = h; }
     if (!dirHandle) { perm = 'prompt'; return status(); }
@@ -334,9 +432,10 @@
       if (next === 'granted') {
         const was = perm;
         perm = 'granted'; needsRepick = false;
-        if (was !== 'granted') syncSoon('refresh');
+        if (was !== 'granted' || conflict) await syncNow('refresh');
       } else perm = next || 'prompt';
     } catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; }
+    emitSync();
     return status();
   }
   async function pickDir() {
@@ -348,7 +447,9 @@
     try { await idbPut(h); } catch (e) { /* node / test handles may have no IndexedDB */ }
     data.syncDirName = h.name || null; flush();
     needsRepick = false;
+    folderChecked = false; conflict = null;
     if (perm === 'granted') await syncNow('pick');
+    emitSync();
     return status();
   }
   // v5.11.0.20: requestPermission / showDirectoryPicker must be the first await inside the
@@ -373,31 +474,61 @@
       return status();
     }
     if (perm === 'granted') {
+      folderChecked = false;
       const w = await syncNow('resume');
       if (w.ok) { needsRepick = false; lastError = null; }
+      else if (w.reason === 'conflict') needsRepick = false;
       else if (isStaleMsg(w.error)) needsRepick = true;
+      emitSync();
       return status();
     }
     needsRepick = true;
-    // 'prompt' / 'denied' after the click: the next click re-picks. Don't paint a raw
-    // "permission: prompt" over the panel (that's just "the prompt was dismissed or dropped").
     try { console.warn('[pixel-farm sync]', 'requestPermission →', perm); } catch (x) {}
     return status();
   }
   async function forgetDir() {
     dirHandle = null; perm = 'prompt'; needsRepick = false; lastError = null;
+    conflict = null; folderChecked = false;
     data.syncDirName = null; flush();
     await idbDel();
+    emitSync();
     return status();
   }
-  // Test hook: drop a mock (or real) directory handle into memory without IndexedDB.
   function installDir(handle, permission) {
     dirHandle = handle || null;
     perm = permission || 'prompt';
     needsRepick = false;
     lastError = null;
+    conflict = null;
+    folderChecked = false;
     if (handle && handle.name) data.syncDirName = handle.name;
     return status();
+  }
+  async function resolveConflict(choice) {
+    if (!conflict || !dirHandle) return Object.assign(status(), { ok: false, reason: 'no-conflict' });
+    const h = dirHandle;
+    if (choice === 'browser') {
+      const backup = await backupExisting(h, SAVE_FILE, conflict.folder);
+      let logBackup = null;
+      try { logBackup = await backupExisting(h, LOG_FILE, conflict.folder); } catch (e) {}
+      conflict = null;
+      folderChecked = true;
+      const w = await syncNow('resolve-browser');
+      emitSync();
+      return Object.assign(status(), { ok: !!w.ok, choice: 'browser', backup, logBackup, error: w.error });
+    }
+    if (choice === 'folder') {
+      const snap = getSave && getSave();
+      const dest = await uniqueName(h, backupFileName('save', conflict.browser));
+      if (snap) await writeRaw(h, dest, JSON.stringify(wrapSave(snap), null, 2) + '\n');
+      const save = conflict.obj && conflict.obj.save ? conflict.obj.save : conflict.obj;
+      conflict = null;
+      folderChecked = true;
+      lastError = null;
+      emitSync();
+      return Object.assign(status(), { ok: true, choice: 'folder', backup: dest, save });
+    }
+    return Object.assign(status(), { ok: false, reason: 'bad-choice' });
   }
 
   function filesForSync(snap) {
@@ -411,6 +542,12 @@
     const h = handle || dirHandle;
     if (!h) return { ok: false, reason: 'no-handle' };
     if (handle !== h && perm !== 'granted' && !handle) return { ok: false, reason: 'no-permission' };
+    if (conflict) return { ok: false, reason: 'conflict', conflict: publicConflict() };
+    if (!folderChecked) {
+      const c = await detectConflict(h, snap);
+      if (c) { conflict = c; emitSync(); return { ok: false, reason: 'conflict', conflict: publicConflict() }; }
+      folderChecked = true;
+    }
     try {
       const files = filesForSync(snap);
       await writeToDir(h, files);
@@ -444,7 +581,8 @@
       needsRepick: !!needsRepick,
       lastSyncAt: data.lastSyncAt || null,
       lastError: lastError,
-      dirName: (dirHandle && dirHandle.name) || data.syncDirName || null
+      dirName: (dirHandle && dirHandle.name) || data.syncDirName || null,
+      conflict: publicConflict()
     };
   }
 
@@ -463,7 +601,7 @@
 
   function reset(store) {
     if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false;
+    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false; conflict = null; folderChecked = false;
     lastWrite = 0; lastError = null; fps = { sum: 0, n: 0, min: Infinity };
     if (store || storage) load(store || storage);
     return data;
@@ -486,6 +624,10 @@
         if (opts && opts.requestResult != null) dir.permission = opts.requestResult;
         return dir.permission;
       },
+      async removeEntry(name) {
+        if (!files[name]) { const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e; }
+        delete files[name];
+      },
       async getFileHandle(name, o) {
         if (opts && opts.writeThrow) throw opts.writeThrow;
         if (!files[name] && !(o && o.create)) throw new Error('not found: ' + name);
@@ -504,11 +646,11 @@
   }
 
   const api = {
-    KEY, SCHEMA, MAX_DAYS, MAX_EVENTS, SAVE_FILE, LOG_FILE, SYNC_MIN_MS,
+    KEY, SCHEMA, MAX_DAYS, MAX_EVENTS, SAVE_FILE, LOG_FILE, PROBE_FILE, SYNC_MIN_MS,
     load, flush, boot, reset, get, current, exportObject, wrapSave,
     openDay, closeDay, startSession, endSession,
     income, spend, purchase, event, tick, work, sampleFps, offline, classify,
-    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker,
+    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker, resolveConflict, peekSave,
     writeToDir, readFromDir, syncNow, syncSoon, syncMorning, filesForSync,
     download, downloadLog, memoryDir
   };

@@ -322,7 +322,8 @@ async function testAsync(name, fn) { await fn(); n++; }
     const st = await LOG.hydrateDir();
     assert.strictEqual(st.granted, true, 'probe write recovered a handle whose queryPermission said prompt');
     assert.strictEqual(st.needGesture, false);
-    assert.ok(dir.files['pixel-farm-save.json']);
+    assert.ok(!dir.files[LOG.PROBE_FILE], 'probe file must be removed');
+    assert.ok(dir.files['pixel-farm-save.json'], 'empty folder: first real sync may write the save');
   });
 
   await testAsync('hydrateDir: NotFoundError from queryPermission is recorded and asks for a re-pick', async () => {
@@ -336,6 +337,110 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.strictEqual(st.granted, false);
     assert.strictEqual(st.needsRepick, true);
     assert.ok(/NotFoundError/.test(st.lastError), st.lastError);
+  });
+
+  function wrapDay(day, coins, savedAt, extra) {
+    return { meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T10:02:00.000Z', gameVersion: '5.11.0.16', saveVersion: 15 },
+      save: Object.assign({ saveVersion: 15, gameVersion: '5.11.0.16', createdAt: 1_000_000, savedAt: savedAt || (day * 1000), clock: { day, t: day === 12 ? 800 : 360 }, coins }, extra) };
+  }
+  function browserDay(day, coins) {
+    return { saveVersion: 15, gameVersion: '5.11.0.20', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
+  }
+  function seedFolder(dir, day, coins) {
+    dir.files['pixel-farm-save.json'] = { text: JSON.stringify(wrapDay(day, coins), null, 2) + '\n' };
+  }
+  function folderDay(dir) {
+    const o = JSON.parse(dir.files['pixel-farm-save.json'].text);
+    return o.save.clock.day;
+  }
+
+  await testAsync('boot does not overwrite folder day 12 with browser day 2 (no clicks)', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    seedFolder(dir, 12, 999);
+    const before = dir.files['pixel-farm-save.json'].text;
+    LOG.installDir(dir, 'prompt');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(folderDay(dir), 12, 'folder day 12 must stay, got ' + folderDay(dir));
+    assert.strictEqual(dir.files['pixel-farm-save.json'].text, before, 'pixel-farm-save.json bytes must be unchanged');
+    assert.ok(!dir.files['pixel-farm-playlog.json'], 'must not write the playlog either');
+    assert.ok(!dir.files[LOG.PROBE_FILE], 'probe file cleaned up');
+    assert.strictEqual(st.granted, true, 'probe may grant permission');
+    assert.ok(st.conflict && st.conflict.paused, JSON.stringify(st.conflict));
+    assert.strictEqual(st.conflict.folder.day, 12);
+    assert.strictEqual(st.conflict.browser.day, 2);
+  });
+
+  await testAsync('granted-on-boot also pauses when folder and browser days differ', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    seedFolder(dir, 12, 999);
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(folderDay(dir), 12);
+    assert.ok(st.conflict && st.conflict.folder.day === 12 && st.conflict.browser.day === 2);
+    const again = await LOG.syncNow('manual');
+    assert.strictEqual(again.reason, 'conflict');
+    assert.strictEqual(folderDay(dir), 12, 'a later syncNow must not overwrite while paused');
+  });
+
+  await testAsync('resolveConflict(browser) backs up day 12 then writes the browser save', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    seedFolder(dir, 12, 999);
+    LOG.installDir(dir, 'granted');
+    await LOG.hydrateDir();
+    const r = await LOG.resolveConflict('browser');
+    assert.ok(r.ok, r.error);
+    assert.strictEqual(folderDay(dir), 2);
+    assert.ok(r.backup && dir.files[r.backup], r.backup);
+    assert.strictEqual(JSON.parse(dir.files[r.backup].text).save.clock.day, 12);
+    assert.strictEqual(LOG.status().conflict, null);
+  });
+
+  await testAsync('resolveConflict(folder) leaves day 12 intact and backs up the browser save', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    seedFolder(dir, 12, 999);
+    const before = dir.files['pixel-farm-save.json'].text;
+    LOG.installDir(dir, 'granted');
+    await LOG.hydrateDir();
+    const r = await LOG.resolveConflict('folder');
+    assert.ok(r.ok);
+    assert.strictEqual(dir.files['pixel-farm-save.json'].text, before, 'folder day 12 file must be untouched');
+    assert.strictEqual(folderDay(dir), 12);
+    assert.strictEqual(r.save && r.save.clock.day, 12);
+    assert.ok(r.backup && dir.files[r.backup], r.backup);
+    assert.strictEqual(JSON.parse(dir.files[r.backup].text).save.clock.day, 2);
+    assert.strictEqual(LOG.status().conflict, null);
+  });
+
+  await testAsync('identical folder and browser saves do not pause, first sync may write', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const same = browserDay(12, 999);
+    same.savedAt = 12000;
+    same.clock = { day: 12, t: 800 };
+    LOG.boot(snap({ day: 12, coins: 999 }), { store: s, getSave: () => same });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    seedFolder(dir, 12, 999); // wrapDay uses t=800, coins=999, createdAt=1_000_000 — matches
+    LOG.installDir(dir, 'granted');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(st.conflict, null, JSON.stringify(st.conflict));
+    assert.strictEqual(folderDay(dir), 12);
   });
 
   console.log(n + ' passed');
