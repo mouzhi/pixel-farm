@@ -143,7 +143,7 @@ async function test(name, fn) {
     assert.ok(/点此恢复本地同步/.test(r0.hintText), r0.hintText);
     assert.ok(/本地同步需要点一下重新授权/.test(r0.menu), r0.menu);
     assert.ok(/点此恢复本地同步/.test(r0.menu), r0.menu);
-    assert.strictEqual(r0.ver, '5.11.0.27', r0.ver);
+    assert.strictEqual(r0.ver, '5.11.0.28', r0.ver);
     fs.mkdirSync(OUT, { recursive: true });
     await p.screenshot({ path: path.join(OUT, 'sync_before.png') });
 
@@ -302,8 +302,8 @@ async function test(name, fn) {
     await p.evaluate(async () => {
       const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
       const wrap = (day, coins, at, t) => ({
-        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.27', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
-        save: { saveVersion: 15, gameVersion: '5.11.0.27', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
+        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.28', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
+        save: { saveVersion: 15, gameVersion: '5.11.0.28', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
       });
       const w8 = wrap(8, 200, Date.parse('2026-11-15T12:00:00-08:00'), 800);
       const w12 = wrap(12, 999, Date.parse('2026-11-21T02:02:00-08:00'), 800); // wedding day in the fixture story
