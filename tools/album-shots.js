@@ -9,7 +9,7 @@ const { chromium } = require('playwright-core');
 const ROOT = process.env.PF_ROOT || path.join(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.webp': 'image/webp' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
-const only = process.argv[2] || null, VER = '5.11.0.15';
+const only = process.argv[2] || null, VER = '5.11.0.16';
 const readSave = f => { const s = JSON.parse(fs.readFileSync(f, 'utf8')); return s.save || s; };
 const FIX = n => path.join(__dirname, 'fixtures', n);
 // a bigger, later farm for the grid: a local real save when one is around (never committed), else the day-72 fixture
@@ -31,6 +31,19 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.screenshot({ path: path.join(OUT, name) });
     const bad = r && r.error ? r.error : check(r); console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
   const renderMs = p => p.evaluate(() => { const f = __farm; f.render(); const t0 = performance.now(); for (let i = 0; i < 12; i++) f.render(); return (performance.now() - t0) / 12; });
+
+  // v5.11.0.16: the photo toast and an achievement can arrive in the same render (first party). Check both event orders at two web sizes.
+  for (const [width, height] of [[1280, 800], [1920, 1080]]) for (const first of ['photo', 'achievement']) {
+    await shot('toast_stack_' + width + '_' + first + '.png', { width, height }, null, async p => {
+      await p.evaluate(first => { const photo = () => dispatchEvent(new CustomEvent('pf:album', { detail: { id: 'party', title: '第一次家庭聚会', url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a48sAAAAASUVORK5CYII=' } }));
+        const ach = () => dispatchEvent(new CustomEvent('pf:say', { detail: '成就：我家大门常打开' }));
+        if (first === 'photo') { photo(); ach(); } else { ach(); photo(); } }, first);
+      await p.waitForTimeout(100);
+      return p.evaluate(() => { const a = document.getElementById('albumToast'), s = document.getElementById('say'), x = a.getBoundingClientRect(), y = s.getBoundingClientRect();
+        return { photo: !a.hidden && /第一次家庭聚会/.test(a.textContent), achievement: !s.hidden && /我家大门常打开/.test(s.textContent), gap: Math.round(y.top - x.bottom),
+          overlap: x.left < y.right && y.left < x.right && x.top < y.bottom && y.top < x.bottom, inside: y.bottom < innerHeight }; });
+    }, r => !r.photo || !r.achievement ? 'one toast missing' : r.overlap || r.gap < 5 ? 'photo and achievement overlap: ' + JSON.stringify(r) : !r.inside ? 'stack off screen' : null);
+  }
 
   // 1. a new farm: the boot hook takes 「农场开张」 half an hour in; the noteProgress hook takes 「第一只小动物」 where the farmer is.
   //    Toast shown; the capture costs at most a couple of renders; the main view is put back exactly (no flicker frame).
