@@ -85,6 +85,7 @@
   // then, for a crowded farm, any spot on a 4-unit grid out to about 36, nearest first (the same farm always gets the same spots)
   const LAWN_GRID = []; for (let y = -32; y <= 32; y += 4) for (let x = -36; x <= 36; x += 4) if (Math.hypot(x, y * 1.15) <= 37 && !LAWN_AT.some(([ax, ay]) => ax === x && ay === y)) LAWN_GRID.push([x, y]);
   LAWN_GRID.sort((a, b) => Math.hypot(a[0], a[1]) - Math.hypot(b[0], b[1]) || a[1] - b[1] || a[0] - b[0]);
+  const ptInBox = (p, b) => p.x > b[0] && p.x < b[2] && p.y > b[1] && p.y < b[3];
   const boxHit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
   // free(box, centre) -> the whole box is plain grass, a short walk from the table; returns [{ kind, x, y, box, spots: [{x, y}], pole: {x, y}, barrel }]
   function partyLawn(c, free) {
@@ -125,6 +126,62 @@
     for (const r of kids) if (!take(r.key, (phase === 1 ? tableOrder.slice().reverse() : []).concat(play, dance, tableOrder, chat, spare))) out[r.key] = null;
     grown.forEach((r, i) => { const a = phase === 0 ? 'eat' : SEQ[((i >> 1) + phase) % 3], rest = SEQ.filter(k => k !== a).map(k => lists[k]);
       if (!take(r.key, lists[a].concat(...rest, spare))) out[r.key] = null; });
+    return out;
+  }
+
+  // ---------- v5.11.0.21: a wedding evening at the party area ----------
+  // The same 17:30–20:30 evening, but it opens with a short ceremony on the grass beside the table: a flower arch, a cream runner
+  // strewn with petals (the aisle) and the guests in two tidy rows facing it. 17:30 everyone takes their place (the couple at the
+  // far end of the aisle), 17:45 the couple walk up the aisle (drawn slowly, it is not a race), 18:02 they stand under the arch
+  // (hearts, petals; the album photo is taken at 18:10), 18:22 the party carries on as usual with the couple at the table.
+  // Nothing is saved: the layout is rebuilt from the grass like the lawn corners.
+  const WEDDING = { gather: PARTY.from - 25, walk: PARTY.from + 20, at: PARTY.from + 34, end: PARTY.from + 54 };
+  const wedOn = T => T >= WEDDING.gather && T < WEDDING.end;
+  const wedPhase = T => (T >= WEDDING.at ? 2 : T >= WEDDING.walk ? 1 : 0); // 0 taking places, 1 the walk, 2 under the arch
+  const wedPhaseEnd = T => [WEDDING.walk, WEDDING.at, WEDDING.end][wedPhase(T)];
+  // Places are { a: along the aisle from the arch, b: across }. The aisle always runs from the arch towards the camera's side
+  // (u = +y) or sideways (u = ±x), so the couple stand in front of the arch, not behind it: south of the table the arch is by
+  // the table and the aisle leads away; north of it the arch is at the far end and the aisle leads back towards the table.
+  const WED_ROWS = [[2.5, -15.5], [2.5, 15.5], [22, -6.5], [22, 6.5], [2.5, -28], [2.5, 28], [22, -19], [22, 19]]; // front row beside the couple, then the row behind
+  const WED_AISLE = [41.5, 24, 14]; // the long aisle (both rows), else a shorter one (front row only)
+  function wedCands(c) { const out = [];
+    for (const len of WED_AISLE) {
+      for (const off of [11, 15]) for (const sx of [0, -8, 8]) out.push({ u: [0, 1], arch: { x: c.x + sx, y: c.y + off }, len });
+      for (const sx of [0, -8, 8]) out.push({ u: [0, 1], arch: { x: c.x + sx, y: c.y - 12.5 - len }, len });
+      out.push({ u: [1, 0], arch: { x: c.x + 16.5, y: c.y }, len }, { u: [-1, 0], arch: { x: c.x - 16.5, y: c.y }, len }); }
+    return out; }
+  // c: the area; free(box, centre?) -> plain grass a short walk away (game.js lawnAt); lawn: partyLawn() (keep off its poles and barrels)
+  // -> { arch, u, couple: [2], start: [2], runner: [from, to], guests: [...], boxes } or null when no side of the area has room
+  function weddingLayout(c, free, lawn) {
+    lawn = lawn || []; let best = null;
+    const stuff = lawn.flatMap(l => [l.pole].concat(l.barrel ? [l.barrel] : []));
+    const bbox = (p, q, m) => [Math.min(p.x, q.x) - m, Math.min(p.y, q.y) - m, Math.max(p.x, q.x) + m, Math.max(p.y, q.y) + m];
+    const near = boxOf(c.x, c.y, [13, 9.5]), spot = p => !ptInBox(p, near) && free([p.x - 2, p.y - 2, p.x + 2, p.y + 2], p) && !stuff.some(q => Math.hypot(q.x - p.x, q.y - p.y) < 4);
+    for (const { u: [ux, uy], arch, len } of wedCands(c)) {
+      const vx = -uy, vy = ux, P = (a, b) => ({ x: arch.x + ux * a + vx * b, y: arch.y + uy * a + vy * b });
+      const couple = [P(2.5, -3), P(2.5, 3)], start = [P(len, -3), P(len, 3)], archBox = bbox(P(-1, -6.5), P(1, 6.5), 0), runBox = bbox(P(2.5, -2), P(len, 2), 0);
+      if (boxHit(archBox, near) || boxHit(runBox, near) || !free(archBox) || !free(runBox)) continue;
+      if (lawn.some(l => boxHit(l.box, bbox(P(-1, -6.5), P(len, 6.5), 0)))) continue;
+      if (!couple.concat(start).every(spot)) continue;
+      const fixed = couple.concat(start), guests = [];
+      for (const [a, b] of WED_ROWS) { if (a > 2.5 && len < WED_AISLE[0]) continue;
+        const p = P(a, b); if (!spot(p) || !fixed.concat(guests).every(q => partyClear(p, q))) continue; guests.push(p); }
+      const boxes = [archBox, runBox].concat(fixed, guests).map(p => (Array.isArray(p) ? p : [p.x - 3, p.y - 3, p.x + 3, p.y + 3]));
+      if (!best || guests.length > best.guests.length) best = { arch, u: [ux, uy], couple, start, runner: [P(2, 0), P(len + 1, 0)], guests, boxes };
+      if (guests.length >= 8) return best;
+    }
+    return best;
+  }
+  // the evening's places while the ceremony lasts: the couple (coupleKeys, in that order) at the far end, then under the arch;
+  // everyone else in the rows, then on the spare grass (extra) clear of the rows -> { key: { x, y, act ('wed-couple' | 'wed-guest'), i } }
+  function weddingPlan(W, roster, coupleKeys, phase, extra) {
+    const out = {}, used = [];
+    coupleKeys.forEach((k, i) => { if (!k) return; const p = (phase === 0 ? W.start : W.couple)[i]; out[k] = { x: p.x, y: p.y, act: 'wed-couple', i, seat: -1 }; });
+    const fixed = W.couple.concat(W.start), spare = (extra || []).filter(p => fixed.concat(W.guests).every(q => partyClear(p, q)));
+    const list = W.guests.concat(spare);
+    for (const r of roster) { if (coupleKeys.includes(r.key)) continue;
+      const p = list.find(q => !used.includes(q) && used.every(u => partyClear(q, u)));
+      if (!p) { out[r.key] = null; continue; } used.push(p); out[r.key] = { x: p.x, y: p.y, act: 'wed-guest', i: -1, seat: -1 }; }
     return out;
   }
 
@@ -196,6 +253,6 @@
   }
 
   const api = { CATALOG, IDS, SHOP_IDS, LAMP_IDS, INV_MAX, PLACED_MAX, ORDERS_MAX, DROPS, rollDrop, GIANT_KEEP, SET_UNLOCK, pageDone,
-    PARTY, special, partyTonight, guestCount, partyOn, partySeats, partyPosts, partyClear, LAWN, LAWN_AT, partyLawn, PHASES, partyPhase, phaseEnd, phaseStart, partyPlan, boxOf, cellsOf, onGrass, reach, keepsPaths, ringSpots, empty, valid };
+    PARTY, special, partyTonight, guestCount, partyOn, WEDDING, wedOn, wedPhase, wedPhaseEnd, weddingLayout, weddingPlan, partySeats, partyPosts, partyClear, LAWN, LAWN_AT, partyLawn, PHASES, partyPhase, phaseEnd, phaseStart, partyPlan, boxOf, cellsOf, onGrass, reach, keepsPaths, ringSpots, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFDecor = api;
 })(typeof window !== 'undefined' ? window : globalThis);
