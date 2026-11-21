@@ -9,7 +9,7 @@ const { chromium } = require('playwright-core');
 const ROOT = process.env.PF_ROOT || path.join(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.webp': 'image/webp' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
-const only = process.argv[2] || null, VER = '5.11.0.16';
+const only = process.argv[2] || null, VER = '5.11.0.19';
 const readSave = f => { const s = JSON.parse(fs.readFileSync(f, 'utf8')); return s.save || s; };
 const FIX = n => path.join(__dirname, 'fixtures', n);
 // a bigger, later farm for the grid: a local real save when one is around (never committed), else the day-72 fixture
