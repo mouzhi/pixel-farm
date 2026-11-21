@@ -98,7 +98,7 @@
       toast.addEventListener('click', () => { const id = toast.dataset.id; toast.hidden = true; stack(false); if (window.PFDiaryUI && !isShown(btn)) PFDiaryUI.album(id); else open(id); }); }
     toast.dataset.id = d.id || ''; toast.innerHTML = `${d.url ? `<img alt="" src="${d.url}">` : ''}<span>📷 存进相册<small>${esc(d.title)}</small></span>`;
     toast.hidden = false; toast.classList.remove('out'); clearTimeout(toastT); stack(true);
-    toastT = setTimeout(() => { toast.classList.add('out'); stack(false); toastT = setTimeout(() => { toast.hidden = true; }, 450); }, 4200);
+    toastT = setTimeout(() => { toast.classList.add('out'); toastT = setTimeout(() => { toast.hidden = true; stack(false); }, 450); }, 4200);
     if (!el.hidden) draw(el); const dy = $('diary'); if (dy && !dy.hidden && dy._albOn) draw(dy); });
   const isShown = b => !!(b && b.offsetParent);
   // v5.11.0.16: other top-centre messages (the #say line: 「成就：…」, and the 小红书 #xhs-toast) stack below the photo toast instead of
@@ -107,5 +107,6 @@
     if (on && toast && !toast.hidden) { R.style.setProperty('--pf-alb-toast-bottom', Math.ceil(toast.getBoundingClientRect().bottom) + 'px'); R.classList.add('pf-alb-toast'); }
     else R.classList.remove('pf-alb-toast');
     dispatchEvent(new CustomEvent('pf:toaststack', { detail: { album: R.classList.contains('pf-alb-toast') } })); }
+  addEventListener('resize', () => { if (toast && !toast.hidden) stack(true); });
   window.PFAlbumUI = { open, close, toggle, renderInto, draw, html, el };
 })();
