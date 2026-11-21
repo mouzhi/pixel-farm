@@ -1618,10 +1618,21 @@ function followInsect(k) { // play-chase: keep walking toward the live butterfly
   k.to = { x: bug.x, y: bug.y }; k.insect = bug;
   if (moved > 5) k.via = routeVia(F, k.to);
 }
+function idleHold() { return { kind: 'idle', label: '歇一会儿', to: { x: F.x, y: F.y }, dur: 8, rest: true }; }
+function nextTask() { // v5.11.0.23: chooseTask may return null (a spouse with no party seat); never hand that to stepActor
+  try { const t = chooseTask(); if (t) return t; } catch (e) { try { console.warn('[pixel-farm] chooseTask', F && (F.id || 'farmer'), e); } catch (x) {} }
+  return idleHold(); }
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
+  try { stepActorInner(dm); }
+  catch (e) {
+    try { console.warn('[pixel-farm] stepActor', F && (F.id || 'farmer'), e); } catch (x) {}
+    if (F) { F.task = idleHold(); F.task.work = 0; }
+  }
+}
+function stepActorInner(dm) {
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = chooseTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (!F.task) { F.task = nextTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   if (k && k.kind === 'play-chase') followInsect(k);
@@ -2559,7 +2570,9 @@ function partyPlanNow() {
   const L = partyLawnNow(), T = S.t % 1440, W = L.wed && DC.wedOn(T) ? L.wed : null, couple = L.wed ? wedCouple() : null;
   const ph = W ? 'w' + DC.wedPhase(T) : DC.partyPhase(T), key = [L.key, ph, partyReg.keys.join(',')].join('|');
   if (partyPlanC.key !== key) { // v5.11.0.21: a wedding evening opens with the ceremony; afterwards the couple sit at the table first
-    const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
+    // v5.11.0.23: the family (farmer, members, spouses) sit before town guests, so a cramped ceremony still has 阿禾 in the rows
+    const fam = new Set(['farmer'].concat(S.members.map(m => m.id), (typeof SPOUSES !== 'undefined' ? SPOUSES : []).map(s => s.id)));
+    const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k) && fam.has(k)), partyReg.keys.filter(k => !couple.includes(k) && !fam.has(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
     partyPlanC = { key, plan: W ? DC.weddingPlan(W, roster, couple, DC.wedPhase(T), L.extra) : DC.partyPlan(area, L.lawn, roster, ph, L.extra) }; }
   return partyPlanC.plan;
 }
@@ -2567,7 +2580,10 @@ function partySpot(a, key) { // a: the actor or guest; their place for this hour
   const area = partyArea(); if (!area) return null; key = key || partyKeyOf(a);
   if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
   if (!partyReg.keys.includes(key)) { partyReg.keys.push(key); partyReg.kid[key] = partyKid(a); }
-  const p = partyPlanNow()[key]; return p ? { x: p.x, y: p.y } : null;
+  const p = partyPlanNow()[key]; if (p) return { x: p.x, y: p.y };
+  // v5.11.0.23: a missing place used to make spouseTask return null and crash the frame loop
+  const i = Math.max(0, partyReg.keys.indexOf(key));
+  return { x: area.x + 12 + (i % 4) * 3, y: area.y + 10 + Math.floor(i / 4) * 3 };
 }
 const partyDur = T => Math.max(3, Math.min(30, (wedCer() ? DC.wedPhaseEnd(T) : DC.phaseEnd(T)) - T, DC.PARTY.to - T)); // v5.11.0.21: the ceremony's beats too
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
@@ -3673,8 +3689,8 @@ const mainBacklog = () => { let n = 0; for (const t of tiles) if (t.open && t.cr
 function homeChoose() { // null: not one of the couple (or helping on the main farm right now); else their next job
   const h = homeOfActor(F); if (!h) return null;
   const T = S.t % 1440, L = HM.layout(h), sp = !!F._spouse, kid = F._spouse || F.id;
-  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F); if (!seat) return null;
-    return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
+  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F);
+    if (seat) return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
   if (T >= sleepAt() || T < WAKE - 30) { if (!sp && ((F.crops.length && shopOpen(T)) || (F.gathered && T < sleepAt() + 60))) return null; const me = F;
     return { kind: 'home', label: '回新房子睡觉', to: L.door, dur: 5, done: () => { me.home = true; me.sleeping = true; } }; }
   const path = CR ? CR.pathOf(S.home, kid) : null;
@@ -3788,9 +3804,10 @@ function homeStatus() {
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
   const own = homeChoose(); if (own) return own;
   const T = S.t % 1440;
-  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F); if (!seat) return null;
-    return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
-  const d = weddingSpot() || DOOR; return { kind: 'idle', label: '来参加婚礼', to: { x: d.x + 3, y: d.y + 6 }, dur: 10, rest: true };
+  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F);
+    if (seat) return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
+  const area = partyArea(), d = weddingSpot() || (area ? { x: area.x + 12, y: area.y + 8 } : DOOR);
+  return { kind: 'idle', label: weddingTonight() ? '来参加婚礼' : '在附近等一会儿', to: { x: d.x + 3, y: d.y + 6 }, dur: 10, rest: true };
 }
 let decorSyncT = 0, partyFxT = 0;
 function decorFrame() {
@@ -5469,7 +5486,11 @@ let last = performance.now();
 function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (dt > 0) noteLog('sampleFps', 1 / dt);
-  advance(dt); render(); albumTick(); hud(); requestAnimationFrame(frame);
+  // v5.11.0.23: one actor or draw error must not black out the canvas or freeze the HUD at its HTML defaults
+  try { advance(dt); } catch (e) { try { console.warn('[pixel-farm] advance', e); } catch (x) {} }
+  try { render(); } catch (e) { try { console.warn('[pixel-farm] render', e); } catch (x) {} }
+  try { albumTick(); hud(); } catch (e) { try { console.warn('[pixel-farm] hud', e); } catch (x) {} }
+  requestAnimationFrame(frame);
 }
 window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); albumTick(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); albumTick(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
@@ -5501,7 +5522,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.22';
+const GAME_VERSION = '5.11.0.23';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
