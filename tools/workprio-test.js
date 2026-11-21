@@ -1,4 +1,4 @@
-// v5.11.0.26 work priorities (from a day-132 farm where chores piled up): the player's chop marks first and 阿禾 helps with
+// v5.11.0.27 work priorities (from a day-132 farm where chores piled up): the player's chop marks first and 阿禾 helps with
 // them, the sunset deck only an hour a day while work waits, demand crops (the diner's cabbage / carrot) sown first, the
 // married child and their spouse come over 6–8 for the harvest and collecting, and with beach guests the farmer fishes for
 // the seafood stall before 11:30 (and the catch waits in the basket for it).

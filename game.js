@@ -833,7 +833,7 @@ function crowdFor(me) { const out = [];
   return out; }
 const whoId = a => a === FARMER ? 'farmer' : a.id;
 const actors = () => S.members.length ? [FARMER, ...S.members] : [FARMER];
-function claimsFor(me) { const c = new Set(); for (const a of actors().concat(SPOUSES.filter(s => s._helpWin))) { const k = a.task; if (a === me || !k) continue; // v5.11.0.26: a spouse helping out claims too
+function claimsFor(me) { const c = new Set(); for (const a of actors().concat(SPOUSES.filter(s => s._helpWin))) { const k = a.task; if (a === me || !k) continue; // v5.11.0.27: a spouse helping out claims too
   if (k.tile) c.add(k.tile); if (k.an) c.add(k.an); if (k.key) c.add(k.key); if (EXCLUSIVE.includes(k.kind)) c.add('kind:' + k.kind); } return c; }
 const seedCount = o => CROP_IDS.reduce((n, k) => n + (o[k] || 0), 0);
 const seedText = o => CROP_IDS.filter(k => o[k] > 0).map(k => `${SIM.CROPS[k].name}×${o[k]}`).join('、');
@@ -915,7 +915,7 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
 // kind makes him work along a row instead of zigzagging. Later, helpers will read the same board and claim tiles.
 function storeTask() { return { kind: 'store', label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗胡萝卜种子放进仓库`); S.store.carrot += F.gathered; F.gathered = 0; } }; }
 function homeTask() { const me = F; return { kind: 'home', label: '回家睡觉', to: DOOR, dur: 5, done: () => { me.home = true; me.sleeping = true; if (me === FARMER) log('回到家，躺下睡觉 Zzz'); } }; }
-// ---- v5.11.0.26 work priorities (day-132 farm: chores piled up while the family sat on the deck and the marked trees waited) ----
+// ---- v5.11.0.27 work priorities (day-132 farm: chores piled up while the family sat on the deck and the marked trees waited) ----
 // The player's chop marks come first (CHOP_ORDER_BASE, above harvest 90) and whoever fells one walks on to the next marked
 // tree beside it in the same trip. The sunset deck and the market-day gathering only run long when nothing urgent waits;
 // otherwise an hour each a day (REST_CAP). Demand crops (DEMAND_TILES: wheat for the mill, cabbage and carrot for the
@@ -997,7 +997,7 @@ function farmHands() { // the main farm's harvest / collecting backlog the marri
 function board() {
   const T = S.t % 1440, E = S.eff, out = [];
   const shut = T < SHOP_OPEN || T >= SHOP_CLOSE - 20; // v5.0: no trips to a closed stall (crops wait in the basket until morning)
-  const post = (kind, base, at, make, key, area, order) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key, area: area || FAM.AREA_OF[kind], order: !!order }); }; // at = null: every target is claimed; v5.11.0.26 order: the player's own command (or a demand seed), no "someone else's area" penalty
+  const post = (kind, base, at, make, key, area, order) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key, area: area || FAM.AREA_OF[kind], order: !!order }); }; // at = null: every target is claimed; v5.11.0.27 order: the player's own command (or a demand seed), no "someone else's area" penalty
   const open = tiles.filter(t => t.open && !CLAIM.has(t));
   const ripe = open.filter(t => t.crop && SU.canHarvest(t.crop, SIM.ripe));
   const dry = open.filter(t => t.crop && SU.canGrow(t.crop, SIM.ripe) && !t.watered);
@@ -1011,8 +1011,8 @@ function board() {
     else { let t = rngNear(dry); // v5.0 sprinkler can: aim at the tile with the most thirsty crops around it
       if (t && E.water3) t = dry.reduce((b, u) => { const v = dry.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - travel(F, u); return v > b.v ? { t: u, v } : b; }, { t, v: -1e9 }).t;
       post('water', late ? 96 : 61, t, () => waterTask(t)); } }
-  if (tilledEmpty.length && !demandPick(F.bag)) { const n = demandFetchN(); if (n > 0) post('fetch', 72, BARN_DOOR, () => fetchTask(n)); } // v5.11.0.26: the mill's / diner's seed from the storehouse
-  if (tilledEmpty.length && bagN > 0) { const t = SU.pickPlantTile(tilledEmpty, tiles, F.bag, rand) || rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t), undefined, undefined, !!demandPick(F.bag)); } // v5.11.0.26: 阿禾 sows a short demand crop too
+  if (tilledEmpty.length && !demandPick(F.bag)) { const n = demandFetchN(); if (n > 0) post('fetch', 72, BARN_DOOR, () => fetchTask(n)); } // v5.11.0.27: the mill's / diner's seed from the storehouse
+  if (tilledEmpty.length && bagN > 0) { const t = SU.pickPlantTile(tilledEmpty, tiles, F.bag, rand) || rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t), undefined, undefined, !!demandPick(F.bag)); } // v5.11.0.27: 阿禾 sows a short demand crop too
   else if (tilledEmpty.length && (storeN > 0 || F.gathered > 0)) post('fetch', 68, BARN_DOOR, () => fetchTask(tilledEmpty.length + tillable.length));
   else if (tilledEmpty.length && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) post('buy', 55, STALL_SPOT, sellTask);
   if (weeds.length) { const t = rngNear(weeds); post('weed', 45, t, () => weedTask(t)); }
@@ -1023,7 +1023,7 @@ function board() {
   if (T < 19 * 60 && F.crops.length < BASK() && !fishedOut) {
     if (E.searod && E.regions.includes('coast')) { const sp = fishSpot('sea'); post('fish', 12, sp.stand, () => fishTask('sea')); }
     else post('fish', 8, FS.POND_SPOT.stand, () => fishTask('pond')); }
-  { const q = seaQuota(); if (q > 0 && F.crops.length < BASK() && (F.fishDay !== S.day || F.fishMin < SEA_QUOTA_MIN)) { const sp = fishSpot('sea'); post('fish', 80 + travel(F, sp.stand) / 8, sp.stand, () => Object.assign(fishTask('sea'), { label: '给海鲜摊钓今天的海鱼' })); } } // v5.11.0.26: an errand (the walk to the pier is not held against it)
+  { const q = seaQuota(); if (q > 0 && F.crops.length < BASK() && (F.fishDay !== S.day || F.fishMin < SEA_QUOTA_MIN)) { const sp = fishSpot('sea'); post('fish', 80 + travel(F, sp.stand) / 8, sp.stand, () => Object.assign(fishTask('sea'), { label: '给海鲜摊钓今天的海鱼' })); } } // v5.11.0.27: an errand (the walk to the pier is not held against it)
   if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
   if (tillable.length && T < 17 * 60) { // the wide hoe aims at the tile whose 3x3 has the most soil to turn
     const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
@@ -1032,7 +1032,7 @@ function board() {
   const ripeTrees = S.trees.filter(t => t.stage === 'tree' && t.ripe && WD.FRUIT[t.kind] && treeReachable(t));
   if (ripeTrees.length && F.crops.length + WD.FRUIT.apple.n <= BASK()) { const t = rngNear(ripeTrees); post('pick', 75, t, () => pickTask(t)); }
   const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
-  if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.26: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
+  if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.27: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0);
   if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
@@ -1130,10 +1130,10 @@ function chooseTask() {
   const T = S.t % 1440;
   if (HM) { const wt = weddingTask(); if (wt) return wt; } // v5.9.0: the wedding
   { const ft = feastTask(); if (ft) return ft; } // v5.10.11: harvest feast (runs past bedtime, to 22:00)
-  if (HM) { if (F._spouse) { const st = spouseTask(); if (st) return st; } else { const ht = homeChoose(); if (ht) return ht; } } // the couple's own day (v5.11.0.26: null = helping on the main farm)
+  if (HM) { if (F._spouse) { const st = spouseTask(); if (st) return st; } else { const ht = homeChoose(); if (ht) return ht; } } // the couple's own day (v5.11.0.27: null = helping on the main farm)
   { const pt = partyTask(); if (pt) return pt; } // v5.7.0: a party evening (runs past bedtime, to 20:30)
   { const sp = sportsTask(); if (sp) return sp; } // v5.10.9: watch the sports day on the playground
-  { const st = F._helpWin ? null : sunsetTask(); if (st && restOk(st)) return restUse(st); } // v5.10.8: sit on the sunset deck 17:00–19:00 (v5.11.0.26: an hour while work waits)
+  { const st = F._helpWin ? null : sunsetTask(); if (st && restOk(st)) return restUse(st); } // v5.10.8: sit on the sunset deck 17:00–19:00 (v5.11.0.27: an hour while work waits)
   if (CR) { const cft = careerFest(); if (cft && !F._spouse && !(F.id && HM && HM.isMarried(S.home, F.id)) && restOk(cft)) return restUse(cft); } // v5.10.6: on a festival the family gathers at the child's shop
   if (T >= sleepAt() || T < WAKE - 30) {
     if (F.crops.length - worksKeepN(F) > 0 && shopOpen(T)) return sellTask(); // v5.0: the stall is shut at night; the basket waits until morning
@@ -1141,16 +1141,16 @@ function chooseTask() {
     return homeTask();
   }
   if (window.PFKids && F.id && /^kid/.test(F.id) && !F._helpWin) { const k = kidPickTask(); if (k) return k; }
-  { const ct = chopNext(); if (ct) return ct; } // v5.11.0.26: the next marked tree beside the one just felled, same trip
+  { const ct = chopNext(); if (ct) return ct; } // v5.11.0.27: the next marked tree beside the one just felled, same trip
   let best = null, bs = -Infinity;
   const others = workingOthers(F).map(a => ({ id: whoId(a), role: a.role })), me = whoId(F);
   const taken = CLAIM = claimsFor(F); CROWD = crowdFor(F); const jobs = board();
   for (const j of jobs) { if (F.role && !FAM.canDo(F.role, j.kind)) continue; if ((j.key && taken.has(j.key)) || taken.has('kind:' + j.kind)) continue;
-    if (F._helpWin && !HELP_KINDS.includes(j.kind)) continue; // v5.11.0.26: the married ones come over for the harvest and the collecting
-    const aff = FAM.affinity(me, F.role, j.area, others); // v5.11.0.26: a player's order (or a demand seed) is everyone's job: no -HELP
+    if (F._helpWin && !HELP_KINDS.includes(j.kind)) continue; // v5.11.0.27: the married ones come over for the harvest and the collecting
+    const aff = FAM.affinity(me, F.role, j.area, others); // v5.11.0.27: a player's order (or a demand seed) is everyone's job: no -HELP
     const s = j.base - travel(F, j.at) / 8 + (j.order && aff < 0 ? 0 : aff) - crowd(j.at) / 4; if (s > bs) { bs = s; best = j; } }
   CLAIM = new Set(); CROWD = [];
-  if (!best && F._helpWin) { F._helpOff = F._helpWin; helpEnd(); return F._spouse ? spouseTask() : homeChoose() || null; } // v5.11.0.26: nothing left to help with
+  if (!best && F._helpWin) { F._helpOff = F._helpWin; helpEnd(); return F._spouse ? spouseTask() : homeChoose() || null; } // v5.11.0.27: nothing left to help with
   if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
   // nothing on the board: rest or stroll. v5.4.3: a child who is not working goes off to play (pets, pens, pond, skip)
   F.idleCount++;
@@ -1196,14 +1196,14 @@ function waterTask(t) {
   } };
 }
 function plantTask(t) {
-  const ty = demandPick(F.bag) || SU.pickSeed(t, tiles, F.bag, () => wheatPick() || SIM.pickFromBag(F.bag, S.prices)); // v5.6.0: wheat only while the mill wants it; v5.11.0.26: a short demand crop first (before the giant-patch habit)
+  const ty = demandPick(F.bag) || SU.pickSeed(t, tiles, F.bag, () => wheatPick() || SIM.pickFromBag(F.bag, S.prices)); // v5.6.0: wheat only while the mill wants it; v5.11.0.27: a short demand crop first (before the giant-patch habit)
   return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || !ty || F.bag[ty] <= 0) return; F.bag[ty]--; diary('p', ty); t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; if (WX && WX.isRaining(S.weather, S.day, S.t)) t.watered = true; groundDirty = true; } };
 }
 function fetchTask(need) { // take the best seeds from the barn first
   return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => {
     if (F.gathered > 0) { S.store.carrot += F.gathered; F.gathered = 0; }
     const order = CROP_IDS.slice().sort((a, b) => SIM.netPerDay(b, S.prices, true) - SIM.netPerDay(a, S.prices, true)), took = SIM.emptySeeds();
-    let left = need; const dw = demandWant(), dg = demandGrowing(); // v5.11.0.26: a short demand crop's seed comes along first
+    let left = need; const dw = demandWant(), dg = demandGrowing(); // v5.11.0.27: a short demand crop's seed comes along first
     for (const k of Object.keys(dw)) { const m = Math.min(left, S.store[k] | 0, Math.max(0, dw[k] - (dg[k] | 0) - (F.bag[k] | 0))); if (m > 0) { S.store[k] -= m; F.bag[k] += m; took[k] = m; left -= m; } }
     for (const k of order) { if (left <= 0) break; const m = Math.min(left, S.store[k]); S.store[k] -= m; F.bag[k] += m; took[k] += m; left -= m; if (left <= 0) break; }
     log(`从仓库取出种子：${seedText(took) || '没有了'}`);
@@ -1268,7 +1268,7 @@ function chopTask(t) {
     log(`砍倒一棵树：木材 ${y.wood} 份进仓库，${WD.FRUIT[y.sapling].name}树苗 1 棵` + (back ? '' : '（这里的树不会再长，树桩夜里挖走）'));
     if (y.drop) chopDrop(t, y);
     decorDrop('chop', t.x, t.y); // v5.7.0: now and then a carving or a stone lamp
-    F._chopNext = t; // v5.11.0.26: chooseTask walks on to a marked tree beside this one
+    F._chopNext = t; // v5.11.0.27: chooseTask walks on to a marked tree beside this one
   } };
 }
 // v5.0: a felled tree sometimes drops something small (world.js DROPS): fruit, a wildflower (a gift for 阿禾), rare seeds, coins, a nest
@@ -1452,7 +1452,7 @@ function spousesIn() {
 }
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
-  const kid = F.role === 'child' || !!F._spouse; // children sell what they picked; buying stays with the grown-ups (v5.11.0.26: a helping spouse too)
+  const kid = F.role === 'child' || !!F._spouse; // children sell what they picked; buying stays with the grown-ups (v5.11.0.27: a helping spouse too)
   return { label: F.crops.length ? '正在去市场卖菜' : S.animals.length && S.hay < AN.need(S.animals) * 2 ? '正在去市场买干草' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
     if (!shopOpen()) { if (F === FARMER) log('集市已经关门了，明天早上再来卖'); return; }
     if (F === FARMER) giftAtStall();
@@ -1477,9 +1477,9 @@ function sellTask() {
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
     if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops.filter(k => k !== 'wheat')); // v5.6.0: wheat is bought for the mill below
       if (p.cost > 0) { emit('purchase', { item: 'seeds', n: seedCount(p.buy), gold: p.cost }); S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; noteLog('spend', 'seeds', p.cost); log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
-    const ws = Math.max(wheatShort(), demandShort('wheat')), wk = Math.min(ws, Math.floor(S.coins * 0.3 / SIM.CROPS.wheat.seed)); // v5.6.0: seed for the mill's wheat; v5.11.0.26: its tiles too
+    const ws = Math.max(wheatShort(), demandShort('wheat')), wk = Math.min(ws, Math.floor(S.coins * 0.3 / SIM.CROPS.wheat.seed)); // v5.6.0: seed for the mill's wheat; v5.11.0.27: its tiles too
     if (wk > 0) { diary('out', null, wk * SIM.CROPS.wheat.seed); S.coins -= wk * SIM.CROPS.wheat.seed; F.bag.wheat += wk; noteLog('spend', 'seeds', wk * SIM.CROPS.wheat.seed); log(`给磨坊买了 ${wk} 颗小麦种子（${wk * SIM.CROPS.wheat.seed} 金）`); }
-    for (const k of ['cabbage', 'carrot']) { const c = SIM.CROPS[k].seed, m = Math.min(demandShort(k), Math.floor(S.coins * 0.1 / c)); // v5.11.0.26: the diner's vegetables
+    for (const k of ['cabbage', 'carrot']) { const c = SIM.CROPS[k].seed, m = Math.min(demandShort(k), Math.floor(S.coins * 0.1 / c)); // v5.11.0.27: the diner's vegetables
       if (m > 0) { diary('out', null, m * c); S.coins -= m * c; F.bag[k] += m; noteLog('spend', 'seeds', m * c); log(`给菜馆买了 ${m} 颗${SIM.CROPS[k].name}种子（${m * c} 金）`); } }
     noteProgress();
   } };
@@ -2859,7 +2859,7 @@ function hallView() { // what the board shows (ui.js)
     festival: FV && FV.ready(H) ? { today: FV.isDay(H, S.day), next: FV.nextDay(H, S.day), lantern: FV.hasShops(H), gift: FV.GIFT } : null }; }
 // ---- the town shop: a grown-up takes workshop goods, honey and fish over at a fifth more ----
 const tradeOk = a => townOpen() && (!a.role || FAM.canDo(a.role, 'towntrade')) && a.role !== 'child';
-const tradeList = a => { const hold = seaHold(a); return a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && !hold[o.i] && TN.tradeable(o.ty, FS.isFish(o.ty))); }; // v5.11.0.26: not the stall's sea fish
+const tradeList = a => { const hold = seaHold(a); return a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && !hold[o.i] && TN.tradeable(o.ty, FS.isFish(o.ty))); }; // v5.11.0.27: not the stall's sea fish
 function tradeKeep(a, keep) { // while the town shop is still open today, the tradeable goods stay in the basket for it
   const T = S.t % 1440; if (marketDay() && tradeOk(a)) return marketKeep(a, keep, T); // v5.10.3
   if (!tradeOk(a) || T >= TN.TRADE.to - 30) return keep;
@@ -3855,7 +3855,7 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     if (seat) return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
   if (T >= sleepAt() || T < WAKE - 30) { if (!sp && ((F.crops.length && shopOpen(T)) || (F.gathered && T < sleepAt() + 60))) return null; const me = F;
     return { kind: 'home', label: '回新房子睡觉', to: L.door, dur: 5, done: () => { me.home = true; me.sleeping = true; } }; }
-  { const win = helpWinNow(T); // v5.11.0.26: 6–8 and 17–19 the married ones come over for the main farm's harvest and collecting
+  { const win = helpWinNow(T); // v5.11.0.27: 6–8 and 17–19 the married ones come over for the main farm's harvest and collecting
     if (win && F._helpOff !== win && (F._helpWin === win || farmHands() >= HM.HELP.backlog)) { if (F._helpWin !== win) { F._helpWin = win; log(`${F.name}从新房子过来帮忙收菜捡蛋`); } return null; }
     if (F._helpWin && F._helpWin !== win) helpEnd(); }
   const path = CR ? CR.pathOf(S.home, kid) : null;
@@ -3967,9 +3967,9 @@ function homeStatus() {
   return { kids, nb: HM.nbRel(S.home), houses: S.home.houses.map(h => ({ site: h.site, name: HM.siteName(h.site), built: h.built, kid: h.kid })), earn: S.home.earn, wage: S.home.wage || 0, open: townOpen() };
 }
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
-  if (F.crops.length && !F._helpWin && shopOpen(S.t % 1440) && homeOfActor(F)) return Object.assign(sellTask(), { kind: 'sell' }); // v5.11.0.26: what they gathered on the main farm goes to market
+  if (F.crops.length && !F._helpWin && shopOpen(S.t % 1440) && homeOfActor(F)) return Object.assign(sellTask(), { kind: 'sell' }); // v5.11.0.27: what they gathered on the main farm goes to market
   const own = homeChoose(); if (own) return own;
-  if (F._helpWin) return null; // v5.11.0.26: helping on the main farm (chooseTask's board)
+  if (F._helpWin) return null; // v5.11.0.27: helping on the main farm (chooseTask's board)
   const T = S.t % 1440;
   if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F);
     if (seat) return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
@@ -5689,7 +5689,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.26';
+const GAME_VERSION = '5.11.0.27';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
