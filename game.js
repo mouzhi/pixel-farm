@@ -2951,9 +2951,20 @@ function bakeryPull(need) { // check the whole order first; never take honey / f
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
   return Object.keys(left).every(k => left[k] <= 0);
 }
+function bakeryReleaseHeld(B) {
+  if (!B || !B.held) return;
+  bakeryHeldReturn(B.held);
+  delete B.held;
+}
+function bakeryRoll(B) {
+  if (!B || B.last === S.day) return B;
+  bakeryReleaseHeld(B);
+  BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined));
+  return B;
+}
 function bakeryMorning() {
   const H = bakeryH(); if (!H || !townOpen()) return; const B = H.bakery; if (B.last === S.day) return;
-  BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined)); BK.autoTake(B, bakeryCounts(), bakeryPrice);
+  bakeryRoll(B); BK.autoTake(B, bakeryCounts(), bakeryPrice);
   const texts = B.offer.map(q => q.text).join('；');
   log(`小桃的订单板：${texts}。家人会接更划算的一单送到面包房，按单多付五成；不接也没有惩罚`);
 }
@@ -2967,8 +2978,10 @@ function bakeryMarkShort(B, o, counts) {
   log(`小桃这一单还缺${bit || '原料'}，凑齐了再送`);
 }
 function bakeryHeldReturn(need) {
-  if (!need || !F) return;
-  for (const x of need) for (let i = 0; i < (x.n | 0); i++) F.crops.push(x.id);
+  if (!need) return;
+  const bag = (F && Array.isArray(F.crops)) ? F : FARMER;
+  if (!bag || !Array.isArray(bag.crops)) return;
+  for (const x of need) for (let i = 0; i < (x.n | 0); i++) bag.crops.push(x.id);
 }
 // when a taken order is short, pick up / collect the missing product first (never a town / hall / inn autobuy)
 function bakeryGatherBoard(post, T, o) {
@@ -2997,7 +3010,9 @@ function bakeryGatherBoard(post, T, o) {
 }
 function bakeryBoard(post, T) {
   const H = bakeryH(); if (!H || !tradeOk(F) || !BK.open(H, T)) return;
-  const B = H.bakery; if (B.last !== S.day) { BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined)); log(`小桃的订单板：${B.offer.map(q => q.text).join('；')}`); }
+  const B = H.bakery; if (B.last !== S.day) { bakeryRoll(B); log(`小桃的订单板：${B.offer.map(q => q.text).join('；')}`); }
+  // cargo already pulled for today's walk: finish the trip even if skip was set, and do not pull twice
+  if (B.held && B.held.length && !B.done) { post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery'); return; }
   if (B.skip) return;
   BK.autoTake(B, bakeryCounts(), bakeryPrice); const o = BK.taken(B); if (!o || B.done) return;
   bakeryGatherBoard(post, T, o);
@@ -3006,10 +3021,15 @@ function bakeryBoard(post, T) {
 }
 function bakeryTask() {
   const at = BK.STAND, KEY = 'town:bakery';
-  const H0 = bakeryH(), B0 = H0 && H0.bakery, o0 = B0 && BK.taken(B0);
+  const H0 = bakeryH(), B0 = H0 && H0.bakery, o0 = B0 && (BK.taken(B0) || (B0.held && B0.held.length && B0.offer && B0.offer.find(q => q.id === B0.take)));
+  if (B0 && B0.held && B0.held.length && !B0.done) {
+    const text = (o0 && o0.text) || BK.needText(B0.held);
+    return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: bakeryArrive(at, text) };
+  }
   if (!o0 || B0.done || B0.skip) return { kind: 'idle', key: KEY, label: '在农场里走走', to: { x: F.x, y: F.y }, dur: 2 };
   const counts = bakeryCounts();
   // v5.11.0.26: pull the goods when the job is taken, not at 小桃's door (a second adult or a workshop run used to empty the basket on the walk)
+  // v5.11.0.27: the pulled cargo is saved as bakery.held so a reload mid-walk cannot drop it
   if (!BK.have(o0.need, counts)) {
     bakeryMarkShort(B0, o0, counts);
     return { kind: 'idle', key: KEY, label: '先凑齐面包房的原料', to: { x: F.x, y: F.y }, dur: 2 };
@@ -3020,18 +3040,25 @@ function bakeryTask() {
     return { kind: 'idle', key: KEY, label: '这一单今天先放下', to: { x: F.x, y: F.y }, dur: 2 };
   }
   if (B0.short) delete B0.short;
-  const held = o0.need.map(x => ({ id: x.id, n: x.n })), text = o0.text;
-  return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: () => {
-    const H = bakeryH(); if (!H || !BK.open(H, S.t % 1440)) { bakeryHeldReturn(held); log('面包房已经打烊了，东西先带回家'); return; }
-    const B = H.bakery, o = BK.taken(B); if (!o || B.done) { bakeryHeldReturn(held); return; }
+  B0.held = o0.need.map(x => ({ id: x.id, n: x.n }));
+  return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: bakeryArrive(at, o0.text) };
+}
+function bakeryArrive(at, text) {
+  return () => {
+    const H = bakeryH(), B = H && H.bakery, held = B && B.held;
+    if (!H || !BK.open(H, S.t % 1440)) { bakeryReleaseHeld(B); log('面包房已经打烊了，东西先带回家'); return; }
+    const o = B && (BK.taken(B) || (held && B.offer && B.offer.find(q => q.id === B.take)));
+    if (!B || !o || B.done) { bakeryReleaseHeld(B); return; }
+    if (!held || !held.length) return;
     const base = BK.baseOf(held, bakeryPrice), sum = BK.payOf(held, bakeryPrice), extra = sum - base, n = held.reduce((s, x) => s + x.n, 0);
     S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
-    B.done = 1; B.days++; B.gold += sum; B.extra += extra; delete B.short;
+    B.done = 1; B.days++; B.gold += sum; B.extra += extra; delete B.short; delete B.held;
     if (HM) HM.clampAdd(S.home.nb, 'n3', BK.FAVOR);
     emit('income', { gold: sum, items: n, source: 'bakery', by: { works: sum }, who: F === FARMER ? 'farmer' : F.id });
     noteLog('income', 'works', sum); if (F !== FARMER) noteLog('work', F.id, 0, sum);
     popText(at.x, at.y - 8, 26, '+' + sum, '#ffd76a'); burst(at.x, at.y - 4, 12, ['#ffd76a', '#fff2a8', Ac[0]], 8, 'coin'); hearts(at.x, at.y - 2, 14);
-    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`); } };
+    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`);
+  };
 }
 function woodshopMorning() { // v5.10.5: once a day, if auto is on and the pile is above the reserve, 阿松 makes a bench
   const H = S.town && S.town.hall; if (!H || !WS || !WS.built(H) || !townOpen()) return;
@@ -3069,13 +3096,16 @@ function smithyView() {
 function setBakeryPick(on, id) { // 「我来挑」 (ui.js): on = 0/1 switches the mode; id accepts one of today's orders
   const H = bakeryH(); if (!H) return; const B = H.bakery;
   if (on === 0 || on === 1 || on === true || on === false) B.pick = on ? 1 : 0;
-  if (id !== undefined) BK.setTake(B, id);
+  if (id !== undefined) {
+    if (B.held && B.take !== id) bakeryReleaseHeld(B);
+    BK.setTake(B, id);
+  }
 }
 function bakeryView() {
   const H = bakeryH(); if (!H) return null; const B = H.bakery;
-  if (B.last !== S.day) BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined));
-  const o = BK.taken(B);
-  return { pick: B.pick, offer: B.offer.map(q => ({ id: q.id, text: q.text, need: q.need, pay: q.pay, base: q.base, take: B.take === q.id, have: BK.have(q.need, bakeryCounts()) })), take: B.take, done: B.done, days: B.days, gold: B.gold, extra: B.extra, open: BK.open(H, S.t % 1440), text: o ? o.text : null };
+  if (B.last !== S.day) bakeryRoll(B);
+  const o = BK.taken(B) || (B.held && B.offer && B.offer.find(q => q.id === B.take));
+  return { pick: B.pick, offer: B.offer.map(q => ({ id: q.id, text: q.text, need: q.need, pay: q.pay, base: q.base, take: B.take === q.id, have: (B.held && B.take === q.id) || BK.have(q.need, bakeryCounts()) })), take: B.take, done: B.done, days: B.days, gold: B.gold, extra: B.extra, open: BK.open(H, S.t % 1440), text: o ? o.text : null };
 }
 // the crowd on market day: pedlars at the stalls nobody lives here to keep, and shoppers going round them
 const MKT = [];
