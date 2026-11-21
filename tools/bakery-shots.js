@@ -155,6 +155,141 @@ fs.mkdirSync(OUT, { recursive: true });
       : r.short !== 1 ? 'short log ' + r.short + ' ' + JSON.stringify(r.log)
       : null);
 
+  // 5c. v5.11.0.27: pull at departure is serialized as bakery.held; a save+reload mid-walk keeps 3 milk+3 honey and pays once
+  if (!only || 'v511027_bakery_held_reload.png'.includes(only)) {
+    const p = await page();
+    let r, mid;
+    try {
+      mid = await p.evaluate(`(() => { ${setup} ${houses} f.hallStart('bakery'); nextMorning();
+        day(S.day); at(8 * 60);
+        const typ = it => typeof it === 'string' ? it : (it && it.type);
+        const tally = () => {
+          const c = { milk: 0, honey: 0 };
+          for (const a of f.actors()) for (const it of (a.crops || [])) { const t = typ(it); if (t in c) c[t]++; }
+          if (S.works && S.works.hives) for (const h of S.works.hives) c.honey += (h && h.ready) | 0;
+          const held = (S.town.hall.bakery && S.town.hall.bakery.held) || [];
+          for (const x of held) if (x.id in c) c[x.id] += x.n | 0;
+          const B = S.town.hall.bakery || {};
+          return { milk: c.milk, honey: c.honey, n: c.milk + c.honey, coins: S.coins, gold: B.gold | 0, done: !!B.done, days: B.days | 0, held: held.map(x => x.id + ':' + x.n), take: B.take };
+        };
+        const B = S.town.hall.bakery;
+        B.offer = [{ id: 'o0', need: [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], text: '3 瓶牛奶 + 3 罐蜂蜜', base: 225, pay: 338 }];
+        B.take = 'o0'; B.done = 0; B.last = S.day; B.pick = 0; B.gold = 0; B.days = 0; B.extra = 0; delete B.short; delete B.skip; delete B.held;
+        for (const a of f.actors()) a.crops.length = 0;
+        f.FARMER.crops.push('milk','milk','milk','honey','honey','honey');
+        const start = tally();
+        const left = until(() => f.actors().some(a => a.task && a.task.kind === 'bakery' && /送到小桃/.test(a.task.label || '')), 200);
+        const walking = tally();
+        const snap = f.snapshot();
+        const compact = PFSave.compact(snap);
+        const baked = compact.town && compact.town.hall && compact.town.hall.bakery;
+        const pay = f.BK.payOf(B.offer[0].need, ty => f.priceOfAny(ty));
+        return { start, walking, left, snap, bakedHeld: baked && baked.held, bakedTake: baked && baked.take, ver: f.version, pay }; })()`);
+      if (!mid || !mid.snap) throw new Error('no mid-walk snapshot');
+      await p.evaluate(s => { __farm.SAVE.off = true; localStorage.clear(); localStorage.setItem('mouzhi/pixel-farm:save', JSON.stringify(s)); }, mid.snap);
+      await p.reload();
+      await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 30000 });
+      await p.evaluate(() => { __farm.SAVE.off = true; const o = document.getElementById('offline'); if (o) o.hidden = true; });
+      r = await p.evaluate(({ start, pay }) => {
+        const f = __farm, S = f.S;
+        const typ = it => typeof it === 'string' ? it : (it && it.type);
+        const tally = () => {
+          const c = { milk: 0, honey: 0 };
+          for (const a of f.actors()) for (const it of (a.crops || [])) { const t = typ(it); if (t in c) c[t]++; }
+          if (S.works && S.works.hives) for (const h of S.works.hives) c.honey += (h && h.ready) | 0;
+          const held = (S.town.hall.bakery && S.town.hall.bakery.held) || [];
+          for (const x of held) if (x.id in c) c[x.id] += x.n | 0;
+          const B = S.town.hall.bakery || {};
+          return { milk: c.milk, honey: c.honey, n: c.milk + c.honey, coins: S.coins, gold: B.gold | 0, done: !!B.done, days: B.days | 0, held: held.map(x => x.id + ':' + x.n), take: B.take };
+        };
+        const loaded = tally();
+        const delivered = () => ((S.events || []).some(e => /把 .*送到小桃的面包房/.test(e.msg)));
+        for (let i = 0; i < 200 && !delivered(); i++) f.advance(1, 10);
+        const paid = tally();
+        const payLogs = ((S.events || []).map(e => e.msg)).filter(m => /把 .*送到小桃的面包房/.test(m));
+        const goldAfterPay = paid.gold;
+        S.t = Math.floor(S.t / 1440) * 1440 + 10 * 60 + 40;
+        if (f.jumpTo) f.jumpTo('town');
+        f.setAngle(0); f.panTo(f.BK.STAND.x, f.BK.STAND.y + 4); f.advance(0.3, 10);
+        const lb = document.getElementById('leftBottom'); if (lb) lb.style.visibility = 'visible';
+        f.refreshUI(); if (f.render) f.render();
+        return { start, loaded, paid, payLogs: payLogs.length, pay, goldAfterPay, ver: f.version, snapPaid: f.snapshot() };
+      }, { start: mid.start, pay: mid.pay });
+      r.walking = mid.walking; r.bakedHeld = mid.bakedHeld; r.left = mid.left;
+      await p.waitForTimeout(400); await p.screenshot({ path: path.join(OUT, 'v511027_bakery_held_reload.png') });
+      const more = await p.evaluate(({ goldAfterPay, pay, snapPaid }) => {
+        const f = __farm, S = f.S;
+        f.SAVE.off = true;
+        f.restore(PFSave.validate(PFSave.compact(snapPaid)));
+        f.SAVE.off = true;
+        const typ = it => typeof it === 'string' ? it : (it && it.type);
+        const tally = () => {
+          const c = { milk: 0, honey: 0 };
+          for (const a of f.actors()) for (const it of (a.crops || [])) { const t = typ(it); if (t in c) c[t]++; }
+          if (S.works && S.works.hives) for (const h of S.works.hives) c.honey += (h && h.ready) | 0;
+          const held = (S.town.hall.bakery && S.town.hall.bakery.held) || [];
+          for (const x of held) if (x.id in c) c[x.id] += x.n | 0;
+          const B = S.town.hall.bakery || {};
+          return { milk: c.milk, honey: c.honey, n: c.milk + c.honey, coins: S.coins, gold: B.gold | 0, done: !!B.done, days: B.days | 0, held: held.map(x => x.id + ':' + x.n), take: B.take };
+        };
+        const until = (ok, n) => { for (let i = 0; i < (n || 600) && !ok(); i++) f.advance(1, 10); return ok(); };
+        const afterPayLoad = tally();
+        for (let i = 0; i < 40; i++) f.advance(1, 10);
+        const noDouble = tally();
+        const B = S.town.hall.bakery;
+        const next = () => { const d = S.day; for (let i = 0; i < 3000 && !(S.day > d && S.t % 1440 >= 6 * 60 + 30); i++) f.advance(1, 10); };
+        next(); S.t = Math.floor(S.t / 1440) * 1440 + 8 * 60;
+        B.offer = [{ id: 'o0', need: [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], text: '3 瓶牛奶 + 3 罐蜂蜜', base: 225, pay: 338 }];
+        B.take = 'o0'; B.done = 0; B.last = S.day; B.pick = 0; delete B.short; delete B.skip; delete B.held;
+        for (const a of f.actors()) a.crops.length = 0;
+        f.FARMER.crops.push('milk','milk','milk','honey','honey','honey');
+        until(() => f.actors().some(a => a.task && a.task.kind === 'bakery' && /送到小桃/.test(a.task.label || '')), 200);
+        const midClose = tally();
+        S.t = Math.floor(S.t / 1440) * 1440 + 16 * 60;
+        until(() => !f.actors().some(a => a.task && a.task.kind === 'bakery'), 200);
+        const closed = tally();
+        const closeLog = ((S.events || []).map(e => e.msg)).filter(m => /打烊/.test(m));
+        B.offer = [{ id: 'o0', need: [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], text: '3 瓶牛奶 + 3 罐蜂蜜', base: 225, pay: 338 }];
+        B.take = 'o0'; B.done = 0; B.last = S.day; B.pick = 0; delete B.short; delete B.skip; delete B.held;
+        for (const a of f.actors()) a.crops.length = 0;
+        f.FARMER.crops.push('milk','milk','milk','honey','honey','honey');
+        S.t = Math.floor(S.t / 1440) * 1440 + 8 * 60;
+        until(() => f.actors().some(a => a.task && a.task.kind === 'bakery' && /送到小桃/.test(a.task.label || '')), 200);
+        const midCancel = tally();
+        f.setBakeryPick(1, null);
+        const cancelled = tally();
+        B.offer = [{ id: 'o0', need: [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], text: '3 瓶牛奶 + 3 罐蜂蜜', base: 225, pay: 338 }];
+        B.take = 'o0'; B.done = 0; B.last = S.day; B.pick = 0; delete B.short; delete B.skip; delete B.held;
+        for (const a of f.actors()) a.crops.length = 0;
+        f.FARMER.crops.push('milk','milk','milk','honey','honey','honey');
+        S.t = Math.floor(S.t / 1440) * 1440 + 8 * 60;
+        until(() => f.actors().some(a => a.task && a.task.kind === 'bakery' && /送到小桃/.test(a.task.label || '')), 200);
+        const midRoll = tally();
+        const day0 = S.day;
+        S.t = (S.day + 1) * 1440 + 7 * 60; S.day = day0 + 1;
+        f.bakeryView();
+        const rolled = tally();
+        return { afterPayLoad, noDouble, midClose, closed, closeLog: closeLog.length, midCancel, cancelled, midRoll, rolled };
+      }, { goldAfterPay: r.goldAfterPay, pay: r.pay, snapPaid: r.snapPaid });
+      delete r.snapPaid;
+      Object.assign(r, more);
+    } catch (e) { r = { error: String(e).slice(0, 400) }; if (r && !r.loaded) await p.screenshot({ path: path.join(OUT, 'v511027_bakery_held_reload.png') }).catch(() => {}); }
+    const bad = r && r.error ? r.error : (!r.left ? 'never left with the basket'
+      : (r.walking && r.walking.n !== 6) || (r.walking && !(r.walking.held && r.walking.held.length)) ? 'cargo not serialized at departure ' + JSON.stringify(r.walking)
+      : !r.bakedHeld || r.bakedHeld.length < 2 ? 'compact save dropped held ' + JSON.stringify(r.bakedHeld)
+      : r.loaded.n !== 6 || r.loaded.milk !== 3 || r.loaded.honey !== 3 ? 'lost cargo on reload ' + JSON.stringify(r.loaded)
+      : r.loaded.gold !== 0 || r.loaded.done ? 'paid before arrival ' + JSON.stringify(r.loaded)
+      : r.paid.n !== 0 || !r.paid.done || r.paid.gold !== r.pay ? 'live delivery after reload ' + JSON.stringify(r.paid)
+      : r.payLogs !== 1 ? 'payout log ' + r.payLogs
+      : r.afterPayLoad.gold !== r.pay || r.noDouble.gold !== r.pay ? 'duplicate payout ' + JSON.stringify({ afterPayLoad: r.afterPayLoad, noDouble: r.noDouble })
+      : r.midClose.n !== 6 || r.closed.n !== 6 || r.closed.held.length || r.closed.gold !== r.pay || !r.closeLog ? 'close did not return cargo ' + JSON.stringify({ midClose: r.midClose, closed: r.closed, closeLog: r.closeLog })
+      : r.midCancel.n !== 6 || r.cancelled.n !== 6 || r.cancelled.held.length || r.cancelled.take || r.cancelled.gold !== r.pay ? 'cancel did not return cargo ' + JSON.stringify({ midCancel: r.midCancel, cancelled: r.cancelled })
+      : r.midRoll.n !== 6 || r.rolled.n !== 6 || r.rolled.held.length || r.rolled.gold !== r.pay ? 'rollover did not return cargo ' + JSON.stringify({ midRoll: r.midRoll, rolled: r.rolled })
+      : null);
+    console.log(bad ? 'FAIL' : 'ok  ', 'v511027_bakery_held_reload.png', JSON.stringify(r).slice(0, 900)); if (bad) fails.push('v511027_bakery_held_reload.png: ' + bad);
+    await p.context().close();
+  }
+
   // 6. fixtures load: hall gains an empty bakery, save version stays 15, decorations keep their counts (layout flag 2)
   for (const [fx, fn] of [['day59', 'save-v10-day59-manor.json'], ['day72', 'save-v15-day72-cottage.json']]) {
     const file = path.join(__dirname, 'fixtures', fn); if (!fs.existsSync(file)) continue; const save = readSave(file);
@@ -164,7 +299,7 @@ fs.mkdirSync(OUT, { recursive: true });
       look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, bakery: s2.town.hall.bakery, layout: s2.settings.decorLayout, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.26' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.27' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
 
   // 7. (local only) the real save and the friend's save load, decorations keep their counts, lamps use the wider spots

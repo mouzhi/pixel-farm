@@ -112,4 +112,17 @@ ok('v5.11.0.26: addCount treats ready 0 as 0, not 1; a new day clears skip; auto
   BK.autoTake(v, { honey: 9 }, BK.payOf); assert.strictEqual(v.take, 'o0', 'skip blocks auto on the failed order');
   BK.roll(v, 10); assert.ok(!v.skip, 'a new day drops yesterday\'s skip'); assert.strictEqual(v.take, null);
 });
+ok('v5.11.0.27: valid() keeps held append-only; junk ids drop; a new day clears held (the game returns cargo first)', () => {
+  const v = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }] }], take: 'o0', held: [{ id: 'milk', n: 3 }, { id: 'nope', n: 2 }, { id: 'honey', n: 3 }] });
+  assert.deepStrictEqual(v.held, [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }]);
+  const plain = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0' });
+  assert.ok(!('held' in plain), 'missing held stays omitted');
+  const emptyHeld = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0', held: [] });
+  assert.ok(!('held' in emptyHeld), 'empty held stays omitted');
+  const junk = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0', held: [{ id: 'ghost', n: 4 }] });
+  assert.ok(!('held' in junk), 'unknown cargo is dropped');
+  const H = HL.valid({ bakery: { last: 9, offer: [{ id: 'o0', need: [{ id: 'milk', n: 3 }] }], take: 'o0', held: [{ id: 'milk', n: 3 }] } });
+  assert.deepStrictEqual(H.bakery.held, [{ id: 'milk', n: 3 }]);
+  BK.roll(v, 10); assert.ok(!v.held, 'a new day drops yesterday\'s held'); assert.strictEqual(v.take, null);
+});
 console.log('bakery-test: ' + n + ' ok');
