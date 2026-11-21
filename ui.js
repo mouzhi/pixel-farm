@@ -881,7 +881,10 @@
       mode = 'rewind'; rewindEntries = null; pendingRewind = null; drawMenu();
       L.openRewind().then(st => {
         if (st.aborted) { mode = ''; drawMenu(); return; }
-        if (!st.granted) { announceSync(st); mode = ''; drawMenu(); return; }
+        if (!st.granted) {
+          dispatchEvent(new CustomEvent('pf:say', { detail: st.rewindHint || '请先点「恢复本地同步」，再打开「回到某一天」。' }));
+          mode = ''; drawMenu(); return;
+        }
         rewindEntries = st.entries || [];
         drawMenu();
       }).catch(err => { dispatchEvent(new CustomEvent('pf:say', { detail: '读不了每日存档：' + (err && err.message || err) })); mode = ''; drawMenu(); });

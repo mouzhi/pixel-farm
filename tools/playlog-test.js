@@ -625,20 +625,68 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.ok(list.filter(x => x.day === 12 && x.role === 'day').length >= 2, 'both timelines listed');
   });
 
-  await testAsync('openRewind requests permission inside the call when the handle is in memory', async () => {
+  await testAsync('openRewind: a hanging requestPermission returns immediately with a restore hint', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const browser = browserDay(2, 10);
+    LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browser });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    dir.requestPermission = () => new Promise(() => {}); // never settles — the live Chrome hang
+    const saves = await dir.getDirectoryHandle('saves', { create: true });
+    saves.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
+    LOG.installDir(dir, 'prompt');
+    let picked = 0;
+    LOG.setPicker(async () => { picked++; return dir; });
+    let st;
+    try {
+      st = await Promise.race([
+        LOG.openRewind(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('openRewind hung waiting on requestPermission')), 400))
+      ]);
+    } finally { LOG.setPicker(null); }
+    assert.strictEqual(picked, 0, 'rewind must not open the folder picker');
+    assert.strictEqual(st.granted, false);
+    assert.deepStrictEqual(st.entries, []);
+    assert.ok(/恢复本地同步/.test(st.rewindHint), st.rewindHint);
+    assert.ok(!dir.files['pixel-farm-save.json'], 'must not write the latest save');
+    assert.ok(!dir.files['pixel-farm-playlog.json'], 'must not write the playlog');
+    assert.strictEqual(browser.clock.day, 2, 'must not touch the browser save');
+  });
+
+  await testAsync('openRewind: no folder handle returns a hint and does not pick or write', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const browser = browserDay(2, 10);
+    LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browser });
+    await LOG.hydrateDir();
+    let picked = 0;
+    LOG.setPicker(async () => { picked++; return LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' }); });
+    try {
+      const st = await LOG.openRewind();
+      assert.strictEqual(picked, 0, 'must not open the picker from rewind');
+      assert.strictEqual(st.granted, false);
+      assert.deepStrictEqual(st.entries, []);
+      assert.ok(/同步到本地文件夹/.test(st.rewindHint), st.rewindHint);
+      assert.strictEqual(browser.clock.day, 2);
+    } finally { LOG.setPicker(null); }
+  });
+
+  await testAsync('openRewind lists daily snapshots only when permission is already granted', async () => {
     const s = mem();
     LOG.reset(s);
     LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browserDay(2, 10) });
     await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     const saves = await dir.getDirectoryHandle('saves', { create: true });
     saves.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
-    LOG.installDir(dir, 'prompt');
+    LOG.installDir(dir, 'granted');
+    const before = Object.keys(dir.files).slice();
     const st = await LOG.openRewind();
-    assert.strictEqual(dir.requestCalls, 1);
+    assert.strictEqual(dir.requestCalls, 0, 'already granted: do not call requestPermission');
     assert.strictEqual(st.granted, true);
     assert.ok(st.entries.some(x => x.day === 12), JSON.stringify(st.entries));
-    // auto path must not have imported that day into the "browser" — getSave is still day 2, and we never called rewindTo
+    assert.deepStrictEqual(Object.keys(dir.files).sort(), before.sort(), 'listing must not write');
     assert.ok(st.entries.every(x => x.role !== 'before-rewind') || true);
   });
 

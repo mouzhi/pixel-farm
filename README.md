@@ -946,5 +946,6 @@ EXCLUDED.md                      没有进仓库的大文件清单
 
 ### v5.11.0.25
 - 修好 Windows 上 Chrome 点「点此恢复本地同步」仍然没有弹出任何窗口：`requestPermission` 虽然是在用户手势里调用的，但对从 IndexedDB 恢复的文件夹句柄，这个 Promise 可能一直既不成功也不失败（15 秒以后还在 pending），页面上也不会出现授权框，所以等它结束再打开 `showDirectoryPicker` 的路径永远走不到。现在只要缓存里的权限还不是 `granted`（或句柄缺失、需要重选），同一次点击会直接打开文件夹选择框（`startIn` 是已保存的那个文件夹，例如再选一次 `H:\pixelfarm`），不再等待 `requestPermission`。若选的还是原来那个文件夹，会用 `isSameEntry` 确认。关上选择框算取消，不会当成失败。本地文件夹仍然只写出、不读回，存档仍是 v15。
-- `node tools/playlog-test.js` 增加：`requestPermission` 返回一个永远不结束的 Promise 时，同一次 `resumeDir()` 仍然会打开选择框，并且选择框是这次点击里的第一个 `await`。
+- 「回到某一天」不再等待同一个可能挂住的 `requestPermission`。权限还不是 `granted`（或还没有文件夹）时，马上退出「正在读取每日存档…」，提示先点「恢复本地同步」；只有已经有写入权限时才列出每日存档。这条路径不会写入、也不会改存档。
+- `node tools/playlog-test.js` 增加：`requestPermission` 返回一个永远不结束的 Promise 时，同一次 `resumeDir()` 仍然会打开选择框，并且选择框是这次点击里的第一个 `await`；同一情况下 `openRewind()` 会立刻返回提示，而不会一直转圈。
 

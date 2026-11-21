@@ -743,20 +743,17 @@
     });
     return items;
   }
-  // Must be called from a click: requestPermission is the first await when the handle is in memory.
+  // v5.11.0.25: do not await requestPermission here. A restored handle can leave
+  // that promise pending forever, and the menu would stay on 「正在读取每日存档…」.
+  // If the folder is not already granted (or there is no handle), return immediately
+  // with a hint to restore local sync first. This path never writes and never
+  // touches the save; the rewind list opens only once permission is already held.
+  const REWIND_NEED_RESUME = '请先点「恢复本地同步」，再打开「回到某一天」。';
+  const REWIND_NEED_FOLDER = '请先同步到本地文件夹，再打开「回到某一天」。';
   async function openRewind() {
-    if (!dirHandle) {
-      try { await pickDir(); }
-      catch (e) {
-        if (e && e.name === 'AbortError') return Object.assign(status(), { aborted: true, entries: [] });
-        logErr(e);
-        return Object.assign(status(), { entries: [] });
-      }
-    } else if (perm !== 'granted') {
-      try { perm = await requestPerm(dirHandle); }
-      catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; return Object.assign(status(), { entries: [] }); }
-      if (perm !== 'granted') { needsRepick = true; return Object.assign(status(), { entries: [] }); }
-      needsRepick = false;
+    if (!dirHandle || perm !== 'granted') {
+      const rewindHint = dirHandle ? REWIND_NEED_RESUME : REWIND_NEED_FOLDER;
+      return Object.assign(status(), { entries: [], rewindHint });
     }
     const entries = await listRewind();
     return Object.assign(status(), { entries });
