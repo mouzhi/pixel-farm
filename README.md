@@ -740,7 +740,7 @@ EXCLUDED.md                      没有进仓库的大文件清单
 
 测试在 `tools/bakery-test.js` 和 `tools/bakery-shots.js`（`v511025_bakery_short.png`）。
 
-CI：`recent-a` 加上核料截图后跑到 23 分 12 秒（超过 22 分钟上限；主干上这一组已经 21 分 50 秒）。`workshop-shots.js` 改挂到 `works-town`，`festival-shots.js` 改挂到 `agrilot`，这一组只留面包房和出路的截图。
+CI：`recent-a` 加上核料截图后跑到 23 分 12 秒（超过 22 分钟上限；主干上这一组已经 21 分 50 秒）。先把 `workshop-shots.js` 和 `festival-shots.js` 挪到 `works-town` / `agrilot`，这两组又分别跑到 25 分 1 秒和 21 分 34 秒，于是各成独立一组。`recent-a` 只留面包房和出路的截图。
 
 ## v5.11.0.14 新房子能挪进第一圈的地（存档仍是 v15，`home.houses[].site` 也可是 `east` 等已买区域或 `home`）
 
