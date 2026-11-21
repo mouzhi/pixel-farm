@@ -118,4 +118,14 @@ ok('v5.10.12: evacuate moves workshops to another yard, else stores them (at nul
   const v = PW.valid({ works: { mill: { at: 'sbank', slot: 2, inp: 3, left: 10, ready: 2 }, jam: { at: null, slot: 0, inp: 1, ready: 1 } } }, plots2);
   assert.strictEqual(v.works.jam.at, null); assert.strictEqual(v.works.jam.inp, 1); assert.strictEqual(v.works.jam.ready, 1); assert.strictEqual(v.works.mill.ready, 2);
 });
+ok('v5.11.0.26: a full hopper does not request a delivery; carry must cover need or remaining room', () => {
+  const jam = PW.WORKS.jam;
+  assert.strictEqual(jam.inCap, 8); assert.strictEqual(jam.need, 2);
+  assert.ok(!PW.canDeliver(40, jam.need, jam.inCap, jam.inCap), 'full 8/8 must not post');
+  assert.ok(!PW.canDeliver(0, jam.need, jam.inCap, 0), 'empty hands must not post');
+  assert.ok(!PW.canDeliver(1, jam.need, jam.inCap, 0), 'one fruit is below need 2');
+  assert.ok(PW.canDeliver(2, jam.need, jam.inCap, 0));
+  assert.ok(PW.canDeliver(1, jam.need, jam.inCap, 7), 'one slot left accepts a single fruit');
+  assert.ok(!PW.canDeliver(1, jam.need, jam.inCap, 8));
+});
 console.log(`works-test: ${n} ok`);

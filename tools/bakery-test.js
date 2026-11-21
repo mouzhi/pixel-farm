@@ -97,4 +97,19 @@ ok('v5.11.0.26: valid() keeps short append-only; a new day clears it; autobuy st
     'smithy', 'school', 'library', 'clinic', 'cottage', 'gravel', 'party', 'festival', 'h1', 'h2', 'h3', 'h4', 'h5', 'L5', 'L8', 'L11', 'market', 'bakery', 'woodshop', 'roof'];
   for (const id of ban) assert.ok(!SIM.AUTO_BUY.includes(id), id + ' must stay off 家人帮忙添置');
 });
+ok('v5.11.0.26: addCount treats ready 0 as 0, not 1; a new day clears skip; autoTake leaves a skipped order alone', () => {
+  const c = {};
+  BK.addCount(c, 'honey'); BK.addCount(c, 'honey', 0); BK.addCount(c, 'flour', 0); BK.addCount(c, 'cheese', 0); BK.addCount(c, 'apple_pie', 0);
+  BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0);
+  assert.deepStrictEqual(c, { honey: 1, flour: 0, cheese: 0, apple_pie: 0 });
+  assert.ok(!BK.have([{ id: 'apple_pie', n: 1 }, { id: 'honey', n: 2 }], c), 'empty workshops and hives must not look fillable');
+  BK.addCount(c, 'honey', 2); BK.addCount(c, 'apple_pie', 1);
+  assert.ok(BK.have([{ id: 'apple_pie', n: 1 }, { id: 'honey', n: 2 }], c));
+  const v = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'honey', n: 2 }] }], take: 'o0', skip: 1 });
+  assert.strictEqual(v.skip, 1); assert.strictEqual(BK.taken(v), null);
+  const plain = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0' });
+  assert.ok(!('skip' in plain), 'missing skip stays omitted');
+  BK.autoTake(v, { honey: 9 }, BK.payOf); assert.strictEqual(v.take, 'o0', 'skip blocks auto on the failed order');
+  BK.roll(v, 10); assert.ok(!v.skip, 'a new day drops yesterday\'s skip'); assert.strictEqual(v.take, null);
+});
 console.log('bakery-test: ' + n + ' ok');

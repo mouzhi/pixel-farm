@@ -43,6 +43,8 @@
   const needText = need => need.map(x => { const w = WORD[x.id] || ['', x.id]; return `${x.n} ${w[0]}${w[1]}`; }).join(' + ');
   const have = (need, counts) => need.every(x => (counts[x.id] | 0) >= x.n);
   const shortOf = (need, counts) => (need || []).map(x => ({ id: x.id, n: Math.max(0, (x.n | 0) - (counts[x.id] | 0)) })).filter(x => x.n > 0);
+  // n || 1 would count a workshop/hive with ready 0 as 1 item
+  const addCount = (c, ty, n) => { if (!ty) return c; c[ty] = (c[ty] | 0) + (n == null ? 1 : n); return c; };
   const cropId = (it, typeOf) => typeof it === 'string' ? it : (typeOf ? typeOf(it) : (it && it.type));
   // mark basket slots for a taken order (call this before workshop / stall keeps)
   function reserve(crops, need, keep, typeOf) {
@@ -94,22 +96,23 @@
     out.done = o.done ? 1 : 0;
     const short = (Array.isArray(o.short) ? o.short : []).filter(id => typeof id === 'string' && WORD[id]).slice(0, 8);
     if (short.length) out.short = short;
+    if (o.skip) out.skip = 1;
     return out;
   }
   // a new day: post 2 orders, clear yesterday's pick; auto-accept is applied later once we know the stock
   function roll(B, day, extra, more) {
     const d = day | 0; if (B.last === d) return B;
-    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; delete B.short; return B;
+    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; delete B.short; delete B.skip; return B;
   }
   // pick mode: the player chose `id` (null clears it so auto can run). ignored once today's order is delivered.
   function setTake(B, id) {
-    if (B.done) return B; B.take = (id && B.offer.some(q => q.id === id)) ? id : null; return B;
+    if (B.done) return B; B.take = (id && B.offer.some(q => q.id === id)) ? id : null; delete B.skip; return B;
   }
   // if nothing is chosen yet, accept the best fulfillable one (auto, and 「我来挑」 when the player has not clicked)
   function autoTake(B, counts, priceOf) {
-    if (B.done || B.take) return B; const b = best(B.offer, counts, priceOf); if (b) B.take = b.id; return B;
+    if (B.done || B.skip || B.take) return B; const b = best(B.offer, counts, priceOf); if (b) B.take = b.id; return B;
   }
-  const taken = B => (B && B.take ? B.offer.find(q => q.id === B.take) : null);
-  const api = { BONUS, FAVOR, HOURS, LOT, STAND, BOARD, UNIT, WORD, NAME, TEMPLATES, built, open, unit, baseOf, payOf, needText, have, shortOf, cropId, reserve, offers, best, empty, valid, roll, setTake, autoTake, taken };
+  const taken = B => (B && B.take && !B.skip ? B.offer.find(q => q.id === B.take) : null);
+  const api = { BONUS, FAVOR, HOURS, LOT, STAND, BOARD, UNIT, WORD, NAME, TEMPLATES, built, open, unit, baseOf, payOf, needText, have, shortOf, addCount, cropId, reserve, offers, best, empty, valid, roll, setTake, autoTake, taken };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFBakery = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -60,6 +60,11 @@
     pie: { name: '苹果派坊', inputs: ['flour', 'apple'], need: 3, out: 'apple_pie', mins: 180, inCap: 8, outCap: 4, cost: 4000, wood: 80, recipe: [{ id: 'flour', n: 1 }, { id: 'apple', n: 2 }], lib: 1 }, // v5.10.9: unlocked at the 书屋
   };
   const WORK_IDS = Object.keys(WORKS);
+  // room 0 made Math.min(need, inCap-inp) === 0, so any carried input (even fruit held for the bakery) posted a useless trip
+  const canDeliver = (carry, need, inCap, inp) => {
+    const room = Math.max(0, (inCap | 0) - (inp | 0));
+    return room > 0 && (carry | 0) > 0 && (carry | 0) >= Math.min(need | 0, room);
+  };
   // products (fixed prices; the stall buys them like vegetables)
   const PRODUCTS = { flour: { name: '面粉', price: 60 }, jam: { name: '果酱', price: 80 }, cheese: { name: '奶酪', price: 130 }, honey: { name: '蜂蜜', price: 40 }, apple_pie: { name: '苹果派', price: 140 } };
   const PRODUCT_IDS = Object.keys(PRODUCTS);
@@ -240,7 +245,7 @@
   if (AN && AN.PEN_IDS) for (const k of PEN2_IDS) if (!AN.PEN_IDS.includes(k)) AN.PEN_IDS.push(k);
 
   const api = { TILE, SPRINKLER, reachOf, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
-    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, slotIn, evacuate, restock, workGate, hasOrchard,
+    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, canDeliver, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, slotIn, evacuate, restock, workGate, hasOrchard,
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,
