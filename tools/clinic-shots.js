@@ -84,7 +84,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await shot(`v51010_fixture_${fx}.png`, `(() => { ${helpers} const s = f.snapshot(); f.advance(2, 10); look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, clinic: s2.town.hall.clinic, school: s2.town.hall.school }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.14' ? 'ver ' + r.ver : !r.clinic || r.clinic.last !== 0 ? 'clinic ' + JSON.stringify(r.clinic) : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.15' ? 'ver ' + r.ver : !r.clinic || r.clinic.last !== 0 ? 'clinic ' + JSON.stringify(r.clinic) : null, save);
   }
 
   // 5. (local only) the real save and the friend's save load without errors
@@ -95,7 +95,7 @@ fs.mkdirSync(OUT, { recursive: true });
       if (town) { f.setAngle(0); f.panTo(780, 70); f.advance(0.3, 10); } else look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, clinic: s2.town.hall.clinic, coins: s.coins }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.14' ? 'ver ' + r.ver : !r.clinic ? 'missing clinic' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.15' ? 'ver ' + r.ver : !r.clinic ? 'missing clinic' : null, save);
   }
 
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

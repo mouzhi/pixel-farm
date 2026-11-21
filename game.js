@@ -2407,11 +2407,17 @@ function autoSpot(id) {
   const anchors = [];
   if (id === 'party') for (const pid of Object.keys(S.plots)) if (S.plots[pid].mod === 'playground') { const r = PL.plot(pid).rect; anchors.push({ c: { x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2 }, r: 40 }); }
   anchors.push({ c: { x: DOOR.x + 24, y: DOOR.y + 30 }, r: 120 });
+  if (id === 'party') anchors.push({ c: { x: DOOR.x, y: DOOR.y }, r: 200 }); // v5.11.0.15: further out, for room to spread out
   let spot = null;
+  let best = null, tried = 0; // v5.11.0.15: the party area looks a little further for grass to spread out on (all three lawn corners)
   for (const a of anchors) { for (const s of DC.ringSpots(a.c, a.r, 6)) {
       if (S.decor.placed.some(p => Math.hypot(p.x - s.x, p.y - s.y) < (DC.CATALOG[p.id].big || id === 'party' ? 24 : 12))) continue;
-      const r = placeOk(s.x, s.y, 'decor', id, null); if (r.ok) { spot = { x: r.x, y: r.y }; break; } }
-    if (spot) break; }
+      const r = placeOk(s.x, s.y, 'decor', id, null); if (!r.ok) continue;
+      if (id !== 'party') { spot = { x: r.x, y: r.y }; break; }
+      const n = lawnAt({ x: r.x, y: r.y }).lawn.length; if (!best || n > best.n) best = { x: r.x, y: r.y, n };
+      if (n >= DC.LAWN.length || ++tried >= 90) break; }
+    if (spot || (best && (best.n >= DC.LAWN.length || tried >= 90))) break; }
+  if (!spot && best) spot = { x: best.x, y: best.y };
   autoCache = { key, spot }; return spot;
 }
 // ---- orders and the carrying jobs ----
@@ -2493,7 +2499,59 @@ function partyMorning() {
 let partyBegun = 0; const GUESTS = [];
 const GUEST_LOOK = ['guestA', 'guestB'], GUEST_NAME = ['镇上的木匠阿松', '镇上的面包师小桃'];
 const EAST_IN = [{ x: 224, y: 66 }, { x: 216, y: 66 }, { x: 176, y: 66 }, { x: 176, y: 54 }, { x: 158, y: 54 }];
-function partySeat(i) { const s = DC.partySeats(partyArea()), order = [0, 4, 3, 7, 1, 5, 8, 9, 2, 6]; return s[order[i % s.length]]; }
+// ---- v5.11.0.15: everyone at the party gets their own place (decor.js partyPlan): the table, and on free grass next to the
+// area a dance floor, a picnic rug and a ball lawn for the children. Who came is kept in memory in the order they turned up
+// (nothing is saved); every hour they swap round, and while they stand there they eat, toast, dance, chat or play (drawn only).
+const partyKid = a => !!(a && /^(child|play|school|helper)$/.test(a.role || ''));
+const partyKeyOf = a => (a === FARMER ? 'farmer' : String(a.id));
+let partyReg = { day: -1, keys: [], kid: {} }, partyLawnC = { key: '', lawn: [], extra: [] }, partyPlanC = { key: '', plan: {} };
+function partyLawnNow() {
+  const a = partyArea(); if (!a) return { lawn: [], extra: [] };
+  ensureNav(); const key = [S.day, a.x, a.y, navVer].join('|'); if (partyLawnC.key === key) return partyLawnC;
+  partyLawnC = Object.assign({ key }, lawnAt(a)); partyPlanC.key = ''; return partyLawnC;
+}
+let lawnSeen = { v: -1, seen: null };
+function lawnAt(a) { // the lawn corners an area at a would get (also asked by autoSpot, before the area is put down)
+  const g = ensureNav(); if (lawnSeen.v !== navVer) lawnSeen = { v: navVer, seen: DC.reach(g, NAV.LAYOUT.DOOR, []) }; const seen = lawnSeen.seen;
+  const seat = DC.partySeats(a)[0], near = c => { const r = pathTo(seat, c); return !!r.reached && r.length <= Math.hypot(c.x - seat.x, c.y - seat.y) * 1.6 + 12; }; // a short walk from the table (not round a fence)
+  const why = {}, no = r => { why[r] = (why[r] | 0) + 1; return false; }, by = o => Math.abs(o.x - a.x) < 80 && Math.abs(o.y - a.y) < 80; // only what is near (autoSpot asks this for many spots)
+  const nTiles = tiles.filter(t => (t.open || t.tilled || t.crop) && by(t)), nTrees = S.trees.filter(by), nYard = yard.filter(by), nProps = props.filter(p => !p.decor && !p.region && by(p));
+  const free = (b, c) => { for (const [i, j] of DC.cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return no('edge'); const k = j * g.w + i; if (g.cost[k] !== NAV.GRASS || !seen[k]) return no('ground'); }
+    if (![[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]], [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]].every(([x, y]) => ownGround(x, y))) return no('locked');
+    const under = (t, up, side) => t.x > b[0] - side && t.x < b[2] + side && t.y > b[1] - 3 && t.y < b[3] + up; // a tree (or stump) south of the box would stand over it
+    if (nTiles.some(t => ptIn(t, b, 4)) || nTrees.some(t => t.stage === 'tree' ? under(t, 28, 6) : under(t, 6, 3.5)) || nYard.some(c => ptIn(c, b, 2))) return no('field/tree');
+    const hits = p => { const q = p.m && Math.abs(Math.sin(p.rot || 0)) > 0.7, rx = p.m ? (q ? p.m.d : p.m.w) / 4 : 2, ry = p.m ? (q ? p.m.w : p.m.d) / 4 : 2, up = p.m ? p.m.h / 3 : 2; return p.x + rx > b[0] - 1 && p.x - rx < b[2] + 1 && p.y + ry > b[1] - 1 && p.y - ry < b[3] + up; }; // its own size, and what it hides behind it
+    if (nProps.some(p => p.tree ? under(p, 28, 6) : hits(p))) return no('prop'); // under a canopy, against a building, on the slide or the swings
+    for (const p of S.decor.placed) if (p.id !== 'party' && boxHit(b, DC.boxOf(p.x, p.y, DC.CATALOG[p.id].foot))) return no('decor');
+    for (const wid of PW.WORK_IDS) { const w = S.works.works[wid]; if (w && w.at) { const q = PW.workPos(w); if (boxHit(b, workBox(q.x, q.y), 1)) return no('work'); } }
+    if (HM && S.home.houses.some(h => boxHit(b, HM.layout(h).foot))) return no('house');
+    if (AN.PEN_IDS.some(k => S.eff[k] && PENS[k].roam && boxHit(b, PENS[k].roam, 2))) return no('pen');
+    if (c && !near(c)) return no('far');
+    return true; };
+  const lawn = DC.partyLawn(a, free), extra = [];
+  for (const [dx, dy] of [[-16, 11], [16, 11], [-16, -11], [16, -11], [-8, 12.5], [8, 12.5], [0, 12.5], [-8, -12.5], [8, -12.5], [0, -12.5], [-17, 0], [17, 0]]) {
+    const x = a.x + dx, y = a.y + dy; if (free([x - 2, y - 2, x + 2, y + 2], { x, y }) && !DC.partySeats(a).concat(extra, lawn.flatMap(l => l.spots)).some(p => Math.hypot(x - p.x, y - p.y) < 7) && !lawn.some(l => ptIn({ x, y }, l.box, 3))) extra.push({ x, y }); }
+  // A full household and friends can outgrow a small lawn. Spare places remain on reachable grass, at least 7 units apart.
+  const all = DC.partySeats(a).concat(lawn.flatMap(l => l.spots));
+  for (const p of DC.ringSpots(a, 60, 7)) { if (extra.length >= 48) break;
+    if (all.concat(extra).some(q => Math.hypot(q.x - p.x, q.y - p.y) < 7) || ptIn(p, DC.boxOf(a.x, a.y, DC.CATALOG.party.foot), 2) || lawn.some(l => ptIn(p, l.box, 3))) continue;
+    if (free([p.x - 2, p.y - 2, p.x + 2, p.y + 2], p)) extra.push({ x: p.x, y: p.y }); }
+  return { lawn, extra, why }; // why: how often each reason ruled a spot out (for the shots)
+}
+function partyPlanNow() {
+  const area = partyArea(); if (!area) return {};
+  if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
+  const L = partyLawnNow(), ph = DC.partyPhase(S.t % 1440), key = [L.key, ph, partyReg.keys.join(',')].join('|');
+  if (partyPlanC.key !== key) partyPlanC = { key, plan: DC.partyPlan(area, L.lawn, partyReg.keys.map(k => ({ key: k, kid: partyReg.kid[k] })), ph, L.extra) };
+  return partyPlanC.plan;
+}
+function partySpot(a, key) { // a: the actor or guest; their place for this hour of the party
+  const area = partyArea(); if (!area) return null; key = key || partyKeyOf(a);
+  if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
+  if (!partyReg.keys.includes(key)) { partyReg.keys.push(key); partyReg.kid[key] = partyKid(a); }
+  const p = partyPlanNow()[key]; return p ? { x: p.x, y: p.y } : null;
+}
+const partyDur = T => Math.max(3, Math.min(30, DC.phaseEnd(T) - T, DC.PARTY.to - T));
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
 function sunsetTask() { // v5.10.8: once the deck is up, the family sits and watches the sea 17:00–19:00
   if (!IN || !S.inn || !IN.deckUp(S.inn) || !IN.isSunset(S.t) || F.away || F.sleeping) return null;
@@ -2506,8 +2564,8 @@ function sunsetTask() { // v5.10.8: once the deck is up, the family sits and wat
 }
 function partyTask() { // chooseTask asks first: on a party evening everyone who is around comes over
   const T = S.t % 1440; if (!partyTonight() || !DC.partyOn(T) || F.away || F.sleeping) return null;
-  const seat = partySeat(partyIndex(F));
-  return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x + R(-0.6, 0.6), y: seat.y + R(-0.4, 0.4) }, dur: Math.max(5, Math.min(30, DC.PARTY.to - T)), rest: true };
+  const seat = partySpot(F); if (!seat) return null; // v5.11.0.15: their own place this hour (was one of 10 seats a few px apart)
+  return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true };
 }
 function guestStep(g, dm) {
   if (!g.pts.length) return;
@@ -2536,7 +2594,7 @@ function decorTick(dm) {
   if ((S.decorLayout | 0) < DECOR_LAYOUT) decorRelayout();
   const T = S.t % 1440, early = townOpen() ? GUEST_WALK : 0;
   if (early && partyTonight() && T >= DC.PARTY.from - early && T < DC.PARTY.from && guestsOut !== S.day && !(WX && WX.isRaining(S.weather, S.day, S.t))) { guestsOut = S.day;
-    for (let i = 0; i < S.decor.party.guests; i++) { const seat = partySeat(actors().length + i), h = TN.BY_ID[i ? 'h4' : 'h3'].door;
+    for (let i = 0; i < S.decor.party.guests; i++) { const seat = partySpot({ id: 'g' + i }), h = TN.BY_ID[i ? 'h4' : 'h3'].door; if (!seat) continue;
       GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: h.x, y: h.y, fx: 0, fy: 1, pts: routeVia(h, seat).concat([seat]), moving: true, leaving: false, home: h, fast: 1 }); }
     if (S.decor.party.guests) log(`${GUEST_NAME.slice(0, S.decor.party.guests).map(n => n.replace('镇上的', '')).join('和')}从镇上动身，来参加今晚的派对`); }
   if (partyTonight() && T >= DC.PARTY.from && T < DC.PARTY.to && partyBegun !== S.day) { partyBegun = S.day;
@@ -2544,11 +2602,13 @@ function decorTick(dm) {
     else { const n = S.decor.party.guests, a = partyArea(); S.decor.party.last = S.day;
       log(n ? `傍晚一家人在派对区聚在一起，${GUEST_NAME.slice(0, n).join('和')}也来做客` : '傍晚一家人在派对区聚在一起，挂起了串灯');
       burst(a.x, a.y, 24, [Ac[3], Ac[1], '#fff2a8', Wt[4]], 18, 'spark'); noteProgress({ partyHeld: true }); albumSnap('party', a.x, a.y + 6, { wait: 30 });
-      for (let i = 0; i < n; i++) { const seat = partySeat(actors().length + i), e = EAST_IN[0];
+      for (let i = 0; i < n; i++) { const seat = partySpot({ id: 'g' + i }), e = EAST_IN[0]; if (!seat) continue;
         if (guestsOut === S.day) break; // v5.8.0: the town guests are already on their way
         GUESTS.push({ id: 'g' + i, look: GUEST_LOOK[i], x: e.x + i * 3, y: e.y + i, fx: -1, fy: 0, pts: EAST_IN.slice(1).concat(routeVia(EAST_IN[EAST_IN.length - 1], seat), [seat]), moving: true, leaving: false }); } } }
   if (GUESTS.length && (!partyTonight() || T >= DC.PARTY.to || T < DC.PARTY.from - early)) for (const g of GUESTS) if (!g.leaving) { g.leaving = true; if (g.home) { g.pts = routeVia(g, g.home).concat([g.home]); continue; } const back = EAST_IN.slice().reverse(); g.pts = routeVia(g, back[0]).concat(back); }
   for (let i = GUESTS.length - 1; i >= 0; i--) { const g = GUESTS[i]; guestStep(g, dm); if (g.leaving && !g.pts.length) GUESTS.splice(i, 1); }
+  if (GUESTS.length && partyTonight() && DC.partyOn(T) && partyBegun === S.day) for (const g of GUESTS) { if (g.leaving || g.pts.length) continue; // v5.11.0.15: the guests swap round too
+    const p = partySpot(g, g.id); if (p && Math.hypot(p.x - g.x, p.y - g.y) > 1.2) { g.pts = routeVia(g, p).concat([p]); g.moving = true; } }
 }
 // ---------- v5.8.0 phase 10: school days, days off, classmates, the town (rules in town.js, art in town-art.js) ----------
 var TOWN_ON = false;
@@ -2988,11 +3048,10 @@ function homeParty(T) { // the party has begun: the guests who came get to know 
   if (partyBegun !== S.day || homePartyNoted === S.day) return; homePartyNoted = S.day;
   for (const g of GUESTS) { if (g.look === 'guestA') HM.clampAdd(S.home.nb, 'n2', HM.NB.party); if (g.look === 'guestB') HM.clampAdd(S.home.nb, 'n3', HM.NB.party); }
   if (WX && WX.isRaining(S.weather, S.day, S.t)) return;
-  let n = 0;
   for (const k of S.family.kids) { if (FAM.kidStage(k, S.day) !== 'teen' || HM.isMarried(S.home, k.id)) continue;
     const b = HM.best(S.home, k.id); if (!b || b.v < HM.REL.friend) continue; HM.clampAdd(HM.KID_IDS.includes(k.id) ? (S.home.rel[k.id] || (S.home.rel[k.id] = {})) : {}, b.id, HM.REL.party);
     const w = weddingTonight(); if (w && w.w.mate === b.id) continue; // the bride or groom comes on their own
-    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySeat(actors().length + 2 + n++);
+    const i = HM.mateIndex(b.id), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0], seat = partySpot({ id: 'f' + i }); if (!seat || GUESTS.some(g => g.id === 'f' + i)) continue;
     GUESTS.push({ id: 'f' + i, look: TN.MATES[i].look, x: from.x, y: from.y, fx: -1, fy: 0, pts: routeVia(from, seat).concat([seat]), moving: true, leaving: false, home: townOpen() ? from : null, fast: 1, friend: 1 });
     log(`${k.name}的好朋友${HM.mateName(b.id)}也来参加派对`); }
 }
@@ -3566,8 +3625,8 @@ const mainBacklog = () => { let n = 0; for (const t of tiles) if (t.open && t.cr
 function homeChoose() { // null: not one of the couple (or helping on the main farm right now); else their next job
   const h = homeOfActor(F); if (!h) return null;
   const T = S.t % 1440, L = HM.layout(h), sp = !!F._spouse, kid = F._spouse || F.id;
-  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySeat(actors().length + 1 + HM.KID_IDS.indexOf(kid));
-    return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: Math.max(5, Math.min(30, DC.PARTY.to - T)), rest: true }; }
+  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F); if (!seat) return null;
+    return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
   if (T >= sleepAt() || T < WAKE - 30) { if (!sp && ((F.crops.length && shopOpen(T)) || (F.gathered && T < sleepAt() + 60))) return null; const me = F;
     return { kind: 'home', label: '回新房子睡觉', to: L.door, dur: 5, done: () => { me.home = true; me.sleeping = true; } }; }
   const path = CR ? CR.pathOf(S.home, kid) : null;
@@ -3643,7 +3702,7 @@ function homeNight() { // a little-farm crop grows one day overnight if it was w
 // hens pecking round their little coop
 const HENS_VIEW = [];
 function homeDraw(list) {
-  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(sp.look, 3); if (sh) list.push(Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp))); }
+  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(sp.look, 3); if (!sh) continue; const d = Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp)); partyLook(d, sp, sp.id); list.push(d); }
   const T = S.t % 1440, sp = ANIMAL_SPR.chicken; if (!sp || !sp.r || !(T >= WAKE && T < BEDTIME)) return;
   S.home.houses.forEach((h, hi) => { if (!h.built || !h.hens) return; const L = HM.layout(h);
     for (let i = 0; i < h.hens; i++) { const k = hi * 2 + i; let v = HENS_VIEW[k]; if (!v) v = HENS_VIEW[k] = { x: L.coop.x, y: L.coop.y + 6, tx: L.coop.x, ty: L.coop.y + 6, step: 0, flip: false, cd: 0 };
@@ -3666,8 +3725,8 @@ function homeStatus() {
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
   const own = homeChoose(); if (own) return own;
   const T = S.t % 1440;
-  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySeat(actors().length + 1 + HM.KID_IDS.indexOf(F._spouse));
-    return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: 10, rest: true }; }
+  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F); if (!seat) return null;
+    return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
   const d = weddingSpot() || DOOR; return { kind: 'idle', label: '来参加婚礼', to: { x: d.x + 3, y: d.y + 6 }, dur: 10, rest: true };
 }
 let decorSyncT = 0, partyFxT = 0;
@@ -3741,10 +3800,97 @@ function workYardsDraw(ref) {
     ctx.fillStyle = 'rgba(30, 20, 12, 0.78)'; ctx.fillRect(Math.round(m[0] - tw / 2), Math.round(m[1] - 8), Math.round(tw), 16);
     ctx.fillStyle = ok ? '#c8f5b8' : '#ffc0b8'; ctx.fillText(t, Math.round(m[0]), Math.round(m[1])); ctx.restore(); }
 }
+// ---- v5.11.0.15: what people do at the party. The sim only has them standing at their place (partySpot); all of this is
+// drawn from realT each frame (no state, nothing saved): bites and chewing at the table, a toast now and then, hops on the
+// dance floor, little bubbles on the rug, and the children chasing a ball round their lawn. Plates, the barrel, the lantern
+// poles and the boards / rug are only out on a party evening.
+const PARTY_FX = []; let PARTY_FX_LAST = [], PARTY_DRAW_LAST = [];
+const PLATE_FOOD = [pix(['.ryR.', 'cEcEc', '.ccc.']), pix(['.oyo.', 'cEcEc', '.ccc.']), pix(['.ppl.', 'cEcEc', '.ccc.'])];
+const PLATE_LEFT = [pix(['..yR.', 'cEcEc', '.ccc.']), pix(['...o.', 'cEcEc', '.ccc.']), pix(['..p..', 'cEcEc', '.ccc.'])];
+const PLATE_DONE = pix(['.....', 'cEyEc', '.ccc.']);
+const PARTY_POLE = pix(['.yyy.', 'yAcAy', '.yyy.', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '..b..', '.bbb.']);
+const PARTY_BARREL = pix(['.c.c.c.', 'btttttb', 'bwwwwwb', 'btttttb', 'btttttb', 'bwwwwwb', 'btttttb', '.bbbbb.']);
+const partyHash = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
+function facePose(fx, fy) { const sx = fx * CA - fy * SA, sy = fx * SA + fy * CA, side = Math.abs(sx) > Math.abs(sy) * 0.9;
+  return side ? { row: 'idle_side', flip: sx < 0, side: 1 } : { row: sy > 0 ? 'idle_front' : 'idle_back', flip: false, side: 0 }; }
+const partyLive = () => DECOR_ON && partyTonight() && DC.partyOn(S.t % 1440) && partyBegun === S.day;
+const partyProps = () => { const T = S.t % 1440; return DECOR_ON && partyTonight() && T >= DC.PARTY.from - 20 && T < DC.PARTY.to; };
+function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a: the actor or guest
+  if (!d || !a || a.moving || a.home || !partyLive()) return;
+  if (!a.pts && !(a.task && a.task.kind === 'party')) return;
+  const P = partyPlanNow()[key]; if (!P || Math.hypot(a.x - P.x, a.y - P.y) > 2.5) return;
+  d.partyKey = key; const area = partyArea(), h = partyHash(key), ph = (h % 997) / 997 * 6.283, cut = d.cut || 0, fx = (k, o) => PARTY_FX.push(Object.assign({ k, x: d.x, y: d.y, cut }, o));
+  if (P.act === 'eat') {
+    const f = facePose(0, area.y - P.y), col = P.seat % 3, per = 2.4, t = realT / per + col * 0.07, n = Math.floor(t), u = t - n;
+    d.row = f.row; d.flip = f.flip; d.fr = 0;
+    if (n % 4 === 3) { d.z = u > 0.15 && u < 0.85 ? 1 : 0; fx('cup', { u, back: f.row === 'idle_back', side: f.flip ? -1 : 1 }); } // both sides of the table raise a cup together
+    else if (u < 0.3) { if (f.row !== 'idle_back') fx('bite', { u: u / 0.3, food: (P.seat + (h & 1)) % 3, down: P.y < area.y ? 1 : -1 }); }
+    else if (u < 0.85) { d.z = Math.floor(u * 14) % 2; if (f.row !== 'idle_back' && u < 0.7) fx('crumb', { u: (u - 0.3) / 0.4, h }); }
+    return; }
+  if (P.act === 'dance') {
+    const beat = Math.floor(realT * 2.4 + ph / 3); d.row = 'idle_side'; d.flip = beat % 2 === 1; d.fr = 0; d.z = Math.round(Math.abs(Math.sin(realT * 7.5 + ph)) * 3);
+    const t = (realT * 0.6 + ph) % 1.6; if (t < 1) fx('note', { u: t, n: (beat >> 1) % 2 });
+    return; }
+  if (P.act === 'chat' || P.act === 'stand') {
+    const L = partyLawnNow().lawn.find(l => l.kind === 'chat' && P.act === 'chat'), c = L ? L.barrel : area, f = facePose(c.x - P.x, c.y - P.y);
+    d.row = f.row; d.flip = f.flip; d.fr = 0;
+    const t = realT / 3.1 + ph, n = Math.floor(t), u = t - n; if (u < 0.42) { d.z = Math.floor(u * 20) % 2; fx('say', { u, icon: (n + h) % 4 }); }
+    return; }
+  if (P.act === 'play') { // pass the ball from fixed places: no children running through one another or the diners
+    const L = partyLawnNow().lawn.find(l => l.kind === 'play'); if (!L) return;
+    const f = facePose(L.x - P.x, L.y - P.y), beat = Math.sin(realT * 3 + ph);
+    d.row = f.side ? 'walk_side' : f.row === 'idle_front' ? 'walk_front' : 'walk_back'; d.flip = f.flip;
+    d.fr = Math.floor(realT * 4 + ph) % 4; d.z = Math.round(Math.max(0, beat) * 2); return;
+  }
+}
+function partyList(list) { // plates under the diners, the barrel, the lantern poles, the ball
+  if (!partyProps()) return; const area = partyArea(), L = partyLawnNow(), live = partyLive(), T = S.t % 1440;
+  for (const l of L.lawn) { if (fogHid(l.x, l.y)) continue; list.push({ spr: PARTY_POLE, x: l.pole.x, y: l.pole.y, w: 1 }); if (l.barrel) list.push({ spr: PARTY_BARREL, x: l.barrel.x, y: l.barrel.y, w: 1 }); }
+  if (!live) return;
+  const plan = partyPlanNow(), u = (T - DC.phaseStart(T)) / (DC.phaseEnd(T) - DC.phaseStart(T)), here = k => { const a = k === 'farmer' ? FARMER : (memberOf(k) || GUESTS.find(g => g.id === k) || SPOUSES.find(s => s.id === k)); const P = plan[k]; return a && P && !a.moving && !a.home && Math.hypot(a.x - P.x, a.y - P.y) < 2.5; };
+  for (const k of Object.keys(plan)) { const P = plan[k]; if (!P || P.act !== 'eat' || !here(k)) continue; const s = P.seat;
+    list.push({ spr: u < 0.45 ? PLATE_FOOD[s % 3] : u < 0.85 ? PLATE_LEFT[s % 3] : PLATE_DONE, x: P.x, y: area.y + (P.y < area.y ? -1.2 : 1.2), lift: 5, at: area }); }
+  const play = L.lawn.find(l => l.kind === 'play');
+  if (play && Object.keys(plan).some(k => plan[k] && plan[k].act === 'play' && here(k))) { const u = (Math.sin(realT * 2.2) + 1) / 2, a = play.spots[0], b = play.spots[1]; PARTY_FX.push({ k: 'ball', x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, z: Math.abs(Math.sin(realT * 4.4)) * 6 }); }
+}
+function partyGround() { // the dance floor's boards and the picnic rug, flat on the grass under everyone
+  if (!partyProps()) return; const L = partyLawnNow().lawn; if (!L.length) return;
+  const [gx, gy] = proj(GX0, GY0); ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
+  for (const l of L) { if (fogHid(l.x, l.y) || !onScreen(l.x, l.y, 40)) continue; const b = l.box, u0 = Math.round((b[0] + 1.5 - GX0) * RS), v0 = Math.round((b[1] + 1.5 - GY0) * RS), w = Math.round((b[2] - b[0] - 3) * RS), hh = Math.round((b[3] - b[1] - 3) * RS);
+    if (l.kind === 'dance') { ctx.fillStyle = Wd[1]; ctx.fillRect(u0 - 1, v0 - 1, w + 2, hh + 2); for (let i = 0; i < hh; i += 4) { ctx.fillStyle = (i >> 2) % 2 ? Wd[3] : Wd[4]; ctx.fillRect(u0, v0 + i, w, Math.min(3, hh - i)); } }
+    if (l.kind === 'chat') { const u1 = u0 + 2, v1 = v0 + 2, w1 = w - 4, h1 = hh - 4; ctx.fillStyle = Rf[1]; ctx.fillRect(u1 - 1, v1 - 1, w1 + 2, h1 + 2);
+      for (let y = 0; y < h1; y += 4) for (let x = 0; x < w1; x += 4) { ctx.fillStyle = ((x + y) >> 2) % 2 ? Ac[0] : Rf[2]; ctx.fillRect(u1 + x, v1 + y, Math.min(4, w1 - x), Math.min(4, h1 - y)); } } }
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+}
+function partyFxDraw(night) { // after the objects: lantern strings out to the lawn, then cups, bites, crumbs, notes, bubbles, the ball
+  if (partyProps()) { const area = partyArea(), posts = DC.partyPosts(area), lit = night > 0.15;
+    for (const [i, l] of partyLawnNow().lawn.entries()) { if (fogHid(l.x, l.y)) continue; const p = posts.slice().sort((a, b) => Math.hypot(a.x - l.pole.x, a.y - l.pole.y) - Math.hypot(b.x - l.pole.x, b.y - l.pole.y))[0];
+      DA.string(ctx, proj, p, l.pole, 20, 18, 12, lit, realT, 5 + i); } }
+  for (const o of PARTY_FX) { if (fogHid(o.x, o.y)) continue; const [sx0, sy0] = proj(o.x, o.y), x = Math.round(sx0), top = Math.round(sy0) - 22 + o.cut, mouth = top + 8;
+    if (o.k === 'cup') { const lift = Math.round(Math.min(1, o.u * 4, (1 - o.u) * 4) * 5), cx = x + (o.back ? 0 : 5 * o.side) - 1, cy = mouth - lift;
+      ctx.fillStyle = Ink[0]; ctx.fillRect(cx - 1, cy - 1, 5, 6); ctx.fillStyle = Ac[0]; ctx.fillRect(cx, cy, 3, 4); ctx.fillStyle = Ac[1]; ctx.fillRect(cx, cy, 3, 2); ctx.fillStyle = Ac[0]; ctx.fillRect(cx, cy - 1, 3, 1);
+      if (o.u > 0.4 && o.u < 0.62) { ctx.fillStyle = '#fff4b8'; ctx.fillRect(cx + 1, cy - 4, 1, 2); ctx.fillRect(cx - 1, cy - 3, 1, 1); ctx.fillRect(cx + 3, cy - 3, 1, 1); } continue; }
+    if (o.k === 'bite') { const y = Math.round(mouth + 7 - o.u * 7) , c = [Rf[3], Ac[2], Ac[3]][o.food]; ctx.fillStyle = Ink[0]; ctx.fillRect(x - 1, y - 1, 4, 4); ctx.fillStyle = c; ctx.fillRect(x, y, 2, 2); continue; }
+    if (o.k === 'crumb') { for (let i = 0; i < 2; i++) { const dx = ((o.h >> i) & 3) - 1 + i * 2, y = Math.round(mouth + 2 + o.u * 7 + i * 2); ctx.fillStyle = i ? Ac[1] : Wd[4]; ctx.fillRect(x + dx, y, 1, 1); } continue; }
+    if (o.k === 'note') { const y = Math.round(top - 4 - o.u * 9), xx = x + 3 + Math.round(Math.sin(o.u * 6) * 2); ctx.globalAlpha = Math.max(0, 1 - o.u * 0.9);
+      ctx.fillStyle = Ink[0]; ctx.fillRect(xx - 1, y + 2, 4, 3); ctx.fillRect(xx + 1, y - 2, 3, 5); ctx.fillStyle = o.n ? Ac[3] : Ac[1]; ctx.fillRect(xx, y + 3, 2, 1); ctx.fillRect(xx + 2, y - 1, 1, 4); ctx.fillRect(xx + 2, y - 1, 2, 1); ctx.globalAlpha = 1; continue; }
+    if (o.k === 'say') { const bx = x + 2, by = top - 12; ctx.fillStyle = Ink[0]; ctx.fillRect(bx - 1, by - 1, 11, 9); ctx.fillRect(bx + 1, by + 8, 2, 2); ctx.fillStyle = Ac[0]; ctx.fillRect(bx, by, 9, 7); ctx.fillRect(bx + 2, by + 7, 1, 1);
+      ctx.fillStyle = [Ac[3], Ac[2], Ink[1], Wd[2]][o.icon];
+      if (o.icon === 0) { ctx.fillRect(bx + 2, by + 2, 2, 1); ctx.fillRect(bx + 5, by + 2, 2, 1); ctx.fillRect(bx + 2, by + 3, 5, 1); ctx.fillRect(bx + 3, by + 4, 3, 1); ctx.fillRect(bx + 4, by + 5, 1, 1); }
+      else if (o.icon === 1) { ctx.fillRect(bx + 3, by + 4, 2, 2); ctx.fillRect(bx + 5, by + 1, 1, 4); ctx.fillRect(bx + 5, by + 1, 2, 1); }
+      else if (o.icon === 2) { const k = Math.floor(o.u * 9) % 4; for (let i = 0; i < 3; i++) if (i < k) ctx.fillRect(bx + 2 + i * 2, by + 3, 1, 1); }
+      else { ctx.fillRect(bx + 2, by + 2, 1, 1); ctx.fillRect(bx + 6, by + 2, 1, 1); ctx.fillRect(bx + 2, by + 4, 5, 1); ctx.fillRect(bx + 3, by + 5, 3, 1); }
+      continue; }
+    if (o.k === 'ball') { const y = Math.round(sy0) - 2 - Math.round(o.z); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x - 2, Math.round(sy0) - 1, 5, 1);
+      ctx.fillStyle = Ink[0]; ctx.fillRect(x - 2, y - 2, 5, 5); ctx.fillStyle = Ac[0]; ctx.fillRect(x - 1, y - 1, 3, 3); ctx.fillStyle = Rf[2]; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); }
+  }
+  PARTY_FX_LAST = PARTY_FX.slice(); PARTY_FX.length = 0;
+}
 function decorDraw() {
   if (!DECOR_ON) return; const T = S.t % 1440, carriers = actors().filter(a => a._carry && !schoolWalk(a)).map(a => { const q = S.decor.orders.find(o => o.u === a._carry); return q ? { x: a.x, y: a.y, id: q.what === 'decor' ? (q.id || decorById(q.ref)) : q.what === 'hive' ? 'hive' : q.what === 'spr' ? 'sprinkler' : null } : null; }).filter(Boolean);
   const on = INPUT.mode === 'decor' || INPUT.mode === 'move', mode = { on, hover: on && INPUT.hover && INPUT.hover.dec, pick: INPUT.mode === 'move' ? INPUT.mvPick : null, items: INPUT.mode === 'move' ? movables() : [] };
   DA.draw(ctx, proj, onScreen, realT, T, dayLight(T), mode, carriers);
+  partyFxDraw(dayLight(T)); // v5.11.0.15
   if (mode.pick && mode.pick.what === 'work') workYardsDraw(mode.pick.ref); // v5.10.12: where a workshop may go
   if (TOWN_ON && TA.draw) { const nt = fairNow() ? Math.min(dayLight(T), 0.58) : dayLight(T); TA.draw(ctx, proj, onScreen, realT, T, nt); } // v5.10.11: lantern strings over the streets
 }
@@ -4024,8 +4170,9 @@ function carryFields(actor) { // hide the hip basket while a giant crop is held 
 function familyDraw(list, T) { // pushes the family into the depth-sorted list; returns the ones that get a ghost
   const out = [], fam = S.family;
   for (const m of S.members) { if (m.home || m.away) continue; const [look, cut] = lookOf(m), sh = famSheet(look, cut); if (!sh) continue;
-    const d = Object.assign({ bb: 1, x: m.x, y: m.y, sheet: sh, member: m.id, cut }, carryFields(m), farmerPose(m)); list.push(d); out.push(d); } // v5.8.1 cut: a child sheet is shorter, the basket sits lower
-  for (const g of GUESTS) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.7.0 party guests
+    const d = Object.assign({ bb: 1, x: m.x, y: m.y, sheet: sh, member: m.id, cut }, carryFields(m), farmerPose(m)); partyLook(d, m, m.id); list.push(d); out.push(d); } // v5.8.1 cut: a child sheet is shorter, the basket sits lower
+  for (const g of GUESTS) { const sh = famSheet(g.look, 0); if (!sh) continue; const d = Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g)); if (!g.leaving) partyLook(d, g, g.id); list.push(d); } // v5.7.0 party guests
+  partyList(list); // v5.11.0.15: plates, the barrel, lantern poles
   for (const g of STAYS) { if (g.inside) continue; const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.7 inn guests
   if (TN) townDraw(list); // v5.8.0 classmates and neighbours
   if (HM) homeDraw(list); // v5.9.0 the married children's partners and their hens
@@ -4572,6 +4719,7 @@ function render() {
   const allTiles = HT.length ? tiles.concat(HT) : tiles; // v5.9.0: the little farms' six tiles each
   for (const t of allTiles) if ((t.tilled || t.crop) && onScreen(t.x, t.y, 20)) drawStack(ctx, models.soil[t.watered ? 1 : 0], t.x, t.y, 0, 0);
   for (const d of decals) { const [sx, sy] = proj(d.x, d.y); if (sx < -8 || sx > W + 8 || sy < -4 || sy > H + 12) continue; const bob = d.bob || 0; ctx.drawImage(d.c, Math.round(sx) - (d.c.width >> 1), Math.round(sy) - d.c.height + 1 + bob); }
+  partyGround(); // v5.11.0.15: the dance floor and the picnic rug
   if (WX && WX.drawRainGround) WX.drawRainGround(ctx, proj, W, H); // v5.11.0.4: splashes and wet spots, under everything standing
   tick('soil+decals');
   const list = [];
@@ -4598,13 +4746,13 @@ function render() {
     for (let i = 0; i < eggs; i++) list.push({ spr: EGG, x: PENS.coop.bld.x - 6 + i * 4, y: PENS.coop.bld.y + 15 + (i % 2), flat: 1 }); }
   for (const p of PETS_LIVE) { const v = petView(p); if (!onScreen(v.x, v.y, 20)) continue; const sp = petSprite(p); list.push({ spr: (v.flip ? sp.l : sp.r)[petFrame(p, v)], x: v.x, y: v.y, w: 1 }); }
   let farmerD = null;
-  if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y }, carryFields(F), farmerPose()); list.push(farmerD); }
+  if (!F.home) { farmerD = Object.assign({ bb: 1, x: F.x, y: F.y }, carryFields(F), farmerPose()); partyLook(farmerD, F, 'farmer'); list.push(farmerD); }
   const familyD = familyDraw(list, T); // v5.0: 阿禾 (at her flower stall, or at home on the farm), the children, a cradle on the porch
   const selling = F.task && F.task.to === STALL_SPOT && !F.moving && !F.home;
   if (!shopOpen(T)) list.push({ spr: CLOSED, x: STALL.x, y: STALL_SPOT.y + 1, lift: 13 }); // v5.0: gone home; a little 'closed' board on the counter
   else list.push({ bb: 1, x: KEEPER.x, y: KEEPER.y, sheet: S.family.moved ? famSheet('father') || undefined : undefined, row: selling && SPR.rows.keeper_wave !== undefined ? 'keeper_wave' : 'keeper', fr: selling ? Math.floor(realT * 5) : (Math.floor(realT * 0.8) % 5 === 4 ? 1 : 0), flip: false });
   if (FOG.on && !FOG.empty && !FOG.peek) { let n = 0; for (const o of list) if (o.rain || !fogHid(o.x, o.y)) list[n++] = o; FOG.hidN = list.length - n; list.length = n; } else FOG.hidN = 0; // v5.11.0.13: nothing under the cloud is drawn
-  for (const o of list) o.depth = proj(o.x, o.y + (o.dy || 0))[2] + (o.bb ? 0.3 : 0);
+  for (const o of list) o.depth = o.at ? proj(o.at.x, o.at.y)[2] + 0.05 : proj(o.x, o.y + (o.dy || 0))[2] + (o.bb ? 0.3 : 0); // at: sorts just after that spot (v5.11.0.15: plates on the party table)
   list.sort((a, b) => a.depth - b.depth);
   // shadows: one mask, then the ground under it steps one palette shade darker
   sctx.clearRect(0, 0, W, H);
@@ -4622,6 +4770,7 @@ function render() {
     if (o.spr) { drawSpr(ctx, o, poseT); continue; }
     drawStack(ctx, o.m, o.x, o.y, o.z || 0, o.rot || 0); tick(o.m.w * o.m.d * o.m.h >= 3000 ? 'o.big' : 'o.small');
   }
+  PARTY_DRAW_LAST = list.filter(o => o.partyKey);
   tick('objects');
   fogUpdate(); drawFog(); tick('fog');
   if (farmerD && !fogHid(farmerD.x, farmerD.y)) drawBillboard(ctx, farmerD, 0.35); // ghost, so he never disappears behind the barn or a tree
@@ -4735,6 +4884,7 @@ function lighting(night, T) {
   if (!F.home) hz(F.x, F.y, 14, 40);
   if (WORKS_ON) PWA.lights(hz); // v5.6.0: lamps on the wheel's grid, busy workshops
   if (DECOR_ON) DA.lights(hz, T); // v5.7.0
+  if (DECOR_ON && partyProps()) for (const l of partyLawnNow().lawn) hz(l.pole.x, l.pole.y, 18, 34, 0.7); // v5.11.0.15: the lawn's lantern poles
   if (YARD_ON) YA.lights(hz, T, HOUSE); // v5.10.3: the door lantern, the curtained windows
   if (HOME_ON) HA.lights(hz, T); // v5.9.0: the new house's windows once someone lives there
   if (INN_ON) IA.lights(hz, T); // v5.10.7: cabin windows and path lamps
@@ -5161,7 +5311,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.14';
+const GAME_VERSION = '5.11.0.15';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5282,7 +5432,7 @@ function restore(s) { // s has been migrated and validated by PFSave
     if (o) Object.assign(m, { water: o.water, bag: Object.assign(SIM.emptySeeds(), o.bag), gathered: o.gathered, crops: o.basket.slice() }); }
   S.town = Object.assign(TN.valid(s.town), { hall: HL ? HL.valid(s.town && s.town.hall) : undefined }); VISITORS.length = 0; NEIGH.length = 0; guestsOut = 0; // v5.8.0
   if (YARD_ON) { YA.sync(true, clothesOut()); if (groundReady) buildGroundBase([20, 30, 170, 66]); }
-  S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; if (DECOR_ON) DA.sync(true); if (INN_ON) IA.sync(true); markNavDirty(); // v5.7.0; v5.10.7 inn
+  S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; partyReg = { day: -1, keys: [], kid: {} }; partyLawnC.key = ''; partyPlanC.key = ''; if (DECOR_ON) DA.sync(true); if (INN_ON) IA.sync(true); markNavDirty(); // v5.7.0; v5.10.7 inn
   if (HM) homeRestore(s); // v5.9.0 (after the family: a married child wakes at the new house)
   S.log = s.log.slice(); S.label = FARMER.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
   refundSpeed();
@@ -5420,7 +5570,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
-  partyMorning: () => partyMorning(), partyTask: () => partyTask(), GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
+  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
 Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------

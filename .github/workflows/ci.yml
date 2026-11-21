@@ -80,7 +80,8 @@ jobs:
             scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js clinic-shots.js fill-shots.js
           # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
           - group: works-town
-            scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
+            # v5.11.0.15: party-shots (~1.5m locally); works-town 14m01s on main run 44800040270, ample headroom
+            scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js party-shots.js
           # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
           - group: home
             scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
@@ -105,7 +106,10 @@ jobs:
           - group: scale
           # v5.11.0.13: + rain-shots from agrilot (scale was 9m41s on run 44782373476; rain ~7m → ~17m)
           # v5.11.0.14: + housemove-shots (~1–2m locally; expected ~18–19m, >=3m headroom under 25m)
-            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js rain-shots.js housemove-shots.js
+          # v5.11.0.15: scale exceeded 22m on run 44815889988; isolate rain instead of passing the overload to another leg.
+            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js housemove-shots.js
+          - group: weather
+            scripts: rain-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
