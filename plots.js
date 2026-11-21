@@ -43,7 +43,7 @@
   const RIVER_HW = 7, BANK = 4;
   const riverHW = (x, y) => RIVER_HW + Math.sin(x * 0.11 + y * 0.07) * 1.2;
   const riverDist = (x, y) => polyDist(x, y, RIVER);
-  // v5.11.0.17: where along the river a point is: the nearest point on the centre line, the downstream direction there and
+  // v5.11.0.20: where along the river a point is: the nearest point on the centre line, the downstream direction there and
   // the distance travelled from the source (world units). Drawing only (the flowing water, the wheels); rules do not use it.
   const RIVER_LEN = (() => { const out = [0]; for (let i = 1; i < RIVER.length; i++) out.push(out[i - 1] + Math.hypot(RIVER[i].x - RIVER[i - 1].x, RIVER[i].y - RIVER[i - 1].y)); return out; })();
   function riverNear(x, y) { let best = null;
@@ -96,7 +96,7 @@
     { id: 'swacross', name: '河对岸·西', terrain: 'across', rect: [-110, 330, 10, 378], gate: P(10, 350), sign: P(14, 342), price: 3600, needs: 'bridge',
       mods: ['field', 'pasture', 'orchard', 'meadow', 'workshop'], field: { cols: 8, rows: 3 }, desc: '过了桥往西的一大片平地' },
     { id: 'seacross', name: '河对岸·东', terrain: 'across', rect: [34, 332, 140, 380], gate: P(34, 350), sign: P(30, 342), price: 4000, needs: 'bridge',
-      mods: ['field', 'pasture', 'meadow', 'workshop', 'dam'], field: { cols: 8, rows: 3 }, wheel: P(100, 324), wheelArt: P(72, 326), desc: '过了桥往东，挨着河' }, // wheelArt: where the wheel is drawn (v5.11.0.17: clear of 南河湾's)
+      mods: ['field', 'pasture', 'meadow', 'workshop', 'dam'], field: { cols: 8, rows: 3 }, wheel: P(100, 324), wheelArt: P(72, 326), desc: '过了桥往东，挨着河' }, // wheelArt: where the wheel is drawn (v5.11.0.20: clear of 南河湾's)
     { id: 'eslope', name: '东坡', terrain: 'slope', rect: [362, -100, 440, -12], gate: P(362, -20), sign: P(358, -30), price: 3500,
       mods: ['pasture', 'field', 'orchard', 'meadow'], field: { cols: 6, rows: 4 }, desc: '北牧场东边的缓坡' },
     { id: 'eroad', name: '东大道', terrain: 'special', special: 'road', rect: [362, 40, 448, 92], gate: P(362, 66), sign: P(358, 56), price: 6500, wood: 30,

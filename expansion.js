@@ -26,7 +26,7 @@
   const fastRiver = (x, y) => { const k = cellOf(x, y), segs = k < 0 ? null : RB[k]; if (k < 0) return PL.riverDist(x, y); if (!segs) return 99; let d = 99; for (const [a, b] of segs) { const q = segD(x, y, a, b); if (q < d) d = q; } return d; };
   const fastTrail = (x, y, w) => { const k = cellOf(x, y), segs = k < 0 ? null : TB[k]; if (!segs) return false; for (const [a, b] of segs) if (segD(x, y, a, b) < w) return true; return false; };
   const fastPlot = (x, y) => { const k = cellOf(x, y), ps = k < 0 ? null : PB[k]; if (!ps) return null; for (const p of ps) if (inRect(x, y, p.rect)) return p; return null; };
-  // v5.11.0.17 河口: the last stretch before the sea widens (banks flaring out into the beach) and the river water gives way,
+  // v5.11.0.20 河口: the last stretch before the sea widens (banks flaring out into the beach) and the river water gives way,
   // in ragged tongues, to the sea's sentinel tone, so the sea pass paints it as one body of water with the open sea.
   const WDm = root.PFWorld, MOUTH_X0 = 124, FLARE = 6.5;
   const mouthFlare = x => { const t = Math.min(1, (x - MOUTH_X0) / 34); return FLARE * t * t; };
@@ -37,10 +37,10 @@
     if (nearRiver) {
       const rd = fastRiver(x, y), F = x > MOUTH_X0 ? mouthFlare(x) : 0, hw = PL.riverHW(x, y) + F;
       if (rd < hw) { // flowing water: lighter in the middle, a dark line along the banks, a few streaks that run with the flow
-        if (F > 0 && rd < hw - 1.2 && mouthSea(x, y)) return [Wt[2], 'water']; // v5.11.0.17: the river mouth turns into the sea's own water
+        if (F > 0 && rd < hw - 1.2 && mouthSea(x, y)) return [Wt[2], 'water']; // v5.11.0.20: the river mouth turns into the sea's own water
         if (rd > hw - 1.2) return [SH[0], 'water'];
         const v = vnoise(x / 6 + y / 9, y / 3 - x / 11, 21);
-        return [v > 0.8 ? Wt[4] : rd < hw * 0.5 ? Wt[3] : (v < 0.14 ? Wt[1] : Wt[3]), 'water']; // v5.11.0.17: fewer baked streaks, the moving ones (game.js drawRiverFlow) carry the flow
+        return [v > 0.8 ? Wt[4] : rd < hw * 0.5 ? Wt[3] : (v < 0.14 ? Wt[1] : Wt[3]), 'water']; // v5.11.0.20: fewer baked streaks, the moving ones (game.js drawRiverFlow) carry the flow
       }
       if (rd < hw + PL.BANK + F * 0.9) { const v = vnoise(x / 3, y / 3, 23);
         if (F > 0 && vnoise(x / 4, y / 4, 19) < F / FLARE + 0.15) { const b = vnoise(x / 5, y / 5, 17); return [rd < hw + 1 ? Wd[3] : b > 0.66 ? Wd[5] : b > 0.33 ? Wd[4] : Wd[3], 'sand']; } // beach sand
@@ -110,7 +110,7 @@
     const rail = B(3, 16, 9, (x, y, z) => (z < 9 && (y === 1 || y === 14)) || z === 8 ? Wd[3] : null);
     // trail barrier: a red-and-cream bar between two posts
     const barrier = B(18, 3, 10, (x, y, z) => (x <= 1 || x >= 16) ? Wd[2] : (z >= 6 && z <= 8) ? ((x >> 2) & 1 ? Rf[2] : Ac[0]) : null);
-    // water wheel (v5.11.0.17): it stands *in* the river. The paddle wheel turns in the y-z plane (local -y is downstream once
+    // water wheel (v5.11.0.20): it stands *in* the river. The paddle wheel turns in the y-z plane (local -y is downstream once
     // placed), its lower WZ voxels are under the surface and not built, so the rim comes up out of the water. A pile in the
     // stream and a post on the bank (local +x, mirrored when side < 0) carry the axle. turn: the v5.6.0 frames of a turning
     // wheel; turn grows frame by frame, which moves the bottom paddles toward local -y, i.e. with the current.
@@ -154,7 +154,7 @@
       if (y <= 1 && z < 9 && x > 1 && x < 20) return z % 3 === 0 ? Wd[2] : Wd[3]; return null; });
     const trough = B(14, 6, 5, (x, y, z) => { if (x === 0 || x === 13 || y === 0 || y === 5 || z === 0) return Wd[2]; return z === 3 ? Wt[3] : null; });
     const board = B(14, 3, 14, (x, y, z) => ((x === 2 || x === 11) && z < 8) ? Wd[2] : (z >= 7 && z <= 13 && y === 1) ? (z === 7 || z === 13 || x === 0 || x === 13 ? Wd[2] : Wd[4]) : null);
-    MD = { ledges: [ledge(3), ledge(11), ledge(29)], boulders: [boulder(5), boulder(17)], abut, rail, barrier, wheelSets: { 1: wheelSet(1), '-1': wheelSet(-1) }, // v5.6.0: a repaired wheel turns (v5.11.0.17: one set per bank side)
+    MD = { ledges: [ledge(3), ledge(11), ledge(29)], boulders: [boulder(5), boulder(17)], abut, rail, barrier, wheelSets: { 1: wheelSet(1), '-1': wheelSet(-1) }, // v5.6.0: a repaired wheel turns (v5.11.0.20: one set per bank side)
       cottages: [cottage(Rf[2]), cottage(Rf[3]), cottage(St[1])], townGate, slide, sandbox, swing, shelter, trough, board };
     return MD;
   }
@@ -222,7 +222,7 @@
     if (mod === 'pasture' && !(S.works && S.works.penHost === p.id)) { add(MD.shelter, x0 + 18, y0 + 14, 0); add(MD.trough, x1 - 18, y0 + 12, 0); }
     if (mod === 'workshop') { add(MD.board, cx, y0 + 8, 0); add(X.crateModel, x0 + 12, y1 - 10, 0.2); add(X.crateModel, x0 + 20, y1 - 9, 1.1); add(X.logsModel, x1 - 16, y1 - 10, 0.15); }
     if (mod === 'road') { add(MD.board, x0 + 10, 56, 0); }
-    if (mod === 'dam' && p.wheel) { const w = PL.wheelSite(p), fr = MD.wheelSets[w.side]; // v5.11.0.17: in the river, turning with the current
+    if (mod === 'dam' && p.wheel) { const w = PL.wheelSite(p), fr = MD.wheelSets[w.side]; // v5.11.0.20: in the river, turning with the current
       o.wheel = add(fr[0], w.x + w.nx * 3, w.y + w.ny * 3, w.rot, { big: 1, frames: fr, site: w }); }
     if (mod === 'woodland') syncWoodland(p.id, true);
     if (mod === 'playground') for (const s of PL.playSpots({ [p.id]: { mod } }).filter(s => s.plot === p.id)) {
@@ -325,7 +325,7 @@
 
   // v5.6.0: the water wheel prop of each 动力坝 plot (works-art.js swaps its frames while it turns)
   const wheelProp = id => (plotProps[id] && plotProps[id].wheel) || null;
-  // v5.11.0.17: every wheel that stands in the river now (the splash and wake under it are drawn with the water, game.js)
+  // v5.11.0.20: every wheel that stands in the river now (the splash and wake under it are drawn with the water, game.js)
   const wheelSites = () => { const out = []; for (const id in plotProps) { const q = plotProps[id].wheel; if (q && q.site) out.push(q.site); } return out; };
   const api = { ground, mount, applyEff, dirtyRect, repaint, buyPlot, rezonePlot, sync, drawLocks, minimap, roamOf, playSpots: () => PL.playSpots(S ? S.plots : {}), models: () => MD, wheelProp, wheelSites, mouthWater: (x, y) => { if (x < MOUTH_X0) return null; const o = ground(x, y, null); return o && o[1] === 'water' ? o : null; }, riverHalf: (x, y) => PL.riverHW(x, y) + (x > MOUTH_X0 ? mouthFlare(x) : 0) };
   root.PFExpand = api;

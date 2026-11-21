@@ -130,7 +130,7 @@
   // ---------- every frame: turning wheels ----------
   function frame(realT) {
     const n = (S.eff && S.eff.wheel) | 0; if (!n || !X.wheelProp) return; const frames = X.wheelFrames();
-    PW.wheelsOf(S.plots, n).forEach(w => { const q = X.wheelProp(w.plot), fr = (q && q.frames) || frames; if (q) q.m = fr[Math.floor(realT * 5) % fr.length]; }); // v5.11.0.17: each wheel has its bank side's frames
+    PW.wheelsOf(S.plots, n).forEach(w => { const q = X.wheelProp(w.plot), fr = (q && q.frames) || frames; if (q) q.m = fr[Math.floor(realT * 5) % fr.length]; }); // v5.11.0.20: each wheel has its bank side's frames
   }
   // ---------- overlays: spray, bees, finished goods, lamps that are too far ----------
   function draw(ctx, proj, onScreen, realT, T, night, rain, mode) {

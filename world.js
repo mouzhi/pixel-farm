@@ -59,7 +59,7 @@
     if (y > s - 9) return 'sand';
     return null;
   }
-  // v5.11.0.17 河口: what the *picture* shows there. seaAt (paths, rain, props, fishing, fog) keeps the straight x 155 edge; the
+  // v5.11.0.20 河口: what the *picture* shows there. seaAt (paths, rain, props, fishing, fog) keeps the straight x 155 edge; the
   // ground paints an irregular sandy west coast over it that never comes west of x 155 (so no plot or fence is ever in water),
   // bends in round the river mouth, and rounds the corner into the southern beach.
   const MOUTH = { x: 156, y: 304 };

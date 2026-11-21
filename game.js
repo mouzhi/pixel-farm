@@ -1785,9 +1785,9 @@ function groundAt(x, y) { // -> [palette colour, kind]
   const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2 + (vnoise(x / 4, y / 4, 11) - 0.5) * 0.34;
   if (e < 1) return [Wt[2], 'water'];           // one flat tone: the layered water is painted over it in screen space (waterPass)
   if (e < 1.3) return [G[3], 'shore'];
-  const sea = COAST_OLD ? WD.seaAt(x, y) : WD.seaLook(x, y); // v5.11.0.17: the picture's irregular coast (rules keep seaAt)
+  const sea = COAST_OLD ? WD.seaAt(x, y) : WD.seaLook(x, y); // v5.11.0.20: the picture's irregular coast (rules keep seaAt)
   if (sea === 'water') return [Wt[2], 'water'];
-  if (sea === 'sand' && !COAST_OLD) { const o = XP.mouthWater(x, y); if (o) return o; } // v5.11.0.17: the river runs on across the beach into the sea
+  if (sea === 'sand' && !COAST_OLD) { const o = XP.mouthWater(x, y); if (o) return o; } // v5.11.0.20: the river runs on across the beach into the sea
   if (sea === 'sand') { const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; }
   const wob = (vnoise(x / 3, y / 3, 7) - 0.5) * 1.6;
   const pd = pathD(x, y), pw = 4.2 + wob;
@@ -2230,7 +2230,7 @@ let worksSyncT = 0;
 function worksFrame() { if (!WORKS_ON) return; if (realT - worksSyncT > 0.2 || realT < worksSyncT) { worksSyncT = realT; PWA.sync(); } PWA.frame(realT); } // the key check is a few JSON strings: 5 times a second is plenty
 function worksBusy(id) { return PW.plotBusy(id, { worksMove: true, works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }) || (DECOR_ON ? decorBusy(id) : null) || (HM ? homeBusy(id) : null) || (IN ? IN.plotBusy(id, S.plots, S.inn) : null); }
 PWA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, tiles, markNavDirty: () => markNavDirty(), wheelProp: id => XP.wheelProp(id),
-  wheelFrames: () => { const md = XP.models(); return md ? [...md.wheelSets[1], ...md.wheelSets[-1]] : []; } }); // v5.11.0.17: both bank sides
+  wheelFrames: () => { const md = XP.models(); return md ? [...md.wheelSets[1], ...md.wheelSets[-1]] : []; } }); // v5.11.0.20: both bank sides
 WORKS_ON = true;
 // ---------- v5.7.0 phase 9: decorations, night lamps, the party area, moving things ----------
 // Rules: decor.js (pure). Art: decor-art.js. S.decor is saved as `decor` (save v13).
@@ -4422,7 +4422,7 @@ const WTONE = [Wt[0], Wt[1], Wt[2], Wt[3], Wt[4], Wt[5], Ac[0], PAL.ramps.shallo
 const LUM = c => 0.3 * (c & 255) + 0.59 * (c >>> 8 & 255) + 0.11 * (c >>> 16 & 255);
 const RTONE = new Map(); for (const c of [...PAL.colors, '#1c1626']) { const v = u32(c), l = LUM(v); RTONE.set(v, l < 70 ? 0 : l < 118 ? 1 : 2); }
 let WG = { pond: null, sea: null };
-function seaBox() { // southern ocean, clipped to the screen (a second pass so pond and sea do not share a midY); v5.11.0.17: from the river mouth (x 122) and out over the ground margin
+function seaBox() { // southern ocean, clipped to the screen (a second pass so pond and sea do not share a midY); v5.11.0.20: from the river mouth (x 122) and out over the ground margin
   const pts = []; for (const [ux, uy] of [[122, 230], [WORLD.x1 + GM, 230], [122, WORLD.y1 + GM], [WORLD.x1 + GM, WORLD.y1 + GM]]) pts.push(proj(ux, uy));
   const x0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[0]))) - 4), x1 = Math.min(W, Math.ceil(Math.max(...pts.map(p => p[0]))) + 4);
   const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
@@ -4444,7 +4444,7 @@ function waterGeom(d, bx, by, bw, bh, open) { // per camera view: mask, distance
   const N = bw * bh, mask = new Uint8Array(N), dist = new Float32Array(N); let n = 0, sx = 0, sy = 0, ys = [];
   for (let i = 0; i < N; i++) if (d[i] === WSENT) { mask[i] = 1; n++; sx += i % bw; sy += (i / bw) | 0; ys.push((i / bw) | 0); }
   if (!n) return { bx, by, bw, bh, n: 0, aq: AQ };
-  // v5.11.0.17: river water next to the sea is not a bank: at the mouth the sea runs on into the river with no shore line
+  // v5.11.0.20: river water next to the sea is not a bank: at the mouth the sea runs on into the river with no shore line
   const wet = open ? new Uint8Array(N) : mask; if (open) { const [r0, r1, r2, r3] = RIVC; for (let i = 0; i < N; i++) { const c = d[i]; wet[i] = mask[i] || c === r0 || c === r1 || c === r2 || c === r3 ? 1 : 0; } }
   for (let i = 0; i < N; i++) dist[i] = wet[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!wet[i]) continue; let v = dist[i];
@@ -4470,9 +4470,9 @@ let SEA_BAND = null; // one byte per world unit over the sea, built once: the ba
 function seaBandMap() {
   if (SEA_BAND) return SEA_BAND; const x0 = 122, y0 = 225, w = WORLD.x1 + GM - x0, h = WORLD.y1 + GM - y0, m = new Uint8Array(w * h), ph = new Uint8Array(w * h), lp = new Uint8Array(w * h), pl = new Uint8Array(w * h);
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const wx = x0 + i + 0.5, wy = y0 + j + 0.5, s = WD.seaShore(wx);
-    const n = vnoise(wx / 14, wy / 9, 29) - 0.5, e = Math.min(wy - (250 + (s - 250) * 0.45), (wx - WD.seaWestEdge(wy)) * 0.9) + n * 10; // contours: softer than the shore, a little noise; v5.11.0.17: round the west coast too
+    const n = vnoise(wx / 14, wy / 9, 29) - 0.5, e = Math.min(wy - (250 + (s - 250) * 0.45), (wx - WD.seaWestEdge(wy)) * 0.9) + n * 10; // contours: softer than the shore, a little noise; v5.11.0.20: round the west coast too
     const k = j * w + i; m[k] = e >= SEA_B2 ? 2 : e >= SEA_B1 ? 1 : 0;
-    // v5.11.0.17: swell crests run along the contours (one every 11 units, in broken dashes), the lapping edge has its own slow phase,
+    // v5.11.0.20: swell crests run along the contours (one every 11 units, in broken dashes), the lapping edge has its own slow phase,
     // and the river's water fans out a little way into the sea at the mouth
     const c = WD.coastDist(wx, wy); ph[k] = c < 7 || vnoise(wx / 8, wy / 3.2, 37) < 0.4 ? 255 : Math.floor(((e / 11 + vnoise(wx / 40, wy / 30, 41) * 1.6) % 1 + 1) % 1 * 254);
     lp[k] = Math.floor(vnoise(wx / 26, wy / 26, 43) * 255);
@@ -4545,7 +4545,7 @@ function paintWater(t, box, key) {
   // 1 + 2: depth and sky
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
     let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else if (band) { if (band[i] >= 1) tn = 3; if (band[i] >= 2) tn = 4; } else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
-  // v5.11.0.17: at the mouth the river's mid blue fans out into the sea and thins away (ordered dither, fixed on the map)
+  // v5.11.0.20: at the mouth the river's mid blue fans out into the sea and thins away (ordered dither, fixed on the map)
   if (Gm.open) { const pl = Gm.pl; for (let i = 0; i < N; i++) if (pl[i] && (pl[i] === 16 || (((i % bw) + ((i / bw) | 0)) & 1))) tone[i] = 3; } // solid, a checker fringe
   // 3: reflections of the trees and reeds behind the pond (their current wind pose)
   for (const o of props) { if (!o.tree) continue; const [sx, sy] = proj(o.x, o.y), X = Math.round(sx) - bx, Y = Math.round(sy);
@@ -4557,7 +4557,7 @@ function paintWater(t, box, key) {
     reflectInto(Gm, tone, s.d32, s.width, s.height, s.height - 3, Math.round(sx) - (s.width >> 1), Y, t); }
   // 4: shallow edge on the near side, lapping dashes, foam where things stand in the water
   const ring = Math.sin(wph(t, 2)) > 0.35 ? 3 : 2;
-  if (Gm.open) { // v5.11.0.17: the sea moves. The wash runs up the beach and back (a slow phase that wanders along the shore), its
+  if (Gm.open) { // v5.11.0.20: the sea moves. The wash runs up the beach and back (a slow phase that wanders along the shore), its
     // front a broken line of foam; further out, low swell crests drift shoreward along the depth contours, one every 5 s loop
     const sh = Math.floor((t % WLOOP) / WLOOP * 256), LAPF = new Float32Array(256), ph = Gm.ph, lp = Gm.lp;
     for (let j = 0; j < 256; j++) LAPF[j] = 1.2 + 2.3 * (0.5 + 0.5 * Math.sin(j / 256 * 2 * Math.PI * 3 - wph(t, 1)));
@@ -4616,7 +4616,7 @@ function waterPass(t) {
   paintWater(t, seaBox(), 'sea');
 }
 
-// v5.11.0.17 河水在流: the river is baked into the ground picture, so the flow is a light layer of moving marks on top: pale
+// v5.11.0.20 河水在流: the river is baked into the ground picture, so the flow is a light layer of moving marks on top: pale
 // streaks and darker ripples drifting downstream (faster mid-stream), glints that blink, now and then a leaf. They follow the
 // centre line (plots.js riverAt), spread across the widening mouth and thin out in the sea. ~520 marks, culled to the screen,
 // a few pixels each. At each water wheel: foam where the paddles enter and leave the water and a short wake downstream.
@@ -4807,7 +4807,7 @@ function render() {
   waterPass(realT); drawRiverRipples(); tick('water');
   if (IN && S.inn && IN.deckUp(S.inn) && IN.isSunset(T)) captureSunsetWater();
   else { SUN_WMASK = null; }
-  drawRiverFlow(realT); tick('flow'); // v5.11.0.17: after the sunset capture (it matches the river by colour)
+  drawRiverFlow(realT); tick('flow'); // v5.11.0.20: after the sunset capture (it matches the river by colour)
   if (WX) WX.drawWet(ctx, proj, RS, { pathSegs, W, H, regionOpen });
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
   const allTiles = HT.length ? tiles.concat(HT) : tiles; // v5.9.0: the little farms' six tiles each
