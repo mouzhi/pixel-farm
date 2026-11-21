@@ -110,8 +110,9 @@ jobs:
             scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js housemove-shots.js
           - group: weather
           # v5.11.0.19: + married-shots (three wedding set-ups, ~3–5m locally); weather was the lightest leg with rain alone (~7m)
-            scripts: rain-shots.js married-shots.js wedding-shots.js
-            # v5.11.0.21: + wedding-shots (~4.7m on CI: weather 11m44s with rain+wedding on run 44880926084)
+          # v5.11.0.20: + water-shots (河口 / flowing water / wheels, ~1.5–2m locally; weather was 10m27s with rain+water on run 44880021944)
+          # v5.11.0.21: + wedding-shots (~4.7m on CI; weather was 15m32s with rain+married+wedding on run 44882574583, ~17.5m expected with water)
+            scripts: rain-shots.js married-shots.js water-shots.js wedding-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale

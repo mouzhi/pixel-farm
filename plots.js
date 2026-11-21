@@ -43,6 +43,27 @@
   const RIVER_HW = 7, BANK = 4;
   const riverHW = (x, y) => RIVER_HW + Math.sin(x * 0.11 + y * 0.07) * 1.2;
   const riverDist = (x, y) => polyDist(x, y, RIVER);
+  // v5.11.0.20: where along the river a point is: the nearest point on the centre line, the downstream direction there and
+  // the distance travelled from the source (world units). Drawing only (the flowing water, the wheels); rules do not use it.
+  const RIVER_LEN = (() => { const out = [0]; for (let i = 1; i < RIVER.length; i++) out.push(out[i - 1] + Math.hypot(RIVER[i].x - RIVER[i - 1].x, RIVER[i].y - RIVER[i - 1].y)); return out; })();
+  function riverNear(x, y) { let best = null;
+    for (let i = 0; i < RIVER.length - 1; i++) { const a = RIVER[i], b = RIVER[i + 1], dx = b.x - a.x, dy = b.y - a.y, l = Math.hypot(dx, dy) || 1;
+      let t = ((x - a.x) * dx + (y - a.y) * dy) / (l * l); t = t < 0 ? 0 : t > 1 ? 1 : t; const px = a.x + t * dx, py = a.y + t * dy, d = Math.hypot(x - px, y - py);
+      if (!best || d < best.d) best = { d, x: px, y: py, fx: dx / l, fy: dy / l, s: RIVER_LEN[i] + t * l, seg: i }; }
+    return best; }
+  // the point `s` units downstream of the source: position and flow direction (clamped to the two ends)
+  function riverAt(s) { let i = 0; while (i < RIVER.length - 2 && RIVER_LEN[i + 1] < s) i++;
+    const a = RIVER[i], b = RIVER[i + 1], l = RIVER_LEN[i + 1] - RIVER_LEN[i] || 1, t = Math.max(0, Math.min(1, (s - RIVER_LEN[i]) / l));
+    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t, fx: (b.x - a.x) / l, fy: (b.y - a.y) / l }; }
+  // a 动力坝's water wheel stands in the river by its plot, not on the grass: the paddle wheel turns in a plane along the flow, its
+  // lower part under the surface `WHEEL_IN` units out from the bank, the axle running back to a post on the bank. rot turns the
+  // model (local -y downstream, local +x toward the bank; see expansion.js). The plot keeps its `wheel` point for the rules.
+  const WHEEL_IN = 3.5;
+  function wheelSite(p) { if (!p || !p.wheel) return null; const w = p.wheelArt || p.wheel, n0 = riverNear(w.x, w.y), cx = (p.rect[0] + p.rect[2]) / 2, cy = (p.rect[1] + p.rect[3]) / 2;
+    let nx = -n0.fy, ny = n0.fx; if ((cx - n0.x) * nx + (cy - n0.y) * ny < 0) { nx = -nx; ny = -ny; } // the bank on the plot's side
+    const hw = riverHW(n0.x, n0.y), off = hw - WHEEL_IN, x = n0.x + nx * off, y = n0.y + ny * off;
+    const rot = Math.atan2(n0.fx, -n0.fy), side = (-n0.fy * nx + n0.fx * ny) > 0 ? 1 : -1; // side 1: local +x is (-fy, fx); -1: the mirrored model
+    return { plot: p.id, x, y, rot, side, fx: n0.fx, fy: n0.fy, nx, ny, hw, bank: { x: n0.x + nx * (hw + 2.2), y: n0.y + ny * (hw + 2.2) } }; }
   // the one bridge, north-south over the river south of the farm
   const BRIDGE = { x: 24, y0: 302, y1: 330, hw: 5 };
   // The ridge: a cliff edge running along the north of the map, bending down at the west and east corners. North of it is
@@ -75,7 +96,7 @@
     { id: 'swacross', name: '河对岸·西', terrain: 'across', rect: [-110, 330, 10, 378], gate: P(10, 350), sign: P(14, 342), price: 3600, needs: 'bridge',
       mods: ['field', 'pasture', 'orchard', 'meadow', 'workshop'], field: { cols: 8, rows: 3 }, desc: '过了桥往西的一大片平地' },
     { id: 'seacross', name: '河对岸·东', terrain: 'across', rect: [34, 332, 140, 380], gate: P(34, 350), sign: P(30, 342), price: 4000, needs: 'bridge',
-      mods: ['field', 'pasture', 'meadow', 'workshop', 'dam'], field: { cols: 8, rows: 3 }, wheel: P(100, 324), desc: '过了桥往东，挨着河' },
+      mods: ['field', 'pasture', 'meadow', 'workshop', 'dam'], field: { cols: 8, rows: 3 }, wheel: P(100, 324), wheelArt: P(72, 326), desc: '过了桥往东，挨着河' }, // wheelArt: where the wheel is drawn (v5.11.0.20: clear of 南河湾's)
     { id: 'eslope', name: '东坡', terrain: 'slope', rect: [362, -100, 440, -12], gate: P(362, -20), sign: P(358, -30), price: 3500,
       mods: ['pasture', 'field', 'orchard', 'meadow'], field: { cols: 6, rows: 4 }, desc: '北牧场东边的缓坡' },
     { id: 'eroad', name: '东大道', terrain: 'special', special: 'road', rect: [362, 40, 448, 92], gate: P(362, 66), sign: P(358, 56), price: 6500, wood: 30,
@@ -267,7 +288,7 @@
   }
 
   const api = { MODULES, MODULE_IDS, TERRAIN, RIVER, RIVER_HW, BANK, BRIDGE, TRAIL, TRAIL_TOP, TRAIL_EAST, TOWN, GRAZE, PLOTS, PLOT_IDS, FIELD_PLOT_IDS, ROUTES, OLD, CLIFF,
-    plot, isPlotId, plotAt, terrainAt, clearAt, outer, riverDist, riverHW, ridgeY, onTrail, polyDist, grazeHours,
+    plot, isPlotId, plotAt, terrainAt, clearAt, outer, riverDist, riverHW, riverNear, riverAt, RIVER_LEN, wheelSite, WHEEL_IN, ridgeY, onTrail, polyDist, grazeHours,
     gateOpen, workers, offer, rezoneOffer, LEGACY_MODS, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFPlots = api;
 })(typeof window !== 'undefined' ? window : globalThis);
