@@ -59,6 +59,26 @@
     if (y > s - 9) return 'sand';
     return null;
   }
+  // v5.11.0.17 河口: what the *picture* shows there. seaAt (paths, rain, props, fishing, fog) keeps the straight x 155 edge; the
+  // ground paints an irregular sandy west coast over it that never comes west of x 155 (so no plot or fence is ever in water),
+  // bends in round the river mouth, and rounds the corner into the southern beach.
+  const MOUTH = { x: 156, y: 304 };
+  function seaWestEdge(y) {
+    const e = 163.5 + Math.sin(y * 0.083 + 0.7) * 3.2 + Math.sin(y * 0.21 + 2.1) * 1.6 + Math.sin(y * 0.037 + 4) * 2.4;
+    const bay = 7 * Math.exp(-(((y - MOUTH.y) / 15) ** 2)); // the coast bends in to meet the widening river
+    return Math.max(155.5, e - bay);
+  }
+  const COAST_SAND = 10;
+  function seaLook(x, y) { // 'water' / 'sand' / null, like seaAt
+    if (x < 155 - COAST_SAND - 2) return null; const s = seaShore(x);
+    if (x < 155 && y < s - 12) return null;
+    const ex = seaWestEdge(y), dS = s + 2 - y, dW = ex - x; // > 0: on the land side of the south / west waterline
+    if (dS < 0 && dW < 0) return 'water';
+    const d = dS < 0 ? dW : dW < 0 ? dS : Math.min(dS, dW) < 6 ? Math.min(dS, dW) : Math.hypot(dS, dW); // the corner is rounded
+    return d < COAST_SAND + 1 ? 'sand' : null;
+  }
+  // how far out to sea a point is (world units past the nearer waterline; negative on land): the depth bands follow it (game.js seaBandMap)
+  function coastDist(x, y) { return Math.min(y - (seaShore(x) + 2), x - seaWestEdge(y)); }
   // paths from the farm to each gate (world units, poly-lines); the farmer walks them and the ground paints them as dirt
   const ROUTES = {
     forest: [{ x: 100, y: 24 }, { x: 100, y: -38 }],
@@ -131,7 +151,7 @@
     .map(([x, y, v], i) => ({ id: 'h' + i, x, y, kind: 'wild', v, stage: 'tree', age: 0, ripe: 0, cd: 0 }));
   // v5.0 house: tiers after the starting cabin; each adds a room (pop = people who can live there). Wood + gold.
   const HOUSE_TIERS = [{ name: '小木屋', pop: 1, woodCap: 100 }, { name: '大木屋', pop: 2, woodCap: 200 }, { name: '二层农舍', pop: 3, woodCap: 400 }, { name: '庄园', pop: 4, woodCap: 800 }];
-  const api = { PENS, PEN_IDS, NAP_SPOTS, TILE, WORLD, WORLD55, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
+  const api = { PENS, PEN_IDS, NAP_SPOTS, TILE, WORLD, WORLD55, HOME, REGIONS, REGION_IDS, region, inRect, areaAt, seaShore, seaAt, seaLook, seaWestEdge, coastDist, MOUTH, ROUTES, FRUIT, FRUIT_IDS, WOOD, SAPLING_DAYS, STUMP_TO_SAPLING, STUMP_TO_TREE,
     MAX_ORDERS, fruitTree, defaultTrees, treeOvernight, pickFruit, chopYield, choppable, regrows, DROPS, EXTRA_TREES, HOUSE_TIERS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorld = api;
 })(typeof window !== 'undefined' ? window : globalThis);
