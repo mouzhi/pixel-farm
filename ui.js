@@ -244,9 +244,12 @@
         const noteOf = k => { const HS = HSK.find(q => q.id === k.id); return HS && HS.note ? '，' + HS.note : ''; };
         const lines = S.members.filter(m => !fam.kids.some(k => k.id === m.id)).map(m => `${m.name}：${jobOf(m)}`);
         for (const k of fam.kids) lines.push(`${k.name}（${stageOf(k)}）：${jobOf(S.members.find(q => q.id === k.id))}${noteOf(k)}`);
-        const busy = S.members.filter(m => !m.home && !m.away && m.task).length;
-        const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length;
-        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${tier.pop}`, tip: `${tier.name}：最多住 ${tier.pop} 人，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
+        // v5.11.0.19: a married child's husband or wife counts as family (they live in the new house, not the manor)
+        const inl = G.spousesIn ? G.spousesIn() : [], spA = G.SPOUSES || [];
+        for (const q of inl) { const a = spA.find(x => x._spouse === q.kid); lines.push(`${q.name}（${(fam.kids.find(k => k.id === q.kid) || {}).name || '孩子'}的爱人）：${jobOf(a)}`); }
+        const busy = S.members.filter(m => !m.home && !m.away && m.task).length + spA.filter(a => !a.home && a.task && inl.some(q => q.kid === a._spouse)).length;
+        const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length + inl.length, room = tier.pop + inl.length;
+        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
@@ -810,7 +813,7 @@
     const st = L && L.status();
     if (st && st.conflict) showConflict(st.conflict); else hideConflict();
   }
-  // v5.11.0.20: never leave a click silent — tell the player it worked, or why it didn't.
+  // v5.11.0.22: never leave a click silent — tell the player it worked, or why it didn't.
   function announceSync(st) {
     if (!st || st.aborted) return;
     if (st.conflict) {
@@ -959,7 +962,7 @@
   hintSync();
   paintSync();
   addEventListener('pf:sync', ev => { paintSync(); const st = ev.detail; if (st && st.conflict) showConflict(st.conflict); });
-  // v5.11.0.20: if Chrome already granted the folder (site settings still lists it) but the
+  // v5.11.0.22: if Chrome already granted the folder (site settings still lists it) but the
   // warning is stuck, re-query when the window is focused and clear it if the handle can write.
   const recanSync = () => { if (!L || !L.refreshPerm) return; L.refreshPerm().then(st => { paintSync(); }); };
   addEventListener('focus', recanSync);

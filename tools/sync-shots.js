@@ -1,4 +1,4 @@
-// v5.11.0.20: screenshots of the stuck "需要重新授权" panel and the restored state.
+// v5.11.0.22: screenshots of the stuck "需要重新授权" panel and the restored state.
 //   node tools/sync-shots.js   writes $PF_SHOTS/sync_{before,after}.png
 'use strict';
 const http = require('http'), fs = require('fs'), path = require('path'), assert = require('assert');
@@ -56,7 +56,7 @@ fs.mkdirSync(OUT, { recursive: true });
   }));
   await b.close();
   await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
-  const bad = r.ver !== '5.11.0.20' ? 'ver ' + r.ver
+  const bad = r.ver !== '5.11.0.22' ? 'ver ' + r.ver
     : !r.st.granted ? 'not granted'
     : !r.hintHidden ? 'hint still shown'
     : !/已同步到本机/.test(r.menu) ? 'menu ' + r.menu

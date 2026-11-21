@@ -9,7 +9,7 @@ const { chromium } = require('playwright-core');
 const ROOT = process.env.PF_ROOT || path.join(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json', '.webp': 'image/webp' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
-const only = process.argv[2] || null, VER = '5.11.0.20';
+const only = process.argv[2] || null, VER = '5.11.0.22';
 const readSave = f => { const s = JSON.parse(fs.readFileSync(f, 'utf8')); return s.save || s; };
 const FIX = n => path.join(__dirname, 'fixtures', n);
 // a bigger, later farm for the grid: a local real save when one is around (never committed), else the day-72 fixture
@@ -32,7 +32,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const bad = r && r.error ? r.error : check(r); console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
   const renderMs = p => p.evaluate(() => { const f = __farm; f.render(); const t0 = performance.now(); for (let i = 0; i < 12; i++) f.render(); return (performance.now() - t0) / 12; });
 
-  // v5.11.0.20: the photo toast and an achievement can arrive in the same render (first party). Check both event orders at two web sizes.
+  // v5.11.0.22: the photo toast and an achievement can arrive in the same render (first party). Check both event orders at two web sizes.
   for (const [width, height] of [[1280, 800], [1920, 1080]]) for (const first of ['photo', 'achievement']) {
     await shot('toast_stack_' + width + '_' + first + '.png', { width, height }, null, async p => {
       await p.evaluate(first => { const photo = () => dispatchEvent(new CustomEvent('pf:album', { detail: { id: 'party', title: '第一次家庭聚会', url: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a48sAAAAASUVORK5CYII=' } }));

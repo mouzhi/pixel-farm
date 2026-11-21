@@ -222,7 +222,7 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.ok(pretty.includes('\n  '), 'pretty-printed');
   });
 
-  // v5.11.0.20: resumeDir / refreshPerm against a mock File System Access handle
+  // v5.11.0.22: resumeDir / refreshPerm against a mock File System Access handle
   function err(name, message) { const e = new Error(message || name); e.name = name; return e; }
 
   await testAsync('resumeDir: requestPermission granted clears needGesture and writes', async () => {
@@ -344,7 +344,7 @@ async function testAsync(name, fn) { await fn(); n++; }
       save: Object.assign({ saveVersion: 15, gameVersion: '5.11.0.16', createdAt: 1_000_000, savedAt: savedAt || (day * 1000), clock: { day, t: day === 12 ? 800 : 360 }, coins }, extra) };
   }
   function browserDay(day, coins) {
-    return { saveVersion: 15, gameVersion: '5.11.0.20', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
+    return { saveVersion: 15, gameVersion: '5.11.0.22', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
   }
   function seedFolder(dir, day, coins) {
     dir.files['pixel-farm-save.json'] = { text: JSON.stringify(wrapDay(day, coins), null, 2) + '\n' };

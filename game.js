@@ -1334,12 +1334,14 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   const fam = S.family, max = FAM.LOVE_MAX, tier = WD.HOUSE_TIERS[S.eff.house || 0];
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby').length;
   const people = 1 + S.members.length + babies;
+  const inlaws = spousesIn(); // v5.11.0.19: a married child's husband or wife is family too (they live in the new house, so the manor's room count is unchanged)
   const today = (fam.today && fam.today.day === S.day) ? fam.today : { chat: 0, gift: 0, giftName: '', sales: 0 };
   let hint;
   if (fam.moved) {
     const kids = fam.kids.map(k => FAM.kidLine(k, S.day));
     const nk = FAM.kidText(FAM.nextKid(fam, S.day, tier.pop)); // v5.3: 「小豆还有 N 天到来」
-    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人。` + (nk ? nk + '。' : '');
+    const sps = inlaws.map(q => `${q.name}（${kidName(q.kid)}的爱人）`);
+    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}${sps.length ? '、' + sps.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人${inlaws.length ? `；新房子里还有 ${inlaws.length} 位家人` : ''}。` + (nk ? nk + '。' : '');
   } else if (!fam.met) hint = '去集市逛逛，就能认识店主阿禾。';
   else if (fam.love >= max && S.eff.house >= 1) hint = '好感已满，她答应明天搬过来。';
   else if (fam.love >= max) hint = '已满，等待大木屋';
@@ -1351,8 +1353,14 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   const total = today.chat + today.gift + today.sales;
   const todayText = bits.length ? ('今天：' + bits.join('，') + '，共 +' + total) : (fam.moved ? '' : '今天还没去集市');
   if (HM && fam.moved) { const notes = fam.kids.map(k => HM.kidNote(S.home, k.id, k.name)).filter(Boolean); if (notes.length) hint += notes.join('；') + '。'; } // v5.9.0
-  return { home: HM ? homeStatus() : null, met: fam.met, moved: fam.moved, love: fam.love, max, people, pop: tier.pop, today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
-    label: fam.moved ? `一家 ${people}/${tier.pop}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
+  const all = people + inlaws.length, room = tier.pop + inlaws.length;
+  return { home: HM ? homeStatus() : null, met: fam.met, moved: fam.moved, love: fam.love, max, people: all, pop: room, manor: people, manorPop: tier.pop, inlaws: inlaws.map(q => q.name), today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
+    label: fam.moved ? `一家 ${all}/${room}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
+}
+// v5.11.0.19: the married children's partners, from the save (S.home.wed), so the count does not wait for their actor
+function spousesIn() {
+  if (!HM || !S.home || !S.home.wed) return [];
+  return HM.KID_IDS.filter(k => HM.isMarried(S.home, k) && S.family.kids.some(q => q.id === k)).map(k => ({ kid: k, mate: S.home.wed[k].mate, name: HM.mateName(S.home.wed[k].mate) }));
 }
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
@@ -3184,12 +3192,12 @@ function careerVia(from, dest, homeward) {
   const onRoad = Math.abs(from.y - 66) < 8 && from.x > 200;
   const via = [];
   if (!homeward && from.x < dest.x && from.x < gate.x + 20) {
-    for (const p of along) if (p.x >= Math.min(from.x, gate.x) - 20 && p.x <= Math.max(dest.x, gate.x) + 4) via.push(p);
+    for (const p of along) if (p.x >= Math.min(from.x, gate.x) - 20 && p.x <= (dest.x < gate.x - 8 ? dest.x : Math.max(dest.x, gate.x)) + 4) via.push(p); // v5.11.0.19: the 农家乐区 is short of the gate
     if (dest.y !== 66) via.push({ x: dest.x, y: 66 });
   } else if (homeward) {
     via.push({ x: from.x, y: 66 });
     const back = along.slice().reverse();
-    for (const p of back) if (p.x <= from.x + 8) via.push(p);
+    for (const p of back) if (p.x <= from.x + 8 && p.x >= dest.x - 8) via.push(p); // v5.11.0.19: stop at the house (a new house east of the farm was reached by walking to the farm gate and back)
   }
   return via;
 }
@@ -3218,6 +3226,28 @@ function innStand() {
   if (IN.dinerUp(S.inn)) return L.diner.stand || L.diner.door;
   if ((S.inn && S.inn.cabins | 0) > 0 && L.cabins[0]) return { x: L.cabins[0].door.x + 8, y: L.cabins[0].door.y + 4 };
   return L.yard || L.gate;
+}
+// v5.11.0.19: what a married child (and their spouse) who runs the 民宿 / 菜馆 does on shift. They take turns round these
+// spots, a step apart so the two are not on top of each other; the labels say what they are doing.
+const inAgri = a => { const r = IN && IN.AGRI; return !!(r && a.x >= r[0] - 2 && a.x <= r[2] + 2 && a.y >= r[1] - 2 && a.y <= r[3] + 2); };
+function innDuties() {
+  const L = innLay(); if (!L) return [];
+  const I = S.inn || {}, out = [], nc = Math.min(L.cabins.length, I.cabins | 0);
+  if (IN.dinerUp(I)) { const d = L.diner;
+    out.push({ to: d.stand, label: '在菜馆门口招呼食客', rest: true });
+    for (const t of (d.tables || []).slice(0, 3)) out.push({ to: { x: t.x + 6, y: t.y + 1 }, label: '给客人端菜、擦桌子', pose: 'pull' });
+    if (L.garden) out.push({ to: { x: Math.round((L.garden[0] + L.garden[2]) / 2), y: L.garden[1] - 3 }, label: '在菜园摘菜', pose: 'pull' }); }
+  for (let i = 0; i < nc; i++) { const c = L.cabins[i], g = (I.guests || []).some(q => IN.cabinOf(q, I) === i && (q.from | 0) <= S.day && (q.until | 0) >= S.day);
+    out.push({ to: { x: c.door.x + 5, y: c.door.y + 4 }, label: g ? `给${i + 1}号小木屋的客人送热水` : `打扫${i + 1}号小木屋、换床单`, pose: g ? null : 'pull', rest: !!g }); }
+  out.push({ to: { x: L.gate.x + 6, y: L.gate.y + 6 }, label: '在农家乐门口迎客', rest: true });
+  return out;
+}
+function innDuty(a, sp) {
+  const ds = innDuties(); if (!ds.length) return null;
+  a._innStep = (a._innStep | 0) + 1;
+  const d = ds[(a._innStep + (sp ? Math.ceil(ds.length / 2) : 0)) % ds.length];
+  return { kind: 'inn-keep', label: d.label, to: { x: d.to.x + R(-0.6, 0.6), y: d.to.y + R(-0.4, 0.4) }, dur: d.pose ? 10 : 14, pose: d.pose || null, rest: !!d.rest,
+    done: d.pose ? () => burst(a.x, a.y - 2, 3, ['#fff2a8', '#ffffff'], 6, 'spark') : null };
 }
 function innFest() { const H = S.town && S.town.hall; return !!(IN && IN.isFest({ market: MK && H && MK.isDay(H, S.day), harvest: FV && H && FV.isDay(H, S.day), lantern: FV && H && FV.hasLantern(H, S.day) })); }
 function innFurnished() { const W = S.town && S.town.hall && S.town.hall.woodshop; return !!(W && ((W.used | 0) > 0 || (W.days | 0) > 0 || (W.made | 0) > 0)); }
@@ -3633,10 +3663,12 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
   const fest = !!(MK && S.town && S.town.hall && MK.isDay(S.town.hall, S.day));
   const work = !!(CR && CR.worksToday(S.home, kid, fest));
   const shop = !!(CR && CR.shopsToday(S.home, kid, S.day));
-  const inn = !!(CR && IN && CR.innsToday(S.home) && innStand());
+  const inn = !!(CR && IN && CR.innsToday(S.home, kid) && innStand()); // v5.11.0.19: the kid was missing here, so 经营民宿 / 菜馆 never left the bench
   const dest = work ? CR.standOf(path.at) : shop ? (CR.standOf(path.at) || CR.doorOf(path.at)) : inn ? innStand() : null;
   // v5.10.6: commute to a job (rain still goes; a festival is a day off) or keep their own shop 9:00–17:00 (the spouse comes too)
   // v5.10.7: 经营民宿 / 菜馆 walks to the inn yard (same hours as a shop)
+  // v5.11.0.19: once in the 农家乐区 on shift they move between the restaurant, the cabins and the gate (innDuty)
+  if (inn && CR.shouldLeave(T) && T < CR.SHOP_HOURS.to && inAgri(F)) { const d = innDuty(F, sp); if (d) return d; }
   if (dest && (work || shop || inn) && CR.shouldLeave(T)) {
     const onShift = work ? CR.workHours(T) : CR.shopHours(T);
     const at = Math.hypot(F.x - dest.x, F.y - dest.y) < 5;
@@ -3650,7 +3682,10 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     }
   }
   if (dest && (work || shop || inn) && T >= (work ? CR.WORK.end : CR.SHOP_HOURS.to) && T < BEDTIME) {
-    if (Math.hypot(F.x - L.door.x, F.y - L.door.y) > 5) return { kind: 'work-back', label: inn ? '从民宿回家' : '下班回家', to: L.door, via: careerVia(F, L.door, true), keepVia: true, dur: 8 };
+    // v5.11.0.19: once home (by the door, the bench or their little field) they stay; it used to send them up to the road and
+    // back every time they stepped off the doorstep, which looked like an evening of commuting
+    if (F._backDay !== S.day && Math.hypot(F.x - L.door.x, F.y - L.door.y) < 40) F._backDay = S.day;
+    if (F._backDay !== S.day) { const me = F; return { kind: 'work-back', label: inn ? '从民宿回家' : '下班回家', to: L.door, via: careerVia(F, L.door, true), keepVia: true, dur: 4, done: () => { me._backDay = S.day; } }; }
   }
   if (fest && path && path.way === 'shop' && CR.shopReady(path, S.day) && T >= 10 * 60 && T < 16 * 60) {
     const d = CR.doorOf(path.at); if (d) return { kind: 'shop-fest', label: '节日在店门口和家人聚', to: { x: d.x + (sp ? 2 : -2), y: d.y + 3 }, dur: 16, rest: true }; }
@@ -3663,7 +3698,7 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
   const tendOk = !work && !shop && !inn || (sp && (T < 9 * 60 || T >= 17 * 60)) || (!sp && !work && !shop && !inn);
   if (tendOk && jobs.length) { let best = null, bd = 1e9; for (const j of jobs) { const q = j.t || j.at, d = Math.hypot(q.x - F.x, q.y - F.y) + (j.k === 'harvest' ? -20 : j.k === 'water' ? -10 : 0); if (d < bd) { bd = d; best = j; } }
     F.idleCount = 0; return homeJobTask(h, best); }
-  if (!sp && !work && !shop && HM.helpNow(help, { T, own: 0, backlog: mainBacklog(), helpDay: homeDayRng(0x4E1 + kidSalt(kid))() < (CR ? CR.helpDayP(S.home, kid) : HM.HELP.dayP) }, S.day, hr)) { const n = help && help.day === S.day ? help.n + 1 : 1;
+  if (!sp && !work && !shop && !inn && HM.helpNow(help, { T, own: 0, backlog: mainBacklog(), helpDay: homeDayRng(0x4E1 + kidSalt(kid))() < (CR ? CR.helpDayP(S.home, kid) : HM.HELP.dayP) }, S.day, hr)) { const n = help && help.day === S.day ? help.n + 1 : 1;
     S.home.help[kid] = { day: S.day, n, last: T, until: Math.min(1440, T + HM.HELP.minutes) }; log(`${F.name}从新房子过来帮一会儿忙`); return null; }
   F.idleCount = (F.idleCount || 0) + 1;
   if (F.idleCount % 3 === 0) { const tile = h._tiles && h._tiles[Math.floor(hr() * h._tiles.length)]; if (tile) return { kind: 'idle', label: '在自家小田边转转', to: { x: tile.x + (hr() - 0.5) * 6, y: tile.y + 6 }, dur: 10 }; }
@@ -5311,7 +5346,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.20';
+const GAME_VERSION = '5.11.0.22';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5559,7 +5594,7 @@ Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHo
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; },
   cropFrame: k => { const a = cropAtlas(); if (!a) return null; const i = CROP_IDS.indexOf(k); if (i < 0) return null;
     const t = 16, c = document.createElement('canvas'); c.width = t; c.height = t; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
-    g.drawImage(a, i * t, 0, t, t, 0, 0, t, t); return c; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
+    g.drawImage(a, i * t, 0, t, t, 0, 0, t, t); return c; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, spousesIn: () => spousesIn(), hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },

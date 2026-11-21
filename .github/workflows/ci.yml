@@ -77,7 +77,7 @@ jobs:
         include:
           # ~7.5m on run 44622565450 (save-smoke alone was 5.0m)
           - group: smoke
-            # v5.11.0.20: + sync-shots (~15s; the reauth button + toast). smoke stays well under 25m.
+            # v5.11.0.22: + sync-shots (~15s; the reauth button + toast). smoke stays well under 25m.
             scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js sync-shots.js clinic-shots.js fill-shots.js
           # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
           - group: works-town
@@ -110,7 +110,8 @@ jobs:
           # v5.11.0.15: scale exceeded 22m on run 44815889988; isolate rain instead of passing the overload to another leg.
             scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js housemove-shots.js
           - group: weather
-            scripts: rain-shots.js
+          # v5.11.0.19: + married-shots (three wedding set-ups, ~3–5m locally); weather was the lightest leg with rain alone (~7m)
+            scripts: rain-shots.js married-shots.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale

@@ -14,7 +14,7 @@
 
   let storage = null, data = emptyData(), cur = null, session = null;
   let dirHandle = null, perm = 'prompt', lastWrite = 0, lastError = null, syncTimer = null, syncQueued = null;
-  let needsRepick = false, pickFn = null; // v5.11.0.20: a stale handle needs a fresh folder pick, not another silent requestPermission
+  let needsRepick = false, pickFn = null; // v5.11.0.22: a stale handle needs a fresh folder pick, not another silent requestPermission
   let conflict = null, folderChecked = false;
   let fps = { sum: 0, n: 0, min: Infinity }, getSave = null;
 
@@ -471,7 +471,7 @@
     emitSync();
     return status();
   }
-  // v5.11.0.20: requestPermission / showDirectoryPicker must be the first await inside the
+  // v5.11.0.22: requestPermission / showDirectoryPicker must be the first await inside the
   // click. Reading IndexedDB first drops Chrome's transient user activation, and the
   // permission call then fails silently — the button looks like it does nothing. If the
   // stored handle is stale or requestPermission does not grant, the next click opens the
