@@ -2519,16 +2519,17 @@ const partyKeyOf = a => (a === FARMER ? 'farmer' : String(a.id));
 let partyReg = { day: -1, keys: [], kid: {} }, partyLawnC = { key: '', lawn: [], extra: [] }, partyPlanC = { key: '', plan: {} };
 function partyLawnNow() {
   const a = partyArea(); if (!a) return { lawn: [], extra: [] };
-  ensureNav(); const key = [S.day, a.x, a.y, navVer].join('|'); if (partyLawnC.key === key) return partyLawnC;
-  partyLawnC = Object.assign({ key }, lawnAt(a)); partyPlanC.key = ''; return partyLawnC;
+  ensureNav(); const wt = wedNow(), key = [S.day, a.x, a.y, navVer, wt ? wt.kid : ''].join('|'); if (partyLawnC.key === key) return partyLawnC;
+  partyLawnC = Object.assign({ key }, lawnAt(a, !!wt)); // v5.11.0.21: + wed
+  partyPlanC.key = ''; return partyLawnC;
 }
 let lawnSeen = { v: -1, seen: null };
-function lawnAt(a) { // the lawn corners an area at a would get (also asked by autoSpot, before the area is put down)
+function lawnAt(a, wedFirst) { // the lawn corners an area at a would get (also asked by autoSpot, before the area is put down); v5.11.0.21 wedFirst: the wedding's aisle and rows first
   const g = ensureNav(); if (lawnSeen.v !== navVer) lawnSeen = { v: navVer, seen: DC.reach(g, NAV.LAYOUT.DOOR, []) }; const seen = lawnSeen.seen;
   const seat = DC.partySeats(a)[0], near = c => { const r = pathTo(seat, c); return !!r.reached && r.length <= Math.hypot(c.x - seat.x, c.y - seat.y) * 1.6 + 12; }; // a short walk from the table (not round a fence)
   const why = {}, no = r => { why[r] = (why[r] | 0) + 1; return false; }, by = o => Math.abs(o.x - a.x) < 80 && Math.abs(o.y - a.y) < 80; // only what is near (autoSpot asks this for many spots)
   const nTiles = tiles.filter(t => (t.open || t.tilled || t.crop) && by(t)), nTrees = S.trees.filter(by), nYard = yard.filter(by), nProps = props.filter(p => !p.decor && !p.region && by(p));
-  const free = (b, c) => { for (const [i, j] of DC.cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return no('edge'); const k = j * g.w + i; if (g.cost[k] !== NAV.GRASS || !seen[k]) return no('ground'); }
+  let free = (b, c) => { for (const [i, j] of DC.cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return no('edge'); const k = j * g.w + i; if (g.cost[k] !== NAV.GRASS || !seen[k]) return no('ground'); }
     if (![[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]], [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]].every(([x, y]) => ownGround(x, y))) return no('locked');
     const under = (t, up, side) => t.x > b[0] - side && t.x < b[2] + side && t.y > b[1] - 3 && t.y < b[3] + up; // a tree (or stump) south of the box would stand over it
     if (nTiles.some(t => ptIn(t, b, 4)) || nTrees.some(t => t.stage === 'tree' ? under(t, 28, 6) : under(t, 6, 3.5)) || nYard.some(c => ptIn(c, b, 2))) return no('field/tree');
@@ -2540,6 +2541,8 @@ function lawnAt(a) { // the lawn corners an area at a would get (also asked by a
     if (AN.PEN_IDS.some(k => S.eff[k] && PENS[k].roam && boxHit(b, PENS[k].roam, 2))) return no('pen');
     if (c && !near(c)) return no('far');
     return true; };
+  const wed = wedFirst ? DC.weddingLayout(a, free, []) : null, wb = wed ? wed.boxes : [], free0 = free; // v5.11.0.21: on a wedding evening the corners fit round the ceremony
+  free = wb.length ? (b, c) => !wb.some(w => boxHit(b, w)) && free0(b, c) : free0;
   const lawn = DC.partyLawn(a, free), extra = [];
   for (const [dx, dy] of [[-16, 11], [16, 11], [-16, -11], [16, -11], [-8, 12.5], [8, 12.5], [0, 12.5], [-8, -12.5], [8, -12.5], [0, -12.5], [-17, 0], [17, 0]]) {
     const x = a.x + dx, y = a.y + dy; if (free([x - 2, y - 2, x + 2, y + 2], { x, y }) && !DC.partySeats(a).concat(extra, lawn.flatMap(l => l.spots)).some(p => Math.hypot(x - p.x, y - p.y) < 7) && !lawn.some(l => ptIn({ x, y }, l.box, 3))) extra.push({ x, y }); }
@@ -2548,13 +2551,16 @@ function lawnAt(a) { // the lawn corners an area at a would get (also asked by a
   for (const p of DC.ringSpots(a, 60, 7)) { if (extra.length >= 48) break;
     if (all.concat(extra).some(q => Math.hypot(q.x - p.x, q.y - p.y) < 7) || ptIn(p, DC.boxOf(a.x, a.y, DC.CATALOG.party.foot), 2) || lawn.some(l => ptIn(p, l.box, 3))) continue;
     if (free([p.x - 2, p.y - 2, p.x + 2, p.y + 2], p)) extra.push({ x: p.x, y: p.y }); }
-  return { lawn, extra, why }; // why: how often each reason ruled a spot out (for the shots)
+  return { lawn, extra, why, wed }; // why: how often each reason ruled a spot out (for the shots); wed: v5.11.0.21 the ceremony's layout (wedding evenings)
 }
 function partyPlanNow() {
   const area = partyArea(); if (!area) return {};
   if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
-  const L = partyLawnNow(), ph = DC.partyPhase(S.t % 1440), key = [L.key, ph, partyReg.keys.join(',')].join('|');
-  if (partyPlanC.key !== key) partyPlanC = { key, plan: DC.partyPlan(area, L.lawn, partyReg.keys.map(k => ({ key: k, kid: partyReg.kid[k] })), ph, L.extra) };
+  const L = partyLawnNow(), T = S.t % 1440, W = L.wed && DC.wedOn(T) ? L.wed : null, couple = L.wed ? wedCouple() : null;
+  const ph = W ? 'w' + DC.wedPhase(T) : DC.partyPhase(T), key = [L.key, ph, partyReg.keys.join(',')].join('|');
+  if (partyPlanC.key !== key) { // v5.11.0.21: a wedding evening opens with the ceremony; afterwards the couple sit at the table first
+    const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
+    partyPlanC = { key, plan: W ? DC.weddingPlan(W, roster, couple, DC.wedPhase(T), L.extra) : DC.partyPlan(area, L.lawn, roster, ph, L.extra) }; }
   return partyPlanC.plan;
 }
 function partySpot(a, key) { // a: the actor or guest; their place for this hour of the party
@@ -2563,7 +2569,7 @@ function partySpot(a, key) { // a: the actor or guest; their place for this hour
   if (!partyReg.keys.includes(key)) { partyReg.keys.push(key); partyReg.kid[key] = partyKid(a); }
   const p = partyPlanNow()[key]; return p ? { x: p.x, y: p.y } : null;
 }
-const partyDur = T => Math.max(3, Math.min(30, DC.phaseEnd(T) - T, DC.PARTY.to - T));
+const partyDur = T => Math.max(3, Math.min(30, (wedCer() ? DC.wedPhaseEnd(T) : DC.phaseEnd(T)) - T, DC.PARTY.to - T)); // v5.11.0.21: the ceremony's beats too
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
 function sunsetTask() { // v5.10.8: once the deck is up, the family sits and watches the sea 17:00–19:00
   if (!IN || !S.inn || !IN.deckUp(S.inn) || !IN.isSunset(S.t) || F.away || F.sleeping) return null;
@@ -2575,7 +2581,8 @@ function sunsetTask() { // v5.10.8: once the deck is up, the family sits and wat
   return { kind: 'sunset', label: '去观景台看落日', to: { x: seat.x + (i % 2 ? 0.6 : -0.6), y: seat.y }, dur: Math.max(8, Math.min(22, IN.SUNSET.to - T)), rest: true };
 }
 function partyTask() { // chooseTask asks first: on a party evening everyone who is around comes over
-  const T = S.t % 1440; if (!partyTonight() || !DC.partyOn(T) || F.away || F.sleeping) return null;
+  const T = S.t % 1440, early = T < DC.PARTY.from && DC.wedOn(T) && (wedCouple() || []).includes(F.id); // v5.11.0.21: the couple go over first, to wait at the end of the aisle
+  if (!partyTonight() || !(DC.partyOn(T) || early) || F.away || F.sleeping) return null;
   const seat = partySpot(F); if (!seat) return null; // v5.11.0.15: their own place this hour (was one of 10 seats a few px apart)
   return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true };
 }
@@ -2974,6 +2981,13 @@ const kidName = id => { const k = S.family.kids.find(q => q.id === id); return k
 const memberOf = id => S.members.find(m => m.id === id) || null;
 const homeOfActor = a => { if (!a || !S.home) return null; const id = a._spouse || a.id; return id && HM.isMarried(S.home, id) ? HM.houseOf(S.home, id) : null; };
 const weddingTonight = () => { for (const k of HM.KID_IDS) { const w = S.home.wed[k]; if (w && w.day === S.day && !w.moved) return { kid: k, w }; } return null; };
+// ---- v5.11.0.21 婚礼: the couple's wedding clothes (bride / groom sheets, home.js wedLooks), and the ceremony at the party area ----
+const wedNow = () => (HM && S.home ? weddingTonight() : null);
+const wedCouple = () => { const w = wedNow(); return w ? [w.kid, 'sp_' + w.kid] : null; };
+function wedLook(a) { // the sheet for one of tonight's couple from 17:00 until the evening ends (null: everyday clothes)
+  if (!a || !HM || !S.home) return null; const w = wedNow(); if (!w) return null; const T = S.t % 1440; if (T < HM.WED.from - 30 || T >= HM.WED.to) return null;
+  const L = HM.wedLooks(w.kid, w.w.mate); return a.id === w.kid ? L.kid : a._spouse === w.kid && a.id === 'sp_' + w.kid ? L.mate : null; }
+const wedCer = () => { if (!DECOR_ON || !partyTonight() || !DC.wedOn(S.t % 1440)) return null; const L = partyLawnNow(); return L.wed || null; }; // the ceremony layout while it lasts
 function homeTilesSync() { // runtime tile views of every built house (state lives on h._tiles; the save gets { t, w, c })
   HT.length = 0;
   S.home.houses.forEach((h, hi) => { if (!h._tiles) { const L = HM.layout(h); h._tiles = L.tiles.map((p, i) => { const o = h.tiles[i] || HM.emptyTile();
@@ -3715,16 +3729,19 @@ function spouseSync() {
   for (let i = SPOUSES.length - 1; i >= 0; i--) { const sp = SPOUSES[i], w = S.home.wed[sp._spouse]; if (!w || !w.mate || TN.MATES[HM.mateIndex(w.mate)].look !== sp.look) SPOUSES.splice(i, 1); }
   for (const k of HM.KID_IDS) { const w = S.home.wed[k]; if (!w || !w.moved || SPOUSES.some(s => s._spouse === k)) continue; SPOUSES.push(makeSpouse(k, w)); }
 }
-let homeLogDay = 0, weddingFxT = 0;
+let homeLogDay = 0, weddingFxT = 0, wedVowDay = 0;
 function homeTick(dm) {
   if (!HM || !S.home) return; const T = S.t % 1440;
   homeParty(T); if (TN && S.family.kids.length) homeTeenVisit(T);
+  wedGather(T); // v5.11.0.21
   if (WX && WX.isRaining(S.weather, S.day, S.t)) for (const t of HT) if (t.crop) t.watered = true;
   // the wedding evening: the other half walks over from town (or up the east road), the couple moves in when it ends
   const w = weddingTonight();
   if (w) { if (T >= HM.WED.from - 60 && !SPOUSES.some(s => s._spouse === w.kid) && T < HM.WED.to) { const sp = makeSpouse(w.kid, w.w), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0];
       Object.assign(sp, { x: from.x, y: from.y, home: false }); SPOUSES.push(sp); log(`${sp.name}从${townOpen() ? '镇上' : '东边的路上'}走过来了`); }
     if (T >= HM.WED.from && T < HM.WED.to && !w.w.began) { w.w.began = 1; log(`婚礼开始了：${kidName(w.kid)}和${HM.mateName(w.w.mate)}，一家人都来了`); }
+    { const W = wedCer(); if (W && DC.wedPhase(T) === 2 && wedVowDay !== S.day) { wedVowDay = S.day; const c = { x: (W.couple[0].x + W.couple[1].x) / 2, y: (W.couple[0].y + W.couple[1].y) / 2 }; // v5.11.0.21: under the arch
+      burst(c.x, c.y, 28, [Ac[3], Ac[0], '#fff2a8', Rf[3]], 22, 'spark'); hearts(c.x, c.y, 26); log(`${kidName(w.kid)}和${HM.mateName(w.w.mate)}走到了花拱门下，交换了戒指`); } }
     if (T >= HM.WED.from && T < HM.WED.to && realT - weddingFxT > 1.2) { weddingFxT = realT; const a = memberOf(w.kid); if (a && !a.home) { hearts(a.x, a.y, 14); if (hr() < 0.3) burst(a.x, a.y, 20, [Ac[3], Rf[3], '#fff2a8'], 10, 'spark'); } }
     if (T >= HM.WED.to || (T < HM.WED.from - 120 && w.w.began)) { if (CR) careerEnsure(w.kid); homeMoveIn(w.kid, true); } }
   // the spouses: wake with the morning, then their own little farm
@@ -3734,6 +3751,13 @@ function homeTick(dm) {
   if (T >= 18 * 60 && homeLogDay !== S.day) { homeLogDay = S.day; for (const h of S.home.houses) if (h.kid && h._todayDay === S.day && h._today) log(`${kidName(h.kid)}家的小田和小鸡今天挣了 ${h._today} 金，算进家里的收入`); }
   if (HOME_ON) HA.sync();
 }
+function wedGather(T) { // the ceremony is about to start: whoever is only pottering about (idle, playing) comes over now, not after it
+  const W = wedCer(); if (!W) return; const ph = DC.wedPhase(T), c = wedCouple() || [];
+  const all = actors(); for (const a of all.concat(SPOUSES.filter(s => !all.includes(s)))) { const k = a.task; if (!k || a.away || a.sleeping) continue;
+    const i = c.indexOf(a.id); if (i >= 0 && ph < 2 && Math.hypot(a.x - W.start[i].x, a.y - W.start[i].y) < 2) a._wedStart = S.day; // ready at the far end: the walk may start
+    if (ph < 2 && (i >= 0 || T >= DC.PARTY.from) && /^(idle|play-)/.test(k.kind || '')) { if (partySpot(a)) a.task = null; continue; }
+    if (k.kind === 'party' && k.to) { const p = partySpot(a); if (p && Math.hypot(p.x - k.to.x, p.y - k.to.y) > 1.5) a.task = null; } } // the places moved on (a new phase): go to the new one now
+}
 function homeNight() { // a little-farm crop grows one day overnight if it was watered
   for (const t of HT) { if (t.crop && t.watered && !SIM.ripe(t.crop)) { t.crop.age++; t.crop.stage = SIM.stageOf(t.crop); } t.watered = false; }
   for (const id of Object.keys(S.home.help)) if (S.home.help[id].day < S.day) delete S.home.help[id];
@@ -3741,7 +3765,7 @@ function homeNight() { // a little-farm crop grows one day overnight if it was w
 // hens pecking round their little coop
 const HENS_VIEW = [];
 function homeDraw(list) {
-  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(sp.look, 3); if (!sh) continue; const d = Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp)); partyLook(d, sp, sp.id); list.push(d); }
+  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(wedLook(sp) || sp.look, 3); if (!sh) continue; const d = Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp)); partyLook(d, sp, sp.id); list.push(d); }
   const T = S.t % 1440, sp = ANIMAL_SPR.chicken; if (!sp || !sp.r || !(T >= WAKE && T < BEDTIME)) return;
   S.home.houses.forEach((h, hi) => { if (!h.built || !h.hens) return; const L = HM.layout(h);
     for (let i = 0; i < h.hens; i++) { const k = hi * 2 + i; let v = HENS_VIEW[k]; if (!v) v = HENS_VIEW[k] = { x: L.coop.x, y: L.coop.y + 6, tx: L.coop.x, ty: L.coop.y + 6, step: 0, flip: false, cd: 0 };
@@ -3852,13 +3876,76 @@ const PARTY_BARREL = pix(['.c.c.c.', 'btttttb', 'bwwwwwb', 'btttttb', 'btttttb',
 const partyHash = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
 function facePose(fx, fy) { const sx = fx * CA - fy * SA, sy = fx * SA + fy * CA, side = Math.abs(sx) > Math.abs(sy) * 0.9;
   return side ? { row: 'idle_side', flip: sx < 0, side: 1 } : { row: sy > 0 ? 'idle_front' : 'idle_back', flip: false, side: 0 }; }
+// ---- v5.11.0.21 婚礼 at the party area: the walk up the aisle and the ceremony poses (drawn only, from the clock; nothing saved) ----
+// the couple's drawn place while they walk the aisle (17:45–18:00): slowly from the far end to the arch, side by side
+function wedWalkAt(i, T) { const W = wedCer(); if (!W || DC.wedPhase(T) !== 1) return null;
+  const u = Math.min(1, (T - DC.WEDDING.walk) / (DC.WEDDING.at - 2 - DC.WEDDING.walk)), s = W.start[i], e = W.couple[i];
+  return { x: s.x + (e.x - s.x) * u, y: s.y + (e.y - s.y) * u, u, f: facePose(e.x - s.x, e.y - s.y) }; }
+function wedWalk(d, a) {
+  if (a.home || a.away || !a.task || a.task.kind !== 'party') return false; const c = wedCouple(), i = c ? c.indexOf(a.id) : -1; if (i < 0) return false;
+  if (a._wedStart !== S.day) return false; const p = wedWalkAt(i, S.t % 1440); if (!p || p.u >= 1) return false;
+  d.x = p.x; d.y = p.y; d.row = p.f.side ? 'walk_side' : p.f.row === 'idle_front' ? 'walk_front' : 'walk_back'; d.flip = p.f.flip; d.fr = Math.floor(realT * 3) % 4; d.z = 0; d.partyKey = c[i]; return true; }
+function wedPose(d, a, P, h, ph, fx) {
+  const W = wedCer(); if (!W) return; const T = S.t % 1440, wp = DC.wedPhase(T);
+  if (P.act === 'wed-couple') {
+    if (wp === 2) { const o = W.couple[1 - P.i], f = facePose(o.x - P.x, o.y - P.y); d.row = f.row; d.flip = f.flip; d.fr = 0; // face each other under the arch
+      const t = realT / 2.6 + P.i * 0.5, u = t - Math.floor(t); d.z = u < 0.25 ? Math.floor(u * 16) % 2 : 0;
+      if (P.i === 0) { const m = W.couple[1]; fx('wheart', { x: (P.x + m.x) / 2, y: (P.y + m.y) / 2, u: (realT / 2.6) % 1 }); } return; }
+    const f = facePose(W.arch.x - P.x, W.arch.y - P.y); d.row = f.row; d.flip = f.flip; d.fr = 0; return; } // waiting at the far end, looking up the aisle
+  // a guest: turned to the couple (wherever they are on the aisle), clapping now and then once they stand under the arch
+  const c = wp === 1 ? [wedWalkAt(0, T), wedWalkAt(1, T)].filter(Boolean) : wp === 2 ? W.couple : W.couple, m = c.length ? { x: (c[0].x + c[c.length - 1].x) / 2, y: (c[0].y + c[c.length - 1].y) / 2 } : W.arch;
+  const f = facePose(m.x - P.x, m.y - P.y); d.row = f.row; d.flip = f.flip; d.fr = 0;
+  if (wp === 2) { const t = realT / 3.4 + ph, n = Math.floor(t), u = t - n; if (u < 0.3) d.z = Math.floor(u * 26) % 2; else if (u > 0.55 && u < 0.85 && (n + h) % 3 === 0) fx('say', { u: (u - 0.55) / 0.3, icon: 0 }); }
+}
+const ARCH_SPR = (() => { // a white arch wound with greenery, pink and cream roses (billboard, anchored at its foot)
+  const w = 27, hh = 32, cx = 13, cy = 13, R0 = 13, R1 = 10, rows = [];
+  const hsh = (x, y) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
+  for (let y = 0; y < hh; y++) { let r = '';
+    for (let x = 0; x < w; x++) { const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy), k = hsh(x, y) % 11;
+      const band = y <= cy ? d <= R0 && d >= R1 : (x <= 2 || x >= w - 3);
+      if (!band) { r += '.'; continue; }
+      if (y > cy && y >= hh - 2) { r += (x === 0 || x === w - 1) ? 'w' : 'b'; continue; }           // the feet
+      if (y > cy + 6 && k > 5) { r += (x === 1 || x === w - 2) ? 'c' : 'E'; continue; }             // bare white posts lower down
+      r += k === 0 || k === 5 ? 'p' : k === 3 ? 'c' : k === 8 ? 'y' : k % 2 ? 'g' : 'l'; }
+    rows.push(r); }
+  return pix(rows);
+})();
+const WED_CAKE = pix(['....p....', '...cpc...', '...ccc...', '..cEcEc..', '..ccccc..', '.pcpcpcp.', '.ccccccc.', '.cEcEcEc.', 'eeeeeeeee']);
+function wedList(list) { // the arch (all evening) and the cake on the table (once the party is on)
+  const L = partyLawnNow(), W = L.wed; if (!W || fogHid(W.arch.x, W.arch.y)) return; list.push({ spr: ARCH_SPR, x: W.arch.x, y: W.arch.y, w: 1 });
+  const area = partyArea(); if (partyLive()) list.push({ spr: WED_CAKE, x: area.x, y: area.y, lift: 6, at: area });
+}
+function wedGround() { // the cream runner up the aisle, petals on it (flat, under everyone)
+  const W = partyLawnNow().wed; if (!W || fogHid(W.arch.x, W.arch.y)) return; const [a, b] = W.runner, hw = 2;
+  const x0 = Math.min(a.x, b.x) - (W.u[1] ? hw : 0), x1 = Math.max(a.x, b.x) + (W.u[1] ? hw : 0), y0 = Math.min(a.y, b.y) - (W.u[0] ? hw : 0), y1 = Math.max(a.y, b.y) + (W.u[0] ? hw : 0);
+  const u0 = Math.round((x0 - GX0) * RS), v0 = Math.round((y0 - GY0) * RS), w = Math.round((x1 - x0) * RS), hh = Math.round((y1 - y0) * RS);
+  ctx.fillStyle = St[2]; ctx.fillRect(u0 - 1, v0 - 1, w + 2, hh + 2); ctx.fillStyle = Ac[0]; ctx.fillRect(u0, v0, w, hh);
+  ctx.fillStyle = St[3]; if (W.u[1]) { ctx.fillRect(u0, v0, 1, hh); ctx.fillRect(u0 + w - 1, v0, 1, hh); } else { ctx.fillRect(u0, v0, w, 1); ctx.fillRect(u0, v0 + hh - 1, w, 1); }
+  for (let i = 0; i < 40; i++) { const hx = (i * 2654435761) >>> 0, px = u0 + 2 + (hx % Math.max(1, w - 4)), py = v0 + 2 + ((hx >> 8) % Math.max(1, hh - 4)); ctx.fillStyle = i % 3 ? Ac[3] : Rf[3]; ctx.fillRect(px, py, 1 + (i % 2), 1); }
+}
+function wedFxDraw() { // bunting from the arch to the area's near posts; falling petals and the rings' little hearts during the ceremony
+  const W = partyLawnNow().wed; if (!W || fogHid(W.arch.x, W.arch.y)) return; const area = partyArea(), posts = DC.partyPosts(area), T = S.t % 1440;
+  const vx = -W.u[1], vy = W.u[0], ends = [-1, 1].map(s => ({ x: W.arch.x + vx * 6 * s, y: W.arch.y + vy * 6 * s }));
+  for (const e of ends) { const p = posts.slice().sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))[0];
+    const [ax, ay] = proj(e.x, e.y), [bx, by] = proj(p.x, p.y), za = 26, zb = 20, n = Math.max(4, Math.round(Math.hypot(bx - ax, by - ay) / 4));
+    for (let i = 0; i <= n; i++) { const t = i / n, x = Math.round(ax + (bx - ax) * t), y = Math.round(ay + (by - ay) * t - (za + (zb - za) * t) + Math.sin(Math.PI * t) * 5);
+      ctx.fillStyle = Wd[2]; ctx.fillRect(x, y, 1, 1); if (i % 2 || i === 0 || i === n) continue;
+      ctx.fillStyle = (i >> 1) % 2 ? Ac[3] : Ac[0]; ctx.fillRect(x - 1, y + 1, 3, 1); ctx.fillRect(x, y + 2, 1, 1); } }
+  const wp = DC.wedOn(T) ? DC.wedPhase(T) : -1; if (wp !== 2 && !(T >= DC.WEDDING.end && T < DC.WEDDING.end + 15)) return;
+  const fade = wp === 2 ? 1 : 1 - (T - DC.WEDDING.end) / 15, n = Math.round(22 * fade), c = { x: (W.couple[0].x + W.couple[1].x) / 2, y: (W.couple[0].y + W.couple[1].y) / 2 };
+  for (let i = 0; i < n; i++) { const hx = (Math.imul(i + 1, 2654435761) >>> 0), per = 2.6 + (hx % 7) / 5, t = ((realT + (hx % 97) / 31) % per) / per;
+    const wx = c.x + ((hx >> 4) % 25) - 12, wy = c.y + ((hx >> 10) % 11) - 5, [sx, sy] = proj(wx, wy), z = 38 * (1 - t);
+    ctx.fillStyle = [Ac[3], Ac[0], Rf[3], Ac[1]][i % 4]; ctx.fillRect(Math.round(sx + Math.sin(t * 9 + i) * 3), Math.round(sy - z), 2 - (i % 2), 1); }
+}
 const partyLive = () => DECOR_ON && partyTonight() && DC.partyOn(S.t % 1440) && partyBegun === S.day;
 const partyProps = () => { const T = S.t % 1440; return DECOR_ON && partyTonight() && T >= DC.PARTY.from - 20 && T < DC.PARTY.to; };
 function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a: the actor or guest
+  if (d && a && wedWalk(d, a)) return; // v5.11.0.21: the couple walking up the aisle
   if (!d || !a || a.moving || a.home || !partyLive()) return;
   if (!a.pts && !(a.task && a.task.kind === 'party')) return;
   const P = partyPlanNow()[key]; if (!P || Math.hypot(a.x - P.x, a.y - P.y) > 2.5) return;
   d.partyKey = key; const area = partyArea(), h = partyHash(key), ph = (h % 997) / 997 * 6.283, cut = d.cut || 0, fx = (k, o) => PARTY_FX.push(Object.assign({ k, x: d.x, y: d.y, cut }, o));
+  if (P.act === 'wed-guest' || P.act === 'wed-couple') { wedPose(d, a, P, h, ph, fx); return; } // v5.11.0.21
   if (P.act === 'eat') {
     const f = facePose(0, area.y - P.y), col = P.seat % 3, per = 2.4, t = realT / per + col * 0.07, n = Math.floor(t), u = t - n;
     d.row = f.row; d.flip = f.flip; d.fr = 0;
@@ -3884,6 +3971,7 @@ function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a
 }
 function partyList(list) { // plates under the diners, the barrel, the lantern poles, the ball
   if (!partyProps()) return; const area = partyArea(), L = partyLawnNow(), live = partyLive(), T = S.t % 1440;
+  if (L.wed) wedList(list); // v5.11.0.21
   for (const l of L.lawn) { if (fogHid(l.x, l.y)) continue; list.push({ spr: PARTY_POLE, x: l.pole.x, y: l.pole.y, w: 1 }); if (l.barrel) list.push({ spr: PARTY_BARREL, x: l.barrel.x, y: l.barrel.y, w: 1 }); }
   if (!live) return;
   const plan = partyPlanNow(), u = (T - DC.phaseStart(T)) / (DC.phaseEnd(T) - DC.phaseStart(T)), here = k => { const a = k === 'farmer' ? FARMER : (memberOf(k) || GUESTS.find(g => g.id === k) || SPOUSES.find(s => s.id === k)); const P = plan[k]; return a && P && !a.moving && !a.home && Math.hypot(a.x - P.x, a.y - P.y) < 2.5; };
@@ -3893,8 +3981,9 @@ function partyList(list) { // plates under the diners, the barrel, the lantern p
   if (play && Object.keys(plan).some(k => plan[k] && plan[k].act === 'play' && here(k))) { const u = (Math.sin(realT * 2.2) + 1) / 2, a = play.spots[0], b = play.spots[1]; PARTY_FX.push({ k: 'ball', x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, z: Math.abs(Math.sin(realT * 4.4)) * 6 }); }
 }
 function partyGround() { // the dance floor's boards and the picnic rug, flat on the grass under everyone
-  if (!partyProps()) return; const L = partyLawnNow().lawn; if (!L.length) return;
+  if (!partyProps()) return; const L = partyLawnNow().lawn, wed = partyLawnNow().wed; if (!L.length && !wed) return;
   const [gx, gy] = proj(GX0, GY0); ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
+  if (wed) wedGround(); // v5.11.0.21: the aisle
   for (const l of L) { if (fogHid(l.x, l.y) || !onScreen(l.x, l.y, 40)) continue; const b = l.box, u0 = Math.round((b[0] + 1.5 - GX0) * RS), v0 = Math.round((b[1] + 1.5 - GY0) * RS), w = Math.round((b[2] - b[0] - 3) * RS), hh = Math.round((b[3] - b[1] - 3) * RS);
     if (l.kind === 'dance') { ctx.fillStyle = Wd[1]; ctx.fillRect(u0 - 1, v0 - 1, w + 2, hh + 2); for (let i = 0; i < hh; i += 4) { ctx.fillStyle = (i >> 2) % 2 ? Wd[3] : Wd[4]; ctx.fillRect(u0, v0 + i, w, Math.min(3, hh - i)); } }
     if (l.kind === 'chat') { const u1 = u0 + 2, v1 = v0 + 2, w1 = w - 4, h1 = hh - 4; ctx.fillStyle = Rf[1]; ctx.fillRect(u1 - 1, v1 - 1, w1 + 2, h1 + 2);
@@ -3904,7 +3993,8 @@ function partyGround() { // the dance floor's boards and the picnic rug, flat on
 function partyFxDraw(night) { // after the objects: lantern strings out to the lawn, then cups, bites, crumbs, notes, bubbles, the ball
   if (partyProps()) { const area = partyArea(), posts = DC.partyPosts(area), lit = night > 0.15;
     for (const [i, l] of partyLawnNow().lawn.entries()) { if (fogHid(l.x, l.y)) continue; const p = posts.slice().sort((a, b) => Math.hypot(a.x - l.pole.x, a.y - l.pole.y) - Math.hypot(b.x - l.pole.x, b.y - l.pole.y))[0];
-      DA.string(ctx, proj, p, l.pole, 20, 18, 12, lit, realT, 5 + i); } }
+      DA.string(ctx, proj, p, l.pole, 20, 18, 12, lit, realT, 5 + i); }
+    if (partyLawnNow().wed) wedFxDraw(); } // v5.11.0.21
   for (const o of PARTY_FX) { if (fogHid(o.x, o.y)) continue; const [sx0, sy0] = proj(o.x, o.y), x = Math.round(sx0), top = Math.round(sy0) - 22 + o.cut, mouth = top + 8;
     if (o.k === 'cup') { const lift = Math.round(Math.min(1, o.u * 4, (1 - o.u) * 4) * 5), cx = x + (o.back ? 0 : 5 * o.side) - 1, cy = mouth - lift;
       ctx.fillStyle = Ink[0]; ctx.fillRect(cx - 1, cy - 1, 5, 6); ctx.fillStyle = Ac[0]; ctx.fillRect(cx, cy, 3, 4); ctx.fillStyle = Ac[1]; ctx.fillRect(cx, cy, 3, 2); ctx.fillStyle = Ac[0]; ctx.fillRect(cx, cy - 1, 3, 1);
@@ -3920,6 +4010,10 @@ function partyFxDraw(night) { // after the objects: lantern strings out to the l
       else if (o.icon === 2) { const k = Math.floor(o.u * 9) % 4; for (let i = 0; i < 3; i++) if (i < k) ctx.fillRect(bx + 2 + i * 2, by + 3, 1, 1); }
       else { ctx.fillRect(bx + 2, by + 2, 1, 1); ctx.fillRect(bx + 6, by + 2, 1, 1); ctx.fillRect(bx + 2, by + 4, 5, 1); ctx.fillRect(bx + 3, by + 5, 3, 1); }
       continue; }
+    if (o.k === 'wheart') { const [hx0, hy0] = proj(o.x, o.y), hx = Math.round(hx0), hy = Math.round(hy0) - 20 - Math.round(o.u * 10); ctx.globalAlpha = Math.max(0, 1 - o.u); // v5.11.0.21: the vows
+      ctx.fillStyle = Ink[0]; ctx.fillRect(hx - 3, hy - 1, 7, 4); ctx.fillRect(hx - 2, hy + 3, 5, 1); ctx.fillRect(hx - 1, hy + 4, 3, 1);
+      ctx.fillStyle = Ac[3]; ctx.fillRect(hx - 2, hy, 2, 1); ctx.fillRect(hx + 1, hy, 2, 1); ctx.fillRect(hx - 2, hy + 1, 5, 1); ctx.fillRect(hx - 1, hy + 2, 3, 1); ctx.fillRect(hx, hy + 3, 1, 1);
+      if (o.u < 0.3) { ctx.fillStyle = '#fff4b8'; ctx.fillRect(hx - 5, hy + 6, 1, 1); ctx.fillRect(hx + 5, hy + 6, 1, 1); ctx.fillRect(hx, hy - 3, 1, 1); } ctx.globalAlpha = 1; continue; }
     if (o.k === 'ball') { const y = Math.round(sy0) - 2 - Math.round(o.z); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x - 2, Math.round(sy0) - 1, 5, 1);
       ctx.fillStyle = Ink[0]; ctx.fillRect(x - 2, y - 2, 5, 5); ctx.fillStyle = Ac[0]; ctx.fillRect(x - 1, y - 1, 3, 3); ctx.fillStyle = Rf[2]; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); }
   }
@@ -4178,12 +4272,14 @@ const FAM_LOOK = {
   beachF: { '#4fa3cf': '#b08ad0', '#2f6ea0': '#8a62b0', '#1f3d68': '#5a3a80', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#f6ecd0', '#5e3524': '#666a73' },
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
 };
+// v5.11.0.21: a second bride or groom the same evening (two of the same) gets a recoloured copy: yellow flowers / a navy suit
+const FAM_DERIVE = { bride2: ['bride', { '#e57fa0': '#f2cf55', '#f2cf55': '#e06a2c' }], groom2: ['groom', { '#3e3f4c': '#1f3d68', '#3a2b38': '#16294a' }] };
 const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 8 (v5.8.1: the children's school look) (partner, father, two children x child / teen)
 function famSheet(look, cut = 0) {
   const key = look + ':' + cut; let sh = FAM_SPR.get(key); if (sh || !SPR.ok) return sh || null;
-  const pre = FAM_PRE[look]; if (pre && !(pre.complete && pre.naturalWidth)) return null; // still decoding: skip a frame
+  const der = FAM_DERIVE[look], pre = FAM_PRE[der ? der[0] : look]; if (pre && !(pre.complete && pre.naturalWidth)) return null; // still decoding: skip a frame
   const W0 = SPR.img.width, H0 = SPR.img.height, src = mkc(W0, H0), g = src.getContext('2d', { willReadFrequently: true }); g.drawImage(pre || SPR.img, 0, 0);
-  if (!pre) { const id = g.getImageData(0, 0, W0, H0), d = id.data, map = FAM_LOOK[look], hex = (r, gg, b) => '#' + [r, gg, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  if (!pre || der) { const id = g.getImageData(0, 0, W0, H0), d = id.data, map = der ? der[1] : FAM_LOOK[look], hex = (r, gg, b) => '#' + [r, gg, b].map(v => v.toString(16).padStart(2, '0')).join('');
     for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const to = map[hex(d[i], d[i + 1], d[i + 2])]; if (to) { d[i] = parseInt(to.slice(1, 3), 16); d[i + 1] = parseInt(to.slice(3, 5), 16); d[i + 2] = parseInt(to.slice(5, 7), 16); } }
     g.putImageData(id, 0, 0); }
   let img = src;
@@ -4193,7 +4289,7 @@ function famSheet(look, cut = 0) {
   const flip = mkc(W0, H0), fc = flip.getContext('2d'); fc.translate(W0, 0); fc.scale(-1, 1); fc.drawImage(img, 0, 0);
   sh = { img, flip }; FAM_SPR.set(key, sh); return sh;
 }
-const lookOf = m => { if (m.id === 'partner') return ['partner', 0];
+const lookOf = m => { if (m.id === 'partner') return ['partner', 0]; const wl = wedLook(m); if (wl) return [wl, 3]; // v5.11.0.21: the wedding clothes
   const cut = (m.role === 'child' || m.role === 'play' || m.role === 'school') ? 6 : 3;
   return [schoolWalk(m) && FAM_PRE[m.id + '_school'] ? m.id + '_school' : m.id, cut]; }; // v5.8.1: on the school walk no straw hat, a school backpack
 const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
@@ -4201,7 +4297,7 @@ const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', 
 const schoolWalk = a => !!(a && a.task && /^(school-go|school-back|race|library-go|library)$/.test(a.task.kind)); // v5.8.1; v5.10.9: sports day and the 书屋 stop use the same school look
 const workWalk = a => !!(a && a.task && /^work|^shop-|^inn-/.test(a.task.kind)); // v5.10.6: commuting or keeping a shop, no field tool; v5.10.7 inn too
 function carryFields(actor) { // hide the hip basket while a giant crop is held overhead
-  if (schoolWalk(actor) || workWalk(actor)) return { basket: null, carry: null }; // v5.8.1: nothing in hand on the walk to and from school; v5.10.6: same on the way to work
+  if (schoolWalk(actor) || workWalk(actor) || wedLook(actor)) return { basket: null, carry: null }; // v5.11.0.21: nothing at the hip with the gown or the suit // v5.8.1: nothing in hand on the walk to and from school; v5.10.6: same on the way to work
   const last = actor.crops.length ? actor.crops[actor.crops.length - 1] : null;
   const carry = actor.crops.slice().reverse().find(it => SU.itemOf(it).giant) || null;
   return { basket: carry ? null : last, carry };
@@ -5664,7 +5760,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
-  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
+  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), wedCer: () => wedCer(), wedLook: a => wedLook(a), famSheet: (l, c) => famSheet(l, c), wedCouple: () => wedCouple(), weddingTonight: () => wedNow(), homeTick: dm => homeTick(dm), homeMorning: () => homeMorning(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
 Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
