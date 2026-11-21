@@ -225,7 +225,7 @@
     if ((ctx.lastWed | 0) > 0 && ctx.day - ctx.lastWed < WED.gap) return null;
     const b = best(st, k.id); return b && b.v >= REL.close ? b.id : null;
   }
-  // v5.11.0.18 the wedding clothes: who wears the gown and who the suit. 小米 and 朵朵 are girls, 小豆 and 石头 boys; 阿团 is
+  // v5.11.0.21 the wedding clothes: who wears the gown and who the suit. 小米 and 朵朵 are girls, 小豆 and 石头 boys; 阿团 is
   // whichever the other one is not. Two girls are two brides, two boys two grooms (the second one's colours differ a little).
   const WED_LOOK = { kid0: 'groom', kid1: 'bride', m1: 'bride', m2: 'groom' };
   function wedLooks(kid, mate) {

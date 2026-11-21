@@ -129,7 +129,7 @@
     return out;
   }
 
-  // ---------- v5.11.0.18: a wedding evening at the party area ----------
+  // ---------- v5.11.0.21: a wedding evening at the party area ----------
   // The same 17:30–20:30 evening, but it opens with a short ceremony on the grass beside the table: a flower arch, a cream runner
   // strewn with petals (the aisle) and the guests in two tidy rows facing it. 17:30 everyone takes their place (the couple at the
   // far end of the aisle), 17:45 the couple walk up the aisle (drawn slowly, it is not a race), 18:02 they stand under the arch

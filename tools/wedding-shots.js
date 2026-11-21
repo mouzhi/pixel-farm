@@ -1,4 +1,4 @@
-// v5.11.0.18 婚礼: a child's wedding is its own scene, not just another party evening. A player's photo 「孩子的婚礼」 showed the
+// v5.11.0.21 婚礼: a child's wedding is its own scene, not just another party evening. A player's photo 「孩子的婚礼」 showed the
 // couple in work clothes and straw hats at the ordinary table: 「婚礼我觉得还是蛮重要的一个场景，女孩子要有婚纱」.
 //   node tools/wedding-shots.js [name-filter]   writes $PF_SHOTS/wedding_*.png (default /workspace/pf-shots)
 //   PF_ROOT=<an old checkout> PF_BEFORE=1 node tools/wedding-shots.js   only wedding_before.png, from that checkout (no checks on new code)

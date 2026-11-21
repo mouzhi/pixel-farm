@@ -109,8 +109,9 @@ jobs:
           # v5.11.0.15: scale exceeded 22m on run 44815889988; isolate rain instead of passing the overload to another leg.
             scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js housemove-shots.js
           - group: weather
-            # v5.11.0.18: + wedding-shots (~3m locally; weather held rain-shots alone, ~7m)
-            scripts: rain-shots.js wedding-shots.js
+          # v5.11.0.19: + married-shots (three wedding set-ups, ~3–5m locally); weather was the lightest leg with rain alone (~7m)
+            scripts: rain-shots.js married-shots.js wedding-shots.js
+            # v5.11.0.21: + wedding-shots (~4.7m on CI: weather 11m44s with rain+wedding on run 44880926084)
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           - group: townscale
