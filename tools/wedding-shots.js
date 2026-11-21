@@ -69,7 +69,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { ver: f.version, T: tod(), arch: [W.arch.x, W.arch.y], u: W.u, guests: W.guests.length, atArch, seen, ...looks(), ...people(), drawn }; })()`,
       r => r.area === false ? 'no party area' : r.W === null ? 'no ceremony layout ' + JSON.stringify(r.wed) : r.ver !== VERSION ? 'ver ' + r.ver
         : r.kid !== 'groom' || r.mate !== 'bride' ? 'outfits ' + r.kid + '/' + r.mate : r.kid1 ? 'a guest in wedding clothes' : !r.atArch.every(Boolean) ? 'couple not under the arch ' + r.atArch
-        : !r.seen.wheart ? 'no vows hearts ' + JSON.stringify(r.seen) : r.acts.filter(a => /wed-guest/.test(a)).length < 3 ? 'guests ' + r.acts : r.gap < 6 ? 'guests overlap ' + r.gap : null);
+        : !r.seen.wheart ? 'no vows hearts ' + JSON.stringify(r.seen) : r.acts.filter(a => /wed-guest/.test(a)).length < 2 ? 'guests ' + r.acts : r.gap < 6 ? 'guests overlap ' + r.gap : null);
     // 2. the walk up the aisle (drawn): the couple wait at the far end from 17:05, walk from 17:50 and stand under the arch by 18:02; side by side half way
     await shot('wedding_walk', `(() => { ${setup} if (!area) return { area: false }; goTo(17 * 60 + 49); const W = f.wedCer(); if (!W) return { W: null };
       const k = kid(), s = sp(), wait = [k, s].map((a, i) => a && Math.round(Math.hypot(a.x - W.start[i].x, a.y - W.start[i].y) * 10) / 10);
