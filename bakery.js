@@ -42,6 +42,18 @@
   const payOf = (need, priceOf) => Math.round(baseOf(need, priceOf) * (1 + BONUS));
   const needText = need => need.map(x => { const w = WORD[x.id] || ['', x.id]; return `${x.n} ${w[0]}${w[1]}`; }).join(' + ');
   const have = (need, counts) => need.every(x => (counts[x.id] | 0) >= x.n);
+  const shortOf = (need, counts) => (need || []).map(x => ({ id: x.id, n: Math.max(0, (x.n | 0) - (counts[x.id] | 0)) })).filter(x => x.n > 0);
+  const cropId = (it, typeOf) => typeof it === 'string' ? it : (typeOf ? typeOf(it) : (it && it.type));
+  // mark basket slots for a taken order (call this before workshop / stall keeps)
+  function reserve(crops, need, keep, typeOf) {
+    const left = {};
+    for (const x of need || []) left[x.id] = (left[x.id] | 0) + x.n;
+    (crops || []).forEach((it, i) => {
+      const ty = cropId(it, typeOf);
+      if (ty && left[ty] > 0 && !keep[i]) { keep[i] = true; left[ty]--; }
+    });
+    return left;
+  }
   // two different templates for the day, quantities from the day number (the same after a reload)
   function offers(day, extra, more) {
     const templates = TEMPLATES.concat(Array.isArray(more) && more.length ? more : []);
@@ -80,12 +92,14 @@
     out.offer = (Array.isArray(o.offer) ? o.offer : []).map(validOffer).filter(Boolean).slice(0, 3);
     out.take = typeof o.take === 'string' && out.offer.some(q => q.id === o.take) ? o.take : null;
     out.done = o.done ? 1 : 0;
+    const short = (Array.isArray(o.short) ? o.short : []).filter(id => typeof id === 'string' && WORD[id]).slice(0, 8);
+    if (short.length) out.short = short;
     return out;
   }
   // a new day: post 2 orders, clear yesterday's pick; auto-accept is applied later once we know the stock
   function roll(B, day, extra, more) {
     const d = day | 0; if (B.last === d) return B;
-    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; return B;
+    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; delete B.short; return B;
   }
   // pick mode: the player chose `id` (null clears it so auto can run). ignored once today's order is delivered.
   function setTake(B, id) {
@@ -96,6 +110,6 @@
     if (B.done || B.take) return B; const b = best(B.offer, counts, priceOf); if (b) B.take = b.id; return B;
   }
   const taken = B => (B && B.take ? B.offer.find(q => q.id === B.take) : null);
-  const api = { BONUS, FAVOR, HOURS, LOT, STAND, BOARD, UNIT, WORD, NAME, TEMPLATES, built, open, unit, baseOf, payOf, needText, have, offers, best, empty, valid, roll, setTake, autoTake, taken };
+  const api = { BONUS, FAVOR, HOURS, LOT, STAND, BOARD, UNIT, WORD, NAME, TEMPLATES, built, open, unit, baseOf, payOf, needText, have, shortOf, cropId, reserve, offers, best, empty, valid, roll, setTake, autoTake, taken };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFBakery = api;
 })(typeof window !== 'undefined' ? window : globalThis);

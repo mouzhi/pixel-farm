@@ -73,7 +73,49 @@ fs.mkdirSync(OUT, { recursive: true });
       tao: tao && tao.spot, log: S.events.map(e => e.msg).filter(m => /面包房|订单/.test(m)).slice(0, 5) }; })()`,
     r => !(r.done && r.days >= 1) ? 'not delivered ' + JSON.stringify(r) : r.gold !== r.pay ? 'pay ' + r.gold + ' vs ' + r.pay : r.fav !== 3 ? 'favor ' + r.fav : !r.log.some(m => /送到小桃的面包房/.test(m)) ? 'log ' + r.log : null);
 
-  // 5. fixtures load: hall gains an empty bakery, save version stays 15, decorations keep their counts (layout flag 2)
+  // 5. v5.11.0.25: milk reserved for a taken bakery order is not poured into the cheese workshop; only one adult walks it; no 「送到门口才发现」 loop
+  await shot('v511025_bakery_short.png', `(() => { ${setup} ${houses} f.hallStart('bakery'); nextMorning();
+    f.buy('cheese');
+    if (!S.works.works.cheese || !S.works.works.cheese.at) {
+      const plot = Object.keys(S.plots).find(id => S.plots[id] && !S.works.works.cheese);
+      S.works.works.cheese = S.works.works.cheese || { at: plot || 'wbank', slot: 0, inp: 0, left: 0, ready: 0 };
+      if (!S.works.works.cheese.at) S.works.works.cheese.at = plot || 'wbank';
+    }
+    S.works.works.cheese.inp = 0; S.works.works.cheese.ready = 0;
+    day(S.day); at(8 * 60);
+    const B = S.town.hall.bakery;
+    B.offer = [{ id: 'o0', need: [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], text: '3 瓶牛奶 + 3 罐蜂蜜', base: 225, pay: 338 },
+      { id: 'o1', need: [{ id: 'egg', n: 4 }], text: '4 个鸡蛋', base: 40, pay: 60 }];
+    B.take = 'o0'; B.done = 0; B.last = S.day; B.pick = 0; delete B.short;
+    for (const a of f.actors()) a.crops.length = 0;
+    f.FARMER.crops.push('milk','milk','milk','honey','honey','honey');
+    const partner = f.actors().find(a => a.id === 'partner');
+    const walkers = [], seen = [];
+    const delivered = () => ((S.events || []).some(e => /把 .*送到小桃的面包房/.test(e.msg)));
+    for (let i = 0; i < 200 && !delivered(); i++) {
+      f.advance(1, 10);
+      const bakers = f.actors().filter(a => a.task && a.task.kind === 'bakery' && a.task.label && /送到小桃/.test(a.task.label));
+      walkers.push(bakers.length);
+      for (const a of bakers) if (!seen.includes(a === f.FARMER ? 'farmer' : a.id)) seen.push(a === f.FARMER ? 'farmer' : a.id);
+    }
+    at(9 * 60 + 20);
+    const msgs = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
+    const door = msgs.filter(m => /送到门口才发现原料不够/.test(m));
+    const short = msgs.filter(m => /还缺/.test(m) && /再送/.test(m));
+    const v = f.bakeryView();
+    look(f.BK.STAND.x, f.BK.STAND.y + 4, 0);
+    const lb = document.getElementById('leftBottom'); if (lb) lb.style.visibility = 'visible';
+    f.refreshUI();
+    return { done: !!(v && v.done), take: v && v.take, cheeseIn: S.works.works.cheese && (S.works.works.cheese.inp | 0),
+      milkLeft: f.actors().reduce((n, a) => n + a.crops.filter(it => it === 'milk' || (it && it.type === 'milk')).length, 0),
+      maxWalkers: Math.max(0, ...walkers), walkers: seen, door: door.length, short: short.length, log: msgs.filter(m => /小桃|门口|还缺|订单/.test(m)).slice(-8) }; })()`,
+    r => r.door > 0 ? 'still walks empty-handed: ' + r.door + ' ' + JSON.stringify(r.log)
+      : r.maxWalkers > 1 ? 'two adults walked the same order ' + r.maxWalkers
+      : !(r.done) ? 'order not delivered ' + JSON.stringify(r)
+      : (r.cheeseIn >= 3) ? 'cheese took the bakery milk ' + r.cheeseIn
+      : null);
+
+  // 6. fixtures load: hall gains an empty bakery, save version stays 15, decorations keep their counts (layout flag 2)
   for (const [fx, fn] of [['day59', 'save-v10-day59-manor.json'], ['day72', 'save-v15-day72-cottage.json']]) {
     const file = path.join(__dirname, 'fixtures', fn); if (!fs.existsSync(file)) continue; const save = readSave(file);
     const want = {}; for (const p0 of (save.decor && save.decor.placed) || []) want[p0.id] = (want[p0.id] || 0) + 1; for (const [k, v] of Object.entries((save.decor && save.decor.inv) || {})) want[k] = (want[k] || 0) + v;
@@ -85,7 +127,7 @@ fs.mkdirSync(OUT, { recursive: true });
       r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.25' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
 
-  // 6. (local only) the real save and the friend's save load, decorations keep their counts, lamps use the wider spots
+  // 7. (local only) the real save and the friend's save load, decorations keep their counts, lamps use the wider spots
   for (const REAL of [process.env.PF_REAL_SAVE, process.env.PF_FRIEND_SAVE].filter(Boolean)) if (fs.existsSync(REAL)) {
     const save = readSave(REAL), tag = REAL === process.env.PF_REAL_SAVE ? 'realsave' : 'friendsave';
     const want = {}; for (const p0 of (save.decor && save.decor.placed) || []) want[p0.id] = (want[p0.id] || 0) + 1; for (const [k, v] of Object.entries((save.decor && save.decor.inv) || {})) want[k] = (want[k] || 0) + v;
@@ -99,7 +141,7 @@ fs.mkdirSync(OUT, { recursive: true });
       r => r.day !== save.clock.day ? 'day' : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts changed' : (r.south.length >= 2 && Math.abs(r.south[0][0] - r.south[r.south.length - 1][0]) < 48) ? 'south still tight ' + JSON.stringify(r.south) : (r.nearStall < 28) ? 'lamp hugging the stall ' + r.nearStall : null, save);
   }
 
-  // 7. (local only) real-save lamps after the wider layout, day and night, looking at the field and 阿禾's stall
+  // 8. (local only) real-save lamps after the wider layout, day and night, looking at the field and 阿禾's stall
   if (process.env.PF_REAL_SAVE && fs.existsSync(process.env.PF_REAL_SAVE)) {
     const save = readSave(process.env.PF_REAL_SAVE);
     for (const [when, T] of [['', 11 * 60], ['_night', 21 * 60 + 30]]) await shot(`v5104_lamps${when}.png`, `(() => { ${helpers} f.advance(1, 10); at(${T}); dry(); f.advance(1, 10); look(120, 80, 0); hide();

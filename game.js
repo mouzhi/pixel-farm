@@ -819,7 +819,7 @@ const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so 
 // walking speed and basket; children only take light jobs (family.js canDo).
 const BASK = () => { const base = F === FARMER ? S.eff.basket : Math.max(4, Math.round(S.eff.basket * (F.bmul || 1)));
   const extra = (S.eff && S.eff.marketExtra) | 0; if (!extra || !MK || !S.town || !S.town.hall || !MK.isDay(S.town.hall, S.day)) return base; return base + extra; }; // v5.10.5: the smithy cart carries more on market day
-const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond'];
+const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond', 'bakery']; // v5.11.0.25: only one adult walks a bakery order
 let CLAIM = new Set();
 // v5.3 roles: while one person picks a job, CROWD holds where the others stand and where they are heading. A target near
 // them costs up to CROWD_K px of extra walk per px inside CROWD_R (rngNear) and a quarter of that in score (chooseTask), so
@@ -2141,10 +2141,11 @@ function dinerReserveNeed() {
   return IN.reserveNeed(S.inn, want, innStaffedNow(), innCounts(), innPay);
 }
 function worksKeep(a) { const keep = new Array(a.crops.length).fill(false); if (a.role && !FAM.canDo(a.role, 'deliver')) return keep;
+  const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (SU && SU.itemType ? SU.itemType(it) : (it && it.type)));
+  // v5.11.0.25: a taken bakery order is held first (including rare/object crops), so it is not sold or poured into a workshop on the walk to 小桃
+  const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(a.crops, ord.need, keep, typ);
   for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at) continue; let room = PW.WORKS[id].inCap - w.inp;
-    a.crops.forEach((it, i) => { if (room > 0 && !keep[i] && typeof it === 'string' && PW.WORKS[id].inputs.includes(it)) { keep[i] = true; room--; } }); }
-  const ord = bakeryTaken(); if (ord) { const need = {}; for (const x of ord.need) need[x.id] = (need[x.id] | 0) + x.n; // v5.10.4: hold the day's order back from the stall
-    a.crops.forEach((it, i) => { const ty = typeof it === 'string' ? it : null; if (ty && need[ty] > 0 && !keep[i]) { keep[i] = true; need[ty]--; } }); }
+    a.crops.forEach((it, i) => { const ty = typ(it); if (room > 0 && !keep[i] && ty && PW.WORKS[id].inputs.includes(ty)) { keep[i] = true; room--; } }); }
   const dinerNeed = dinerReserveNeed(); // v5.11.0.12: hold tonight's restaurant ingredients until 11:30, like the bakery
   if (dinerNeed) a.crops.forEach((it, i) => {
     const ty = innType(it);
@@ -2850,27 +2851,66 @@ function bakeryMorning() {
   const texts = B.offer.map(q => q.text).join('；');
   log(`小桃的订单板：${texts}。家人会接更划算的一单送到面包房，按单多付五成；不接也没有惩罚`);
 }
+function bakeryMarkShort(B, o, counts) {
+  const short = (BK.shortOf ? BK.shortOf(o.need, counts || bakeryCounts()) : o.need.filter(x => ((counts || bakeryCounts())[x.id] | 0) < x.n));
+  B.short = short.map(x => x.id);
+  const tag = S.day + ':' + o.id;
+  if (B._shortLog === tag) return;
+  B._shortLog = tag;
+  const bit = short.map(x => (BK.needText ? BK.needText([x]) : ((x.n | 0) + (BK.NAME && BK.NAME[x.id] || x.id)))).join('、');
+  log(`小桃这一单还缺${bit || '原料'}，凑齐了再送`);
+}
+function bakeryHeldReturn(need) {
+  if (!need || !F) return;
+  for (const x of need) for (let i = 0; i < (x.n | 0); i++) F.crops.push(x.id);
+}
+// when a taken order is short, pick up / collect the missing product first (never a town / hall / inn autobuy)
+function bakeryGatherBoard(post, T, o) {
+  const short = BK.shortOf ? BK.shortOf(o.need, bakeryCounts()) : [];
+  if (!short.length || T >= 18 * 60) return;
+  const want = {}; for (const x of short) want[x.id] = x.n;
+  const space = BASK() - F.crops.length; if (space <= 0) return;
+  for (const id of PW.WORK_IDS) {
+    const w = S.works && S.works.works && S.works.works[id], def = PW.WORKS[id];
+    if (!w || !w.at || !def || !want[def.out] || !(w.ready > 0)) continue;
+    post('pickup', 86, PWA.doorOf(id), () => pickupTask(id), 'w:' + id + ':out', workArea[id]);
+  }
+  if (want.honey && S.works && S.works.hives) S.works.hives.forEach((h, i) => {
+    const sp = PWA.hiveSpots()[i];
+    if (h && h.ready > 0 && sp) post('honey', 86, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard');
+  });
+}
 function bakeryBoard(post, T) {
   const H = bakeryH(); if (!H || !tradeOk(F) || !BK.open(H, T)) return;
   const B = H.bakery; if (B.last !== S.day) { BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined)); log(`小桃的订单板：${B.offer.map(q => q.text).join('；')}`); }
   BK.autoTake(B, bakeryCounts(), bakeryPrice); const o = BK.taken(B); if (!o || B.done) return;
+  bakeryGatherBoard(post, T, o);
   if (!BK.have(o.need, bakeryCounts())) return;
-  post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery:' + (F === FARMER ? 'farmer' : F.id));
+  post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery');
 }
 function bakeryTask() {
-  const at = BK.STAND;
-  return { kind: 'bakery', label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: () => {
-    const H = bakeryH(); if (!H || !BK.open(H, S.t % 1440)) { log('面包房已经打烊了，东西先带回家'); return; }
-    const B = H.bakery; const o = BK.taken(B); if (!o || B.done) return;
-    if (!BK.have(o.need, bakeryCounts()) || !bakeryPull(o.need)) { log('送到门口才发现原料不够，这一单改日再说'); return; }
-    const base = BK.baseOf(o.need, bakeryPrice), sum = BK.payOf(o.need, bakeryPrice), extra = sum - base, n = o.need.reduce((s, x) => s + x.n, 0);
+  const at = BK.STAND, KEY = 'town:bakery';
+  const H0 = bakeryH(), B0 = H0 && H0.bakery, o0 = B0 && BK.taken(B0);
+  if (!o0 || B0.done) return { kind: 'idle', key: KEY, label: '在农场里走走', to: { x: F.x, y: F.y }, dur: 2 };
+  const counts = bakeryCounts();
+  // v5.11.0.25: pull the goods when the job is taken, not at 小桃's door (a second adult or a workshop run used to empty the basket on the walk)
+  if (!BK.have(o0.need, counts) || !bakeryPull(o0.need)) {
+    bakeryMarkShort(B0, o0, counts);
+    return { kind: 'idle', key: KEY, label: '先凑齐面包房的原料', to: { x: F.x, y: F.y }, dur: 2 };
+  }
+  if (B0.short) delete B0.short;
+  const held = o0.need.map(x => ({ id: x.id, n: x.n })), text = o0.text;
+  return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: () => {
+    const H = bakeryH(); if (!H || !BK.open(H, S.t % 1440)) { bakeryHeldReturn(held); log('面包房已经打烊了，东西先带回家'); return; }
+    const B = H.bakery, o = BK.taken(B); if (!o || B.done) { bakeryHeldReturn(held); return; }
+    const base = BK.baseOf(held, bakeryPrice), sum = BK.payOf(held, bakeryPrice), extra = sum - base, n = held.reduce((s, x) => s + x.n, 0);
     S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
-    B.done = 1; B.days++; B.gold += sum; B.extra += extra;
+    B.done = 1; B.days++; B.gold += sum; B.extra += extra; delete B.short;
     if (HM) HM.clampAdd(S.home.nb, 'n3', BK.FAVOR);
     emit('income', { gold: sum, items: n, source: 'bakery', by: { works: sum }, who: F === FARMER ? 'farmer' : F.id });
     noteLog('income', 'works', sum); if (F !== FARMER) noteLog('work', F.id, 0, sum);
     popText(at.x, at.y - 8, 26, '+' + sum, '#ffd76a'); burst(at.x, at.y - 4, 12, ['#ffd76a', '#fff2a8', Ac[0]], 8, 'coin'); hearts(at.x, at.y - 2, 14);
-    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${o.text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`); } };
+    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`); } };
 }
 function woodshopMorning() { // v5.10.5: once a day, if auto is on and the pile is above the reserve, 阿松 makes a bench
   const H = S.town && S.town.hall; if (!H || !WS || !WS.built(H) || !townOpen()) return;
