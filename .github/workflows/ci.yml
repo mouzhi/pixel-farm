@@ -141,7 +141,8 @@ jobs:
           # with both plus the new bakery shot (run 44916066351); parking them on works-town / agrilot
           # then made those groups 25m01s and 21m34s (run 44918453900).
           - group: workshop
-            scripts: workshop-shots.js
+            # v5.11.0.27: + workprio-test (~40s locally; workshop-shots alone is a light leg)
+            scripts: workshop-shots.js workprio-test.js
           - group: festival
             scripts: festival-shots.js
     steps:
