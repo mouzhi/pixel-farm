@@ -62,6 +62,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const looks = () => ({ kid: f.wedLook(kid()), mate: sp() ? f.wedLook(sp()) : null, kid1: f.wedLook(S.members.find(m => m.id === 'kid1')), lookOf: f.lookOf(kid()).join(':') });`;
     // 1. 18:10 under the arch: the bride in her gown and veil, the groom in his suit, petals falling, the guests in rows facing them
     await shot('wedding_ceremony', `(() => { ${setup} ${people} if (!area) return { area: false }; goTo(18 * 60 + 10); const W = f.wedCer(); if (!W) return { W: null, wed: S.home.wed };
+      for (let i = 0; i < 200 && people().acts.filter(a => /wed-guest/.test(a)).length < 2; i++) f.advance(0.05, 10);
       look((W.arch.x + area.x) / 2 + 4, (W.couple[0].y + W.arch.y) / 2 + 8); const seen = {};
       for (let i = 0; i < 30; i++) { f.setRealT(100 + i * 0.3); f.render(); for (const o of f.partyFx()) seen[o.k] = (seen[o.k] | 0) + 1; }
       f.setRealT(101.1); f.render(); const k = kid(), s = sp(), atArch = [k, s].map((a, i) => a && Math.hypot(a.x - W.couple[i].x, a.y - W.couple[i].y) < 1.5);

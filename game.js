@@ -2570,7 +2570,9 @@ function partyPlanNow() {
   const L = partyLawnNow(), T = S.t % 1440, W = L.wed && DC.wedOn(T) ? L.wed : null, couple = L.wed ? wedCouple() : null;
   const ph = W ? 'w' + DC.wedPhase(T) : DC.partyPhase(T), key = [L.key, ph, partyReg.keys.join(',')].join('|');
   if (partyPlanC.key !== key) { // v5.11.0.21: a wedding evening opens with the ceremony; afterwards the couple sit at the table first
-    const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
+    // v5.11.0.23: the family (farmer, members, spouses) sit before town guests, so a cramped ceremony still has 阿禾 in the rows
+    const fam = new Set(['farmer'].concat(S.members.map(m => m.id), (typeof SPOUSES !== 'undefined' ? SPOUSES : []).map(s => s.id)));
+    const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k) && fam.has(k)), partyReg.keys.filter(k => !couple.includes(k) && !fam.has(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
     partyPlanC = { key, plan: W ? DC.weddingPlan(W, roster, couple, DC.wedPhase(T), L.extra) : DC.partyPlan(area, L.lawn, roster, ph, L.extra) }; }
   return partyPlanC.plan;
 }
