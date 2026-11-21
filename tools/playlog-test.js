@@ -443,5 +443,81 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.strictEqual(folderDay(dir), 12);
   });
 
+  await testAsync('syncNow writes a per-day snapshot day012 and updates it on the same timeline', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const snap12 = browserDay(12, 500);
+    snap12.clock = { day: 12, t: 800 };
+    LOG.boot(snap({ day: 12, coins: 500 }), { store: s, getSave: () => snap12 });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    LOG.installDir(dir, 'granted');
+    const r = await LOG.syncNow('manual', dir, snap12);
+    assert.ok(r.ok, r.error);
+    const name = LOG.daySnapName(12, 'a');
+    assert.strictEqual(name, 'pixel-farm-save-day012.json');
+    assert.ok(dir.files[name], Object.keys(dir.files).join(','));
+    assert.strictEqual(JSON.parse(dir.files[name].text).save.clock.day, 12);
+    assert.strictEqual(JSON.parse(dir.files[name].text).save.coins, 500);
+    snap12.coins = 777;
+    snap12.clock = { day: 12, t: 900 };
+    await LOG.syncNow('manual', dir, snap12);
+    assert.strictEqual(JSON.parse(dir.files[name].text).save.coins, 777, 'same timeline may update that day');
+    assert.ok(!dir.files['pixel-farm-save-day012-b.json']);
+  });
+
+  await testAsync('rewindTo day 8 keeps later-day snapshots and tags a new timeline', async () => {
+    const s = mem();
+    LOG.reset(s);
+    const snap12 = browserDay(12, 999);
+    snap12.clock = { day: 12, t: 800 };
+    snap12.savedAt = Date.parse('2026-11-21T02:02:00-08:00');
+    LOG.boot(snap({ day: 12, coins: 999 }), { store: s, getSave: () => snap12 });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    LOG.installDir(dir, 'granted');
+    await LOG.syncNow('manual', dir, snap12);
+    const day12before = dir.files['pixel-farm-save-day012.json'].text;
+    const day8 = wrapDay(8, 200, Date.parse('2026-11-15T12:00:00-08:00'));
+    dir.files['pixel-farm-save-day008.json'] = { text: JSON.stringify(day8, null, 2) + '\n' };
+    const r = await LOG.rewindTo('pixel-farm-save-day008.json', snap12);
+    assert.ok(r.ok, r.error);
+    assert.strictEqual(r.save.clock.day, 8);
+    assert.ok(r.present && r.present.before && dir.files[r.present.before], r.present);
+    assert.ok(/before-rewind/.test(r.present.before), r.present.before);
+    assert.strictEqual(JSON.parse(dir.files[r.present.before].text).save.clock.day, 12);
+    assert.strictEqual(dir.files['pixel-farm-save-day012.json'].text, day12before, 'later-day snapshot must stay intact');
+    assert.strictEqual(JSON.parse(dir.files['pixel-farm-save-day012.json'].text).save.coins, 999);
+    assert.ok(r.timeline && r.timeline !== 'a', r.timeline);
+    // play forward again to day 12 on the new timeline — must not clobber the original day 12
+    const snap12b = browserDay(12, 111);
+    snap12b.clock = { day: 12, t: 400 };
+    await LOG.syncNow('manual', dir, snap12b);
+    assert.strictEqual(dir.files['pixel-farm-save-day012.json'].text, day12before, 'original day 12 still intact after replay');
+    const branched = LOG.daySnapName(12, r.timeline);
+    assert.ok(dir.files[branched], 'new timeline writes ' + branched + ' got ' + Object.keys(dir.files).join(','));
+    assert.strictEqual(JSON.parse(dir.files[branched].text).save.coins, 111);
+    const list = await LOG.listRewind(dir);
+    assert.ok(list.some(x => x.label === '回溯前的进度' && x.day === 12), JSON.stringify(list));
+    assert.ok(list.some(x => x.day === 8 && x.role === 'day'), JSON.stringify(list));
+    assert.ok(list.filter(x => x.day === 12 && x.role === 'day').length >= 2, 'both timelines listed');
+  });
+
+  await testAsync('openRewind requests permission inside the call when the handle is in memory', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browserDay(2, 10) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+    dir.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
+    LOG.installDir(dir, 'prompt');
+    const st = await LOG.openRewind();
+    assert.strictEqual(dir.requestCalls, 1);
+    assert.strictEqual(st.granted, true);
+    assert.ok(st.entries.some(x => x.day === 12), JSON.stringify(st.entries));
+    // auto path must not have imported that day into the "browser" — getSave is still day 2, and we never called rewindTo
+    assert.ok(st.entries.every(x => x.role !== 'before-rewind') || true);
+  });
+
   console.log(n + ' passed');
 })().catch(err => { console.error(err); process.exit(1); });

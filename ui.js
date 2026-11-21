@@ -851,8 +851,18 @@
     if (st.supported && st.granted) h += `<button class="pbtn" data-a="syncpick">更换本地文件夹…</button>`;
     if (st.needGesture) h += `<button class="pbtn" data-a="syncresume">${st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步'}</button>`;
     if (st.granted) h += `<button class="pbtn" data-a="syncnow">立即同步</button><button class="pbtn" data-a="syncstop">停止本地同步</button>`;
+    if (!hosted() && st.supported && !st.conflict) h += `<button class="pbtn" data-a="syncrewind">回到某一天</button>`;
     h += `<button class="pbtn" data-a="exportlog">导出游玩记录</button></div>`;
     return h;
+  }
+  function rewindRow(e) {
+    const clock = e.clock ? ' ' + e.clock : '';
+    const title = e.role === 'before-rewind' || e.label === '回溯前的进度'
+      ? '回溯前的进度 · 第' + (e.day != null ? e.day : '?') + '天' + clock
+      : '第' + (e.day != null ? e.day : '?') + '天' + clock;
+    const at = e.savedAt ? new Date(e.savedAt).toLocaleString('zh-CN') : '';
+    const tl = e.timeline && e.timeline !== 'a' ? ' · 另一条进度' : '';
+    return `<button class="pbtn copt" data-a="rewindpick" data-n="${esc(e.name)}">${esc(title)}<span class="cd">${at ? '保存于 ' + esc(at) : ''}${e.coins != null ? ' · ' + esc(String(e.coins)) + ' 金' : ''}${esc(tl)}</span></button>`;
   }
   function drawMenu() {
     const st = G.SAVE;
@@ -863,12 +873,26 @@
     h += syncLine() + syncButtons();
     if (mode === 'export') h += `<textarea id="io" readonly>${esc(SAVE.encode(G.snapshot()))}</textarea><div class="row"><button class="pbtn" data-a="copy">复制</button><span class="note" id="msg">复制后可以在别的浏览器里导入</span></div>`;
     if (mode === 'import') h += `<textarea id="io" placeholder="把导出的存档文字粘贴到这里"></textarea><div class="row"><button class="pbtn" data-a="check">检查</button><span class="note" id="msg"></span></div>`;
+    if (mode === 'rewind') {
+      h += `<div class="note">选一天回到当时的进度。读档后用的是现在的游戏（婚礼会是新的样子）。当前进度会先存成「回溯前的进度」，可以再选回来。</div>`;
+      if (!rewindEntries) h += `<div class="note">正在读取每日存档…</div>`;
+      else if (!rewindEntries.length) h += `<div class="note">文件夹里还没有每日存档。同步过之后，每一天都会留一份。</div>`;
+      else h += `<div class="rewind-list">${rewindEntries.map(rewindRow).join('')}</div>`;
+    }
+    if (mode === 'rewind-confirm' && pendingRewind) {
+      const e = pendingRewind;
+      const clock = e.clock ? ' ' + e.clock : '';
+      const title = e.role === 'before-rewind' ? '回溯前的进度（第' + (e.day != null ? e.day : '?') + '天' + clock + '）' : '第' + (e.day != null ? e.day : '?') + '天' + clock;
+      h += `<div class="note bad">确定回到${esc(title)}吗？当前进度会先另存为「回溯前的进度」，可以再选回来。</div>`;
+      h += `<div class="row"><button class="pbtn warn" data-a="rewindgo">确定回到这一天</button><button class="pbtn" data-a="rewindno">取消</button></div>`;
+    }
     if (resetArm > Date.now()) h += `<div class="note bad">重置会从第 1 天重新开始；当前存档会另存一份留底。游玩记录会留着，另起一个农场时间线。</div>`;
     menu.innerHTML = h;
   }
-  let pending = null;
+  let pending = null, rewindEntries = null, pendingRewind = null;
   menu.addEventListener('click', e => {
-    const a = e.target && e.target.dataset && e.target.dataset.a; if (!a) return;
+    const btn = e.target && e.target.closest && e.target.closest('[data-a]');
+    const a = btn && btn.dataset && btn.dataset.a; if (!a) return;
     if (a === 'export') { mode = mode === 'export' ? '' : 'export'; G.saveNow(); drawMenu(); }
     else if (a === 'import') { mode = mode === 'import' ? '' : 'import'; pending = null; drawMenu(); }
     else if (a === 'copy') { const io = $('io'); io.select(); (navigator.clipboard ? navigator.clipboard.writeText(io.value) : Promise.reject()).then(() => $('msg').textContent = '已复制', () => { document.execCommand && document.execCommand('copy'); $('msg').textContent = '已选中，按 Ctrl+C 复制'; }); }
@@ -885,6 +909,31 @@
     else if (a === 'syncfold' && L) { chooseSync('folder'); }
     else if (a === 'syncbrowse' && L) { chooseSync('browser'); }
     else if (a === 'exportlog' && L) { L.downloadLog(G.version); }
+    else if (a === 'syncrewind' && L) {
+      mode = 'rewind'; rewindEntries = null; pendingRewind = null; drawMenu();
+      L.openRewind().then(st => {
+        if (st.aborted) { mode = ''; drawMenu(); return; }
+        if (!st.granted) { announceSync(st); mode = ''; drawMenu(); return; }
+        rewindEntries = st.entries || [];
+        drawMenu();
+      }).catch(err => { dispatchEvent(new CustomEvent('pf:say', { detail: '读不了每日存档：' + (err && err.message || err) })); mode = ''; drawMenu(); });
+    }
+    else if (a === 'rewindpick' && L) {
+      const n = btn.dataset.n;
+      pendingRewind = (rewindEntries || []).find(x => x.name === n) || { name: n };
+      mode = 'rewind-confirm'; drawMenu();
+    }
+    else if (a === 'rewindno') { mode = 'rewind'; pendingRewind = null; drawMenu(); }
+    else if (a === 'rewindgo' && L && pendingRewind) {
+      const name = pendingRewind.name;
+      G.saveNow();
+      L.rewindTo(name).then(r => {
+        if (!r.ok) { dispatchEvent(new CustomEvent('pf:say', { detail: '没能回到那一天：' + (r.error || r.reason || '') })); return; }
+        dispatchEvent(new CustomEvent('pf:say', { detail: '正在回到那一天…' }));
+        const ir = G.importState(r.save);
+        if (ir && ir.ok === false) dispatchEvent(new CustomEvent('pf:say', { detail: '导入失败：' + (ir.error || '') }));
+      }).catch(err => { dispatchEvent(new CustomEvent('pf:say', { detail: '没能回到那一天：' + (err && err.message || err) })); });
+    }
   });
   async function chooseSync(which) {
     if (!L || !L.resolveConflict) return;

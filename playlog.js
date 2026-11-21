@@ -20,7 +20,7 @@
 
   function emptyIncome() { const o = {}; for (const k of INCOME) o[k] = 0; return o; }
   function emptyIdle() { return { fish: 0, rest: 0, patrol: 0, other: 0 }; }
-  function emptyData() { return { schema: SCHEMA, startedAt: null, lastSyncAt: null, syncDirName: null, sessions: [], days: [], events: [] }; }
+  function emptyData() { return { schema: SCHEMA, startedAt: null, lastSyncAt: null, syncDirName: null, timeline: 'a', sessions: [], days: [], events: [] }; }
   function emptyDay(snap) {
     return {
       day: snap.day, farm: snap.createdAt || null, realAt: snap.now || Date.now(),
@@ -46,6 +46,7 @@
     d.startedAt = raw.startedAt || null;
     d.lastSyncAt = raw.lastSyncAt || null;
     d.syncDirName = raw.syncDirName || null;
+    d.timeline = raw.timeline || 'a';
     d.sessions = Array.isArray(raw.sessions) ? raw.sessions.slice(-MAX_SESSIONS) : [];
     d.days = Array.isArray(raw.days) ? raw.days.map(normalizeDay).filter(Boolean).slice(-MAX_DAYS) : [];
     d.events = Array.isArray(raw.events) ? raw.events.slice(-MAX_EVENTS) : [];
@@ -228,11 +229,29 @@
       sessions: data.sessions, days: data.days, events: data.events
     };
   }
-  function wrapSave(snap) {
+  function wrapSave(snap, extraMeta) {
     return {
-      meta: { kind: 'pixel-farm-save', exportedAt: new Date().toISOString(), gameVersion: snap && snap.gameVersion || null, saveVersion: snap && snap.saveVersion || null },
+      meta: Object.assign({
+        kind: 'pixel-farm-save', exportedAt: new Date().toISOString(),
+        gameVersion: snap && snap.gameVersion || null, saveVersion: snap && snap.saveVersion || null,
+        timeline: (data && data.timeline) || 'a'
+      }, extraMeta || {}),
       save: snap && root.PFSave && root.PFSave.compact ? root.PFSave.compact(snap) : snap // v5.11.0.8: the same compact form as the game's own save
     };
+  }
+  function currentTimeline() { return (data && data.timeline) || 'a'; }
+  function padDay(d) { return String(Math.max(0, Math.round(+d || 0))).padStart(3, '0'); }
+  function daySnapName(day, timeline) {
+    const tl = timeline || currentTimeline();
+    return 'pixel-farm-save-day' + padDay(day) + (tl && tl !== 'a' ? '-' + tl : '') + '.json';
+  }
+  function nextTimeline() {
+    const cur = currentTimeline() || 'a';
+    const m = cur.match(/^([a-z]+)(\d*)$/);
+    const letter = (m && m[1]) || 'a', seq = (m && m[2]) ? parseInt(m[2], 10) : 0;
+    if (letter === 'z' || letter.length !== 1) return 't' + Date.now().toString(36).slice(-4);
+    const next = String.fromCharCode(letter.charCodeAt(0) + 1);
+    return seq ? next + seq : next;
   }
 
   // ---- folder sync (Chrome File System Access API); writeToDir is also used with OPFS or a mock handle in tests ----
@@ -531,7 +550,118 @@
     return Object.assign(status(), { ok: false, reason: 'bad-choice' });
   }
 
-  function filesForSync(snap) {
+  async function listNames(handle) {
+    if (handle && handle.files && typeof handle.files === 'object' && typeof handle.values !== 'function') return Object.keys(handle.files);
+    const names = [];
+    if (handle && typeof handle.values === 'function') {
+      for await (const entry of handle.values()) if (entry && entry.name) names.push(entry.name);
+    } else if (handle && typeof handle.keys === 'function') {
+      for await (const name of handle.keys()) names.push(name);
+    }
+    return names;
+  }
+  async function writeDaySnap(handle, snap) {
+    const s = snap || (getSave && getSave());
+    if (!s) return null;
+    const peek = peekSave(s);
+    if (!peek || peek.day == null) return null;
+    const name = daySnapName(peek.day, currentTimeline());
+    await writeRaw(handle, name, JSON.stringify(wrapSave(s), null, 2) + '\n');
+    return name;
+  }
+  async function snapshotPresent(handle, snap) {
+    const s = snap || (getSave && getSave());
+    const dayName = s ? await writeDaySnap(handle, s) : null;
+    const dest = await uniqueName(handle, 'pixel-farm-save-before-rewind.json');
+    if (s) await writeRaw(handle, dest, JSON.stringify(wrapSave(s, { role: 'before-rewind' }), null, 2) + '\n');
+    return { day: dayName, before: dest };
+  }
+  function parseSnapName(name) {
+    const dayM = String(name || '').match(/^pixel-farm-save-day(\d{3})(?:-([a-z0-9]+))?\.json$/i);
+    if (dayM) return { role: 'day', day: parseInt(dayM[1], 10), timeline: dayM[2] || 'a', name };
+    const preM = String(name || '').match(/^pixel-farm-save-before-rewind(?:-(\d+|[a-z0-9]+))?\.json$/i);
+    if (preM) return { role: 'before-rewind', timeline: 'a', name };
+    return null;
+  }
+  async function listRewind(handle) {
+    const h = handle || dirHandle;
+    if (!h) return [];
+    const names = await listNames(h);
+    const items = [];
+    for (const name of names) {
+      const parsed = parseSnapName(name);
+      if (!parsed) continue;
+      let obj = null, peek = null;
+      try {
+        const text = await readFromDir(h, name);
+        obj = JSON.parse(text);
+        peek = peekSave(obj);
+      } catch (e) { continue; }
+      if (!peek) continue;
+      items.push({
+        name,
+        role: parsed.role,
+        timeline: (obj.meta && obj.meta.timeline) || parsed.timeline || 'a',
+        day: peek.day,
+        t: peek.t,
+        clock: peekClock(peek),
+        savedAt: peek.savedAt,
+        coins: peek.coins,
+        label: parsed.role === 'before-rewind' ? '回溯前的进度' : null
+      });
+    }
+    items.sort((a, b) => {
+      if (a.role !== b.role) return a.role === 'before-rewind' ? -1 : 1;
+      if (a.role === 'before-rewind') return (b.savedAt || 0) - (a.savedAt || 0);
+      if (a.day !== b.day) return (b.day || 0) - (a.day || 0);
+      if (a.timeline !== b.timeline) return String(a.timeline).localeCompare(String(b.timeline));
+      return (b.savedAt || 0) - (a.savedAt || 0);
+    });
+    return items;
+  }
+  // Must be called from a click: requestPermission is the first await when the handle is in memory.
+  async function openRewind() {
+    if (!dirHandle) {
+      try { await pickDir(); }
+      catch (e) {
+        if (e && e.name === 'AbortError') return Object.assign(status(), { aborted: true, entries: [] });
+        logErr(e);
+        return Object.assign(status(), { entries: [] });
+      }
+    } else if (perm !== 'granted') {
+      try { perm = await requestPerm(dirHandle); }
+      catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; return Object.assign(status(), { entries: [] }); }
+      if (perm !== 'granted') { needsRepick = true; return Object.assign(status(), { entries: [] }); }
+      needsRepick = false;
+    }
+    const entries = await listRewind();
+    return Object.assign(status(), { entries });
+  }
+  // Explicit user action only. Auto-sync never reads a day snapshot back into the browser.
+  // Before loading, the current browser state is written as a day snapshot + 「回溯前的进度」.
+  // A new timeline suffix is started so later syncs won't overwrite earlier days of the old line.
+  async function rewindTo(name, snap) {
+    const h = dirHandle;
+    if (!h) return Object.assign(status(), { ok: false, reason: 'no-handle' });
+    if (perm !== 'granted') return Object.assign(status(), { ok: false, reason: 'no-permission' });
+    let text, obj;
+    try { text = await readFromDir(h, name); obj = JSON.parse(text); }
+    catch (e) { logErr(e); return Object.assign(status(), { ok: false, reason: 'error', error: lastError }); }
+    const save = obj && obj.save && typeof obj.save === 'object' ? obj.save : obj;
+    const present = await snapshotPresent(h, snap || (getSave && getSave()));
+    data.timeline = nextTimeline();
+    flush();
+    conflict = null;
+    folderChecked = true;
+    lastError = null;
+    // Point the live folder save at the chosen day so a reload won't see a false conflict.
+    // Per-day files of the previous timeline are left alone.
+    await writeRaw(h, SAVE_FILE, typeof text === 'string' ? text : JSON.stringify(obj, null, 2) + '\n');
+    emitSync();
+    return Object.assign(status(), { ok: true, save, present, timeline: currentTimeline(), from: name });
+  }
+
+    function filesForSync(snap) {
     const s = snap || (getSave && getSave());
     const files = {};
     files[LOG_FILE] = exportObject(s && s.gameVersion);
@@ -551,6 +681,7 @@
     try {
       const files = filesForSync(snap);
       await writeToDir(h, files);
+      try { await writeDaySnap(h, snap); } catch (e) { try { console.warn('[pixel-farm sync] day snapshot', e); } catch (x) {} }
       lastWrite = Date.now(); lastError = null;
       data.lastSyncAt = lastWrite; flush();
       return { ok: true, reason: reason || 'sync', at: lastWrite };
@@ -628,6 +759,8 @@
         if (!files[name]) { const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e; }
         delete files[name];
       },
+      async *values() { for (const name of Object.keys(files)) yield { name, kind: 'file' }; },
+      async *keys() { for (const name of Object.keys(files)) yield name; },
       async getFileHandle(name, o) {
         if (opts && opts.writeThrow) throw opts.writeThrow;
         if (!files[name] && !(o && o.create)) throw new Error('not found: ' + name);
@@ -651,6 +784,7 @@
     openDay, closeDay, startSession, endSession,
     income, spend, purchase, event, tick, work, sampleFps, offline, classify,
     supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker, resolveConflict, peekSave,
+    listRewind, openRewind, rewindTo, daySnapName, currentTimeline,
     writeToDir, readFromDir, syncNow, syncSoon, syncMorning, filesForSync,
     download, downloadLog, memoryDir
   };

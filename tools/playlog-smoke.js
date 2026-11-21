@@ -252,6 +252,62 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs.filter(e => !/pixel-farm sync/.test(e)), []);
   });
 
+  await test('回到某一天 lists per-day snapshots and is hidden on a hosted (xhs) shell', async ctx => {
+    const p = await open(ctx);
+    await p.evaluate(async () => {
+      const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+      const wrap = (day, coins, at, t) => ({
+        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.20', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
+        save: { saveVersion: 15, gameVersion: '5.11.0.20', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
+      });
+      const w8 = wrap(8, 200, Date.parse('2026-11-15T12:00:00-08:00'), 800);
+      const w12 = wrap(12, 999, Date.parse('2026-11-21T02:02:00-08:00'), 800); // wedding day in the fixture story
+      const w20 = wrap(20, 1500, Date.parse('2026-11-21T14:00:00-08:00'), 360);
+      dir.files['pixel-farm-save-day008.json'] = { text: JSON.stringify(w8, null, 2) + '\n' };
+      dir.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(w12, null, 2) + '\n' };
+      dir.files['pixel-farm-save-day020.json'] = { text: JSON.stringify(w20, null, 2) + '\n' };
+      window.__syncDir = dir;
+      PFPlaylog.installDir(dir, 'granted');
+      document.getElementById('menuBtn').click();
+      if (document.getElementById('menu').hidden) document.getElementById('menuBtn').click();
+    });
+    await p.waitForFunction(() => /回到某一天/.test(document.getElementById('menu').innerText), null, { timeout: 3000 });
+    await p.click('#menu button[data-a="syncrewind"]');
+    await p.waitForFunction(() => {
+      const m = document.getElementById('menu');
+      return m && /第12天/.test(m.innerText) && /第8天/.test(m.innerText) && /婚礼会是新的样子|每日存档/.test(m.innerText);
+    }, null, { timeout: 4000 });
+    const text = await p.evaluate(() => document.getElementById('menu').innerText);
+    assert.ok(/第12天/.test(text) && /13:20/.test(text), text);
+    assert.ok(/第8天/.test(text), text);
+    assert.ok(/第20天/.test(text), text);
+    fs.mkdirSync(OUT, { recursive: true });
+    await p.screenshot({ path: path.join(OUT, 'sync_rewind.png') });
+    // confirm dialog
+    await p.click('#menu button[data-n="pixel-farm-save-day012.json"]');
+    await p.waitForFunction(() => /确定回到/.test(document.getElementById('menu').innerText), null, { timeout: 3000 });
+    const confirm = await p.evaluate(() => document.getElementById('menu').innerText);
+    assert.ok(/确定回到/.test(confirm) && /第12天/.test(confirm) && /回溯前的进度/.test(confirm), confirm);
+    // cancel — folder files must be unchanged (no rewind yet)
+    await p.click('#menu button[data-a="rewindno"]');
+    const days = await p.evaluate(() => ({
+      d12: JSON.parse(window.__syncDir.files['pixel-farm-save-day012.json'].text).save.clock.day,
+      d20: JSON.parse(window.__syncDir.files['pixel-farm-save-day020.json'].text).save.clock.day,
+      keys: Object.keys(window.__syncDir.files).sort()
+    }));
+    assert.strictEqual(days.d12, 12);
+    assert.strictEqual(days.d20, 20);
+    // hosted / xhs shell hides the button
+    const hidden = await p.evaluate(() => {
+      window.PFPlatform = { id: 'xhs' };
+      document.getElementById('menuBtn').click();
+      document.getElementById('menuBtn').click();
+      return /回到某一天/.test(document.getElementById('menu').innerText);
+    });
+    assert.strictEqual(hidden, false, 'hosted shell must not show 回到某一天');
+    assert.deepStrictEqual(p.errs.filter(e => !/pixel-farm sync/.test(e)), []);
+  });
+
   await browser.close();
   await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
   if (failed) { console.log(failed + ' failed'); process.exit(1); }
