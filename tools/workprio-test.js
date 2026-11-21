@@ -57,7 +57,10 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('workprio_sunset.png', inn, `(() => { ${helpers} S.inn.resort.deck = 1; f.innRepaint && f.innRepaint(); at(17 * 60 + 5); dry(); quiet(); ripen(6); free();
     const first = f.chooseTask(); F0._rest = { day: S.day, sunset: 60 };
     const capped = f.chooseTask(); quiet(); free(); const idle = f.chooseTask();
-    return { first: first && first.kind, capped: capped && capped.kind, idle: idle && idle.kind, pending: f.workPending() }; })()`,
+    const pending = f.workPending(); F0._rest = null; free(); for (let i = 0; i < 10; i++) f.advance(1, 10);
+    const L = f.innResortLayout(), seat = L && L.deck && L.deck.sit[0]; if (seat) look(seat.x, seat.y);
+    const onDeck = f.actors().filter(a => a.task && a.task.kind === 'sunset').length;
+    return { first: first && first.kind, capped: capped && capped.kind, idle: idle && idle.kind, pending, onDeck, T: Math.round(S.t % 1440) }; })()`,
     r => r.first !== 'sunset' ? 'first ' + r.first : r.capped === 'sunset' ? 'still on the deck with work waiting' : r.idle !== 'sunset' ? 'no work, no deck: ' + r.idle : null);
 
   // 3. demand crops: the diner is open, so a tile goes to cabbage before the bag's watermelons; the seed is bought too
