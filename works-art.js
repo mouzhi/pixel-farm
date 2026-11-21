@@ -133,7 +133,7 @@
       if (y === 11 && x >= 4 && x <= 7 && z <= 2) return z === 2 ? St[3] : Ac[1];                           // a jar filling up
       return null; });
     // the little gutter under each hive (a golden lip on a short trough), drawn as its own tiny model in front of the hive
-    const gutter = B(10, 3, 3, (x, y, z) => (z <= 1 && x >= 1 && x <= 8 && y >= 0 && y <= 2) ? (z === 1 && y === 1 ? Ac[1] : Wd[3]) : null);
+    const gutter = B(12, 4, 3, (x, y, z) => { if (x < 1 || x > 10 || y > 3) return null; const rim = x === 1 || x === 10 || y === 0 || y === 3; if (z === 0) return Wd[2]; if (z === 1) return rim ? Wd[1] : Ac[1]; return z === 2 && rim && (x + y) % 3 === 0 ? Wd[1] : null; });
     return { sprinkler, mill, jam, cheese, pie: jam, hive, lamp, feeder, chute, milker, vat, gutter };
   }
   // ---------- small pixel icons (products, the lamp's 'too far' mark) ----------
@@ -184,7 +184,7 @@
     if (m.e) for (const k of ['coop', 'coop2']) { if (!S.eff[k] || !P[k]) continue; const b = P[k].bld; out.push({ kind: 'chute', pen: k, x: b.x + 9.5, y: b.y + 1 }); }
     if (m.m) for (const k of ['shed', 'shed2']) { if (!S.eff[k] || !P[k]) continue; const b = P[k].bld; out.push({ kind: 'milker', pen: k, x: b.x - 14, y: b.y + 3, frames: 1 }); }
     if (m.h) { const c = meadowCentre(); if (c) out.push({ kind: 'vat', x: c.x, y: c.y });
-      hiveSpots().forEach((h, i) => { if (h && !S.works.hives[i]._c && h.at !== 'orchard') out.push({ kind: 'gutter', x: h.x, y: h.y + 3.5 }); }); }
+      hiveSpots().forEach((h, i) => { if (h && !S.works.hives[i]._c && h.at !== 'orchard') out.push({ kind: 'gutter', x: h.x, y: h.y + 4 }); }); }
     return out;
   }
   // the shop and the codex draw the machines from their models (like the decorations)
