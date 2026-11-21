@@ -36,7 +36,33 @@ ok('party: anniversaries (28 days) make one likelier; guests 0-2; the evening wi
   assert(DC.special(60, { kids: [{ born: 4 }] })); assert(!DC.special(60, {}));
   const r = rng(3), c = [0, 0, 0]; for (let i = 0; i < 3000; i++) c[DC.guestCount(r)]++; assert(c[0] && c[1] && c[2]);
   assert(!DC.partyOn(17 * 60)); assert(DC.partyOn(18 * 60)); assert(DC.partyOn(20 * 60 + 10)); assert(!DC.partyOn(20 * 60 + 30));
-  assert.strictEqual(DC.partySeats({ x: 0, y: 0 }).length, 10); assert.strictEqual(DC.partyPosts({ x: 0, y: 0 }).length, 4);
+  assert.strictEqual(DC.partySeats({ x: 0, y: 0 }).length, 2); assert.strictEqual(DC.partyPosts({ x: 0, y: 0 }).length, 4);
+});
+ok('v5.11.0.15 party: seats 8 apart; lawn corners on free grass, never under the area or each other; nobody shares a place', () => {
+  const s = DC.partySeats({ x: 0, y: 0 }); for (let i = 0; i < s.length; i++) for (let j = i + 1; j < s.length; j++) assert(Math.hypot(s[i].x - s[j].x, s[i].y - s[j].y) >= 7.9, 'seats ' + i + ' ' + j);
+  const c = { x: 100, y: 50 }, all = DC.partyLawn(c, () => true); assert.deepStrictEqual(all.map(l => l.kind), ['dance', 'chat', 'play']);
+  const hit = (a, b) => a[0] < b[2] && a[2] > b[0] && a[1] < b[3] && a[3] > b[1];
+  const area = [c.x - 12, c.y - 8.5, c.x + 12, c.y + 8.5]; for (const l of all) { assert(!hit(l.box, area), l.kind + ' under the area'); assert(!l.tall); for (const p of l.spots) assert(p.x > l.box[0] && p.x < l.box[2] && p.y > l.box[1] && p.y < l.box[3]); }
+  for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) assert(!hit(all[i].box, all[j].box));
+  // a narrow strip: the corners stand on end; no grass at all: no corners (the table alone still works)
+  const narrow = DC.partyLawn(c, b => b[2] - b[0] <= 12); assert(narrow.length === 3 && narrow.every(l => l.tall));
+  assert.deepStrictEqual(DC.partyLawn(c, () => false), []);
+  // the same farm gets the same spots
+  assert.deepStrictEqual(DC.partyLawn(c, b => b[1] > c.y), DC.partyLawn(c, b => b[1] > c.y));
+  const roster = ['farmer', 'partner', 'father', 'g0', 'g1', 'f0', 'sp_kid1', 'kid1'].map(key => ({ key })).concat([{ key: 'kid0', kid: 1 }, { key: 'm2', kid: 1 }]);
+  for (const lawn of [all, narrow, []]) for (let ph = 0; ph < 3; ph++) {
+    const extra = Array.from({ length: 20 }, (_, i) => ({ x: -200 + (i % 5) * 30, y: -200 + Math.floor(i / 5) * 40 })), plan = DC.partyPlan(c, lawn, roster, ph, extra), spots = Object.values(plan).filter(Boolean);
+    const placed = roster.filter(r => plan[r.key]).length; assert.strictEqual(placed, roster.length, 'placed ' + placed);
+    for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) assert(DC.partyClear(spots[i], spots[j]), 'projected silhouettes overlap');
+    assert.strictEqual(new Set(spots.map(p => p.x + ',' + p.y)).size, spots.length, 'two people on one spot (phase ' + ph + ')');
+    if (lawn.length === 3) { if (ph !== 1) assert.strictEqual(plan.kid0.act, 'play'); else assert.strictEqual(plan.kid0.act, 'eat');
+      if (ph === 0) assert.strictEqual(plan.farmer.act, 'eat'); else assert(new Set(roster.filter(r => !r.kid).map(r => plan[r.key].act)).size >= 2, 'the grown-ups mix'); }
+  }
+  // round 0 is dinner; later rounds move people along; the rounds' edges
+  assert.strictEqual(DC.partyPhase(17 * 60 + 30), 0); assert.strictEqual(DC.partyPhase(18 * 60 + 40), 1); assert.strictEqual(DC.partyPhase(19 * 60 + 35), 2); assert.strictEqual(DC.phaseEnd(18 * 60), 18 * 60 + 40); assert.strictEqual(DC.phaseEnd(20 * 60), DC.PARTY.to);
+  const a = DC.partyPlan(c, all, roster, 1), b = DC.partyPlan(c, all, roster, 2); assert(roster.some(r => a[r.key].x !== b[r.key].x || a[r.key].y !== b[r.key].y));
+  // a newcomer does not move the ones already there (within a round)
+  const before = DC.partyPlan(c, all, roster.slice(0, 4), 1), after = DC.partyPlan(c, all, roster.slice(0, 5), 1); for (const r of roster.slice(0, 4)) assert.deepStrictEqual(before[r.key], after[r.key]);
 });
 // a 10x6 grid of grass (10) with a dirt path (5) across row 2 and a wall (0) with one gap in column 6
 const grid = () => { const g = { x0: 0, y0: 0, cell: 4, w: 10, h: 6, cost: new Uint8Array(60).fill(10) };
@@ -87,5 +113,12 @@ ok('shop: a 装饰 tab with flat prices; the party area costs 2000 + 40 wood', (
   const tab = SIM.SHOP_TABS.find(t => t.id === 'decor'); assert(tab); assert.deepStrictEqual(tab.ids, DC.SHOP_IDS);
   const p = SIM.shopItem('party'); assert(p.flat && p.p9); assert.deepStrictEqual([p.levels[0].cost, p.levels[0].wood], [2000, 40]);
   const b = SIM.shopItem('bench'); assert(b.levels.every(l => l.cost === 300 && l.wood === 10)); assert.strictEqual(b.levels.length, 6);
+});
+ok('v5.11.0.2 收回: store orders and kept pieces survive valid(); kept never exceeds the storehouse; untouched saves keep their shape', () => {
+  const v = DC.valid({ inv: { bench: 2, flowerpot: 1 }, kept: { bench: 5, flowerpot: 1, nope: 3 }, placed: [{ u: 3, id: 'bench', x: 60, y: 60 }],
+    orders: [{ op: 'store', what: 'decor', ref: 3, id: 'bench', x: 158, y: 41, mine: 1 }, { op: 'store', what: 'work', ref: 'mill', x: 1, y: 1 }, { op: 'store', what: 'decor', ref: null, x: 1, y: 1 }], n: 4 });
+  assert.deepStrictEqual(v.kept, { bench: 2, flowerpot: 1 });
+  assert.strictEqual(v.orders.length, 1); assert.deepStrictEqual([v.orders[0].op, v.orders[0].what, v.orders[0].ref, v.orders[0].mine], ['store', 'decor', 3, 1]);
+  assert(!('kept' in DC.valid({ inv: { bench: 1 } })), 'no kept field unless used'); assert(!('kept' in DC.empty()));
 });
 console.log(`decor-test: ${n} ok`);

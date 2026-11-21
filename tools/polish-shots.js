@@ -63,8 +63,8 @@ fs.mkdirSync(OUT, { recursive: true });
   { const p = await page(FIXTURE); const r = await p.evaluate(() => { const f = __farm, S = f.S; document.getElementById('offline').hidden = true; S.coins = 900000; f.FARMER.wood = 800;
       f.buyPlot('eroad', 'road'); S.town.school.kid0 = 1; const ok = f.buy('town').ok; if (S.weather) S.weather.rained = false;
       S.t = Math.floor(S.t / 1440) * 1440 + 18 * 60; for (let i = 0; i < 200 && S.t % 1440 < 19 * 60 + 30; i++) f.advance(1, 10);
-      for (let i = 0; i < 200 && f.NEIGH.some(n => n.out && n.moving); i++) f.advance(1, 10);
-      f.setAngle(0.3); f.panTo(528, 84); f.advance(0.2, 10); return { ok, tod: Math.round(S.t % 1440), lights: f.TN.lightsAt(S.t % 1440).length, out: f.NEIGH.filter(n => n.out).map(n => n.name + ':' + n.spot) }; });
+      for (let i = 0; i < 60 && f.NEIGH.filter(n => n.out && n.spot !== 'home' && !n.moving).length < 2; i++) f.advance(1, 10); // v5.11.0: the bigger town keeps someone walking home at 19:30
+      f.setAngle(0.3); f.panTo(780, 70); f.advance(0.2, 10); return { ok, tod: Math.round(S.t % 1440), lights: f.TN.lightsAt(S.t % 1440).length, out: f.NEIGH.filter(n => n.out && n.spot !== 'home').map(n => n.name + ':' + n.spot) }; });
     await p.screenshot({ path: path.join(OUT, 'v591_town_evening.png') });
     check('v591_town_evening.png', !r.ok ? 'town' : r.lights < 10 ? 'lights ' + r.lights : r.out.length !== 2 ? 'out ' + r.out : null, r); await p.context().close(); }
   // 6b. the shop's 新房子 card with its long lock note (no 花甸 / 农田 yet): the name column keeps its width (was one character wide), at 1280 and 390

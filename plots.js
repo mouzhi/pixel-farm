@@ -26,10 +26,13 @@
     playground: { name: '乐园', icon: 'playground', desc: '滑梯、沙坑（能堆沙堡）和秋千，孩子会自己来玩', now: '滑梯、沙坑和秋千', cost: 800, wood: 40 },
     bridge: { name: '石桥', icon: 'bridge', desc: '修好以后家人、羊群和上学的孩子都从桥上过河', now: '桥修好了' },
     trail: { name: '山道', icon: 'trail', desc: '一条弯弯的上山小路，通向山顶的两块地', now: '路障拆掉，能上山了' },
-    inn: { name: '民宿院', icon: 'inn', desc: '能盖最多 4 间小木屋和一座农家菜馆，游客会沿东大道来住（商店「农家乐」里买，要繁荣度 3）', now: '先铺好院子和石子路' },
+    inn: { name: '空院子', icon: 'inn', desc: '以前的民宿院。民宿已经搬到镇门口的农家乐区，这块地空出来了，可以免费改建一次', now: '一片空院子' }, // v5.11.0.5: legacy only (no plot offers it any more)
     resort: { name: '度假村', icon: 'resort', desc: '东南滩改成度假村后，海边能盖沙滩小屋、遮阳伞、海鲜摊、游客栈桥和日落观景台（商店「农家乐」里买，要先买下海边，繁荣度 3）', now: '一条通向沙滩的小路' },
   };
   const MODULE_IDS = Object.keys(MODULES);
+  // v5.11.0.5: modules no plot offers any more but an old save may still hold. validPlots keeps them (it would otherwise turn
+  // them into the plot's first module); they produce nothing and the plot can be rezoned (free once when `free` is set).
+  const LEGACY_MODS = ['inn'];
   const TERRAIN = { flat: '平地', river: '河边地', slope: '山脚缓坡', high: '山顶高地', across: '河对岸', special: '特殊地块' };
 
   // ---------- terrain: the river, the mountains and the mountain trail ----------
@@ -44,7 +47,7 @@
   const BRIDGE = { x: 24, y0: 302, y1: 330, hw: 5 };
   // The ridge: a cliff edge running along the north of the map, bending down at the west and east corners. North of it is
   // the high plateau, reached only by the mountain trail.
-  function ridgeY(x) { return -158 + Math.sin(x * 0.045) * 4 + Math.sin(x * 0.013 + 1) * 3 + Math.max(0, -170 - x) * 1.1 + Math.max(0, Math.min(x, 470) - 352) * 0.45; } // v5.8.0: level off past the old map edge (the town strip)
+  function ridgeY(x) { return -158 + Math.sin(x * 0.045) * 4 + Math.sin(x * 0.013 + 1) * 3 + Math.max(0, -170 - x) * 1.1 + Math.max(0, Math.min(x, 470) - 352) * 0.45 - Math.max(0, Math.min(x, 640) - 530) * 0.12; } // v5.8.0: level off past the old map edge (the town strip); v5.11.0: step back 13 north behind the new town
   const CLIFF = 5; // world units of rock face below the ridge line
   // the trail (dirt, bought as its own special plot): up the gap between 林场 and 北牧场, through the cliff, along the plateau
   const TRAIL = [P(204, -108), P(190, -126), P(214, -144), P(196, -166), P(196, -184)];
@@ -60,21 +63,21 @@
     { id: 'play', name: '屋西空地', terrain: 'flat', rect: [-76, 64, -24, 124], gate: P(-48, 64), sign: P(-60, 60), price: 2200, wood: 40, bundle: 'playground',
       mods: ['playground', 'meadow'], desc: '紧挨着家的一块平地，几乎只适合做乐园（价钱里已经含滑梯、沙坑和秋千）' },
     { id: 'glade', name: '林间空地', terrain: 'flat', rect: [-120, 136, -30, 186], gate: P(-30, 160), sign: P(-26, 150), price: 2400,
-      mods: ['field', 'orchard', 'meadow', 'playground', 'inn'], field: { cols: 8, rows: 3 }, desc: '南边林子里的一块平地' },
+      mods: ['field', 'orchard', 'meadow', 'playground'], field: { cols: 8, rows: 3 }, desc: '南边林子里的一块平地' },
     { id: 'swbank', name: '西南河湾', terrain: 'river', rect: [-136, 200, -80, 256], gate: P(-80, 228), sign: P(-76, 218), price: 3200,
       mods: ['field', 'meadow', 'workshop', 'dam'], field: { cols: 5, rows: 4 }, wheel: P(-146, 256), desc: '靠河的一小块地，河边能修水车' },
     { id: 'wbank', name: '西河湾', terrain: 'river', rect: [-200, 40, -156, 140], gate: P(-176, 40), sign: P(-166, 36), price: 3400,
       mods: ['field', 'workshop', 'dam'], field: { cols: 4, rows: 7 }, wheel: P(-208, 120), desc: '西边河岸上的长条地' },
     { id: 'sbank', name: '南河湾', terrain: 'river', rect: [40, 222, 140, 296], gate: P(40, 250), sign: P(36, 240), price: 3800,
-      mods: ['field', 'workshop', 'dam', 'inn'], field: { cols: 8, rows: 3 }, wheel: P(110, 306), desc: '南边河湾，土厚，也能修水车' },
+      mods: ['field', 'workshop', 'dam'], field: { cols: 8, rows: 3 }, wheel: P(110, 306), desc: '南边河湾，土厚，也能修水车' },
     { id: 'bridge', name: '石桥', terrain: 'special', special: 'bridge', rect: [12, 300, 36, 332], gate: P(24, 300), sign: P(38, 296), price: 5500, wood: 30,
       mods: ['bridge'], desc: '河上唯一的桥，修好才能去河对岸' },
     { id: 'swacross', name: '河对岸·西', terrain: 'across', rect: [-110, 330, 10, 378], gate: P(10, 350), sign: P(14, 342), price: 3600, needs: 'bridge',
-      mods: ['field', 'pasture', 'orchard', 'meadow', 'workshop', 'inn'], field: { cols: 8, rows: 3 }, desc: '过了桥往西的一大片平地' },
+      mods: ['field', 'pasture', 'orchard', 'meadow', 'workshop'], field: { cols: 8, rows: 3 }, desc: '过了桥往西的一大片平地' },
     { id: 'seacross', name: '河对岸·东', terrain: 'across', rect: [34, 332, 140, 380], gate: P(34, 350), sign: P(30, 342), price: 4000, needs: 'bridge',
-      mods: ['field', 'pasture', 'meadow', 'workshop', 'dam', 'inn'], field: { cols: 8, rows: 3 }, wheel: P(100, 324), desc: '过了桥往东，挨着河' },
+      mods: ['field', 'pasture', 'meadow', 'workshop', 'dam'], field: { cols: 8, rows: 3 }, wheel: P(100, 324), desc: '过了桥往东，挨着河' },
     { id: 'eslope', name: '东坡', terrain: 'slope', rect: [362, -100, 440, -12], gate: P(362, -20), sign: P(358, -30), price: 3500,
-      mods: ['pasture', 'field', 'orchard', 'meadow', 'inn'], field: { cols: 6, rows: 4 }, desc: '北牧场东边的缓坡' },
+      mods: ['pasture', 'field', 'orchard', 'meadow'], field: { cols: 6, rows: 4 }, desc: '北牧场东边的缓坡' },
     { id: 'eroad', name: '东大道', terrain: 'special', special: 'road', rect: [362, 40, 448, 92], gate: P(362, 66), sign: P(358, 56), price: 6500, wood: 30,
       mods: ['road'], desc: '通向隔壁镇子的路，能看见镇子的屋顶' },
     { id: 'eshore', name: '东南滩', terrain: 'flat', rect: [362, 112, 440, 200], gate: P(362, 150), sign: P(358, 140), price: 3000,
@@ -120,7 +123,7 @@
     x_neslope: [P(204, -106), P(240, -106), P(240, -112)],
   };
   // inside a bought road plot the road runs on to the town gate at the map edge
-  const TOWN = { gate: P(440, 66), lane: [P(362, 66), P(440, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
+  const TOWN = { gate: P(596, 66), lane: [P(362, 66), P(596, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
   if (WD) for (const k in ROUTES) if (!WD.ROUTES[k]) WD.ROUTES[k] = ROUTES[k];
 
   // ---------- the grazing meadow behind the sheep fold (a fold upgrade, not a plot) ----------
@@ -147,7 +150,7 @@
     if (riverDist(x, y) < RIVER_HW + BANK + pad * 0.6) return true;
     const ry = ridgeY(x); if (y < ry + 2 + pad * 0.3 && y > ry - CLIFF - 3) return true;
     if (onTrail(x, y, 7 + pad * 0.5)) return true;
-    if (inRect(x, y, [TOWN.gate.x - 10, 40, 460, 92])) return true;
+    if (inRect(x, y, [440, 40, 460, 92])) return true;
     return false;
   }
   // a world point that is outside the old 64 x 50 map
@@ -179,8 +182,9 @@
     if (p.special || p.mods.length < 2) return { id, plot: p, mod, ok: false, reason: 'fixed' };
     if (!p.mods.includes(mod)) return { id, plot: p, mod, ok: false, reason: 'module' };
     if (cur.mod === mod) return { id, plot: p, mod, ok: false, reason: 'same' };
-    const s = setupOf(p, mod), cost = round50(p.price * 0.25) + s.cost, w = 10 + s.wood;
-    const out = { id, plot: p, mod, from: cur.mod, cost, wood: w, short: Math.max(0, cost - (coins | 0)), shortWood: Math.max(0, w - (wood | 0)) };
+    const free = !!cur.free; // v5.11.0.5: the old 民宿院 plot is rezoned once for nothing (the module's own setup too)
+    const s = setupOf(p, mod), cost = free ? 0 : round50(p.price * 0.25) + s.cost, w = free ? 0 : 10 + s.wood;
+    const out = { id, plot: p, mod, from: cur.mod, cost, wood: w, free, short: Math.max(0, cost - (coins | 0)), shortWood: Math.max(0, w - (wood | 0)) };
     out.ok = !out.short && !out.shortWood; if (!out.ok) out.reason = 'short';
     return out;
   }
@@ -188,7 +192,8 @@
   function validPlots(v) {
     const out = {}; if (!v || typeof v !== 'object' || Array.isArray(v)) return out;
     for (const id of PLOT_IDS) { const o = v[id]; if (!o || typeof o !== 'object') continue; const p = BY_ID[id];
-      const mod = p.mods.includes(o.mod) ? o.mod : p.mods[0]; out[id] = { mod, day: Math.max(1, Math.round(+o.day) || 1) }; }
+      const mod = p.mods.includes(o.mod) || LEGACY_MODS.includes(o.mod) ? o.mod : p.mods[0]; out[id] = { mod, day: Math.max(1, Math.round(+o.day) || 1) };
+      if (o.free && LEGACY_MODS.includes(mod)) out[id].free = 1; } // v5.11.0.5: one free rezone of an old 民宿院
     for (const id of Object.keys(out)) { const p = BY_ID[id]; if (p.needs && !out[p.needs]) delete out[id]; } // never across a river without the bridge
     return out;
   }
@@ -263,6 +268,6 @@
 
   const api = { MODULES, MODULE_IDS, TERRAIN, RIVER, RIVER_HW, BANK, BRIDGE, TRAIL, TRAIL_TOP, TRAIL_EAST, TOWN, GRAZE, PLOTS, PLOT_IDS, FIELD_PLOT_IDS, ROUTES, OLD, CLIFF,
     plot, isPlotId, plotAt, terrainAt, clearAt, outer, riverDist, riverHW, ridgeY, onTrail, polyDist, grazeHours,
-    gateOpen, workers, offer, rezoneOffer, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve };
+    gateOpen, workers, offer, rezoneOffer, LEGACY_MODS, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFPlots = api;
 })(typeof window !== 'undefined' ? window : globalThis);

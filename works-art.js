@@ -20,46 +20,47 @@
       if (z === 9) return c < 1.3 ? Wt[4] : null;                                     // nozzle
       return null; });
     // 磨坊: a stone mill with a tall gable and a millstone leaning by the door
-    const mill = (() => { const X0 = 2, X1 = 25, Y0 = 3, Y1 = 19, ZW = 15;
+    const mill = (() => { const X0 = 2, X1 = 25, Y0 = 3, Y1 = 19, ZW = 23; // v5.11.0.9 (房子比例): walls 23 (were 15), a door a grown-up fits through
       const roof = { z0: ZW + 1, pitch: 0.7, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 2, y1: Y1 + 2, fy0: Y0, fy1: Y1, base: Wd[1], line: Wd[0] || Ink[1], ridge: Wd[0] || Ink[1], trim: Wd[3] };
-      return B(28, 26, 34, (x, y, z) => {
+      return B(28, 26, 42, (x, y, z) => {
         if (z <= 7 && Math.hypot(x - 22, z - 4) < 4.2 && y >= Y1 + 1 && y <= Y1 + 2) return Math.hypot(x - 22, z - 4) < 1 ? St[1] : St[3]; // millstone
         if (z <= 2 && y > Y1 && y <= Y1 + 4 && x >= 5 && x <= 9) return Wd[3];        // a sack
         if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
           const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
           if (!(front || side || back)) return St[1];
-          if (front && x >= 11 && x <= 16 && z >= 1 && z <= 9) return z === 9 || x === 11 || x === 16 ? Wd[4] : Wd[2];   // the door
-          if (front && x >= 4 && x <= 7 && z >= 9 && z <= 12) return (x === 4 || x === 7 || z === 9 || z === 12) ? Ac[0] : Ink[1];
+          if (front && x >= 11 && x <= 16 && z >= 1 && z <= 19) return z === 19 || x === 11 || x === 16 ? Wd[4] : (z === 10 ? Wd[3] : Wd[2]);   // the door
+          if (front && ((x >= 4 && x <= 7) || (x >= 20 && x <= 23)) && z >= 11 && z <= 15) return (x === 4 || x === 7 || x === 20 || x === 23 || z === 11 || z === 15) ? Ac[0] : Ink[1];
           if (z === 0) return St[1];
           return ((front || back) ? (x + (z >> 2)) % 5 === 0 : (y + (z >> 2)) % 5 === 0) || z % 4 === 0 ? St[2] : St[3];
         }
         const r = gable(x, y, z, roof); return r === 'fill' ? St[2] : r; }, { big: 1 }); })();
     // 果酱铺: a plank cottage with a red-and-white awning and jars on the counter
-    const jam = (() => { const X0 = 2, X1 = 23, Y0 = 3, Y1 = 16, ZW = 13;
+    const jam = (() => { const X0 = 2, X1 = 23, Y0 = 3, Y1 = 16, ZW = 21; // v5.11.0.9: walls 21 (were 13)
       const roof = { z0: ZW + 1, pitch: 0.9, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 2, y1: Y1 + 2, fy0: Y0, fy1: Y1, base: Rf[3], line: Rf[2], ridge: Rf[2], trim: Wd[4] };
-      return B(26, 24, 26, (x, y, z) => {
+      return B(26, 24, 36, (x, y, z) => {
         if (y >= Y1 + 1 && y <= Y1 + 5 && x >= X0 + 1 && x <= X1 - 1 && z === ZW - 2 + ((Y1 + 5 - y) >> 1)) return ((x >> 1) & 1) ? Rf[3] : Ac[0]; // awning
-        if (y >= Y1 + 1 && y <= Y1 + 2 && x >= 4 && x <= 20 && z <= 5) { if (z === 5) return Wd[4]; return z < 5 && (x === 4 || x === 20) ? Wd[2] : (z === 4 ? null : Wd[3]); } // counter
-        if (z === 6 && y === Y1 + 2 && x >= 6 && x <= 18 && x % 3 === 0) return [Rf[2], Ac[2], Ac[3], Rf[3], Ac[1]][(x / 3) % 5];   // jars
+        if ((x === X0 + 1 || x === X1 - 1) && y === Y1 + 5 && z < ZW - 2) return Wd[2];                     // awning posts
+        if (y >= Y1 + 1 && y <= Y1 + 2 && x >= 4 && x <= 20 && z <= 8) { if (z === 8) return Wd[4]; return z < 8 && (x === 4 || x === 20) ? Wd[2] : (z === 7 ? null : Wd[3]); } // counter
+        if (z === 9 && y === Y1 + 2 && x >= 6 && x <= 18 && x % 3 === 0) return [Rf[2], Ac[2], Ac[3], Rf[3], Ac[1]][(x / 3) % 5];   // jars
         if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
           const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
           if (!(front || side || back)) return Wd[2];
-          if (front && x >= 9 && x <= 15 && z >= 6 && z <= 11) return (x === 9 || x === 15 || z === 6 || z === 11) ? Ac[0] : Ink[1];  // serving window
+          if (front && x >= 8 && x <= 16 && z >= 8 && z <= 16) return (x === 8 || x === 16 || z === 8 || z === 16) ? Ac[0] : Ink[1];  // serving window
           if (z === ZW || z === 0) return Wd[4];
           return (front || back) ? (x % 4 === 0 ? Wd[2] : Wd[3]) : (y % 4 === 0 ? Wd[2] : Wd[3]);
         }
         const r = gable(x, y, z, roof); return r === 'fill' ? Wd[2] : r; }, { big: 1 }); })();
     // 奶酪坊: white plaster, a blue-grey roof and a round cheese sign on the gable
-    const cheese = (() => { const X0 = 2, X1 = 25, Y0 = 3, Y1 = 18, ZW = 14;
+    const cheese = (() => { const X0 = 2, X1 = 25, Y0 = 3, Y1 = 18, ZW = 22; // v5.11.0.9: walls 22 (were 14)
       const roof = { z0: ZW + 1, pitch: 0.9, x0: X0 - 2, x1: X1 + 2, y0: Y0 - 2, y1: Y1 + 2, fy0: Y0, fy1: Y1, base: St[2], line: St[1], ridge: St[1], trim: Wd[4] };
-      return B(28, 24, 28, (x, y, z) => {
+      return B(28, 24, 38, (x, y, z) => {
         if (y === Y1 + 2 && Math.hypot(x - 13.5, z - (ZW + 6)) < 3.2) return Math.hypot(x - 13.5, z - (ZW + 6)) < 2.2 ? Ac[1] : Ac[2];       // cheese sign
         if (z <= 3 && y > Y1 && y <= Y1 + 4 && Math.hypot(x - 21, y - (Y1 + 2)) < 2.4) return z === 3 ? Ac[1] : Ac[2];                            // a wheel by the door
         if (z <= ZW && x >= X0 && x <= X1 && y >= Y0 && y <= Y1) {
           const front = y >= Y1 - 1, side = x <= X0 + 1 || x >= X1 - 1, back = y <= Y0 + 1;
           if (!(front || side || back)) return Ac[0];
-          if (front && x >= 11 && x <= 16 && z >= 1 && z <= 9) return z === 9 || x === 11 || x === 16 ? Wd[4] : Wt[2];
-          if (front && x >= 4 && x <= 7 && z >= 8 && z <= 11) return (x === 4 || x === 7 || z === 8 || z === 11) ? Wd[4] : Ink[1];
+          if (front && x >= 11 && x <= 16 && z >= 1 && z <= 19) return z === 19 || x === 11 || x === 16 ? Wd[4] : Wt[2];
+          if (front && ((x >= 4 && x <= 7) || (x >= 20 && x <= 23)) && z >= 11 && z <= 15) return (x === 4 || x === 7 || x === 20 || x === 23 || z === 11 || z === 15) ? Wd[4] : Ink[1];
           if (z <= 1) return St[2];
           return (front || back) ? ((x + z) % 9 === 0 ? St[3] : Ac[0]) : ((y + z) % 9 === 0 ? St[3] : Ac[0]);
         }
@@ -164,7 +165,7 @@
   // light sources at night: powered lamps glow, the workshops' windows are warm while they work
   function lights(hz) {
     if ((S.eff && S.eff.wheel) > 0) for (const l of lamps()) if (l.on) hz(l.x, l.y, 22, 38, 0.9);
-    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.left > 0)) continue; const p = PW.workPos(w); hz(p.x, p.y + 6, 10, 18, 0.5); }
+    for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.left > 0)) continue; const p = PW.workPos(w); hz(p.x, p.y + 6, 14, 18, 0.5); }
   }
   // the lamp ids that are lit now (works.js decides the fruit bonus from these)
   const litLamps = () => (S.eff && S.eff.wheel) > 0 ? lamps().filter(l => l.on) : [];

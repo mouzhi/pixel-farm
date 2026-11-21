@@ -54,16 +54,18 @@
       if ((x <= 1 || x >= 24) && (y === 1 || y === 2) && z <= 18) return z === 18 ? Wd[4] : Wd[2];
       return null; });
     // 派对区: a long table with a cloth and food, two benches, four posts for the lights (strung by the overlay)
+    // v5.11.0.15: the table and benches run almost post to post (staggered places, decor.js SEATS); the plates are drawn by game.js
     const party = B(44, 30, 22, (x, y, z) => {
       if ((x <= 1 || x >= 42) && (y <= 1 || y >= 28) && z <= 20) return z === 20 ? Wd[4] : Wd[2];
-      const tx = x >= 12 && x <= 31, ty = y >= 11 && y <= 18;
+      const tx = x >= 4 && x <= 39, ty = y >= 11 && y <= 18;
       if (tx && ty) {
-        if (z <= 4) return ((x === 12 || x === 31) && (y === 11 || y === 18)) ? Wd[1] : null;
+        if (z <= 4) return ((x === 4 || x === 39 || x === 21) && (y === 11 || y === 18)) ? Wd[1] : null;
         if (z === 5) return (y === 11 || y === 18) ? Rf[2] : Ac[0];
-        if (z === 6) { const k = (x * 7 + y * 3) % 9; return k === 0 ? Ac[2] : k === 3 ? Rf[3] : k === 5 ? G[4] : k === 7 ? Ac[1] : null; }
-        if (z === 7) return (x * 7 + y * 3) % 9 === 0 && x % 2 === 0 ? Ac[1] : null;
+        if (z === 6) { if (x % 10 >= 3 && x % 10 <= 5 && y >= 13 && y <= 16) return (x + y) % 2 ? Ac[2] : Ac[1]; // bowls down the middle
+          return (x === 4 || x === 39) && (y === 12 || y === 17) ? St[3] : null; }
+        if (z === 7) return x % 10 === 4 && y >= 14 && y <= 15 ? Rf[3] : null;
         return null; }
-      if (x >= 12 && x <= 31 && (y === 7 || y === 8 || y === 21 || y === 22)) { if (z === 3) return (x & 1) ? Wd[3] : Wd[4]; if (z <= 2) return (x === 13 || x === 30) ? Wd[1] : null; }
+      if (x >= 5 && x <= 38 && (y === 7 || y === 8 || y === 21 || y === 22)) { if (z === 3) return (x & 1) ? Wd[3] : Wd[4]; if (z <= 2) return (x === 6 || x === 21 || x === 37) ? Wd[1] : null; }
       return null; });
     const carving = B(8, 8, 13, (x, y, z) => {
       const body = ((x - 3.5) / 3.2) ** 2 + ((y - 3.5) / 2.8) ** 2 + ((z - 3) / 3.4) ** 2 < 1, head = ((x - 3.5) / 2.4) ** 2 + ((y - 4) / 2.2) ** 2 + ((z - 8.5) / 2.3) ** 2 < 1;
@@ -179,7 +181,7 @@
       if (lamp && lit && p.id !== 'stringlights' && p.id !== 'party') { const [sx, sy] = proj(p.x, p.y), h = p.id === 'lamppost' ? 12 : 5; ctx.fillStyle = '#fff4b8'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - h, 2, 2); }
       if (lamp && !lamp.on && wheel && night > 0.2 && !(p.id === 'party' && partyNow(T)) && X.farIcon) { const [sx, sy] = proj(p.x, p.y); ctx.globalAlpha = 0.85; ctx.drawImage(X.farIcon(), Math.round(sx) - 3, Math.round(sy) - 30); ctx.globalAlpha = 1; } }
     // pending orders: a little flag where it is going
-    for (const q of S.decor.orders) { if (!onScreen(q.x, q.y, 30)) continue; const [sx, sy] = proj(q.x, q.y), x = Math.round(sx), y = Math.round(sy);
+    for (const q of S.decor.orders) { if (q.op === 'store' || !onScreen(q.x, q.y, 30)) continue; const [sx, sy] = proj(q.x, q.y), x = Math.round(sx), y = Math.round(sy);
       ctx.fillStyle = Ink[0]; ctx.fillRect(x, y - 9, 1, 9); ctx.fillStyle = q.st === 1 ? Ac[1] : Ac[0]; ctx.fillRect(x + 1, y - 9, 4, 3); }
     // someone carrying a piece: its icon bobbing over their head
     for (const c of carriers || []) { const url = c.id && ICON_URL[c.id]; if (!url) continue; const img = iconImg(c.id); if (!img) continue;
@@ -194,6 +196,6 @@
   }
   const IMG = {};
   function iconImg(id) { if (IMG[id]) return IMG[id].complete ? IMG[id] : null; if (!ICON_URL[id]) return null; const im = new Image(); im.src = ICON_URL[id]; IMG[id] = im; return null; }
-  const api = { mount, sync, blocks, lamps, litLamps, lights, draw, iconURL, bookURL, models: () => MD };
+  const api = { mount, sync, blocks, lamps, litLamps, lights, draw, iconURL, bookURL, models: () => MD, string };
   root.PFDecorArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

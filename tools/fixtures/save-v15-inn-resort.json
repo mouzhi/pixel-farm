@@ -1,0 +1,4588 @@
+{
+ "saveVersion": 15,
+ "gameVersion": "5.11.1",
+ "createdAt": 1795161550607,
+ "savedAt": 1795161588341,
+ "rng": -1988890394,
+ "clock": {
+  "day": 75,
+  "t": 108540
+ },
+ "coins": 395793,
+ "stats": {
+  "totalSold": 61,
+  "cleared": 66,
+  "earned": 21303,
+  "soldToday": 0,
+  "todayEarn": 0,
+  "dayEarn": [
+   13000,
+   160,
+   96,
+   7967,
+   80
+  ]
+ },
+ "prices": {
+  "carrot": 0.995,
+  "cabbage": 1.025,
+  "pumpkin": 1.057,
+  "strawberry": 1.037,
+  "watermelon": 0.973,
+  "wheat": 0.992,
+  "egg": 1.006,
+  "wool": 0.966,
+  "milk": 0.957,
+  "truffle": 1.014
+ },
+ "inventory": {
+  "water": 12,
+  "waterMax": 16,
+  "store": {
+   "carrot": 81,
+   "cabbage": 0,
+   "pumpkin": 0,
+   "strawberry": 4,
+   "watermelon": 0,
+   "wheat": 0
+  },
+  "bag": {
+   "carrot": 0,
+   "cabbage": 0,
+   "pumpkin": 25,
+   "strawberry": 0,
+   "watermelon": 0,
+   "wheat": 0
+  },
+  "gathered": 0,
+  "basket": [
+   "apple",
+   "apple",
+   "pumpkin",
+   "pumpkin"
+  ],
+  "wood": 2500,
+  "saplings": {
+   "apple": 5,
+   "orange": 8
+  },
+  "hay": 27,
+  "fishFood": 0,
+  "ornament": {
+   "koi": 0,
+   "goldfish": 0
+  }
+ },
+ "farmer": {
+  "x": 77,
+  "y": 185.2,
+  "sleeping": false,
+  "home": false
+ },
+ "tiles": [
+  {
+   "f": "home",
+   "c": 0,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 6.079763754634187
+   }
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 6.2338080257829285
+   }
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.859002117710188
+   }
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 0.34699438164010643
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 0,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.616942896237597
+   }
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.7918455401714891
+   }
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.780684315701947
+   }
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 3.895600527115166
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 0.3885179671645165
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 0,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.114787368187681
+   }
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 2,
+    "rot": 0.14020773056894542
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.068523628264666
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 0,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 1,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 5.8234889362193645
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 2,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 1,
+    "rot": 1.150608870331198
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 3,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": {
+    "v": 0,
+    "rot": 3.934762383317575
+   },
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 4,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "home",
+   "c": 5,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": {
+    "type": "branch",
+    "v": 0,
+    "rot": 6.261392728611827
+   },
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "east",
+   "c": 0,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.105814199550077
+   }
+  },
+  {
+   "f": "east",
+   "c": 1,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 5.324608985166997
+   }
+  },
+  {
+   "f": "east",
+   "c": 2,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.8357334263622764
+   }
+  },
+  {
+   "f": "east",
+   "c": 3,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.245636152131483
+   }
+  },
+  {
+   "f": "east",
+   "c": 4,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 6.116077431496233
+   }
+  },
+  {
+   "f": "east",
+   "c": 5,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.8820126849226653,
+    "giant": 1
+   }
+  },
+  {
+   "f": "east",
+   "c": 6,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.516016299817711,
+    "giantOf": {
+     "f": "east",
+     "c": 5,
+     "r": 0
+    }
+   }
+  },
+  {
+   "f": "east",
+   "c": 7,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.7047847532760352
+   }
+  },
+  {
+   "f": "east",
+   "c": 0,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.1483037087880077
+   }
+  },
+  {
+   "f": "east",
+   "c": 1,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.2291215084679425
+   }
+  },
+  {
+   "f": "east",
+   "c": 2,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.290089862029999
+   }
+  },
+  {
+   "f": "east",
+   "c": 3,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 6.206659269398078
+   }
+  },
+  {
+   "f": "east",
+   "c": 4,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 1.7038164301309735
+   }
+  },
+  {
+   "f": "east",
+   "c": 5,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.261810907032341,
+    "giantOf": {
+     "f": "east",
+     "c": 5,
+     "r": 0
+    }
+   }
+  },
+  {
+   "f": "east",
+   "c": 6,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.13242199778556824,
+    "giantOf": {
+     "f": "east",
+     "c": 5,
+     "r": 0
+    }
+   }
+  },
+  {
+   "f": "east",
+   "c": 7,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.895217135958374
+   }
+  },
+  {
+   "f": "east",
+   "c": 0,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.013476413488388
+   }
+  },
+  {
+   "f": "east",
+   "c": 1,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.814517933409661
+   }
+  },
+  {
+   "f": "east",
+   "c": 2,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 1.8919215882755818
+   }
+  },
+  {
+   "f": "east",
+   "c": 3,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.309259341163561
+   }
+  },
+  {
+   "f": "east",
+   "c": 4,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.7097421536780897
+   }
+  },
+  {
+   "f": "east",
+   "c": 5,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.356122599402443
+   }
+  },
+  {
+   "f": "east",
+   "c": 6,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 5.0721640820615
+   }
+  },
+  {
+   "f": "east",
+   "c": 7,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.4415890639182183
+   }
+  },
+  {
+   "f": "south",
+   "c": 0,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 1,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 1.1594186062179506
+   }
+  },
+  {
+   "f": "south",
+   "c": 2,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.829942253129557
+   }
+  },
+  {
+   "f": "south",
+   "c": 3,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.5213717845082284
+   }
+  },
+  {
+   "f": "south",
+   "c": 4,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 1.4173277211748063
+   }
+  },
+  {
+   "f": "south",
+   "c": 5,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.270535692209378
+   }
+  },
+  {
+   "f": "south",
+   "c": 6,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.9097209001611919
+   }
+  },
+  {
+   "f": "south",
+   "c": 7,
+   "r": 0,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.68242543826811
+   }
+  },
+  {
+   "f": "south",
+   "c": 0,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "south",
+   "c": 1,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.701362559394911
+   }
+  },
+  {
+   "f": "south",
+   "c": 2,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 5.983335072314367
+   }
+  },
+  {
+   "f": "south",
+   "c": 3,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 6.247039188761264
+   }
+  },
+  {
+   "f": "south",
+   "c": 4,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 4.571691731670872
+   }
+  },
+  {
+   "f": "south",
+   "c": 5,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 5.9165756666008384
+   }
+  },
+  {
+   "f": "south",
+   "c": 6,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.4451011781021954,
+    "giant": 1
+   }
+  },
+  {
+   "f": "south",
+   "c": 7,
+   "r": 1,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.8848893966153264,
+    "giantOf": {
+     "f": "south",
+     "c": 6,
+     "r": 1
+    }
+   }
+  },
+  {
+   "f": "south",
+   "c": 0,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.6890725391637536
+   }
+  },
+  {
+   "f": "south",
+   "c": 1,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.4841097473166887
+   }
+  },
+  {
+   "f": "south",
+   "c": 2,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.2840855488646776
+   }
+  },
+  {
+   "f": "south",
+   "c": 3,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.2104414473567158
+   }
+  },
+  {
+   "f": "south",
+   "c": 4,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.336700649810955
+   }
+  },
+  {
+   "f": "south",
+   "c": 5,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 2.474596236385405
+   }
+  },
+  {
+   "f": "south",
+   "c": 6,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 0.5603622684068978,
+    "giantOf": {
+     "f": "south",
+     "c": 6,
+     "r": 1
+    }
+   }
+  },
+  {
+   "f": "south",
+   "c": 7,
+   "r": 2,
+   "open": true,
+   "tilled": true,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": {
+    "type": "pumpkin",
+    "age": 4,
+    "n": 0,
+    "rot": 3.3027404587995264,
+    "giantOf": {
+     "f": "south",
+     "c": 6,
+     "r": 1
+    }
+   }
+  },
+  {
+   "f": "glade",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 6,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 7,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 6,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 7,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 6,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "glade",
+   "c": 7,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 0,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 1,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 2,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 3,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swbank",
+   "c": 4,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 4,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 4,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 4,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 4,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 5,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 5,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 5,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 5,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 0,
+   "r": 6,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 1,
+   "r": 6,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 2,
+   "r": 6,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "wbank",
+   "c": 3,
+   "r": 6,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 6,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 7,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 6,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 7,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 6,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "sbank",
+   "c": 7,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 6,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 7,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 6,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 7,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 6,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "swacross",
+   "c": 7,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 6,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 7,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 6,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 7,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 6,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "seacross",
+   "c": 7,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 0,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 1,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 2,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 3,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 4,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 5,
+   "r": 0,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 0,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 1,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 2,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 3,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 4,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 5,
+   "r": 1,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 0,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 1,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 2,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 3,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 4,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 5,
+   "r": 2,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 0,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 1,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 2,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 3,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 4,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eslope",
+   "c": 5,
+   "r": 3,
+   "open": false,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 0,
+   "r": 0,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 1,
+   "r": 0,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 2,
+   "r": 0,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 3,
+   "r": 0,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 4,
+   "r": 0,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 5,
+   "r": 0,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 0,
+   "r": 1,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 1,
+   "r": 1,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 2,
+   "r": 1,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 3,
+   "r": 1,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 4,
+   "r": 1,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 5,
+   "r": 1,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 0,
+   "r": 2,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 1,
+   "r": 2,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 2,
+   "r": 2,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 3,
+   "r": 2,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 4,
+   "r": 2,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 5,
+   "r": 2,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 0,
+   "r": 3,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 1,
+   "r": 3,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 2,
+   "r": 3,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 3,
+   "r": 3,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 4,
+   "r": 3,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  },
+  {
+   "f": "eshore",
+   "c": 5,
+   "r": 3,
+   "open": true,
+   "tilled": false,
+   "watered": false,
+   "debris": null,
+   "weed": null,
+   "crop": null
+  }
+ ],
+ "upgrades": {
+  "field": 0,
+  "can": 2,
+  "shoe": 0,
+  "hoe": 0,
+  "basket": 0,
+  "strawberry": 0,
+  "watermelon": 0,
+  "axe": 1,
+  "forest": 1,
+  "east": 1,
+  "orchard": 1,
+  "south": 1,
+  "pasture": 1,
+  "coop": 1,
+  "chicken": 1,
+  "sty": 0,
+  "pig": 0,
+  "fold": 1,
+  "graze": 0,
+  "sheep": 1,
+  "shed": 0,
+  "cow": 0,
+  "cat": 0,
+  "dog": 0,
+  "house": 2,
+  "fence": 0,
+  "rod": 0,
+  "coast": 1,
+  "searod": 0,
+  "lumber": 0,
+  "sprinkler": 0,
+  "mill": 0,
+  "jam": 0,
+  "cheese": 0,
+  "pie": 0,
+  "wheel": 0,
+  "hive": 0,
+  "coop2": 0,
+  "sty2": 0,
+  "fold2": 0,
+  "shed2": 0,
+  "bench": 0,
+  "flowerpot": 0,
+  "scarecrow": 0,
+  "birdbath": 0,
+  "lamppost": 0,
+  "stonelamp": 0,
+  "stringlights": 0,
+  "party": 0,
+  "town": 1,
+  "cottage": 0,
+  "gravel": 0,
+  "mailbox": 0,
+  "clothesline": 0,
+  "flowerbed": 0,
+  "vegfence": 0,
+  "curtains": 0,
+  "lantern": 0,
+  "roof": 0,
+  "flag": 0,
+  "awning": 0,
+  "scale": 0,
+  "sign": 0,
+  "vase": 0,
+  "straw": 0,
+  "catbed": 0,
+  "doghouse": 0,
+  "brush": 0,
+  "saltlick": 0
+ },
+ "settings": {
+  "speed": 1,
+  "decorLayout": 2,
+  "speedRefund": 0,
+  "autoBuy": false,
+  "autoDay": 0,
+  "autoN": 0
+ },
+ "offline": {
+  "win": []
+ },
+ "yard": [
+  {
+   "type": "rock",
+   "v": 0,
+   "rot": 1.6382974267099053,
+   "x": 13.91,
+   "y": 88.95
+  },
+  {
+   "type": "weed",
+   "v": 1,
+   "rot": 4.656830111853779,
+   "x": 40.07,
+   "y": 73.98
+  },
+  {
+   "type": "weed",
+   "v": 0,
+   "rot": 0.5583022767398507,
+   "x": 155.7,
+   "y": 70.13
+  }
+ ],
+ "trees": [
+  {
+   "id": "w0",
+   "x": 10,
+   "y": -93,
+   "kind": "wild",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w1",
+   "x": 60,
+   "y": -89,
+   "kind": "wild",
+   "v": 3,
+   "stage": "sapling",
+   "age": 3,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w2",
+   "x": 83,
+   "y": -90,
+   "kind": "wild",
+   "v": 7,
+   "stage": "sapling",
+   "age": 4,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w3",
+   "x": 100,
+   "y": -94,
+   "kind": "wild",
+   "v": 6,
+   "stage": "sapling",
+   "age": 4,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w4",
+   "x": 120,
+   "y": -91,
+   "kind": "wild",
+   "v": 6,
+   "stage": "stump",
+   "age": 1,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w5",
+   "x": 165,
+   "y": -90,
+   "kind": "wild",
+   "v": 3,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w6",
+   "x": 24,
+   "y": -76,
+   "kind": "wild",
+   "v": 7,
+   "stage": "sapling",
+   "age": 3,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w7",
+   "x": 65,
+   "y": -78,
+   "kind": "wild",
+   "v": 0,
+   "stage": "sapling",
+   "age": 3,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w8",
+   "x": 109,
+   "y": -75,
+   "kind": "wild",
+   "v": 6,
+   "stage": "sapling",
+   "age": 4,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w9",
+   "x": 131,
+   "y": -78,
+   "kind": "wild",
+   "v": 2,
+   "stage": "stump",
+   "age": 1,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w10",
+   "x": 152,
+   "y": -78,
+   "kind": "wild",
+   "v": 5,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w11",
+   "x": 178,
+   "y": -76,
+   "kind": "wild",
+   "v": 7,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w12",
+   "x": 39,
+   "y": -65,
+   "kind": "wild",
+   "v": 0,
+   "stage": "sapling",
+   "age": 3,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w13",
+   "x": 55,
+   "y": -65,
+   "kind": "wild",
+   "v": 5,
+   "stage": "sapling",
+   "age": 3,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w14",
+   "x": 77,
+   "y": -63,
+   "kind": "wild",
+   "v": 4,
+   "stage": "sapling",
+   "age": 3,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w15",
+   "x": 121,
+   "y": -61,
+   "kind": "wild",
+   "v": 5,
+   "stage": "sapling",
+   "age": 4,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "w16",
+   "x": 142,
+   "y": -63,
+   "kind": "wild",
+   "v": 0,
+   "stage": "sapling",
+   "age": 4,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "a0",
+   "x": -120,
+   "y": -70,
+   "kind": "apple",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 1
+  },
+  {
+   "id": "a1",
+   "x": -84,
+   "y": -78,
+   "kind": "apple",
+   "v": 1,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 1
+  },
+  {
+   "id": "a2",
+   "x": -104,
+   "y": -40,
+   "kind": "apple",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 1
+  },
+  {
+   "id": "h0",
+   "x": 22,
+   "y": 84,
+   "kind": "wild",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h1",
+   "x": 44,
+   "y": 82,
+   "kind": "wild",
+   "v": 4,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h2",
+   "x": 8,
+   "y": 96,
+   "kind": "wild",
+   "v": 3,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h3",
+   "x": 6,
+   "y": 62,
+   "kind": "wild",
+   "v": 5,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h4",
+   "x": 8,
+   "y": 14,
+   "kind": "wild",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h5",
+   "x": 128,
+   "y": 6,
+   "kind": "wild",
+   "v": 6,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h6",
+   "x": 186,
+   "y": 84,
+   "kind": "wild",
+   "v": 1,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h7",
+   "x": 184,
+   "y": 118,
+   "kind": "wild",
+   "v": 7,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h8",
+   "x": 334,
+   "y": 24,
+   "kind": "wild",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h9",
+   "x": 226,
+   "y": 104,
+   "kind": "wild",
+   "v": 3,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h10",
+   "x": 338,
+   "y": 108,
+   "kind": "wild",
+   "v": 5,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h11",
+   "x": 48,
+   "y": 196,
+   "kind": "wild",
+   "v": 2,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h12",
+   "x": 178,
+   "y": 158,
+   "kind": "wild",
+   "v": 6,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h13",
+   "x": 226,
+   "y": -92,
+   "kind": "wild",
+   "v": 1,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h14",
+   "x": 338,
+   "y": -92,
+   "kind": "wild",
+   "v": 4,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h15",
+   "x": -144,
+   "y": -92,
+   "kind": "wild",
+   "v": 7,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  },
+  {
+   "id": "h16",
+   "x": -60,
+   "y": -92,
+   "kind": "wild",
+   "v": 0,
+   "stage": "tree",
+   "age": 0,
+   "ripe": 0,
+   "cd": 0
+  }
+ ],
+ "orders": [],
+ "animals": [
+  {
+   "id": "chicken0",
+   "kind": "chicken",
+   "h": 100,
+   "cd": 1,
+   "ready": 2,
+   "pet": 0
+  },
+  {
+   "id": "sheep0",
+   "kind": "sheep",
+   "h": 100,
+   "cd": 1,
+   "ready": 0,
+   "pet": 0
+  }
+ ],
+ "troughs": {
+  "coop": {
+   "feed": 1,
+   "water": 1
+  },
+  "sty": {
+   "feed": 0,
+   "water": 0
+  },
+  "fold": {
+   "feed": 0,
+   "water": 0
+  },
+  "shed": {
+   "feed": 0,
+   "water": 0
+  },
+  "coop2": {
+   "feed": 0,
+   "water": 0
+  },
+  "sty2": {
+   "feed": 0,
+   "water": 0
+  },
+  "fold2": {
+   "feed": 0,
+   "water": 0
+  },
+  "shed2": {
+   "feed": 0,
+   "water": 0
+  }
+ },
+ "catches": [
+  {
+   "id": "carp",
+   "name": "鲤鱼",
+   "gold": 9,
+   "water": "pond",
+   "day": 73
+  },
+  {
+   "id": "grassc",
+   "name": "草鱼",
+   "gold": 13,
+   "water": "pond",
+   "day": 73
+  },
+  {
+   "id": "carp",
+   "name": "鲤鱼",
+   "gold": 9,
+   "water": "pond",
+   "day": 71
+  },
+  {
+   "id": "crucian",
+   "name": "鲫鱼",
+   "gold": 5,
+   "water": "pond",
+   "day": 70
+  }
+ ],
+ "pondFish": [],
+ "codex": {
+  "entries": {
+   "fish:crucian": {
+    "firstDay": 70,
+    "count": 1
+   },
+   "decor:carving": {
+    "firstDay": 71,
+    "count": 1
+   },
+   "fish:carp": {
+    "firstDay": 71,
+    "count": 2
+   },
+   "fish:grassc": {
+    "firstDay": 73,
+    "count": 1
+   },
+   "giant:pumpkin": {
+    "firstDay": 75,
+    "count": 2
+   }
+  }
+ },
+ "achievements": [
+  {
+   "id": "gold1000",
+   "day": 1
+  },
+  {
+   "id": "movedin",
+   "day": 1
+  },
+  {
+   "id": "allland",
+   "day": 1
+  },
+  {
+   "id": "school",
+   "day": 70
+  },
+  {
+   "id": "richday",
+   "day": 70
+  },
+  {
+   "id": "rarefind",
+   "day": 75
+  },
+  {
+   "id": "pumpkin",
+   "day": 75
+  },
+  {
+   "id": "happypets",
+   "day": 75
+  }
+ ],
+ "milestones": [
+  {
+   "id": "open",
+   "day": 1
+  },
+  {
+   "id": "met",
+   "day": 1
+  },
+  {
+   "id": "moved",
+   "day": 1
+  },
+  {
+   "id": "house",
+   "day": 1
+  },
+  {
+   "id": "tool",
+   "day": 1
+  },
+  {
+   "id": "axe",
+   "day": 1
+  },
+  {
+   "id": "region",
+   "day": 1
+  },
+  {
+   "id": "allland",
+   "day": 1
+  },
+  {
+   "id": "animal",
+   "day": 1
+  },
+  {
+   "id": "born",
+   "day": 70
+  },
+  {
+   "id": "sale",
+   "day": 70
+  },
+  {
+   "id": "fish",
+   "day": 70
+  }
+ ],
+ "streaks": {
+  "noShop": 5,
+  "shopDay": 0,
+  "happy": 5,
+  "dogDay": 0
+ },
+ "weather": {
+  "nextDay": 8,
+  "start": 517,
+  "dur": 180,
+  "lastDay": 0,
+  "rained": 0,
+  "nextStart": 0,
+  "nextDur": 0
+ },
+ "bugNet": 0,
+ "family": {
+  "love": 100,
+  "met": 1,
+  "chatDay": 0,
+  "gifts": 0,
+  "sales": 0,
+  "moved": 1,
+  "kids": [
+   {
+    "id": "kid0",
+    "name": "小豆",
+    "born": 15
+   },
+   {
+    "id": "kid1",
+    "name": "小米",
+    "born": 40
+   }
+  ],
+  "today": {
+   "day": 0,
+   "chat": 0,
+   "gift": 0,
+   "giftName": "",
+   "sales": 0
+  },
+  "kidGrowth": 1
+ },
+ "members": [
+  {
+   "id": "partner",
+   "water": 2,
+   "bag": {
+    "carrot": 0,
+    "cabbage": 0,
+    "pumpkin": 47,
+    "strawberry": 0,
+    "watermelon": 0,
+    "wheat": 0
+   },
+   "gathered": 0,
+   "basket": [
+    "pumpkin"
+   ]
+  },
+  {
+   "id": "kid0",
+   "water": 4,
+   "bag": {
+    "carrot": 0,
+    "cabbage": 0,
+    "pumpkin": 37,
+    "strawberry": 0,
+    "watermelon": 0,
+    "wheat": 0
+   },
+   "gathered": 0,
+   "basket": [
+    "pumpkin",
+    "pumpkin",
+    "pumpkin",
+    "pumpkin"
+   ]
+  },
+  {
+   "id": "kid1",
+   "water": 0,
+   "bag": {
+    "carrot": 0,
+    "cabbage": 0,
+    "pumpkin": 0,
+    "strawberry": 0,
+    "watermelon": 0,
+    "wheat": 0
+   },
+   "gathered": 0,
+   "basket": [
+    "egg",
+    "egg",
+    "egg",
+    "egg",
+    "egg"
+   ]
+  }
+ ],
+ "log": [
+  "09:00 买下了「东南滩」（3000 金），做成农田",
+  "09:00 买下了「林间空地」（2400 金），做成花甸",
+  "06:30 收获了南瓜，留下 1 颗种子",
+  "06:29 收获了南瓜，留下 1 颗种子"
+ ],
+ "plots": {
+  "eroad": {
+   "mod": "road",
+   "day": 70
+  },
+  "glade": {
+   "mod": "inn",
+   "day": 75
+  },
+  "eshore": {
+   "mod": "resort",
+   "day": 75
+  }
+ },
+ "works": {
+  "sprinklers": [],
+  "works": {},
+  "hives": [],
+  "penHost": null
+ },
+ "town": {
+  "school": {
+   "kid0": 1,
+   "kid1": 8
+  },
+  "last": {
+   "kid1": 74
+  },
+  "skip": {},
+  "mate": {
+   "last": 0,
+   "day": 74,
+   "kid": null,
+   "who": 0
+  },
+  "trade": 83,
+  "lots": {},
+  "hall": {
+   "built": {
+    "L5": 71,
+    "L8": 72,
+    "L11": 73,
+    "market": 74,
+    "bakery": 75
+   },
+   "job": null,
+   "gifts": [],
+   "paper": 70,
+   "week": {
+    "built": [
+     "L5",
+     "L8",
+     "L11",
+     "market",
+     "bakery"
+    ],
+    "gifts": 0,
+    "trade": 83
+   },
+   "market": {
+    "pick": 0,
+    "take": {
+     "crops": 1,
+     "fruit": 1,
+     "animals": 1,
+     "fish": 1,
+     "goods": 1
+    },
+    "days": 0,
+    "gold": 0,
+    "extra": 0,
+    "last": 0
+   },
+   "bakery": {
+    "pick": 0,
+    "days": 0,
+    "gold": 0,
+    "extra": 0,
+    "last": 75,
+    "offer": [
+     {
+      "id": "o0",
+      "need": [
+       {
+        "id": "cheese",
+        "n": 1
+       },
+       {
+        "id": "milk",
+        "n": 2
+       }
+      ],
+      "text": "1 块奶酪 + 2 瓶牛奶",
+      "base": 200,
+      "pay": 300
+     },
+     {
+      "id": "o1",
+      "need": [
+       {
+        "id": "wool",
+        "n": 3
+       },
+       {
+        "id": "egg",
+        "n": 8
+       }
+      ],
+      "text": "3 团羊毛 + 8 个鸡蛋",
+      "base": 260,
+      "pay": 390
+     }
+    ],
+    "take": null,
+    "done": 0
+   },
+   "woodshop": {
+    "auto": 1,
+    "days": 0,
+    "used": 0,
+    "last": 0,
+    "made": 0
+   },
+   "smithy": {
+    "up": {
+     "water": 0,
+     "works": 0,
+     "axe": 0,
+     "rod": 0,
+     "cart": 0
+    }
+   },
+   "school": {
+    "last": 0
+   },
+   "library": {
+    "days": 0,
+    "last": 0
+   },
+   "clinic": {
+    "last": 0
+   },
+   "festival": {
+    "last": 0,
+    "gift": 0
+   }
+  }
+ },
+ "home": {
+  "houses": [],
+  "rel": {
+   "kid0": {
+    "m1": 15
+   },
+   "kid1": {
+    "m0": 9,
+    "m1": 9,
+    "m2": 7
+   }
+  },
+  "nb": {
+   "n0": 16,
+   "n1": 5
+  },
+  "wed": {},
+  "help": {},
+  "teen": {
+   "kid0": 74
+  },
+  "earn": 0,
+  "path": {},
+  "wage": 0
+ },
+ "decor": {
+  "inv": {},
+  "placed": [
+   {
+    "u": 2,
+    "id": "carving",
+    "x": 116,
+    "y": 26,
+    "d": 71
+   }
+  ],
+  "orders": [],
+  "party": {
+   "last": 0,
+   "at": 0,
+   "tonight": 0,
+   "guests": 0
+  },
+  "got": {},
+  "n": 3,
+  "moon": 0
+ },
+ "inn": {
+  "cabins": 3,
+  "inn2": 1,
+  "guests": [
+   {
+    "id": "g750",
+    "look": "innB",
+    "n": 2,
+    "room": 1,
+    "from": 74,
+    "until": 76,
+    "at": 700,
+    "stay": "inn"
+   },
+   {
+    "id": "g751",
+    "look": "innE",
+    "n": 1,
+    "room": 4,
+    "from": 75,
+    "until": 77,
+    "at": 650,
+    "stay": "inn"
+   },
+   {
+    "id": "g2",
+    "look": "beachC",
+    "n": 2,
+    "room": 1,
+    "from": 75,
+    "until": 76,
+    "at": 660,
+    "stay": "beach"
+   }
+  ],
+  "diner": {
+   "lv": 2,
+   "menu": "auto",
+   "served": 37,
+   "missed": 0,
+   "last": 0
+  },
+  "resort": {
+   "huts": 2,
+   "parasols": 3,
+   "stall": 0,
+   "pier": 0,
+   "deck": 0
+  },
+  "stars": {
+   "avg": 4.5,
+   "last": [
+    {
+     "day": 72,
+     "s": 4,
+     "note": "羊好软"
+    },
+    {
+     "day": 74,
+     "s": 5,
+     "note": "南瓜饼好吃"
+    }
+   ]
+  },
+  "earn": {
+   "rooms": 4200,
+   "meals": 2650
+  },
+  "job": null,
+  "walkins": 0,
+  "arrived": 75
+ },
+ "diary": {
+  "days": [
+   {
+    "d": 1,
+    "w": 0,
+    "a": {},
+    "pr": {},
+    "wd": 0,
+    "in": 0,
+    "out": 18480,
+    "buy": [
+     "house",
+     "axe",
+     "forest",
+     "east",
+     "orchard",
+     "south",
+     "pasture",
+     "coast"
+    ],
+    "ev": []
+   },
+   {
+    "d": 70,
+    "w": 0,
+    "a": {
+     "kid0": {
+      "h": {
+       "apple": 5
+      }
+     },
+     "partner": {
+      "h": {
+       "apple": 10
+      }
+     },
+     "farmer": {
+      "p": {
+       "carrot": 14
+      },
+      "f": {
+       "crucian": 1
+      }
+     }
+    },
+    "pr": {},
+    "wd": 0,
+    "in": 13000,
+    "out": 29155,
+    "buy": [
+     "plot:eroad",
+     "town",
+     "hall:L5"
+    ],
+    "ev": []
+   },
+   {
+    "d": 71,
+    "w": 0,
+    "a": {
+     "partner": {
+      "p": {
+       "pumpkin": 14
+      },
+      "h": {
+       "carrot": 1
+      }
+     },
+     "kid0": {
+      "p": {
+       "pumpkin": 24
+      },
+      "h": {
+       "carrot": 7
+      }
+     },
+     "farmer": {
+      "p": {
+       "pumpkin": 22
+      },
+      "h": {
+       "carrot": 6
+      },
+      "f": {
+       "carp": 1
+      }
+     }
+    },
+    "pr": {
+     "egg": 2
+    },
+    "wd": 40,
+    "in": 160,
+    "out": 9475,
+    "buy": [
+     "hall:L8"
+    ],
+    "ev": []
+   },
+   {
+    "d": 72,
+    "w": 0,
+    "a": {},
+    "pr": {
+     "egg": 2
+    },
+    "wd": 48,
+    "in": 96,
+    "out": 8000,
+    "buy": [
+     "hall:L11"
+    ],
+    "ev": []
+   },
+   {
+    "d": 73,
+    "w": 0,
+    "a": {
+     "partner": {
+      "h": {
+       "apple": 10
+      }
+     },
+     "kid0": {
+      "h": {
+       "apple": 5
+      }
+     },
+     "farmer": {
+      "f": {
+       "grassc": 1,
+       "carp": 1
+      }
+     }
+    },
+    "pr": {
+     "egg": 2,
+     "wool": 2
+    },
+    "wd": 0,
+    "in": 7967,
+    "out": 30000,
+    "buy": [
+     "hall:market"
+    ],
+    "ev": []
+   },
+   {
+    "d": 74,
+    "w": 0,
+    "a": {},
+    "pr": {
+     "egg": 2
+    },
+    "wd": 16,
+    "in": 80,
+    "out": 25000,
+    "buy": [
+     "hall:bakery"
+    ],
+    "ev": []
+   },
+   {
+    "d": 75,
+    "w": 0,
+    "a": {
+     "partner": {
+      "h": {
+       "pumpkin": 1
+      }
+     },
+     "kid0": {
+      "h": {
+       "pumpkin": 4
+      }
+     },
+     "farmer": {
+      "h": {
+       "pumpkin": 2
+      }
+     }
+    },
+    "pr": {},
+    "wd": 0,
+    "in": 0,
+    "out": 5400,
+    "buy": [
+     "plot:glade",
+     "plot:eshore"
+    ],
+    "ev": []
+   }
+  ]
+ }
+}

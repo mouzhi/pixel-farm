@@ -27,7 +27,8 @@
     'audio-config.js',
     'audio.js',
     'ui.js',
-    'leaderboard.js'
+    'leaderboard.js',
+    'touch.js'
   ];
   function loadList(list, done) {
     var i = 0;

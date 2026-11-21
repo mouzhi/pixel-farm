@@ -40,7 +40,8 @@ ok('a newer save is never overwritten', () => {
 });
 ok('export string round trip and tamper check', () => {
   const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, 'save-v1-day4.json'), 'utf8')));
-  const str = SAVE.encode(s); assert(str.startsWith('PF1.')); assert.deepStrictEqual(SAVE.decode(str), s);
+  const str = SAVE.encode(s); assert(str.startsWith('PF1.')); const d = SAVE.decode(str); // v5.11.0.8: the compact form rounds floats (rot to 2 decimals)
+  assert.deepStrictEqual(d, SAVE.migrate(JSON.parse(JSON.stringify(SAVE.compact(s))))); assert.deepStrictEqual(SAVE.decode(SAVE.encode(d)), d);
   assert.throws(() => SAVE.decode(str.slice(0, -1) + (str.endsWith('a') ? 'b' : 'a'))); assert.throws(() => SAVE.decode('hello'));
 });
 ok('reset keeps one copy of the old save', () => {
@@ -257,7 +258,7 @@ ok('map: regions sit outside the farm and each other, gates on their edge, route
     const w = WD.WORLD; assert(x0 > w.x0 && y0 > w.y0 && x1 < w.x1 && y1 < w.y1);
     const rt = WD.ROUTES[r.id], end = rt[rt.length - 1]; assert.deepStrictEqual([end.x, end.y], [g.x, g.y]); assert.strictEqual(WD.areaAt(r.center.x, r.center.y), r.id); }
   assert.strictEqual(WD.areaAt(96, 64), 'home'); assert.strictEqual(WD.areaAt(-150, 200), null);
-  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '112x74'); // v5.5.0: the ring adds 12 tiles each side east-west and 12 north-south; v5.8.0: the town strip adds 24 more east
+  const map = (w => (w.x1 - w.x0) / WD.TILE + 'x' + (w.y1 - w.y0) / WD.TILE)(WD.WORLD); assert.strictEqual(map, '158x74'); // v5.5.0: the ring adds 12 tiles each side east-west and 12 north-south; v5.8.0: the town strip adds 24 more east; v5.11.0: 46 more
   const coast = WD.region('coast'); assert.strictEqual(WD.areaAt(coast.center.x, coast.center.y), 'coast');
   assert.strictEqual(WD.areaAt(coast.fish.stand.x, coast.fish.stand.y), 'coast'); // the pier is in r.water, still area 'coast'
   assert.strictEqual(WD.seaAt(280, 278), 'water');

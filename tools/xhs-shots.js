@@ -91,7 +91,7 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
   // 2. the grown farm, following the farmer
   await shot('farm.png', `(() => { ${grown} const raw = (window.PFPlatform && PFPlatform.store && PFPlatform.store().getItem('mouzhi/pixel-farm:save')) || JSON.stringify(f.snapshot()); return Object.assign(ui(), { day: S.day, town: !!S.town, version: f.version, saveBytes: unescape(encodeURIComponent(raw)).length, snapBytes: unescape(encodeURIComponent(JSON.stringify(f.snapshot()))).length }); })()`, r => r.version !== WEB_VER ? 'version ' + r.version : !r.town ? 'no town' : r.snapBytes > 65536 ? 'grown farm save is over the 64KB cloud cap: ' + r.snapBytes : null, RICH);
   // 3. the town with the new buildings (market, bakery, smithy, school, library, clinic)
-  await shot('town.png', `(() => { ${grown} unfollow(); const c = { x: 520, y: 80 }; look(c.x, c.y, 0);
+  await shot('town.png', `(() => { ${grown} unfollow(); const c = (f.jumpSpot && f.jumpSpot('town')) || { x: 520, y: 80 }; look(c.x, c.y, 0);
     return { hall: S.town.hall && Object.keys(S.town.hall).length, center: c }; })()`, null, RICH);
   // 4. shop: every tab (incl. 镇公所 and 农家乐) fits the phone
   const tabsOf = `(() => { ${grown} tap('#xhs-btn-shop'); f.refreshUI(); return [...document.querySelectorAll('#shop .tabs [data-tab]')].map(b => b.dataset.tab); })()`;

@@ -80,8 +80,16 @@
       el.style.top = Math.max(0, Math.round(bottom - 64)) + 'px';
       return;
     }
-    if (r.height) el.style.top = Math.round(r.bottom + 14) + 'px';
+    var top = r.height ? r.bottom + 14 : 0;
+    // 1.3.0：相册新照片提示（#albumToast）也在 HUD 下面。两条一起来（第一次家庭聚会 + 成就）时，这条排在照片提示下面，不叠字。
+    var alb = doc.getElementById('albumToast');
+    if (alb && !alb.hidden && doc.documentElement.classList.contains('pf-alb-toast')) {
+      var ar = alb.getBoundingClientRect();
+      if (ar.height) top = Math.max(top, ar.bottom + 18); // 18：暗晕比字框上沿多出约 10px
+    }
+    if (top) el.style.top = Math.round(top) + 'px';
   }
+  root.addEventListener('pf:toaststack', function () { if (toastEl) placeToast(); });
   P.toast = function (msg) {
     if (!msg) return;
     var el = ensureToast();
@@ -116,6 +124,7 @@
     // 1.2.0：pf:say 是对玩家这一下点按的回话（「点家门口的池塘…」「标记了要放进池塘的金鱼」），
     // 以前和农场日志同级，0.4 秒内就被下一条日志顶掉，手机上等于没说。改成按点按反馈处理。
     root.addEventListener('pf:say', function (e) {
+      if (P.touch && doc.documentElement.classList.contains('pt-mode')) return; // touch.js shows it in the tool bar
       if (e && e.detail) { lastToastSrc = String(e.detail); P.notice(String(e.detail)); }
     });
     function check() {
@@ -266,6 +275,7 @@
     P.followFarmer = !!on;
     markIcons();
   }
+  P.setFollow = setFollow; // touch.js pauses following while a tool is on
 
   function compactHud() {
     var day = doc.getElementById('day');
@@ -921,6 +931,7 @@
     tools.addEventListener('click', function (e) {
       var b = e.target && e.target.closest ? e.target.closest('button[data-m]') : null;
       if (!b) return;
+      if (P.touch) return; // touch.js: the ⚒ toolbox + crosshair replace these hints
       var m = b.getAttribute('data-m'), k = b.getAttribute('data-k') || '';
       var hint = String(b.title || '').replace(/[（(][^）)]*Esc[^）)]*[）)]/g, '').trim();
       setTimeout(function () {

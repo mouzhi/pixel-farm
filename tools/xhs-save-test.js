@@ -141,6 +141,22 @@ ok('late-game compact JSON also stays under the 64KB cloud content cap', () => {
   assert(bytes < 65536, 'late-game save must fit in one cloud content object');
 });
 
+ok('1.3.0: real v15 saves, compact (v5.11.0.8) with a full album, stay well under the 64KB cloud cap; photos never go in the save', () => {
+  const AL = require('../album.js');
+  for (const f of ['save-v15-day72-cottage.json', 'save-v15-inn-resort.json']) {
+    const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')));
+    const A = AL.valid(s.album || []);
+    AL.MOMENTS.forEach((m, i) => AL.add(A, { id: m.id, d: 300 + i, t: 600, x: 100.5, y: 80.25, w: ['farmer', 'partner', 'kid0', 'kid1'] }));
+    s.album = AL.pack(A);
+    const json = JSON.stringify(SAVE.compact(s)), bytes = Buffer.byteLength(json, 'utf8');
+    console.log('  ', f, 'compact + full album:', bytes, 'bytes,', A.list.length, 'photos');
+    assert(A.list.length === AL.MOMENTS.length, 'every moment is in the album');
+    assert(bytes < 48 * 1024, f + ' must leave headroom under the 64KB cloud content cap');
+    assert(!/data:image\//.test(json), 'album pictures live in localStorage, never in the cloud save');
+    assert.strictEqual(SAVE.migrate(JSON.parse(json)).saveVersion, 15);
+  }
+});
+
 const PLATFORM = fs.readFileSync(path.join(__dirname, '../platforms/xhs/platform.js'), 'utf8');
 
 function lsMock(init) {
@@ -324,6 +340,27 @@ function cloudCases() {
           assert.strictEqual(onCloud.savedAt, 300);
           assert.strictEqual(onCloud.clock.day, 12);
           console.log('ok   local-newer: keeps local and write-through to cloud');
+          n++;
+        });
+      });
+    })
+    .then(() => {
+      // 1.3.0: album thumbnails go to the container Storage only (official §3.6), never localStorage, and the save flush does not rewrite them
+      const AK = 'mouzhi/pixel-farm:album:123';
+      const { P, calls, local, xhsMem } = loadPlatform({ noCloud: true, local: {}, xhs: { [AK]: JSON.stringify({ open: ['data:image/png;base64,AAAA', 0] }) } });
+      return waitReady(P).then(() => {
+        const A = P.albumStore();
+        assert.strictEqual(JSON.parse(A.getItem(AK)).open[0], 'data:image/png;base64,AAAA', 'album thumbs read back from the container Storage');
+        const before = calls.setStorage;
+        A.setItem(AK, JSON.stringify({ open: ['data:image/png;base64,BBBB', 1] }));
+        assert.strictEqual(calls.setStorage, before + 1, 'one setStorage for the album key');
+        assert.strictEqual(local.getItem(AK), null, 'album thumbs never go to localStorage');
+        assert.throws(() => A.setItem('mouzhi/pixel-farm:save', '{}'), /album store/);
+        P.store().setItem('mouzhi/pixel-farm:save', JSON.stringify(saveObj(500, 3)));
+        return P.flush().then(() => {
+          assert.strictEqual(local.getItem(AK), null, 'the save flush does not copy album thumbs to localStorage');
+          assert.strictEqual(JSON.parse(JSON.parse(xhsMem.get(AK))).open[0], 'data:image/png;base64,BBBB');
+          console.log('ok   1.3.0 album thumbs: container Storage only, not localStorage, not in the save flush');
           n++;
         });
       });

@@ -48,3 +48,5 @@ PF_URL=http://127.0.0.1:8770 node tools/fps.js   # 换端口（多个 worktree �
 | `build_sprites_A.py` | 把 `assets/src/` 里的 SpriteCook 原图量化到调色板，生成 `assets/sprites.js`、`chars.png`、`crops.png`。 |
 | `dl.py prefix url…` | 把 SpriteCook 的输出下载到 `assets/src/`。 |
 | `views_to_voxels.py`、`viewer.html` | 早期体素模型工具和查看器。 |
+
+| `events-test.js` / `countdown-shots.js` | **v5.10.14 活动倒计时（CI 用）**：下一次活动日的计算（间隔 + 偏移，解锁当天不算）、只列出已解锁的集市 / 运动会 / 丰收节、当天文案（今晚18点 / 今天7点 / 进行中）、`register()` 新活动；浏览器检查桌面和 390×844、展开列表、活动当天、第 72 天样例存档未解锁时不显示。截图 `countdown_*.png`。 |
