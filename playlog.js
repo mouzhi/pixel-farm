@@ -10,12 +10,13 @@
   const SYNC_MIN_MS = 60000;
   const IDB_NAME = 'mouzhi-pixel-farm', IDB_STORE = 'fs', IDB_KEY = 'dir';
   const SAVE_FILE = 'pixel-farm-save.json', LOG_FILE = 'pixel-farm-playlog.json', PROBE_FILE = 'pixel-farm-sync-probe';
+  const SNAP_DIR = 'saves'; // daily snapshots live here, never mixed with the live latest files
   const INCOME = ['crops', 'fruit', 'animals', 'fish', 'wood', 'yard', 'offline'];
 
   let storage = null, data = emptyData(), cur = null, session = null;
   let dirHandle = null, perm = 'prompt', lastWrite = 0, lastError = null, syncTimer = null, syncQueued = null;
   let needsRepick = false, pickFn = null; // v5.11.0.22: a stale handle needs a fresh folder pick, not another silent requestPermission
-  let conflict = null, folderChecked = false;
+  let folderChecked = false; // first write has already preserved any pre-existing folder save
   let fps = { sum: 0, n: 0, min: Infinity }, getSave = null;
 
   function emptyIncome() { const o = {}; for (const k of INCOME) o[k] = 0; return o; }
@@ -351,11 +352,6 @@
     const h = Math.floor(t / 60) % 24, m = t % 60;
     return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
   }
-  function publicConflict() {
-    if (!conflict) return null;
-    const slim = p => p ? { day: p.day, t: p.t, savedAt: p.savedAt, coins: p.coins, clock: peekClock(p), unreadable: !!p.unreadable } : null;
-    return { folder: slim(conflict.folder), browser: slim(conflict.browser), paused: true };
-  }
   function emitSync() {
     if (typeof dispatchEvent !== 'function' || typeof CustomEvent !== 'function') return;
     try { dispatchEvent(new CustomEvent('pf:sync', { detail: status() })); } catch (e) {}
@@ -366,24 +362,6 @@
       if (/not found|NotFoundError/i.test(errText(e))) return null;
       throw e;
     }
-  }
-  // First write of the real save/playlog files: if the folder already has a different
-  // farm save, keep both, pause overwriting, and let the player choose.
-  async function detectConflict(handle, snap) {
-    const h = handle || dirHandle;
-    if (!h) return null;
-    let text = null;
-    try { text = await readFolderText(h, SAVE_FILE); }
-    catch (e) { logErr(e); return null; }
-    if (text == null || !String(text).trim()) return null;
-    const browser = peekSave(snap || (getSave && getSave()));
-    let obj = null;
-    try { obj = JSON.parse(text); }
-    catch (e) { return { folder: { day: null, t: null, savedAt: null, coins: null, unreadable: true }, browser, raw: text, obj: null }; }
-    const folder = peekSave(obj);
-    if (!folder || !browser) return null;
-    if (peekEqual(folder, browser)) return null;
-    return { folder, browser, raw: text, obj };
   }
   async function writeRaw(handle, name, text) {
     const fh = await handle.getFileHandle(name, { create: true });
@@ -404,16 +382,70 @@
     }
     return stem + '-' + Date.now() + ext;
   }
-  function backupFileName(kind, peek) {
-    const day = peek && peek.day != null ? 'day' + peek.day : 'unknown';
-    return kind === 'log' ? 'pixel-farm-playlog-backup-' + day + '.json' : 'pixel-farm-save-backup-' + day + '.json';
+  function snapBase(name) { return String(name || '').split('/').pop(); }
+  async function getSavesDir(handle, create) {
+    if (!handle || typeof handle.getDirectoryHandle !== 'function') {
+      if (!create) return null;
+      throw new Error('no directory handle');
+    }
+    try { return await handle.getDirectoryHandle(SNAP_DIR, { create: !!create }); }
+    catch (e) {
+      if (!create && /not found|NotFoundError/i.test(errText(e))) return null;
+      throw e;
+    }
   }
-  async function backupExisting(handle, name, peek) {
-    const text = await readFolderText(handle, name);
-    if (text == null) return null;
-    const dest = await uniqueName(handle, backupFileName(name === LOG_FILE ? 'log' : 'save', peek));
-    await writeRaw(handle, dest, text);
-    return dest;
+  function sameSnapText(a, b) {
+    if (a == null || b == null) return false;
+    if (a === b || String(a).trim() === String(b).trim()) return true;
+    try {
+      const pa = peekSave(JSON.parse(a)), pb = peekSave(JSON.parse(b));
+      return !!(pa && pb && peekEqual(pa, pb));
+    } catch (e) { return false; }
+  }
+  function sameFarm(existingText, snap) {
+    const peek = peekSave(snap);
+    if (!peek) return false;
+    try {
+      const ep = peekSave(JSON.parse(existingText));
+      return !!(ep && peek.createdAt != null && ep.createdAt === peek.createdAt);
+    } catch (e) { return false; }
+  }
+  function nextLetter(tl) {
+    const cur = tl || 'a';
+    if (cur === 'z' || !/^[a-z]$/.test(cur)) return 't' + Date.now().toString(36).slice(-4);
+    return String.fromCharCode(cur.charCodeAt(0) + 1);
+  }
+  async function nextFreeDayName(saves, day, startTl) {
+    let tl = startTl || 'a';
+    for (let i = 0; i < 24; i++) {
+      const name = daySnapName(day, tl);
+      if (!(await existsName(saves, name))) return { name, timeline: tl };
+      tl = nextLetter(tl);
+    }
+    const tl2 = 't' + Date.now().toString(36).slice(-4);
+    return { name: daySnapName(day, tl2), timeline: tl2 };
+  }
+  // Before the first write of the live latest files, copy the folder's existing
+  // pixel-farm-save.json into saves/ under that farm's own day number. Bytes stay
+  // identical. If that day file already exists with different content, add a
+  // timeline suffix. The folder is write-only after this; the browser save is
+  // the one that continues.
+  async function preserveExistingSave(handle) {
+    const text = await readFolderText(handle, SAVE_FILE);
+    if (text == null || !String(text).trim()) return null;
+    let peek = null;
+    try { peek = peekSave(JSON.parse(text)); } catch (e) {}
+    const day = peek && peek.day != null ? peek.day : 0;
+    const saves = await getSavesDir(handle, true);
+    let name = daySnapName(day, 'a');
+    if (await existsName(saves, name)) {
+      const existing = await readFolderText(saves, name);
+      if (sameSnapText(existing, text)) return { name, dir: SNAP_DIR };
+      const free = await nextFreeDayName(saves, day, 'b');
+      name = free.name;
+    }
+    await writeRaw(saves, name, text);
+    return { name, dir: SNAP_DIR };
   }
   // Permission probe must NEVER write pixel-farm-save.json or the playlog. A tiny
   // throwaway file is enough to see whether Chrome will actually let us write.
@@ -451,7 +483,7 @@
       if (next === 'granted') {
         const was = perm;
         perm = 'granted'; needsRepick = false;
-        if (was !== 'granted' || conflict) await syncNow('refresh');
+        if (was !== 'granted') await syncNow('refresh');
       } else perm = next || 'prompt';
     } catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; }
     emitSync();
@@ -466,7 +498,7 @@
     try { await idbPut(h); } catch (e) { /* node / test handles may have no IndexedDB */ }
     data.syncDirName = h.name || null; flush();
     needsRepick = false;
-    folderChecked = false; conflict = null;
+    folderChecked = false;
     if (perm === 'granted') await syncNow('pick');
     emitSync();
     return status();
@@ -496,7 +528,6 @@
       folderChecked = false;
       const w = await syncNow('resume');
       if (w.ok) { needsRepick = false; lastError = null; }
-      else if (w.reason === 'conflict') needsRepick = false;
       else if (isStaleMsg(w.error)) needsRepick = true;
       emitSync();
       return status();
@@ -507,7 +538,7 @@
   }
   async function forgetDir() {
     dirHandle = null; perm = 'prompt'; needsRepick = false; lastError = null;
-    conflict = null; folderChecked = false;
+    folderChecked = false;
     data.syncDirName = null; flush();
     await idbDel();
     emitSync();
@@ -518,38 +549,10 @@
     perm = permission || 'prompt';
     needsRepick = false;
     lastError = null;
-    conflict = null;
     folderChecked = false;
     if (handle && handle.name) data.syncDirName = handle.name;
     return status();
   }
-  async function resolveConflict(choice) {
-    if (!conflict || !dirHandle) return Object.assign(status(), { ok: false, reason: 'no-conflict' });
-    const h = dirHandle;
-    if (choice === 'browser') {
-      const backup = await backupExisting(h, SAVE_FILE, conflict.folder);
-      let logBackup = null;
-      try { logBackup = await backupExisting(h, LOG_FILE, conflict.folder); } catch (e) {}
-      conflict = null;
-      folderChecked = true;
-      const w = await syncNow('resolve-browser');
-      emitSync();
-      return Object.assign(status(), { ok: !!w.ok, choice: 'browser', backup, logBackup, error: w.error });
-    }
-    if (choice === 'folder') {
-      const snap = getSave && getSave();
-      const dest = await uniqueName(h, backupFileName('save', conflict.browser));
-      if (snap) await writeRaw(h, dest, JSON.stringify(wrapSave(snap), null, 2) + '\n');
-      const save = conflict.obj && conflict.obj.save ? conflict.obj.save : conflict.obj;
-      conflict = null;
-      folderChecked = true;
-      lastError = null;
-      emitSync();
-      return Object.assign(status(), { ok: true, choice: 'folder', backup: dest, save });
-    }
-    return Object.assign(status(), { ok: false, reason: 'bad-choice' });
-  }
-
   async function listNames(handle) {
     if (handle && handle.files && typeof handle.files === 'object' && typeof handle.values !== 'function') return Object.keys(handle.files);
     const names = [];
@@ -565,15 +568,28 @@
     if (!s) return null;
     const peek = peekSave(s);
     if (!peek || peek.day == null) return null;
-    const name = daySnapName(peek.day, currentTimeline());
-    await writeRaw(handle, name, JSON.stringify(wrapSave(s), null, 2) + '\n');
+    const saves = await getSavesDir(handle, true);
+    let name = daySnapName(peek.day, currentTimeline());
+    if (await existsName(saves, name)) {
+      const existing = await readFolderText(saves, name);
+      // Same farm (or identical bytes): update that day's file. A different farm
+      // at the same day number gets a timeline suffix so the older snapshot stays.
+      if (existing != null && !sameFarm(existing, s) && !sameSnapText(existing, JSON.stringify(wrapSave(s), null, 2) + '\n')) {
+        const free = await nextFreeDayName(saves, peek.day, nextLetter(currentTimeline()));
+        data.timeline = free.timeline;
+        flush();
+        name = free.name;
+      }
+    }
+    await writeRaw(saves, name, JSON.stringify(wrapSave(s), null, 2) + '\n');
     return name;
   }
   async function snapshotPresent(handle, snap) {
     const s = snap || (getSave && getSave());
     const dayName = s ? await writeDaySnap(handle, s) : null;
-    const dest = await uniqueName(handle, 'pixel-farm-save-before-rewind.json');
-    if (s) await writeRaw(handle, dest, JSON.stringify(wrapSave(s, { role: 'before-rewind' }), null, 2) + '\n');
+    const saves = await getSavesDir(handle, true);
+    const dest = await uniqueName(saves, 'pixel-farm-save-before-rewind.json');
+    if (s) await writeRaw(saves, dest, JSON.stringify(wrapSave(s, { role: 'before-rewind' }), null, 2) + '\n');
     return { day: dayName, before: dest };
   }
   function parseSnapName(name) {
@@ -583,23 +599,21 @@
     if (preM) return { role: 'before-rewind', timeline: 'a', name };
     return null;
   }
-  async function listRewind(handle) {
-    const h = handle || dirHandle;
-    if (!h) return [];
-    const names = await listNames(h);
-    const items = [];
+  async function collectSnapItems(handle, names, items, seen) {
     for (const name of names) {
-      const parsed = parseSnapName(name);
-      if (!parsed) continue;
+      const base = snapBase(name);
+      const parsed = parseSnapName(base);
+      if (!parsed || seen[base]) continue;
       let obj = null, peek = null;
       try {
-        const text = await readFromDir(h, name);
+        const text = await readFromDir(handle, base);
         obj = JSON.parse(text);
         peek = peekSave(obj);
       } catch (e) { continue; }
       if (!peek) continue;
+      seen[base] = true;
       items.push({
-        name,
+        name: base,
         role: parsed.role,
         timeline: (obj.meta && obj.meta.timeline) || parsed.timeline || 'a',
         day: peek.day,
@@ -610,6 +624,15 @@
         label: parsed.role === 'before-rewind' ? '回溯前的进度' : null
       });
     }
+  }
+  async function listRewind(handle) {
+    const h = handle || dirHandle;
+    if (!h) return [];
+    const items = [], seen = {};
+    const saves = await getSavesDir(h, false);
+    if (saves) await collectSnapItems(saves, await listNames(saves), items, seen);
+    // Also accept leftover root-level day files from earlier builds.
+    await collectSnapItems(h, await listNames(h), items, seen);
     items.sort((a, b) => {
       if (a.role !== b.role) return a.role === 'before-rewind' ? -1 : 1;
       if (a.role === 'before-rewind') return (b.savedAt || 0) - (a.savedAt || 0);
@@ -644,24 +667,28 @@
     const h = dirHandle;
     if (!h) return Object.assign(status(), { ok: false, reason: 'no-handle' });
     if (perm !== 'granted') return Object.assign(status(), { ok: false, reason: 'no-permission' });
-    let text, obj;
-    try { text = await readFromDir(h, name); obj = JSON.parse(text); }
-    catch (e) { logErr(e); return Object.assign(status(), { ok: false, reason: 'error', error: lastError }); }
+    const base = snapBase(name);
+    let text = null, obj;
+    try {
+      const saves = await getSavesDir(h, false);
+      if (saves) text = await readFolderText(saves, base);
+      if (text == null) text = await readFolderText(h, base);
+      if (text == null) throw new Error('not found: ' + base);
+      obj = JSON.parse(text);
+    } catch (e) { logErr(e); return Object.assign(status(), { ok: false, reason: 'error', error: lastError }); }
     const save = obj && obj.save && typeof obj.save === 'object' ? obj.save : obj;
     const present = await snapshotPresent(h, snap || (getSave && getSave()));
     data.timeline = nextTimeline();
     flush();
-    conflict = null;
     folderChecked = true;
     lastError = null;
-    // Point the live folder save at the chosen day so a reload won't see a false conflict.
-    // Per-day files of the previous timeline are left alone.
+    // Live latest follows the chosen day. Per-day files of the previous timeline stay put.
     await writeRaw(h, SAVE_FILE, typeof text === 'string' ? text : JSON.stringify(obj, null, 2) + '\n');
     emitSync();
     return Object.assign(status(), { ok: true, save, present, timeline: currentTimeline(), from: name });
   }
 
-    function filesForSync(snap) {
+  function filesForSync(snap) {
     const s = snap || (getSave && getSave());
     const files = {};
     files[LOG_FILE] = exportObject(s && s.gameVersion);
@@ -672,16 +699,15 @@
     const h = handle || dirHandle;
     if (!h) return { ok: false, reason: 'no-handle' };
     if (handle !== h && perm !== 'granted' && !handle) return { ok: false, reason: 'no-permission' };
-    if (conflict) return { ok: false, reason: 'conflict', conflict: publicConflict() };
     if (!folderChecked) {
-      const c = await detectConflict(h, snap);
-      if (c) { conflict = c; emitSync(); return { ok: false, reason: 'conflict', conflict: publicConflict() }; }
-      folderChecked = true;
+      try { await preserveExistingSave(h); }
+      catch (e) { logErr(e); return { ok: false, reason: 'error', error: lastError }; }
     }
     try {
       const files = filesForSync(snap);
       await writeToDir(h, files);
       try { await writeDaySnap(h, snap); } catch (e) { try { console.warn('[pixel-farm sync] day snapshot', e); } catch (x) {} }
+      folderChecked = true;
       lastWrite = Date.now(); lastError = null;
       data.lastSyncAt = lastWrite; flush();
       return { ok: true, reason: reason || 'sync', at: lastWrite };
@@ -712,8 +738,7 @@
       needsRepick: !!needsRepick,
       lastSyncAt: data.lastSyncAt || null,
       lastError: lastError,
-      dirName: (dirHandle && dirHandle.name) || data.syncDirName || null,
-      conflict: publicConflict()
+      dirName: (dirHandle && dirHandle.name) || data.syncDirName || null
     };
   }
 
@@ -732,7 +757,7 @@
 
   function reset(store) {
     if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false; conflict = null; folderChecked = false;
+    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false; folderChecked = false;
     lastWrite = 0; lastError = null; fps = { sum: 0, n: 0, min: Infinity };
     if (store || storage) load(store || storage);
     return data;
@@ -740,8 +765,9 @@
 
   function memoryDir(opts) {
     const files = {};
+    const dirs = {};
     const dir = {
-      name: (opts && opts.name) || 'memory', files,
+      name: (opts && opts.name) || 'memory', files, dirs,
       permission: (opts && opts.permission) || 'granted',
       queryCalls: 0, requestCalls: 0,
       async queryPermission() {
@@ -756,14 +782,28 @@
         return dir.permission;
       },
       async removeEntry(name) {
-        if (!files[name]) { const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e; }
-        delete files[name];
+        if (files[name]) { delete files[name]; return; }
+        if (dirs[name]) { delete dirs[name]; return; }
+        const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e;
       },
-      async *values() { for (const name of Object.keys(files)) yield { name, kind: 'file' }; },
-      async *keys() { for (const name of Object.keys(files)) yield name; },
+      async *values() {
+        for (const name of Object.keys(files)) yield { name, kind: 'file' };
+        for (const name of Object.keys(dirs)) yield { name, kind: 'directory' };
+      },
+      async *keys() {
+        for (const name of Object.keys(files)) yield name;
+        for (const name of Object.keys(dirs)) yield name;
+      },
+      async getDirectoryHandle(name, o) {
+        if (!dirs[name]) {
+          if (!(o && o.create)) { const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e; }
+          dirs[name] = memoryDir({ name, writeThrow: opts && opts.writeThrow });
+        }
+        return dirs[name];
+      },
       async getFileHandle(name, o) {
         if (opts && opts.writeThrow) throw opts.writeThrow;
-        if (!files[name] && !(o && o.create)) throw new Error('not found: ' + name);
+        if (!files[name] && !(o && o.create)) { const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e; }
         if (!files[name]) files[name] = { text: '' };
         const rec = files[name];
         return {
@@ -779,11 +819,11 @@
   }
 
   const api = {
-    KEY, SCHEMA, MAX_DAYS, MAX_EVENTS, SAVE_FILE, LOG_FILE, PROBE_FILE, SYNC_MIN_MS,
+    KEY, SCHEMA, MAX_DAYS, MAX_EVENTS, SAVE_FILE, LOG_FILE, PROBE_FILE, SNAP_DIR, SYNC_MIN_MS,
     load, flush, boot, reset, get, current, exportObject, wrapSave,
     openDay, closeDay, startSession, endSession,
     income, spend, purchase, event, tick, work, sampleFps, offline, classify,
-    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker, resolveConflict, peekSave,
+    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker, peekSave,
     listRewind, openRewind, rewindTo, daySnapName, currentTimeline,
     writeToDir, readFromDir, syncNow, syncSoon, syncMorning, filesForSync,
     download, downloadLog, memoryDir

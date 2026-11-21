@@ -353,81 +353,78 @@ async function testAsync(name, fn) { await fn(); n++; }
     const o = JSON.parse(dir.files['pixel-farm-save.json'].text);
     return o.save.clock.day;
   }
+  function savesFiles(dir) {
+    return (dir.dirs && dir.dirs.saves && dir.dirs.saves.files) || {};
+  }
+  function snapText(dir, name) {
+    const f = savesFiles(dir)[name];
+    return f && f.text;
+  }
 
-  await testAsync('boot does not overwrite folder day 12 with browser day 2 (no clicks)', async () => {
+  await testAsync('first sync keeps folder day 12 as a saves/ snapshot and writes the browser day-1 latest', async () => {
     const s = mem();
     LOG.reset(s);
-    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
     await LOG.hydrateDir();
     const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
     seedFolder(dir, 12, 999);
     const before = dir.files['pixel-farm-save.json'].text;
     LOG.installDir(dir, 'prompt');
     const st = await LOG.hydrateDir();
-    assert.strictEqual(folderDay(dir), 12, 'folder day 12 must stay, got ' + folderDay(dir));
-    assert.strictEqual(dir.files['pixel-farm-save.json'].text, before, 'pixel-farm-save.json bytes must be unchanged');
-    assert.ok(!dir.files['pixel-farm-playlog.json'], 'must not write the playlog either');
-    assert.ok(!dir.files[LOG.PROBE_FILE], 'probe file cleaned up');
     assert.strictEqual(st.granted, true, 'probe may grant permission');
-    assert.ok(st.conflict && st.conflict.paused, JSON.stringify(st.conflict));
-    assert.strictEqual(st.conflict.folder.day, 12);
-    assert.strictEqual(st.conflict.browser.day, 2);
+    assert.ok(!('conflict' in st) || !st.conflict, 'no conflict panel: ' + JSON.stringify(st.conflict));
+    assert.ok(!dir.files[LOG.PROBE_FILE], 'probe file cleaned up');
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012.json'), before, 'day 12 snapshot must be identical to the original folder save');
+    assert.strictEqual(JSON.parse(snapText(dir, 'pixel-farm-save-day012.json')).save.clock.day, 12);
+    assert.strictEqual(JSON.parse(snapText(dir, 'pixel-farm-save-day012.json')).save.coins, 999);
+    assert.strictEqual(folderDay(dir), 1, 'latest must be the browser save, got day ' + folderDay(dir));
+    assert.strictEqual(JSON.parse(dir.files['pixel-farm-save.json'].text).save.coins, 0);
+    assert.ok(dir.files['pixel-farm-playlog.json'], 'playlog is written after the snapshot is preserved');
+    const list = await LOG.listRewind(dir);
+    assert.ok(list.some(x => x.day === 12 && x.role === 'day'), JSON.stringify(list));
   });
 
-  await testAsync('granted-on-boot also pauses when folder and browser days differ', async () => {
+  await testAsync('granted-on-boot also preserves day 12 then writes the browser save, with no pause', async () => {
     const s = mem();
     LOG.reset(s);
-    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
-    await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
-    seedFolder(dir, 12, 999);
-    LOG.installDir(dir, 'granted');
-    const st = await LOG.hydrateDir();
-    assert.strictEqual(folderDay(dir), 12);
-    assert.ok(st.conflict && st.conflict.folder.day === 12 && st.conflict.browser.day === 2);
-    const again = await LOG.syncNow('manual');
-    assert.strictEqual(again.reason, 'conflict');
-    assert.strictEqual(folderDay(dir), 12, 'a later syncNow must not overwrite while paused');
-  });
-
-  await testAsync('resolveConflict(browser) backs up day 12 then writes the browser save', async () => {
-    const s = mem();
-    LOG.reset(s);
-    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
-    await LOG.hydrateDir();
-    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
-    seedFolder(dir, 12, 999);
-    LOG.installDir(dir, 'granted');
-    await LOG.hydrateDir();
-    const r = await LOG.resolveConflict('browser');
-    assert.ok(r.ok, r.error);
-    assert.strictEqual(folderDay(dir), 2);
-    assert.ok(r.backup && dir.files[r.backup], r.backup);
-    assert.strictEqual(JSON.parse(dir.files[r.backup].text).save.clock.day, 12);
-    assert.strictEqual(LOG.status().conflict, null);
-  });
-
-  await testAsync('resolveConflict(folder) leaves day 12 intact and backs up the browser save', async () => {
-    const s = mem();
-    LOG.reset(s);
-    LOG.boot(snap({ day: 2, coins: 10 }), { store: s, getSave: () => browserDay(2, 10) });
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
     await LOG.hydrateDir();
     const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     seedFolder(dir, 12, 999);
     const before = dir.files['pixel-farm-save.json'].text;
     LOG.installDir(dir, 'granted');
-    await LOG.hydrateDir();
-    const r = await LOG.resolveConflict('folder');
-    assert.ok(r.ok);
-    assert.strictEqual(dir.files['pixel-farm-save.json'].text, before, 'folder day 12 file must be untouched');
-    assert.strictEqual(folderDay(dir), 12);
-    assert.strictEqual(r.save && r.save.clock.day, 12);
-    assert.ok(r.backup && dir.files[r.backup], r.backup);
-    assert.strictEqual(JSON.parse(dir.files[r.backup].text).save.clock.day, 2);
-    assert.strictEqual(LOG.status().conflict, null);
+    const st = await LOG.hydrateDir();
+    assert.ok(st.ok !== false);
+    assert.ok(!st.conflict);
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012.json'), before);
+    assert.strictEqual(folderDay(dir), 1);
+    const again = await LOG.syncNow('manual');
+    assert.ok(again.ok, again.error);
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012.json'), before, 'later syncs must not clobber the preserved day 12');
+    assert.strictEqual(folderDay(dir), 1);
   });
 
-  await testAsync('identical folder and browser saves do not pause, first sync may write', async () => {
+  await testAsync('if saves/day012 already exists with different content, the old latest gets a timeline suffix', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ day: 1, coins: 0 }), { store: s, getSave: () => browserDay(1, 0) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    seedFolder(dir, 12, 999);
+    const before = dir.files['pixel-farm-save.json'].text;
+    const other = wrapDay(12, 50, 1);
+    other.save.createdAt = 2_000_000; // a different farm
+    const saves = await dir.getDirectoryHandle('saves', { create: true });
+    const otherText = JSON.stringify(other, null, 2) + '\n';
+    saves.files['pixel-farm-save-day012.json'] = { text: otherText };
+    LOG.installDir(dir, 'granted');
+    await LOG.hydrateDir();
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012.json'), otherText, 'existing different day012 stays');
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012-b.json'), before, 'incoming latest is preserved under a suffix');
+    assert.strictEqual(folderDay(dir), 1);
+  });
+
+  await testAsync('identical folder and browser saves still write, and day 12 is listed', async () => {
     const s = mem();
     LOG.reset(s);
     const same = browserDay(12, 999);
@@ -439,8 +436,11 @@ async function testAsync(name, fn) { await fn(); n++; }
     seedFolder(dir, 12, 999); // wrapDay uses t=800, coins=999, createdAt=1_000_000 — matches
     LOG.installDir(dir, 'granted');
     const st = await LOG.hydrateDir();
-    assert.strictEqual(st.conflict, null, JSON.stringify(st.conflict));
+    assert.ok(!st.conflict);
     assert.strictEqual(folderDay(dir), 12);
+    assert.ok(snapText(dir, 'pixel-farm-save-day012.json'), 'day snapshot exists');
+    const list = await LOG.listRewind(dir);
+    assert.ok(list.some(x => x.day === 12), JSON.stringify(list));
   });
 
   await testAsync('syncNow writes a per-day snapshot day012 and updates it on the same timeline', async () => {
@@ -456,14 +456,14 @@ async function testAsync(name, fn) { await fn(); n++; }
     assert.ok(r.ok, r.error);
     const name = LOG.daySnapName(12, 'a');
     assert.strictEqual(name, 'pixel-farm-save-day012.json');
-    assert.ok(dir.files[name], Object.keys(dir.files).join(','));
-    assert.strictEqual(JSON.parse(dir.files[name].text).save.clock.day, 12);
-    assert.strictEqual(JSON.parse(dir.files[name].text).save.coins, 500);
+    assert.ok(snapText(dir, name), Object.keys(savesFiles(dir)).join(','));
+    assert.strictEqual(JSON.parse(snapText(dir, name)).save.clock.day, 12);
+    assert.strictEqual(JSON.parse(snapText(dir, name)).save.coins, 500);
     snap12.coins = 777;
     snap12.clock = { day: 12, t: 900 };
     await LOG.syncNow('manual', dir, snap12);
-    assert.strictEqual(JSON.parse(dir.files[name].text).save.coins, 777, 'same timeline may update that day');
-    assert.ok(!dir.files['pixel-farm-save-day012-b.json']);
+    assert.strictEqual(JSON.parse(snapText(dir, name)).save.coins, 777, 'same timeline may update that day');
+    assert.ok(!snapText(dir, 'pixel-farm-save-day012-b.json'));
   });
 
   await testAsync('rewindTo day 8 keeps later-day snapshots and tags a new timeline', async () => {
@@ -477,26 +477,26 @@ async function testAsync(name, fn) { await fn(); n++; }
     const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
     LOG.installDir(dir, 'granted');
     await LOG.syncNow('manual', dir, snap12);
-    const day12before = dir.files['pixel-farm-save-day012.json'].text;
+    const day12before = snapText(dir, 'pixel-farm-save-day012.json');
     const day8 = wrapDay(8, 200, Date.parse('2026-11-15T12:00:00-08:00'));
-    dir.files['pixel-farm-save-day008.json'] = { text: JSON.stringify(day8, null, 2) + '\n' };
+    savesFiles(dir)['pixel-farm-save-day008.json'] = { text: JSON.stringify(day8, null, 2) + '\n' };
     const r = await LOG.rewindTo('pixel-farm-save-day008.json', snap12);
     assert.ok(r.ok, r.error);
     assert.strictEqual(r.save.clock.day, 8);
-    assert.ok(r.present && r.present.before && dir.files[r.present.before], r.present);
+    assert.ok(r.present && r.present.before && snapText(dir, r.present.before), r.present);
     assert.ok(/before-rewind/.test(r.present.before), r.present.before);
-    assert.strictEqual(JSON.parse(dir.files[r.present.before].text).save.clock.day, 12);
-    assert.strictEqual(dir.files['pixel-farm-save-day012.json'].text, day12before, 'later-day snapshot must stay intact');
-    assert.strictEqual(JSON.parse(dir.files['pixel-farm-save-day012.json'].text).save.coins, 999);
+    assert.strictEqual(JSON.parse(snapText(dir, r.present.before)).save.clock.day, 12);
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012.json'), day12before, 'later-day snapshot must stay intact');
+    assert.strictEqual(JSON.parse(snapText(dir, 'pixel-farm-save-day012.json')).save.coins, 999);
     assert.ok(r.timeline && r.timeline !== 'a', r.timeline);
     // play forward again to day 12 on the new timeline — must not clobber the original day 12
     const snap12b = browserDay(12, 111);
     snap12b.clock = { day: 12, t: 400 };
     await LOG.syncNow('manual', dir, snap12b);
-    assert.strictEqual(dir.files['pixel-farm-save-day012.json'].text, day12before, 'original day 12 still intact after replay');
+    assert.strictEqual(snapText(dir, 'pixel-farm-save-day012.json'), day12before, 'original day 12 still intact after replay');
     const branched = LOG.daySnapName(12, r.timeline);
-    assert.ok(dir.files[branched], 'new timeline writes ' + branched + ' got ' + Object.keys(dir.files).join(','));
-    assert.strictEqual(JSON.parse(dir.files[branched].text).save.coins, 111);
+    assert.ok(snapText(dir, branched), 'new timeline writes ' + branched + ' got ' + Object.keys(savesFiles(dir)).join(','));
+    assert.strictEqual(JSON.parse(snapText(dir, branched)).save.coins, 111);
     const list = await LOG.listRewind(dir);
     assert.ok(list.some(x => x.label === '回溯前的进度' && x.day === 12), JSON.stringify(list));
     assert.ok(list.some(x => x.day === 8 && x.role === 'day'), JSON.stringify(list));
@@ -509,7 +509,8 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.boot(snap({ day: 2 }), { store: s, getSave: () => browserDay(2, 10) });
     await LOG.hydrateDir();
     const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
-    dir.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
+    const saves = await dir.getDirectoryHandle('saves', { create: true });
+    saves.files['pixel-farm-save-day012.json'] = { text: JSON.stringify(wrapDay(12, 999, Date.parse('2026-11-21T02:02:00-08:00')), null, 2) + '\n' };
     LOG.installDir(dir, 'prompt');
     const st = await LOG.openRewind();
     assert.strictEqual(dir.requestCalls, 1);
