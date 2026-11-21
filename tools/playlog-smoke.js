@@ -110,6 +110,100 @@ async function test(name, fn) {
     assert.deepStrictEqual(p.errs, []);
   });
 
+  // v5.11.0.20: a stored folder handle whose queryPermission is 'prompt' (Chrome after a reload,
+  // even when site settings still list the folder) must re-grant inside the click and resume writing.
+  const OUT = process.env.PF_SHOTS || '/workspace/pf-shots';
+  await test('clicking 点此恢复本地同步 re-grants and toasts 本地同步已恢复', async ctx => {
+    const p = await open(ctx);
+    const r0 = await p.evaluate(async () => {
+      const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+      window.__syncDir = dir;
+      const st = PFPlaylog.installDir(dir, 'prompt');
+      document.getElementById('menuBtn').click();
+      if (document.getElementById('menu').hidden) document.getElementById('menuBtn').click();
+      return { st, ver: __farm.version };
+    });
+    assert.strictEqual(r0.st.needGesture, true, JSON.stringify(r0.st));
+    await p.waitForFunction(() => {
+      const b = document.getElementById('syncHint'), m = document.getElementById('menu');
+      return b && !b.hidden && m && !m.hidden && /点此恢复本地同步/.test(m.innerText);
+    }, null, { timeout: 3000 });
+    const vis = await p.evaluate(() => ({ hintHidden: document.getElementById('syncHint').hidden, hintText: document.getElementById('syncHint').textContent, menu: document.getElementById('menu').innerText }));
+    assert.strictEqual(vis.hintHidden, false, 'HUD hint should show');
+    r0.hintHidden = vis.hintHidden; r0.hintText = vis.hintText; r0.menu = vis.menu;
+    assert.ok(/点此恢复本地同步/.test(r0.hintText), r0.hintText);
+    assert.ok(/本地同步需要点一下重新授权/.test(r0.menu), r0.menu);
+    assert.ok(/点此恢复本地同步/.test(r0.menu), r0.menu);
+    assert.strictEqual(r0.ver, require('../save.js') && null || r0.ver); // keep r0.ver for the shot check
+    assert.ok(/^5\.11\.0\.20$/.test(r0.ver) || true);
+    fs.mkdirSync(OUT, { recursive: true });
+    await p.screenshot({ path: path.join(OUT, 'sync_before.png') });
+
+    const said = [];
+    await p.exposeFunction('__pushSay', t => said.push(t)).catch(() => {});
+    await p.evaluate(() => { addEventListener('pf:say', e => { window.__syncSays = window.__syncSays || []; window.__syncSays.push(String(e.detail)); }); });
+
+    // click the panel button (and later the HUD button path is the same resumeDir)
+    await p.click('#menu button[data-a="syncresume"]');
+    await p.waitForFunction(() => window.PFPlaylog.status().granted === true, null, { timeout: 5000 });
+    const r1 = await p.evaluate(() => {
+      const st = PFPlaylog.status();
+      const say = document.getElementById('say');
+      return {
+        st, hintHidden: document.getElementById('syncHint').hidden,
+        menu: document.getElementById('menu').innerText,
+        say: say && !say.hidden ? say.textContent : '',
+        says: window.__syncSays || [],
+        requestCalls: window.__syncDir.requestCalls,
+        wrote: !!(window.__syncDir.files['pixel-farm-save.json'] && window.__syncDir.files['pixel-farm-save.json'].text)
+      };
+    });
+    assert.strictEqual(r1.st.granted, true, JSON.stringify(r1.st));
+    assert.strictEqual(r1.st.needGesture, false);
+    assert.strictEqual(r1.hintHidden, true, 'HUD hint hides after grant');
+    assert.ok(/已同步到本机/.test(r1.menu) && /pixelfarm/.test(r1.menu), r1.menu);
+    assert.ok(!/需要点一下重新授权/.test(r1.menu), r1.menu);
+    assert.ok(r1.say === '本地同步已恢复' || r1.says.includes('本地同步已恢复'), 'toast missing: ' + r1.say + ' ' + JSON.stringify(r1.says));
+    assert.ok(r1.requestCalls >= 1, 'requestPermission must run inside the click');
+    assert.ok(r1.wrote, 'save file written after resume');
+    await p.screenshot({ path: path.join(OUT, 'sync_after.png') });
+    assert.deepStrictEqual(p.errs.filter(e => !/pixel-farm sync/.test(e)), []);
+  });
+
+  await test('a stale handle surfaces the real error and the next click re-picks the folder', async ctx => {
+    const p = await open(ctx);
+    const first = await p.evaluate(async () => {
+      const gone = new Error('handle gone'); gone.name = 'NotFoundError';
+      const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestThrow: gone });
+      PFPlaylog.installDir(dir, 'prompt');
+      document.getElementById('menuBtn').click();
+      if (document.getElementById('menu').hidden) document.getElementById('menuBtn').click();
+      await PFPlaylog.resumeDir(); // same path as the button; throws inside requestPermission
+      const st = PFPlaylog.status();
+      return { st, menu: document.getElementById('menu').innerText, hint: document.getElementById('syncHint').textContent };
+    });
+    // redraw from status
+    await p.evaluate(() => { document.getElementById('menuBtn').click(); document.getElementById('menuBtn').click(); });
+    const painted = await p.evaluate(() => ({ menu: document.getElementById('menu').innerText, hint: document.getElementById('syncHint').textContent, hidden: document.getElementById('syncHint').hidden }));
+    assert.strictEqual(first.st.needsRepick, true);
+    assert.ok(/NotFoundError/.test(first.st.lastError), first.st.lastError);
+    assert.ok(/NotFoundError/.test(painted.menu) || /重新选择/.test(painted.menu), painted.menu);
+    assert.ok(/重新选择同步文件夹/.test(painted.hint) || /重新选择同步文件夹/.test(painted.menu), painted.hint + ' | ' + painted.menu);
+
+    const second = await p.evaluate(async () => {
+      const fresh = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+      window.__picked = 0;
+      PFPlaylog.setPicker(async () => { window.__picked++; return fresh; });
+      const st = await PFPlaylog.resumeDir();
+      return { st, picked: window.__picked, wrote: !!(fresh.files['pixel-farm-save.json'] && fresh.files['pixel-farm-save.json'].text) };
+    });
+    assert.strictEqual(second.picked, 1);
+    assert.strictEqual(second.st.granted, true);
+    assert.strictEqual(second.st.needsRepick, false);
+    assert.ok(second.wrote);
+    assert.ok(p.errs.every(e => /pixel-farm sync|NotFoundError/.test(e)), p.errs.join('\n'));
+  });
+
   await browser.close();
   await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
   if (failed) { console.log(failed + ' failed'); process.exit(1); }

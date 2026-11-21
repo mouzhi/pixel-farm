@@ -784,13 +784,24 @@
     const b = $('syncHint'); if (!b || !L) return;
     const st = L.status();
     b.hidden = !st.needGesture;
+    b.textContent = st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步';
   }
+  // v5.11.0.20: never leave a click silent — tell the player it worked, or why it didn't.
+  function announceSync(st) {
+    if (!st || st.aborted) return;
+    const msg = st.granted && !st.lastError ? '本地同步已恢复'
+      : st.lastError ? '本地同步没能恢复：' + st.lastError
+      : st.needsRepick ? '请再点一次，重新选择同步文件夹'
+      : '';
+    if (msg) dispatchEvent(new CustomEvent('pf:say', { detail: msg }));
+  }
+  function afterResume(st) { hintSync(); if (!menu.hidden) drawMenu(); announceSync(st); }
   function syncLine() {
     if (!L) return '';
     const st = L.status();
     if (!st.supported) return `<div class="note">当前浏览器不能把文件写到本机文件夹（Chrome 可以）。可以用「导出游玩记录」下载 JSON。</div>`;
     if (st.granted) return `<div class="note">已同步到本机「${esc(st.dirName || '文件夹')}」· <span id="syncAgo">${agoSync(st.lastSyncAt)}</span>${st.lastError ? ` <span class="bad">上次出错：${esc(st.lastError)}</span>` : ''}</div>`;
-    if (st.needGesture) return `<div class="note">本地同步需要点一下重新授权。</div>`;
+    if (st.needGesture) return `<div class="note">本地同步需要点一下重新授权。${st.lastError ? ` <span class="bad">原因：${esc(st.lastError)}</span>` : ''}${st.needsRepick ? ' 请重新选择一次文件夹。' : ''}</div>`;
     return `<div class="note">选一个本机文件夹后，存档和游玩记录会自动写进去（建议放在「文稿 / pixel-farm-sync」）。</div>`;
   }
   function syncButtons() {
@@ -799,7 +810,7 @@
     let h = `<div class="row">`;
     if (st.supported && !st.granted && !st.needGesture) h += `<button class="pbtn" data-a="syncpick">同步到本地文件夹…</button>`;
     if (st.supported && st.granted) h += `<button class="pbtn" data-a="syncpick">更换本地文件夹…</button>`;
-    if (st.needGesture) h += `<button class="pbtn" data-a="syncresume">点此恢复本地同步</button>`;
+    if (st.needGesture) h += `<button class="pbtn" data-a="syncresume">${st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步'}</button>`;
     if (st.granted) h += `<button class="pbtn" data-a="syncnow">立即同步</button><button class="pbtn" data-a="syncstop">停止本地同步</button>`;
     h += `<button class="pbtn" data-a="exportlog">导出游玩记录</button></div>`;
     return h;
@@ -828,15 +839,20 @@
     }
     else if (a === 'doimport' && pending) { pending.savedAt = Date.now(); const r = G.importState(pending); if (!r.ok) $('msg').innerHTML = `<span class="bad">导入失败：${esc(r.error)}</span>`; }
     else if (a === 'reset') { if (resetArm > Date.now()) G.reset(); else { resetArm = Date.now() + 4000; drawMenu(); setTimeout(() => { if (!menu.hidden) drawMenu(); }, 4100); } }
-    else if (a === 'syncpick' && L) { L.pickDir().then(() => { drawMenu(); hintSync(); }).catch(err => { if (err && err.name === 'AbortError') return; drawMenu(); }); }
-    else if (a === 'syncresume' && L) { L.resumeDir().then(() => { drawMenu(); hintSync(); }); }
+    else if (a === 'syncpick' && L) { L.pickDir().then(st => { drawMenu(); hintSync(); announceSync(st); }).catch(err => { if (err && err.name === 'AbortError') return; drawMenu(); dispatchEvent(new CustomEvent('pf:say', { detail: '本地同步没能恢复：' + (err && err.message || err) })); }); }
+    else if (a === 'syncresume' && L) { L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); }); }
     else if (a === 'syncnow' && L) { G.saveNow(); L.syncNow('manual').then(() => drawMenu()); }
     else if (a === 'syncstop' && L) { L.forgetDir().then(() => { drawMenu(); hintSync(); }); }
     else if (a === 'exportlog' && L) { L.downloadLog(G.version); }
   });
   $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) { shop.hidden = true; store.hidden = true; } mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
-  if ($('syncHint') && L) $('syncHint').addEventListener('click', () => { L.resumeDir().then(() => { hintSync(); if (!menu.hidden) drawMenu(); }); });
+  if ($('syncHint') && L) $('syncHint').addEventListener('click', () => { L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); }); });
   hintSync();
+  // v5.11.0.20: if Chrome already granted the folder (site settings still lists it) but the
+  // warning is stuck, re-query when the window is focused and clear it if the handle can write.
+  const recanSync = () => { if (!L || !L.refreshPerm) return; L.refreshPerm().then(st => { hintSync(); if (!menu.hidden) drawMenu(); }); };
+  addEventListener('focus', recanSync);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) recanSync(); });
   // ---- offline summary ----
   const dur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} 小时 ${m} 分` : m ? `${m} 分钟` : `${s} 秒`; };
   const OFFLINE_POP_SEC = 600; // v5.9.1: the welcome-back box only after 10 minutes away

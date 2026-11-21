@@ -14,6 +14,7 @@
 
   let storage = null, data = emptyData(), cur = null, session = null;
   let dirHandle = null, perm = 'prompt', lastWrite = 0, lastError = null, syncTimer = null, syncQueued = null;
+  let needsRepick = false, pickFn = null; // v5.11.0.20: a stale handle needs a fresh folder pick, not another silent requestPermission
   let fps = { sum: 0, n: 0, min: Infinity }, getSave = null;
 
   function emptyIncome() { const o = {}; for (const k of INCOME) o[k] = 0; return o; }
@@ -234,7 +235,18 @@
   }
 
   // ---- folder sync (Chrome File System Access API); writeToDir is also used with OPFS or a mock handle in tests ----
-  function supported() { return typeof showDirectoryPicker === 'function'; }
+  function errText(e) {
+    if (e == null) return 'error';
+    if (typeof e === 'string') return e;
+    const name = e.name || '', msg = e.message || String(e);
+    return name && msg && String(msg).indexOf(name) !== 0 ? name + ': ' + msg : (msg || name || String(e));
+  }
+  function logErr(e) { lastError = errText(e); try { console.warn('[pixel-farm sync]', lastError, e); } catch (x) {} }
+  function isStaleMsg(s) { return /NotFoundError|InvalidStateError/.test(String(s || '')); }
+  function isStaleErr(e) { return isStaleMsg((e && e.name) || '') || isStaleMsg(errText(e)); }
+  function setPicker(fn) { pickFn = fn; }
+  function getPicker() { return pickFn || (typeof showDirectoryPicker === 'function' ? showDirectoryPicker : null); }
+  function supported() { return typeof getPicker() === 'function'; }
   function idbOpen() {
     return new Promise((resolve, reject) => {
       if (typeof indexedDB === 'undefined') return reject(new Error('no indexedDB'));
@@ -285,35 +297,106 @@
     return f.text();
   }
 
+  async function queryPerm(h) {
+    if (!h || typeof h.queryPermission !== 'function') return 'prompt';
+    return await h.queryPermission({ mode: 'readwrite' });
+  }
+  async function requestPerm(h) {
+    if (!h || typeof h.requestPermission !== 'function') return 'prompt';
+    return await h.requestPermission({ mode: 'readwrite' });
+  }
+  // If queryPermission says 'prompt' but Chrome already granted the folder (the site-settings
+  // bubble still lists it), a write often just works. Recover quietly; only keep the reauth
+  // warning for a real NotAllowedError, and mark a broken handle so the next click re-picks.
+  async function probeWrite() {
+    if (!dirHandle) return;
+    const r = await syncNow('boot-probe', dirHandle);
+    if (r.ok) { perm = 'granted'; needsRepick = false; lastError = null; }
+    else if (isStaleMsg(r.error)) needsRepick = true;
+    else lastError = null;
+  }
   async function hydrateDir() {
-    if (!dirHandle) dirHandle = await idbGet();
+    if (!dirHandle) { const h = await idbGet(); if (!dirHandle) dirHandle = h; }
+    if (!dirHandle) { perm = 'prompt'; needsRepick = false; return status(); }
+    try { perm = await queryPerm(dirHandle); }
+    catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; }
+    if (perm === 'granted') { needsRepick = false; syncSoon('boot'); }
+    else await probeWrite();
+    return status();
+  }
+  // Re-read the handle's permission (no gesture needed). Used on window focus so a grant that
+  // landed in Chrome's site settings actually clears the "需要重新授权" warning.
+  async function refreshPerm() {
+    if (!dirHandle) { const h = await idbGet(); if (!dirHandle) dirHandle = h; }
     if (!dirHandle) { perm = 'prompt'; return status(); }
-    try { perm = await dirHandle.queryPermission({ mode: 'readwrite' }); }
-    catch (e) { perm = 'prompt'; }
-    if (perm === 'granted') syncSoon('boot');
+    try {
+      const next = await queryPerm(dirHandle);
+      if (next === 'granted') {
+        const was = perm;
+        perm = 'granted'; needsRepick = false;
+        if (was !== 'granted') syncSoon('refresh');
+      } else perm = next || 'prompt';
+    } catch (e) { logErr(e); perm = 'prompt'; needsRepick = true; }
     return status();
   }
   async function pickDir() {
-    if (!supported()) throw new Error('unsupported');
-    const h = await showDirectoryPicker({ id: 'pixel-farm-sync', mode: 'readwrite', startIn: 'documents' });
+    const fn = getPicker();
+    if (typeof fn !== 'function') throw new Error('unsupported');
+    const h = await fn({ id: 'pixel-farm-sync', mode: 'readwrite', startIn: 'documents' });
     dirHandle = h; perm = 'granted';
-    try { perm = await h.requestPermission({ mode: 'readwrite' }); } catch (e) {}
-    await idbPut(h);
+    try { perm = await h.requestPermission({ mode: 'readwrite' }); } catch (e) { logErr(e); }
+    try { await idbPut(h); } catch (e) { /* node / test handles may have no IndexedDB */ }
     data.syncDirName = h.name || null; flush();
+    needsRepick = false;
     if (perm === 'granted') await syncNow('pick');
     return status();
   }
+  // v5.11.0.20: requestPermission / showDirectoryPicker must be the first await inside the
+  // click. Reading IndexedDB first drops Chrome's transient user activation, and the
+  // permission call then fails silently — the button looks like it does nothing. If the
+  // stored handle is stale or requestPermission does not grant, the next click opens the
+  // folder picker so the player can re-choose.
   async function resumeDir() {
-    if (!dirHandle) dirHandle = await idbGet();
-    if (!dirHandle) return status();
-    try { perm = await dirHandle.requestPermission({ mode: 'readwrite' }); }
-    catch (e) { perm = 'prompt'; lastError = String(e && e.message || e); }
-    if (perm === 'granted') await syncNow('resume');
+    if (needsRepick || !dirHandle) {
+      try { return await pickDir(); }
+      catch (e) {
+        if (e && e.name === 'AbortError') return Object.assign(status(), { aborted: true });
+        logErr(e);
+        return status();
+      }
+    }
+    try { perm = await requestPerm(dirHandle); }
+    catch (e) {
+      logErr(e);
+      perm = 'prompt';
+      needsRepick = true;
+      return status();
+    }
+    if (perm === 'granted') {
+      const w = await syncNow('resume');
+      if (w.ok) { needsRepick = false; lastError = null; }
+      else if (isStaleMsg(w.error)) needsRepick = true;
+      return status();
+    }
+    needsRepick = true;
+    // 'prompt' / 'denied' after the click: the next click re-picks. Don't paint a raw
+    // "permission: prompt" over the panel (that's just "the prompt was dismissed or dropped").
+    try { console.warn('[pixel-farm sync]', 'requestPermission →', perm); } catch (x) {}
     return status();
   }
   async function forgetDir() {
-    dirHandle = null; perm = 'prompt'; data.syncDirName = null; flush();
+    dirHandle = null; perm = 'prompt'; needsRepick = false; lastError = null;
+    data.syncDirName = null; flush();
     await idbDel();
+    return status();
+  }
+  // Test hook: drop a mock (or real) directory handle into memory without IndexedDB.
+  function installDir(handle, permission) {
+    dirHandle = handle || null;
+    perm = permission || 'prompt';
+    needsRepick = false;
+    lastError = null;
+    if (handle && handle.name) data.syncDirName = handle.name;
     return status();
   }
 
@@ -335,7 +418,7 @@
       data.lastSyncAt = lastWrite; flush();
       return { ok: true, reason: reason || 'sync', at: lastWrite };
     } catch (e) {
-      lastError = String(e && e.message || e);
+      logErr(e);
       return { ok: false, reason: 'error', error: lastError };
     }
   }
@@ -357,7 +440,8 @@
       supported: supported(),
       hasHandle: !!dirHandle,
       granted: perm === 'granted',
-      needGesture: !!dirHandle && perm !== 'granted',
+      needGesture: (!!dirHandle && perm !== 'granted') || !!needsRepick,
+      needsRepick: !!needsRepick,
       lastSyncAt: data.lastSyncAt || null,
       lastError: lastError,
       dirName: (dirHandle && dirHandle.name) || data.syncDirName || null
@@ -379,18 +463,32 @@
 
   function reset(store) {
     if (syncTimer) { clearTimeout(syncTimer); syncTimer = null; }
-    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt';
+    data = emptyData(); cur = null; session = null; dirHandle = null; perm = 'prompt'; needsRepick = false;
     lastWrite = 0; lastError = null; fps = { sum: 0, n: 0, min: Infinity };
     if (store || storage) load(store || storage);
     return data;
   }
 
-  function memoryDir() {
+  function memoryDir(opts) {
     const files = {};
-    return {
-      name: 'memory', files,
-      async getFileHandle(name, opts) {
-        if (!files[name] && !(opts && opts.create)) throw new Error('not found: ' + name);
+    const dir = {
+      name: (opts && opts.name) || 'memory', files,
+      permission: (opts && opts.permission) || 'granted',
+      queryCalls: 0, requestCalls: 0,
+      async queryPermission() {
+        dir.queryCalls++;
+        if (opts && opts.queryThrow) throw opts.queryThrow;
+        return dir.permission;
+      },
+      async requestPermission() {
+        dir.requestCalls++;
+        if (opts && opts.requestThrow) throw opts.requestThrow;
+        if (opts && opts.requestResult != null) dir.permission = opts.requestResult;
+        return dir.permission;
+      },
+      async getFileHandle(name, o) {
+        if (opts && opts.writeThrow) throw opts.writeThrow;
+        if (!files[name] && !(o && o.create)) throw new Error('not found: ' + name);
         if (!files[name]) files[name] = { text: '' };
         const rec = files[name];
         return {
@@ -402,6 +500,7 @@
         };
       }
     };
+    return dir;
   }
 
   const api = {
@@ -409,7 +508,7 @@
     load, flush, boot, reset, get, current, exportObject, wrapSave,
     openDay, closeDay, startSession, endSession,
     income, spend, purchase, event, tick, work, sampleFps, offline, classify,
-    supported, status, pickDir, resumeDir, forgetDir, hydrateDir,
+    supported, status, pickDir, resumeDir, forgetDir, hydrateDir, refreshPerm, installDir, setPicker,
     writeToDir, readFromDir, syncNow, syncSoon, syncMorning, filesForSync,
     download, downloadLog, memoryDir
   };

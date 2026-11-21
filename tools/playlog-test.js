@@ -221,5 +221,122 @@ async function testAsync(name, fn) { await fn(); n++; }
     const pretty = dir.files['pixel-farm-playlog.json'].text;
     assert.ok(pretty.includes('\n  '), 'pretty-printed');
   });
+
+  // v5.11.0.20: resumeDir / refreshPerm against a mock File System Access handle
+  function err(name, message) { const e = new Error(message || name); e.name = name; return e; }
+
+  await testAsync('resumeDir: requestPermission granted clears needGesture and writes', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap({ coins: 3 }), { store: s, getSave: () => snap({ coins: 3, saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+    const st0 = LOG.installDir(dir, 'prompt');
+    assert.strictEqual(st0.needGesture, true);
+    assert.strictEqual(st0.granted, false);
+    const st = await LOG.resumeDir();
+    assert.strictEqual(dir.requestCalls, 1, 'requestPermission called');
+    assert.strictEqual(st.granted, true);
+    assert.strictEqual(st.needGesture, false);
+    assert.strictEqual(st.lastError, null);
+    assert.ok(dir.files['pixel-farm-save.json'].text.includes('pixel-farm-save'));
+  });
+
+  await testAsync('resumeDir calls requestPermission before any other await when the handle is in memory', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    let requestAt = -1, queryAt = -1, tick = 0;
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted' });
+    const origReq = dir.requestPermission.bind(dir);
+    dir.requestPermission = async function () { requestAt = ++tick; return origReq(); };
+    const origQuery = dir.queryPermission.bind(dir);
+    dir.queryPermission = async function () { queryAt = ++tick; return origQuery(); };
+    LOG.installDir(dir, 'prompt');
+    await LOG.resumeDir();
+    assert.strictEqual(requestAt, 1, 'requestPermission is the first async call in the click');
+    assert.ok(queryAt === -1 || queryAt > requestAt, 'queryPermission must not precede requestPermission');
+  });
+
+  await testAsync('resumeDir: requestPermission throw is logged and next click falls back to the picker', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestThrow: err('NotFoundError', 'handle gone') });
+    LOG.installDir(dir, 'prompt');
+    const st = await LOG.resumeDir();
+    assert.strictEqual(st.granted, false);
+    assert.strictEqual(st.needGesture, true);
+    assert.strictEqual(st.needsRepick, true);
+    assert.ok(/NotFoundError/.test(st.lastError), st.lastError);
+    let picked = 0;
+    const fresh = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });
+    LOG.setPicker(async () => { picked++; return fresh; });
+    const st2 = await LOG.resumeDir();
+    LOG.setPicker(null);
+    assert.strictEqual(picked, 1);
+    assert.strictEqual(st2.granted, true);
+    assert.strictEqual(st2.needsRepick, false);
+    assert.ok(fresh.files['pixel-farm-save.json']);
+  });
+
+  await testAsync('resumeDir: granted permission but stale write marks needsRepick', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', requestResult: 'granted', writeThrow: err('InvalidStateError', 'stale file handle') });
+    LOG.installDir(dir, 'prompt');
+    const st = await LOG.resumeDir();
+    assert.strictEqual(st.granted, true, 'permission itself was granted');
+    assert.strictEqual(st.needsRepick, true);
+    assert.ok(/InvalidStateError/.test(st.lastError), st.lastError);
+  });
+
+  await testAsync('refreshPerm: queryPermission granted clears a stuck needGesture flag', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    LOG.installDir(dir, 'prompt');
+    assert.strictEqual(LOG.status().needGesture, true);
+    dir.permission = 'granted';
+    const st = await LOG.refreshPerm();
+    assert.strictEqual(st.granted, true);
+    assert.strictEqual(st.needGesture, false);
+    assert.strictEqual(dir.queryCalls, 1);
+    assert.strictEqual(dir.requestCalls, 0, 'refresh must not call requestPermission (no gesture)');
+  });
+
+  await testAsync('hydrateDir: queryPermission prompt but a probe write succeeds recovers without a click', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt' });
+    LOG.installDir(dir, 'prompt');
+    // installDir does not probe; hydrateDir should
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(st.granted, true, 'probe write recovered a handle whose queryPermission said prompt');
+    assert.strictEqual(st.needGesture, false);
+    assert.ok(dir.files['pixel-farm-save.json']);
+  });
+
+  await testAsync('hydrateDir: NotFoundError from queryPermission is recorded and asks for a re-pick', async () => {
+    const s = mem();
+    LOG.reset(s);
+    LOG.boot(snap(), { store: s, getSave: () => snap({ saveVersion: 15 }) });
+    await LOG.hydrateDir();
+    const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'prompt', queryThrow: err('NotFoundError', 'no such file'), writeThrow: err('NotFoundError', 'no such file') });
+    LOG.installDir(dir, 'prompt');
+    const st = await LOG.hydrateDir();
+    assert.strictEqual(st.granted, false);
+    assert.strictEqual(st.needsRepick, true);
+    assert.ok(/NotFoundError/.test(st.lastError), st.lastError);
+  });
+
   console.log(n + ' passed');
 })().catch(err => { console.error(err); process.exit(1); });
