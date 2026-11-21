@@ -1619,7 +1619,7 @@ function followInsect(k) { // play-chase: keep walking toward the live butterfly
   if (moved > 5) k.via = routeVia(F, k.to);
 }
 function idleHold() { return { kind: 'idle', label: '歇一会儿', to: { x: F.x, y: F.y }, dur: 8, rest: true }; }
-function pickTask() { // v5.11.0.23: chooseTask may return null (a spouse with no party seat); never hand that to stepActor
+function nextTask() { // v5.11.0.23: chooseTask may return null (a spouse with no party seat); never hand that to stepActor
   try { const t = chooseTask(); if (t) return t; } catch (e) { try { console.warn('[pixel-farm] chooseTask', F && (F.id || 'farmer'), e); } catch (x) {} }
   return idleHold(); }
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
@@ -1632,7 +1632,7 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
 function stepActorInner(dm) {
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = pickTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (!F.task) { F.task = nextTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   if (k && k.kind === 'play-chase') followInsect(k);
