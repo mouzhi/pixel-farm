@@ -97,12 +97,16 @@
     const short = (Array.isArray(o.short) ? o.short : []).filter(id => typeof id === 'string' && WORD[id]).slice(0, 8);
     if (short.length) out.short = short;
     if (o.skip) out.skip = 1;
+    // v5.11.0.27: cargo already pulled for a walk in progress (append-only; omitted when empty)
+    const held = cleanNeed(o.held);
+    if (held.length) out.held = held;
     return out;
   }
   // a new day: post 2 orders, clear yesterday's pick; auto-accept is applied later once we know the stock
+  // the game must bakeryHeldReturn any B.held before calling roll (otherwise the cargo would vanish)
   function roll(B, day, extra, more) {
     const d = day | 0; if (B.last === d) return B;
-    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; delete B.short; delete B.skip; return B;
+    B.last = d; B.offer = offers(d, extra, more); B.take = null; B.done = 0; delete B.short; delete B.skip; delete B.held; return B;
   }
   // pick mode: the player chose `id` (null clears it so auto can run). ignored once today's order is delivered.
   function setTake(B, id) {
