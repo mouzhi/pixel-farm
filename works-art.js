@@ -6,7 +6,7 @@
   const PW = root.PFWorks, PL = root.PFPlots;
   const PAL = root.PF_PALETTE, R = PAL.ramps, Wd = R.wood, St = R.stone, Wt = R.water, Rf = R.roof, Ac = R.accent, Ink = R.ink, G = R.green;
   let X = null, S = null, MD = null, ICON = null, lastKey = '', mounted = false;
-  const own = { spr: [], works: [], hives: [], lamps: [], mach: [] }; // props this file put down (v5.11.0.27: machines)
+  const own = { spr: [], works: [], hives: [], lamps: [], mach: [] }; // props this file put down (v5.11.0.29: machines)
   const removeFrom = (arr, o) => { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); };
 
   // ---------- models (voxel = 1 screen px; 2 voxels per world unit) ----------
@@ -81,7 +81,7 @@
       if (z === 23) return x >= 1 && x <= 4 && y >= 1 && y <= 4 ? Ink[1] : null;
       if (z === 24) return (x === 2 || x === 3) && (y === 2 || y === 3) ? Ink[1] : null;
       return null; });
-    // ---------- v5.11.0.27 自动化机械 ----------
+    // ---------- v5.11.0.29 自动化机械 ----------
     // 自动饲喂槽 + 自来水槽: stands right behind a pen's trough (same width): a plank hopper with a tin funnel over the hay half,
     // a crank wheel on its side that turns while it feeds, and a blue pipe from the wheel's main with a tap over the water half.
     const spokes = (u, v, a, r0, r1, rim, spoke, hub) => { const r = Math.hypot(u, v); if (r > r1) return null; if (r > r1 - 1) return rim; if (r < r0) return hub;
@@ -173,7 +173,7 @@
   function blocks() { const out = []; for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.workPos(w); out.push([p.x - 7, p.y - 5, p.x + 7, p.y + 4]); } return out; }
   // where someone stands to hand goods in / take them out: in front of the door
   function doorOf(id) { const w = S.works.works[id]; const p = PW.workPos(w); return { x: p.x + 1, y: p.y + 8 }; }
-  // ---------- v5.11.0.27 machines: where each one stands (fixed spots on what is already there) ----------
+  // ---------- v5.11.0.29 machines: where each one stands (fixed spots on what is already there) ----------
   const PENS = () => (root.PFWorld && root.PFWorld.PENS) || {};
   const machKey = () => JSON.stringify([S.works.mach || 0, PW.MACH_PENS.map(k => !!(S.eff && S.eff[k])), PW.MACH_PENS.map(k => { const P = PENS()[k]; return P && P.bld ? [P.bld.x, P.bld.y] : 0; })]);
   const meadowCentre = () => { const sl = PW.hiveSlots(S.plots, S.eff ? S.eff.regions : []).filter(q => q.at !== 'orchard'); if (sl.length < 6) return null;
@@ -217,7 +217,7 @@
 
   // ---------- every frame: turning wheels ----------
   function frame(realT) {
-    if (own.mach.length) { const i = Math.floor(realT * 4); for (const q of own.mach) if (q.frames) q.m = q.frames[(i + (q.x & 3)) % q.frames.length]; } // v5.11.0.27: cranks and flywheels turn
+    if (own.mach.length) { const i = Math.floor(realT * 4); for (const q of own.mach) if (q.frames) q.m = q.frames[(i + (q.x & 3)) % q.frames.length]; } // v5.11.0.29: cranks and flywheels turn
     const n = (S.eff && S.eff.wheel) | 0; if (!n || !X.wheelProp) return; const frames = X.wheelFrames();
     PW.wheelsOf(S.plots, n).forEach(w => { const q = X.wheelProp(w.plot), fr = (q && q.frames) || frames; if (q) q.m = fr[Math.floor(realT * 5) % fr.length]; }); // v5.11.0.20: each wheel has its bank side's frames
   }
@@ -237,7 +237,7 @@
     for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.ready > 0)) continue; const p = PW.workPos(w); if (!onScreen(p.x, p.y, 40)) continue;
       const [sx, sy] = proj(p.x, p.y), ic = ICON[PW.WORKS[id].out]; ctx.drawImage(ic, Math.round(sx) - (ic.width >> 1), Math.round(sy) - 40 + bob); }
     const hs = hiveSpots(); S.works.hives.forEach((hv, i) => { const h = hs[i]; if (!h || hv._c || !(hv.ready > 0) || !onScreen(h.x, h.y, 30)) return; const [sx, sy] = proj(h.x, h.y); ctx.drawImage(ICON.honey, Math.round(sx) - 3, Math.round(sy) - 22 + bob); });
-    // v5.11.0.27 machines: eggs roll down the chute, water drips from the feeder's tap, honey drips into the jar
+    // v5.11.0.29 machines: eggs roll down the chute, water drips from the feeder's tap, honey drips into the jar
     if (own.mach.length && T >= 5 * 60 && T < 21 * 60) for (const q of own.mach) { if (!onScreen(q.x, q.y, 30)) continue;
       if (q.mach === 'chute') for (let k = 0; k < 2; k++) { const t = (realT * 0.45 + k * 0.5 + (q.x & 7) * 0.13) % 1; if (t > 0.8) continue; const u = t / 0.8;
         const [sx, sy] = proj(q.x - 4 + u * 5.5, q.y); const z = 13 - 9 * u; ctx.fillStyle = '#f6ecd0'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy - z) - 1, 2, 2); ctx.fillStyle = '#cfd0c6'; ctx.fillRect(Math.round(sx), Math.round(sy - z), 1, 1); }

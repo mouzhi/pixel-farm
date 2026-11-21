@@ -1,4 +1,4 @@
-// Screenshots + browser checks for v5.11.0.27 自动化机械 (auto feeder + waterer, egg chute, milker, honey tray):  node tools/mach-shots.js [name-filter]
+// Screenshots + browser checks for v5.11.0.29 自动化机械 (auto feeder + waterer, egg chute, milker, honey tray):  node tools/mach-shots.js [name-filter]
 //   writes /workspace/pf-shots/mach_*.png (PF_SHOTS to change); exits 1 on a page error, a console error or a failed check
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
@@ -64,10 +64,12 @@ fs.mkdirSync(OUT, { recursive: true });
   // 4. the honey tray: six hives drain into the barrel; no hive caps at 2; the bin feeds an order; the night cart ships the extra
   await shot('mach_tray.png', `(async () => { ${setup} at(9 * 60); dry(); for (const h of S.works.hives) h.ready = 2; const r = f.buy('tray');
     const now = f.PW.binHas(S.works.mach, 'honey'), left = S.works.hives.reduce((n, h) => n + h.ready, 0); const counts = f.bakeryCounts().honey | 0;
+    for (const h of S.works.hives) h.ready = 0; for (const a of f.actors()) a.crops = a.crops.filter(c => c !== 'honey'); S.works.mach.hn = 6;
+    const pulled = f.bakeryPull([{ id: 'honey', n: 4 }]), afterPull = f.PW.binHas(S.works.mach, 'honey'); f.bakeryHeldReturn([{ id: 'honey', n: 4 }]); const returned = f.PW.binHas(S.works.mach, 'honey');
     S.works.mach.hn = 20; const c0 = S.earned; nextMorning(); const shipped = recent(/收货车拉走了/).length, earned = S.earned - c0;
     const sp = f.PWA.machSpots().find(q => q.kind === 'vat'); at(11 * 60); const png = await (${closeup})(sp.x, sp.y);
-    return { ok: r.ok, now, left, counts, shipped, keep: f.PW.binHas(S.works.mach, 'honey'), png }; })()`,
-    r => !r.ok ? 'buy' : r.now !== 12 || r.left ? 'hives did not drain ' + r.now + '/' + r.left : r.counts < 12 ? 'bakery does not see the bin' : !r.shipped ? 'no produce cart' : null);
+    return { ok: r.ok, now, left, counts, pulled, afterPull, returned, shipped, keep: f.PW.binHas(S.works.mach, 'honey'), png }; })()`,
+    r => !r.ok ? 'buy' : r.now !== 12 || r.left ? 'hives did not drain ' + r.now + '/' + r.left : r.counts < 12 ? 'bakery does not see the bin' : !r.pulled || r.afterPull !== 2 || r.returned !== 6 ? 'bakery hold/return through the bin ' + [r.pulled, r.afterPull, r.returned] : !r.shipped ? 'no produce cart' : null);
   // 5. the shop's 工坊 tab (machines with prices, locks and icons) and the codex 机械 page
   await shot('mach_shop.png', `(() => { ${setup} smithy(); f.buy('feeder'); f.buy('chute'); localStorage.setItem('mouzhi/pixel-farm:shop-tab', 'works'); return {}; })()`,
     r => (r.cards || 0) < 5 ? 'machine cards ' + r.cards : null,

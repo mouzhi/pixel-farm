@@ -68,7 +68,7 @@
   const keyGiant = id => 'giant:' + id;
   const keyDecor = id => 'decor:' + id;
   const keyBug = id => 'bug:' + id;
-  const keyMach = id => 'mach:' + id; // v5.11.0.27 自动化机械, recorded when bought
+  const keyMach = id => 'mach:' + id; // v5.11.0.29 自动化机械, recorded when bought
   const MACH_ITEMS = [{ id: 'feeder', name: '自动饲喂槽' }, { id: 'chute', name: '集蛋滑道' }, { id: 'milker', name: '挤奶机' }, { id: 'tray', name: '蜂蜜收集槽' }];
 
   function emptyCodex() { return { entries: {} }; }
@@ -140,7 +140,7 @@
       { id: 'giant', name: '巨大作物', items: catalog().giant },
       { id: 'bug', name: '昆虫', items: catalog().bug },
       { id: 'decor', name: '装饰', items: catalog().decor },
-      { id: 'mach', name: '机械', items: catalog().mach }, // v5.11.0.27
+      { id: 'mach', name: '机械', items: catalog().mach }, // v5.11.0.29
     ];
   }
 

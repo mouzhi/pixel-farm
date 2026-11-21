@@ -213,7 +213,7 @@
   const HERD = { out: [8 * 60, 8 * 60 + 45], back: [16 * 60 + 40, 17 * 60 + 30], noon: 12 * 60, bonus: 3 };
   const herdPhase = T => T >= HERD.out[0] && T < HERD.out[1] ? 'out' : T >= HERD.out[1] && T < HERD.back[0] ? 'graze' : T >= HERD.back[0] && T < HERD.back[1] ? 'back' : null;
 
-  // ---------- v5.11.0.27 自动化机械（第一批）: auto feeder + waterer, egg chute, milker, honey tray ----------
+  // ---------- v5.11.0.29 自动化机械（第一批）: auto feeder + waterer, egg chute, milker, honey tray ----------
   // Bought in the shop's 「工坊」 tab (never by 家人帮忙添置), fitted onto what is already there: the pens' troughs, the coops,
   // the cow sheds, the meadow's hives. Saved as works.mach = { f, e, m, h, eg, mk, hn } (small ints; zero keys left out):
   // f: a bit per pen with a feeder (MACH_PENS order), e / m / h: chute / milker / tray, eg / mk / hn: goods waiting in the
@@ -307,7 +307,7 @@
       if (typeof q.x === 'number' && typeof q.y === 'number') { out.works[id].x = num(q.x, 0, -260, 452); out.works[id].y = num(q.y, 0, -212, 388); } } // v5.7.0 moved
     out.hives = (Array.isArray(o.hives) ? o.hives : []).slice(0, HIVE.max).filter(h => h && typeof h === 'object').map(h => ({ at: h.at === 'orchard' || PL.isPlotId(h.at) ? h.at : null, s: Math.round(num(h.s, 0, 0, 5)), cd: Math.round(num(h.cd, HIVE.every, 0, 9)), ready: Math.round(num(h.ready, 0, 0, HIVE.readyCap)), ...(typeof h.x === 'number' && typeof h.y === 'number' ? { x: num(h.x, 0, -260, 452), y: num(h.y, 0, -212, 388) } : {}) })); // v5.7.0: x, y once moved
     out.penHost = typeof o.penHost === 'string' && PL.isPlotId(o.penHost) ? o.penHost : null;
-    const mach = machValid(o.mach); if (mach) out.mach = mach; // v5.11.0.27 append-only (v15): only once a machine is bought
+    const mach = machValid(o.mach); if (mach) out.mach = mach; // v5.11.0.29 append-only (v15): only once a machine is bought
     return out;
   }
 
