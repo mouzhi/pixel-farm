@@ -82,7 +82,7 @@ fs.mkdirSync(OUT, { recursive: true });
     until(() => { const k = kid(); return Math.hypot(k.x - h.x, k.y - h.y) < 30; }, 1500); look(h.x, h.y + 2, 0.3);
     return { bought, picked, no: no && no.why, yes: yes && yes.ok, at: [h.site, h.x, h.y, h.m], crops, inPlot: f.HT.every(t => f.PL.plotAt(t.x, t.y) && f.PL.plotAt(t.x, t.y).id === 'eslope'),
       kidNear: [Math.round(kid().x), Math.round(kid().y)], log: S.events.map(e => e.msg).filter(l => /挪到了新地方/.test(l)).slice(-1) }; })()`,
-    r => !r.bought ? 'eslope not bought' : r.picked !== 'home' ? 'not picked' : !/花甸或农田/.test(r.no || '') ? 'bad spot accepted: ' + r.no : !r.yes ? 'move refused' : r.at[0] !== 'eslope' ? 'not moved ' + r.at : !r.inPlot ? 'tiles left behind' : r.crops !== 6 ? 'crops lost ' + r.crops : !r.log.length ? 'no log' : null);
+    r => !r.bought ? 'eslope not bought' : r.picked !== 'home' ? 'not picked' : !/花甸.农田/.test(r.no || '') ? 'bad spot accepted: ' + r.no : !r.yes ? 'move refused' : r.at[0] !== 'eslope' ? 'not moved ' + r.at : !r.inPlot ? 'tiles left behind' : r.crops !== 6 ? 'crops lost ' + r.crops : !r.log.length ? 'no log' : null);
   // 5. helping: about every other day 小豆 comes over for an hour (a second only when the main farm is behind); then back home
   await shot('v590_help.png', `(() => { ${setup} wed(); const days = []; let pic = null;
     for (let d = 72; d <= 77; d++) { until(() => S.day === d && tod() >= 9 * 60, 2000);

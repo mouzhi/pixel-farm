@@ -180,78 +180,153 @@
     const tier = BOOK.rarityOf(it);
     return tier ? 'r-' + tier : '';
   }
-  // v5.1.1: a fixed 48px bar (8 tick marks) that stays inside the 62px slot at every can size
-  const METER_W = 48;
+  // v5.1.1: 8 tick marks; v5.11.0.7 the fill is a share of the bar so the same meter fits the full slot, the compact slot and the slim strip
   function meterBar(cur, max) {
-    const fill = max > 0 ? Math.max(0, Math.min(METER_W, Math.round(METER_W * cur / max))) : 0;
-    return `<div class="meter" aria-valuenow="${cur}" aria-valuemax="${max}"><i class="fill" style="width:${fill}px"></i><span class="ticks"></span></div>`;
+    const pct = max > 0 ? Math.max(0, Math.min(100, Math.round(100 * cur / max))) : 0;
+    return `<div class="meter" aria-valuenow="${cur}" aria-valuemax="${max}"><i class="fill" style="width:${pct}%"></i><span class="ticks"></span></div>`;
   }
+  // ---- v5.11.0.7 seed packets: one 16x16 picture per crop (paper packet, crop-coloured bands, a small drawing of the crop) ----
+  // The bar used to show seeds by sliding the whole ripe-crop sheet behind a 32px box, and a v5.9.1 rule (#inv .slot i{background-size:28px!important})
+  // squashed that sheet into 28px: carrot (frame 0) showed every crop as a row of dots, the others slid out of the box and showed nothing.
+  const SEED_ART = {
+    carrot: { band: '#e8862a', rows: ['     g g', '    ggg ', '   OoG  ', '  Ohoo  ', '  ooO   ', ' Ooo    ', ' oO     ', 'O       '], cols: { o: '#e8862a', O: '#b85a1a', h: '#ffb060', g: gr[4], G: gr[2] } },
+    cabbage: { band: gr[3], rows: ['        ', '  GggG  ', ' GglggG ', ' glGGlg ', ' gGllGg ', ' GglggG ', '  GggG  ', '        '], cols: { g: gr[3], l: gr[4], G: gr[2] } },
+    pumpkin: { band: '#b85a1a', rows: ['    t   ', '   tt   ', ' OooooO ', 'OohoOooO', 'OohoOooO', 'OoooOooO', ' OooooO ', '        '], cols: { o: '#e8862a', O: '#b85a1a', h: '#ffb060', t: gr[2] } },
+    strawberry: { band: '#d83a3a', rows: ['  g  g  ', ' gGggGg ', ' rrrrrr ', ' rxrrxr ', ' rrrrRr ', '  rxRr  ', '   rr   ', '        '], cols: { r: '#d83a3a', R: '#9a2a2a', x: '#ffd76a', g: gr[4], G: gr[2] } },
+    watermelon: { band: gr[2], rows: ['        ', '        ', 'rrrrrrrr', 'rxrrrxrr', ' rrxrrr ', ' cccccc ', '  GGGG  ', '        '], cols: { r: '#e8505a', x: ink, c: '#c8f08a', G: gr[2] } },
+    wheat: { band: '#c8952a', rows: ['    y   ', '   yYy  ', '   yYy y', '   yYyyY', '   yYy y', '    t   ', '   tt   ', '    t   '], cols: { y: '#f2cf55', Y: '#c8952a', t: gr[3] } },
+  };
+  const SEED_DOTS = { band: wd[3], rows: ['        ', '        ', '  bb    ', '  bbb bb', '   b bbb', '  bb  b ', '  bbb   ', '        '], cols: { b: wd[1] } };
+  function seedPacket(art) {
+    const rows = ['', '  kkkkkkkkkkkk', '  kwdwdwdwdwdk', '  kBBBBBBBBBBk'];
+    for (let y = 0; y < 9; y++) { const e = y ? art.rows[y - 1] : '        '; rows.push('  kp' + [...e].map(ch => ch === ' ' ? 'p' : ch).join('') + 'sk'); }
+    rows.push('  kBBBBBBBBBBk', '  kkkkkkkkkkkk');
+    return pixIcon(rows.map(r => r.padEnd(16)), Object.assign({ k: ink, w: '#fff6dc', d: '#e0d0a8', p: '#f6ecd0', s: '#e0d0a8', B: art.band }, art.cols));
+  }
+  const SEED_ICON = {};
+  const seedIconURL = k => SEED_ICON[k] || (SEED_ICON[k] = seedPacket(SEED_ART[k] || SEED_DOTS));
+  // saplings: a sprout in a burlap bag with the fruit's colour, so they do not read as the fruit itself
+  const saplingIcon = fruit => pixIcon(['', '', '', '     kkkk', '    kgggglk', '   kglggfgk', '   kgfgglk', '    kkkbkk', '      b', '      b', '    kkkbkk', '   kddddddk', '   kdtddtdk', '    kkkkkk'].map(r => r.padEnd(16)), { k: ink, g: gr[3], l: gr[4], f: fruit, b: wd[2], d: wd[3], t: wd[4] });
+  const SAPLING_ICON = { apple: saplingIcon(rf[2]), orange: saplingIcon('#e8862a') };
+  ICONS.crate = pixIcon(['', '', '  kkkkkkkkkkkk', '  kttttttttttk', '  kbkbbbbbbkbk', '  kbbkbbbbkbbk', '  kbbbkbbkbbbk', '  kbbbbkkbbbbk', '  kbbbkbbkbbbk', '  kbbkbbbbkbbk', '  kbkbbbbbbkbk', '  kttttttttttk', '  kkkkkkkkkkkk'].map(r => r.padEnd(16)), { k: ink, b: wd[2], t: wd[4] });
+  const pic = url => `<i style="background-image:url(${url})"></i>`; // one 16x16 picture; the bar's CSS sizes it at 2x
   // ---- inventory bar: water, the seeds he can grow, the basket ----
+  // v5.11.0.7 three looks, desktop web only (a platform shell such as xhs docks #inv itself and always gets the full look):
+  //   full    — early game (阿禾 has not moved in): 54px slots with the name under the icon, so a new player can read the bar
+  //   compact — once the family runs the farm: 40px icon + count slots, name and details in a hover tooltip, kids folded into 家人, a 仓库 highlight
+  //   slim    — one thin strip (water, basket, family, storehouse), the default once the family has moved in; ▴ / ▾ switch, kept in localStorage
+  const INV_KEY = 'mouzhi/pixel-farm:ui:inv';
+  const hosted = () => !!window.PFPlatform;
+  const readInvPref = () => { try { return localStorage.getItem(INV_KEY) || ''; } catch (e) { return ''; } };
+  let invPref = hosted() ? '' : readInvPref();
+  const setInvPref = v => { invPref = v; try { localStorage.setItem(INV_KEY, v); } catch (e) {} invKey = ''; inv(); hideTip(); };
+  const invMode = () => { if (hosted()) return 'full'; const late = !!(G.S.family && G.S.family.moved); if (invPref === 'slim') return 'slim'; if (invPref === 'open') return late ? 'compact' : 'full'; return late ? 'slim' : 'full'; };
+  const short = n => n >= 10000 ? (Math.round(n / 1000) / 10) + '万' : String(n);
+  let storeCache = null, storeAt = 0; // G.storehouse() walks every basket; the bar re-reads it at most every 2 s
+  const storeSum = () => { const now = Date.now(); if (!storeCache || now - storeAt > 2000) { storeAt = now; try { storeCache = G.storehouse ? G.storehouse() : null; } catch (e) { storeCache = null; } } return storeCache; };
   let invKey = '';
-  function inv() {
-    const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0);
-    const fishN = F.crops.filter(k => window.PFFish && PFFish.isFish(typ(k))).length;
-    const specials = (F.crops || []).map(it => { const o = window.PFSurprise ? PFSurprise.itemOf(it) : { type: typ(it) }; return [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'); }).join('|');
-    const key = [F.water, S.waterMax, E.basket, ...ids.map(k => k + F.bag[k]), F.crops.length, fishN, specials, F.gathered, !!atlas, F.wood, E.house, F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), S.eff.regions.length, E.rod, E.searod, (S.catches[0] && S.catches[0].id) || ''].join(',');
-    if (key === invKey) return; invKey = key;
-    let h = `<div class="slot" title="水壶：每格土地每天浇一次，空了去井边装满"><i style="background:url(${CAN});background-size:32px"></i>${meterBar(F.water, S.waterMax)}<span class="k">水壶</span><span class="n">${F.water}/${S.waterMax}</span></div>`;
+  function invEntries(mode) {
+    const S = G.S, F = G.F, E = S.eff, ids = SIM.IDS.filter(k => E.crops.includes(k) || F.bag[k] > 0), out = [];
+    const add = o => out.push(Object.assign({ n: '', tip: '', cls: '', kcls: '' }, o));
+    add({ id: 'can', ico: pic(CAN), name: '水壶', n: `${F.water}/${S.waterMax}`, tip: '每格土地每天浇一次，空了去井边装满', meter: meterBar(F.water, S.waterMax), mini: 1 });
     for (const k of ids) { const n = F.bag[k] + (k === 'carrot' ? F.gathered : 0); if (!n && k !== 'carrot') continue; // v5.9.1: seeds he has none of stay out of the one-row bar
-      h += `<div class="slot${n ? '' : ' dim'}" title="${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟">${cropIcon(k)}<span class="k">${SIM.CROPS[k].name}种</span><span class="n">${n}</span></div>`; }
-    h += `<div class="slot${F.crops.length ? '' : ' dim'}" title="篮子：装满 ${E.basket} 个就去集市"><i style="background:url(${BASKET});background-size:32px"></i><span class="k">篮子</span><span class="n">${F.crops.length}/${E.basket}</span></div>`;
+      add({ id: 'seed-' + k, ico: pic(seedIconURL(k)), name: `${SIM.CROPS[k].name}种`, n, dim: !n, tip: `${SIM.CROPS[k].name}种子（随身）· ${SIM.CROPS[k].days} 天成熟` }); }
+    add({ id: 'basket', ico: pic(BASKET), name: '篮子', n: `${F.crops.length}/${E.basket}`, dim: !F.crops.length, tip: `装满 ${E.basket} 个就去集市`, mini: 1 });
     if (F.wood || E.axe) { const cap = (G.woodCap && G.woodCap()) || PFWorld.HOUSE_TIERS[E.house || 0].woodCap; // v5.0: wood is a material kept in the storehouse; v5.10.5 cap +400 with the woodshop
-      h += `<div class="slot${F.wood ? '' : ' dim'}" title="仓库里的木材：扩建房子、给动物棚子围篱笆要用。仓库最多放 ${cap} 份（房子越大越多），放不下的才拿去集市卖（${PFWorld.WOOD.price} 金一份）"><i style="background:url(${FRUIT_ICON.wood});background-size:32px"></i><span class="k">木材</span><span class="n">${F.wood}/${cap}</span></div>`; }
+      add({ id: 'wood', ico: pic(FRUIT_ICON.wood), name: '木材', n: `${F.wood}/${cap}`, cn: short(F.wood), dim: !F.wood, tip: `仓库里的木材：扩建房子、给动物棚子围篱笆要用。仓库最多放 ${cap} 份（房子越大越多），放不下的才拿去集市卖（${PFWorld.WOOD.price} 金一份）` }); }
     { const fam = S.family, FA = window.PFFamily, tier = PFWorld.HOUSE_TIERS[E.house || 0]; // v5.0: 阿禾 and the children
-      if (!fam.moved && fam.met) h += `<div class="slot" title="阿禾是集市的店主（7:00–19:00 开门）。农夫每天第一次去集市会和她聊几句（+${FA.CHAT}），篮子里有野花、鱼、果子或鸡蛋就送她一样；每天头两趟卖东西各 +${FA.SALE}。好感满 ${FA.LOVE_MAX}、房子扩建成大木屋后，她就搬来一起经营农场，摊子交给她爸爸。"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">阿禾</span><span class="n">${fam.love}/${FA.LOVE_MAX}</span></div>`;
-      if (fam.moved) { const kids = fam.kids.map(k => FA.kidLine(k, S.day));
-        const jobs = S.members.map(m => `${m.name}：${m.home ? '在家' : m.task ? m.task.label : '歇着'}`);
-        h += `<div class="slot" title="${tier.name}：最多住 ${tier.pop} 人。家人：阿禾${kids.length ? '、' + kids.join('、') : ''}。${jobs.join('；')}"><i style="background:url(${ICONS.house});background-size:32px;image-rendering:pixelated"></i><span class="k">家人</span><span class="n">${1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length}/${tier.pop}</span></div>`;
-        const NK = window.PFKids;
-        for (const k of fam.kids) {
-          const short = NK ? NK.panelShort(k, S.day) : FA.kidStage(k, S.day);
-          const m = S.members.find(q => q.id === k.id);
-          const job = !m || m.home ? '在家' : m.away ? '在学校上课' : (m.task ? m.task.label : '歇着');
-          const HS = G.homeStatus ? G.homeStatus().kids.find(q => q.id === k.id) : null, note = HS && HS.note ? HS.note + '。' : ''; // v5.9.0
-          const short2 = HS && HS.married ? '成家' : short;
-          h += `<div class="slot" title="${FA.kidLine(k, S.day)}。${note}${job}"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${k.name}</span><span class="n">${short2}</span></div>`;
-        }
+      if (!fam.moved && fam.met) add({ id: 'ahe', ico: pic(ICONS.heart), name: '阿禾', n: `${fam.love}/${FA.LOVE_MAX}`, tip: `阿禾是集市的店主（7:00–19:00 开门）。农夫每天第一次去集市会和她聊几句（+${FA.CHAT}），篮子里有野花、鱼、果子或鸡蛋就送她一样；每天头两趟卖东西各 +${FA.SALE}。好感满 ${FA.LOVE_MAX}、房子扩建成大木屋后，她就搬来一起经营农场，摊子交给她爸爸。` });
+      if (fam.moved) {
+        // v5.11.0.7: one 家人 slot; each child's age, school or job is a line of its tooltip instead of a slot of its own
+        const NK = window.PFKids, HSK = G.homeStatus ? G.homeStatus().kids : [];
+        const jobOf = m => !m || m.home ? '在家' : m.away ? '在学校上课' : (m.task ? m.task.label : '歇着');
+        const stageOf = k => { const HS = HSK.find(q => q.id === k.id); return HS && HS.married ? '成家' : NK ? NK.panelShort(k, S.day) : FA.kidStage(k, S.day); };
+        const noteOf = k => { const HS = HSK.find(q => q.id === k.id); return HS && HS.note ? '，' + HS.note : ''; };
+        const lines = S.members.filter(m => !fam.kids.some(k => k.id === m.id)).map(m => `${m.name}：${jobOf(m)}`);
+        for (const k of fam.kids) lines.push(`${k.name}（${stageOf(k)}）：${jobOf(S.members.find(q => q.id === k.id))}${noteOf(k)}`);
+        const busy = S.members.filter(m => !m.home && !m.away && m.task).length;
+        const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length;
+        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${tier.pop}`, tip: `${tier.name}：最多住 ${tier.pop} 人，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
-        if (nk) h += `<div class="slot${nk.room ? ' dim' : ''}" title="${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）"><i style="background:url(${ICONS.heart});background-size:32px;image-rendering:pixelated"></i><span class="k">${nk.name}</span><span class="n">${nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天'}</span></div>`; } }
-    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<div class="slot" title="${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置"><i style="background:url(${FRUIT_ICON[k]});background-size:32px"></i><span class="k">${PFWorld.FRUIT[k].name}苗</span><span class="n">${F.saplings[k]}</span></div>`;
-    if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) h += `<div class="slot${S.hay ? '' : ' dim'}" title="仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）"><i style="background:url(${ICONS.hay});background-size:32px"></i><span class="k">干草</span><span class="n">${S.hay}</span></div>`;
+        if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
+      } }
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置` });
+    if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) add({ id: 'hay', ico: pic(ICONS.hay), name: '干草', n: S.hay, dim: !S.hay, tip: `仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）` });
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
-      h += `<div class="slot" title="${S.animals.map(a => `${PFAnimals.KINDS[a.kind].name} ${a.h}（${PFAnimals.mood(a.h)}）`).join('，')}。喂饱、加水、摸一摸会更开心；开心（80 以上）多产一份，闷闷不乐（30 以下）不产。"><i style="background:url(${ICONS.chicken});background-size:32px;image-rendering:pixelated"></i><span class="k">${mood}</span><span class="n">${S.animals.length}</span></div>`; }
+      add({ id: 'animals', ico: pic(ICONS.chicken), name: mood, n: S.animals.length, tip: `${S.animals.map(a => `${PFAnimals.KINDS[a.kind].name} ${a.h}（${PFAnimals.mood(a.h)}）`).join('，')}。喂饱、加水、摸一摸会更开心；开心（80 以上）多产一份，闷闷不乐（30 以下）不产。` }); }
     // v4.6: the starter bamboo rod is always owned (shop level 0); fish in the basket are listed by kind
     const FS = window.PFFish, rod = FS.rodOf(E.rod || 0);
-    const rodTip = E.searod ? `${rod.name}，另有海竿，可在码头海钓` : `${rod.name}（开局就有）。商店可升级钢竿、碳素竿；买下海边和海竿后能海钓`;
-    h += `<div class="slot" title="${rodTip}"><i style="background:url(${E.searod ? ICONS.searod : ICONS.rod});background-size:32px;image-rendering:pixelated"></i><span class="k">${E.searod ? '海竿' : rod.name}</span></div>`;
-    if (FS && fishN) {
-      const counts = {}; for (const k of F.crops) { const id = typ(k); if (FS.isFish(id)) counts[id] = (counts[id] || 0) + 1; }
+    add({ id: 'rod', ico: pic(E.searod ? ICONS.searod : ICONS.rod), name: E.searod ? '海竿' : rod.name, tip: E.searod ? `${rod.name}，另有海竿，可在码头海钓` : `${rod.name}（开局就有）。商店可升级钢竿、碳素竿；买下海边和海竿后能海钓` });
+    if (FS) { const counts = {}; for (const k of F.crops) { const id = typ(k); if (FS.isFish(id)) counts[id] = (counts[id] || 0) + 1; }
       for (const id of FS.FISH_IDS) if (counts[id]) { const f = FS.fishOf(id), rc = rarityClass({ group: 'fish', id });
-        h += `<div class="slot ${rc}" title="${f.name}：篮子里待售，集市收购 ${f.price} 金一条">${itemArt({ group: 'fish', id }, { fit: 32 })}<span class="k ${rc}">${esc(f.name)}</span><span class="n">${counts[id]}</span></div>`; }
-    }
+        add({ id: 'fish-' + id, ico: itemArt({ group: 'fish', id }, { fit: 32 }), name: f.name, n: counts[id], cls: rc, kcls: rc, tip: `篮子里待售，集市收购 ${f.price} 金一条` }); } }
     // same sprites for basket rares / glowing / giant crops, grouped like the fish slots
     if (window.PFSurprise) {
       const groups = new Map();
-      for (const it of F.crops) {
-        const o = PFSurprise.itemOf(it);
-        if ((FS && FS.isFish(o.type)) || !(o.rare || o.glow || o.giant)) continue;
-        const key = [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':');
-        const e = groups.get(key) || { spec: o, n: 0 }; e.n++; groups.set(key, e);
-      }
+      for (const it of F.crops) { const o = PFSurprise.itemOf(it); if ((FS && FS.isFish(o.type)) || !(o.rare || o.glow || o.giant)) continue;
+        const key = [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'); const e = groups.get(key) || { spec: o, n: 0 }; e.n++; groups.set(key, e); }
       for (const e of groups.values()) {
         const name = PFSurprise.itemName(e.spec, Object.fromEntries((SIM.IDS || []).map(k => [k, SIM.CROPS[k].name])));
         const rc = rarityClass(e.spec), unit = G.priceOfAny ? G.priceOfAny(e.spec) : '';
-        h += `<div class="slot ${rc}" title="${esc(name)}${unit ? '：篮子里待售，集市收购 ' + unit + ' 金' : ''}">${itemArt(e.spec, { fit: 32 })}<span class="k ${rc}">${esc(name)}</span><span class="n">${e.n}</span></div>`;
+        add({ id: 'sp-' + name, ico: itemArt(e.spec, { fit: 32 }), name, n: e.n, cls: rc, kcls: rc, tip: unit ? `篮子里待售，集市收购 ${unit} 金` : '' });
       }
     }
-    $('inv').innerHTML = h;
+    // v5.11.0.7 late game: what the storehouse would fetch today, the thing a player who no longer farms by hand looks for
+    if (mode !== 'full') { const d = storeSum();
+      if (d) { const rows = (d.store || []).filter(r => r.n > 0).sort((a, b) => b.n - a.n).slice(0, 3);
+        const seeds = (d.store || []).reduce((n, r) => n + r.n, 0);
+        add({ id: 'store', ico: pic(ICONS.crate), name: '仓库', n: short(d.sellGold || 0), act: 'store', mini: 1, miniN: `可卖 ${short(d.sellGold || 0)}`,
+          tip: `今天可卖 ${d.sellGold || 0} 金（按今日行情）。仓库种子 ${seeds} 颗，木材 ${d.wood ? d.wood.n : 0}/${d.wood ? d.wood.cap : 0}。` + (rows.length ? `\n存得最多：${rows.map(r => `${r.name} ×${r.n}`).join('、')}` : '') + '\n点一下打开仓库（I）' }); } }
+    return out;
+  }
+  function inv() {
+    const S = G.S, F = G.F, E = S.eff, mode = invMode(), sd = mode === 'full' ? null : storeSum();
+    const specials = (F.crops || []).map(it => { const o = window.PFSurprise ? PFSurprise.itemOf(it) : { type: typ(it) }; return [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'); }).join('|');
+    const key = [mode, F.water, S.waterMax, E.basket, ...SIM.IDS.map(k => k + F.bag[k]), specials, F.gathered, F.wood, E.house, E.axe, E.crops.join('/'), F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.met, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.home ? 'h' : '') + (m.away ? 'a' : '') + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), E.rod, E.searod, sd ? sd.sellGold : ''].join(',');
+    if (key === invKey) return; invKey = key;
+    const list = invEntries(mode), el = $('inv');
+    const data = e => `data-id="${e.id}" data-name="${esc(e.name)}" data-tip="${esc(e.tip)}"${e.act ? ` data-act="${e.act}"` : ''}`;
+    let h = '';
+    if (mode === 'slim') {
+      h += `<button type="button" class="invtog" data-a="open" title="展开物品栏">▴ 物品栏</button>`;
+      for (const e of list) if (e.mini) h += `<div class="slot mini${e.dim ? ' dim' : ''}" ${data(e)}>${e.ico}${e.meter || ''}<span class="k">${esc(e.name)}</span><span class="n">${esc(e.miniN || e.n)}</span></div>`;
+    } else {
+      if (!hosted()) h += `<button type="button" class="invtog" data-a="slim" title="收起物品栏（家人会照看农场）">▾</button>`; // first, so it never scrolls out of a long bar
+      for (const e of list) h += `<div class="slot ${e.cls}${e.dim ? ' dim' : ''}" ${data(e)}>${e.ico}${e.meter || ''}<span class="k ${e.kcls}">${esc(e.name)}</span>${e.n !== '' ? `<span class="n">${esc(mode === 'compact' && e.cn !== undefined ? e.cn : e.n)}</span>` : ''}</div>`;
+    }
+    el.className = 'panel ' + mode; el.innerHTML = h;
+    if (tipFor && !el.contains(tipFor)) hideTip();
+  }
+  // ---- v5.11.0.7 hover tooltip for the bar: name, count and the long text, in the same pixel panel as the rest ----
+  let tipEl = null, tipFor = null;
+  function hideTip() { if (tipEl) tipEl.hidden = true; tipFor = null; }
+  function showTip(slot) {
+    if (!tipEl) { tipEl = document.createElement('div'); tipEl.id = 'invTip'; tipEl.className = 'panel'; tipEl.hidden = true; document.body.appendChild(tipEl); }
+    const name = slot.dataset.name || '', tip = slot.dataset.tip || '', n = (slot.querySelector('.n') || {}).textContent || '';
+    tipEl.innerHTML = `<b>${esc(name)}</b>${n ? `<span class="tn">${esc(n)}</span>` : ''}${tip ? `<div class="td">${esc(tip).replace(/\n/g, '<br>')}</div>` : ''}`;
+    tipEl.hidden = false; tipFor = slot;
+    const r = slot.getBoundingClientRect(), bar = $('inv').getBoundingClientRect(), w = tipEl.offsetWidth, hgt = tipEl.offsetHeight;
+    const x = Math.max(6, Math.min(innerWidth - w - 6, Math.round(r.left + r.width / 2 - w / 2)));
+    tipEl.style.left = x + 'px'; tipEl.style.top = Math.max(6, Math.round(bar.top - hgt - 8)) + 'px';
+  }
+  {
+    const el = $('inv');
+    el.addEventListener('mouseover', e => { const s = e.target.closest && e.target.closest('.slot'); if (s && el.contains(s)) { if (s !== tipFor) showTip(s); } });
+    el.addEventListener('mouseleave', hideTip);
+    el.addEventListener('click', e => {
+      const b = e.target.closest && e.target.closest('.invtog,.slot'); if (!b || !el.contains(b)) return;
+      if (b.dataset.a === 'open') return setInvPref('open');
+      if (b.dataset.a === 'slim') return setInvPref('slim');
+      if (b.dataset.act === 'store') { hideTip(); return toggleStore(true); }
+      if (el.classList.contains('slim')) setInvPref('open'); // anywhere on the slim strip opens the bar
+    });
   }
   // ---- shop: the player's job is to decide what to buy; the farmer does the rest ----
   const shop = $('shop'); let shopKey = '', shopFocus = '', plotView = ''; // plotView: v5.5.0 one plot's page (plots-ui.js)
   const SHOP_TAB_KEY = 'mouzhi/pixel-farm:shop-tab';
   const uiStore = () => (window.PFPlatform && PFPlatform.store && PFPlatform.store()) || (typeof localStorage !== 'undefined' ? localStorage : null);
   const HALL_TAB = { id: 'hall', name: '镇公所', title: '镇公所的告示板：建设项目、繁荣度、送给镇上的装饰', ids: [] }; // v5.10.0
-  const INN_TAB = { id: 'inn', name: '农家乐', title: '民宿院、二层客栈和海边度假村。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7; v5.10.8 resort
+  const INN_TAB = { id: 'inn', name: '农家乐', title: '镇门口农家乐区的民宿、二层客栈、菜馆，还有海边度假村。家人帮忙添置不会买这些。', ids: [] }; // v5.10.7; v5.10.8 resort
   const shopTabs = () => (SIM.SHOP_TABS || [{ id: 'all', name: '全部', ids: SIM.SHOP_IDS }]).concat(G.hallView ? [HALL_TAB] : []).concat(G.innView ? [INN_TAB] : []);
   const readShopTab = () => { try { const st = uiStore(), v = st && st.getItem(SHOP_TAB_KEY); if (v && shopTabs().some(t => t.id === v)) return v; } catch (e) {} return shopTabs()[0].id; };
   let shopTab = readShopTab();
@@ -343,20 +418,22 @@
     const stars = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
     const starTxt = '★'.repeat(stars) + '☆'.repeat(5 - stars);
     let h = '';
-    h += `<div class="sec">民宿院${v.plotName ? ' · ' + esc(v.plotName) : ''}${v.inn2 ? ' · 二层客栈' : ''}</div>`;
-    if (!v.plot) h += `<div class="more">先在「地块」里把林间空地、南河湾、河对岸或东坡改建成民宿院。</div>`;
+    h += `<div class="sec">农家乐区 · 民宿${v.inn2 ? ' · 二层客栈' : ''}</div>`; // v5.11.0.5: its own district by the town gate, no plot is rezoned
+    if (!v.plot) h += `<div class="more">农家乐区在镇门口东大道两边，是一块专门的空地，不占家里的地块。先修好东大道、开了镇门，就能在这里盖小木屋和菜馆。</div>`;
+    else h += `<div class="more">小木屋、二层客栈、农家菜馆和厨房都盖在镇门口的农家乐区（东大道北边是民宿，南边是菜馆和菜园），不用改建任何地块。小地图下面点「农家乐」就能过去看。</div>`;
+    if (v.freed && v.freed.length) h += `<div class="more">民宿已经从「${esc(v.freed.join('、'))}」搬到农家乐区，原来那块地空出来了，可以在「地块」里免费改建一次。</div>`;
     h += `<div class="more">现在 ${v.cabins} / 4 间小木屋${v.inn2 ? '（每间可住两组）' : ''}，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
       (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +
       (v.guests && v.guests.length ? `，今天住着 ${v.guests.length} 组共 ${v.people} 人` : '，今天还没有客人') +
       `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
     const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' };
     if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
-    const label = o => o.name || jobName[o.id] || o.id; // xhs 1.2.0: the kitchen offer has no name (web showed "kitchen")
+    const label = o => o.name || jobName[o.id] || '农家乐项目'; // v5.11.0.5: never a raw id (the kitchen card showed "kitchen")
     const desc = o => ({
       cabin: v.cabins ? '再加一间，16 点前从东大道来的客人可以多住一组。家人一天盖好。' : '第一间小木屋。客人晚上住在亮着灯的屋子里，走时按星级付房费。家人一天盖好。',
-      diner: '院子南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜。',
+      diner: '农家乐区南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜，旁边还有一块菜园。',
       kitchen: '厨房升一级，多 2 道菜、多 4 个座位。一共可以升两级。',
-      inn2: '把整个院子的小木屋加盖成二层客栈，每间多住一组客人。家人一天改好。',
+      inn2: '把农家乐区的小木屋都加盖成二层客栈，每间多住一组客人。家人一天改好。',
       hut: '海边的沙滩小屋。度假村的客人只住这里，白天在沙滩上走、在伞下躺。家人一天盖好。',
       parasol: '一把遮阳伞。家人马上摆到沙滩上固定的位置，最多 8 把。',
       stall: '用家里钓的海鱼做海鱼烤和海鲜汤，收入算进菜馆。家人一天盖好。',
@@ -388,8 +465,18 @@
       (v.stall ? '，海鲜摊已开' : '') + (v.pier ? '，栈桥已铺' : '') + (v.deck ? '，观景台已修好' : '') + '。</div>';
     h += cards(resortIds);
     if (v.diner) {
+      const g = v.garden || {}, last = v.lastMeal || {};
+      const gardenLine = (g.greens | 0) ? `菜园今天能做时蔬 ${g.greens} 份` + ((g.cabbage | 0) ? `，还有卷心菜 ${g.cabbage}` : '') + ((g.carrot | 0) ? `、胡萝卜 ${g.carrot}` : '') + '。' : '';
+      const capLine = (v.cookCap | 0) ? `厨房每天最多做 ${v.cookCap} 份（升厨房会加座位和产量）。` : '';
+      let lastLine = '';
+      if (last.day) {
+        lastLine = `最近一次（第 ${last.day} 天）做了 ${last.served | 0} 份`;
+        if (last.missed) lastLine += `，还差 ${last.missed} 份` + (last.shortNames && last.shortNames.length ? '，缺' + last.shortNames.join('、') : '');
+        lastLine += '。';
+      }
       h += `<div class="sec">菜馆菜单（「我来挑」只上架仓库里做得出的菜；不够的会自动撤掉）</div>`;
-      h += `<div class="card"><div class="ct"><div><b>点菜方式</b> <span class="lv">${v.auto ? '全自动' : '我来挑'}</span></div><div class="d">自动时家人用库存最多的原料做。一天两顿，住客每人两份，集市那天会多来几个散客。</div></div>` +
+      if (capLine || gardenLine || lastLine) h += `<div class="more">${esc(capLine + gardenLine + lastLine)}</div>`;
+      h += `<div class="card"><div class="ct"><div><b>点菜方式</b> <span class="lv">${v.auto ? '全自动' : '我来挑'}</span></div><div class="d">自动时家人用库存最多的原料做，菜园的时蔬会补上差额。一天两顿，住客每人两份，集市那天会多来几个散客。开饭前原料会先留着，不会卖掉。</div></div>` +
         `<div class="cb"><button type="button" class="pbtn" data-inn="mode">${v.auto ? '我来挑' : '改回自动'}</button></div></div>`;
       if (!v.auto) {
         for (const d of v.listed) {
@@ -403,7 +490,7 @@
     }
     if (v.book && v.book.length) {
       h += `<div class="sec">留言本（最近 ${v.book.length} 条）</div>`;
-      for (const b of v.book) h += `<div class="more">第 ${b.day} 天 · ${'★'.repeat(b.s || 3)}${b.note ? ' · ' + esc(b.note) : ''}</div>`;
+      for (const b of v.book) h += `<div class="more">第 ${b.day} 天 · ${'★'.repeat(b.s || 3)}${b.note ? ' · ' + esc(b.note) : ''}${(b.n | 0) > 1 ? '（' + (b.n | 0) + ' 组）' : ''}</div>`;
     }
     return h;
   }
@@ -770,14 +857,33 @@
   // ---- offline summary ----
   const dur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} 小时 ${m} 分` : m ? `${m} 分钟` : `${s} 秒`; };
   const OFFLINE_POP_SEC = 600; // v5.9.1: the welcome-back box only after 10 minutes away
+  // v5.11.0.8: say plainly that the game clock stood still and the family worked at half speed (the rules are unchanged)
+  const gold = n => Number(n || 0).toLocaleString('en-US');
+  const paused = r => r.day ? `游戏时间是暂停的：现在还是第 ${r.day} 天 ${r.clock || ''}`.trim() : '游戏时间是暂停的';
+  const wxLine = r => r.wxDays > 0 ? `日历没往前走，只有天气照常过了 ${r.wxDays} 天${r.rain ? '，其间下过小雨，田都湿了' : ''}` : (r.rain ? '离开时下过小雨，田都湿了' : '');
+  // a short break (no box): a small line that floats up under the gold, e.g. 「+4,001 金（离开 4 分钟，时间暂停中）」
+  function offToast(r) {
+    const away = dur(r.awaySec), text = r.gold > 0 ? `+${gold(r.gold)} 金（离开 ${away}，时间暂停中）`
+      : r.limited && r.nextText ? `离开 ${away}，时间暂停中（离线额度 ${G.offBack ? G.offBack(r) : r.nextText + ' 起恢复全部 3 天'}）` : ''; // v5.11.0.8 review: the rolling window frees the oldest days first
+    if (!text) return;
+    let el = $('offToast'); if (!el) { el = document.createElement('div'); el.id = 'offToast'; document.body.appendChild(el); }
+    const c = $('coins'), b = c && c.getBoundingClientRect();
+    el.textContent = text; el.className = '';
+    if (b && b.width) { el.style.left = Math.max(6, Math.min(b.left, innerWidth - 260)) + 'px'; el.style.top = Math.round(b.bottom + 4) + 'px'; }
+    else { el.style.left = '50%'; el.style.top = '64px'; }
+    void el.offsetWidth; el.className = 'show'; clearTimeout(offToast.t); offToast.t = setTimeout(() => { el.className = ''; }, 4200);
+  }
   function showOffline(r) {
-    if (!r || !(r.awaySec >= OFFLINE_POP_SEC) || !(r.days > 0)) return; const box = $('offline'); // v5.9.1: a short break only gets the log line (离线期间赚了…); v5.10.1: so does a used-up 24-hour window
-    const first = r.limited ? `离开了 ${dur(r.awaySec)}，折合 ${r.asked} 天；过去 24 小时已经结算过 ${r.used} 天，这次按 ${r.days} 天算`
-      : `离开了 ${dur(r.awaySec)}，按在线 50% 的速度折合 ${r.days} 天${r.capped ? '（已到 3 天上限）' : ''}`;
-    box.innerHTML = `<h3>欢迎回来</h3><div>${first}</div>` +
-      (r.avg > 0 ? `<div>最近日均 ${r.avg} 金 → 获得 <b style="color:#ffd76a">${r.gold} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
+    if (!r) return; if (!(r.awaySec >= OFFLINE_POP_SEC) || !(r.days > 0)) { offToast(r); return; } // v5.9.1: a short break gets no box; v5.11.0.8: but a toast by the gold
+    const box = $('offline');
+    const first = `离开了 ${dur(r.awaySec)}，${paused(r)}`;
+    const second = r.limited ? `家人按在线一半的速度帮你干活；过去 24 小时已经结算过 ${r.used} 天，这次相当于 ${r.days} 天的收入`
+      : `家人按在线一半的速度帮你干活，相当于 ${r.days} 天的收入${r.capped ? '（已到 3 天上限）' : ''}`;
+    const wx = wxLine(r);
+    box.innerHTML = `<h3>欢迎回来</h3><div>${first}</div><div>${second}</div>` +
+      (r.avg > 0 ? `<div>最近日均 ${gold(r.avg)} 金 → 获得 <b style="color:#ffd76a">${gold(r.gold)} 金</b></div>` : `<div>还没有完整一天的收入记录，这次没有离线收益</div>`) +
       (r.wood > 0 ? `<div>家人在林场砍了 <b style="color:#e0b880">${r.wood} 份木材</b></div>` : '') +
-      (r.rain ? `<div>这天下过小雨，田都湿了</div>` : '') +
+      (wx ? `<div class="offwx">${wx}</div>` : '') +
       (r.limited && r.nextText ? `<div class="offnote" style="font-size:11px;opacity:.75">每 24 小时最多结算 3 天离线收益，${r.nextText} 以后再满</div>` : '') +
       `<div class="row" style="justify-content:center;display:flex;margin-top:8px"><button class="pbtn" id="offOk">好的</button></div>`;
     box.hidden = false; $('offOk').onclick = () => { box.hidden = true; };
@@ -795,7 +901,7 @@
     const star = '★'.repeat(s) + '☆'.repeat(5 - s);
     let h = '<div class="rel innbook"><div class="rk"><b>民宿留言本</b> <span class="lv">' + star + '</span></div>';
     h += `<div class="rr"><span>今天 ${v.guests && v.guests.length ? v.guests.length + ' 组 / ' + v.people + ' 人' : '还没有客人'}</span><span class="rl">${v.earn.today ? '今日 ' + v.earn.today + ' 金' : '星级 ' + (Math.round(v.stars * 10) / 10)}</span></div>`;
-    if (v.book && v.book.length) for (const b of v.book.slice(0, 5)) h += `<div class="rr"><span>第 ${b.day} 天 ${'★'.repeat(b.s || 3)}</span><span class="rl">${esc(b.note || '')}</span></div>`;
+    if (v.book && v.book.length) for (const b of v.book.slice(0, 5)) h += `<div class="rr"><span>第 ${b.day} 天 ${'★'.repeat(b.s || 3)}${(b.n | 0) > 1 ? '（' + (b.n | 0) + ' 组）' : ''}</span><span class="rl">${esc(b.note || '')}</span></div>`;
     else h += '<div class="rr"><span>还没有留言，客人走时会写几句</span></div>';
     return h + '</div>';
   }
@@ -810,14 +916,17 @@
       h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">换个活法</button></div>`; continue; }
       if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }
       if (!top.length) continue;
-      h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join(''); }
+      h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)} ${r.v}</span></div>`).join('');
+      const CLOSE = (window.PFHome && PFHome.REL.close) || 80, b = top[0]; // v5.11.0.10: how far the closest classmate is from a wedding
+      h += `<div class="rr rn"><span>${k.stage === 'teen' ? (b.v >= CLOSE ? `和${esc(b.name)}走得很近了，有空的新房子、晴天傍晚就办婚礼` : `和${esc(b.name)} ${b.v}/${CLOSE}，到 ${CLOSE}「走得很近」就能成家`) : '长成少年以后才谈婚事'}</span></div>`; }
     if (H.nb.length) h += '<div class="rk"><b>镇上的人</b></div>' + H.nb.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join('');
     return h + '</div>';
   }
   function drawLoveTip() {
     if (!loveTip || loveTip.hidden || !G.loveStatus) return;
     const love = G.loveStatus();
-    loveTip.innerHTML = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home) + innBookHtml();
+    const html = (love.todayText ? '<div>' + love.todayText + '</div>' : '') + '<div class="hint">' + love.hint + '</div>' + relHtml(love.home) + innBookHtml();
+    if (loveTip._html !== html) { loveTip.innerHTML = html; loveTip._html = html; } // v5.11.0.10: only when it changed, so a click on 换个活法 is not cut by a redraw
     placeLoveTip();
   }
   const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };

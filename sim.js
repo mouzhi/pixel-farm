@@ -269,6 +269,10 @@
       out.win = w.slice(-OFFLINE_WIN_MAX);
       out.nextFullAt = out.win.length ? Math.max(...out.win.map(x => x.at)) + OFFLINE_WIN_MS : now; // all of today's days are free again
     }
+    // v5.11.0.8: the window rolls, so the oldest record frees its days first (nextPartAt, nextPartDays) — usually well before
+    // nextFullAt, when the whole 3 days are back
+    if (out.win && out.win.length) { const first = Math.min(...out.win.map(x => x.at)); out.nextPartAt = first + OFFLINE_WIN_MS;
+      out.nextPartDays = Math.round(out.win.filter(x => x.at === first).reduce((a, x) => a + x.days, 0) * 100) / 100; }
     out.gold = Math.floor(avg * out.days);
     return out;
   }

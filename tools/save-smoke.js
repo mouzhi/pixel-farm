@@ -26,7 +26,7 @@ async function seed(p, items) {
   await p.evaluate(items => { __farm.SAVE.off = true; localStorage.clear(); for (const [k, v] of Object.entries(items)) localStorage.setItem(k, v); }, items);
   await p.reload(); await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.SAVE, null, { timeout: 15000 });
 }
-const core = p => p.evaluate(() => { const s = __farm.snapshot(); delete s.savedAt; return s; });
+const core = p => p.evaluate(() => { const s = PFSave.compact(__farm.snapshot()); delete s.savedAt; return s; }); // v5.11.0.8: what is saved (the compact form, floats rounded)
 async function openShop(p, tab) {
   if (await p.evaluate(() => document.getElementById('shop').hidden)) {
     await p.keyboard.press('b'); await p.waitForSelector('#shop:not([hidden])');
@@ -274,8 +274,8 @@ async function test(name, fn) {
     await p.evaluate(() => { __farm.S.coins = 2000; __farm.buy('axe'); __farm.buy('forest'); }); await p.waitForSelector('#tools:not([hidden]) [data-m="chop"]');
     await p.click('#tools [data-m="chop"]'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), 'chop');
     await p.evaluate(() => __farm.panTo(96, -60)); await p.waitForTimeout(100);
-    const tgt = await p.evaluate(() => { const t = __farm.S.trees.find(t => t.kind === 'wild' && t.x > 70 && t.x < 130 && t.y > -80 && t.y < -45); const s = __farm.treeScreen(t.id), c = document.querySelector('canvas').getBoundingClientRect();
-      return { id: t.id, x: c.left + s.x * c.width / 426, y: c.top + s.y * c.height / 266 }; });
+    const tgt = await p.evaluate(() => { const t = __farm.S.trees.find(t => t.kind === 'wild' && t.x > 70 && t.x < 130 && t.y > -80 && t.y < -45); const s = __farm.treeScreen(t.id), cvs = document.querySelector('canvas'), c = cvs.getBoundingClientRect();
+      return { id: t.id, x: c.left + s.x * c.width / cvs.width, y: c.top + s.y * c.height / cvs.height }; });
     await p.mouse.click(tgt.x, tgt.y); const ord = await p.evaluate(() => __farm.S.orders.map(o => o.id));
     assert.deepStrictEqual(ord, [tgt.id]); await p.keyboard.press('Escape'); assert.strictEqual(await p.evaluate(() => __farm.input.mode), null);
     assert.deepStrictEqual(p.errs, []);
@@ -308,7 +308,7 @@ async function test(name, fn) {
       const r = window.PFAnimals.overnight([a], { feed: 0, water: 1 }); return { h: a.h, made: r.report.made }; });
     assert(hungry.h < 30, 'hunger lowers happiness'); assert.deepStrictEqual(hungry.made, {});
     await p.evaluate(() => __farm.saveNow()); const a = await core(p); await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
-    const b = await p.evaluate(() => ({ s: __farm.snapshot(), views: __farm.AV.size }));
+    const b = await p.evaluate(() => ({ s: PFSave.compact(__farm.snapshot()), views: __farm.AV.size })); // v5.11.0.8: compare the saved (compact) form
     assert.deepStrictEqual(b.s.animals, a.animals); assert.deepStrictEqual(b.s.troughs, a.troughs); assert.strictEqual(b.views, 5); assert.strictEqual(b.s.saveVersion, require('../save.js').CURRENT);
     const mm = await p.evaluate(() => { const c = document.getElementById('minimap'); return c && c.width > 0; }); assert(mm);
     assert.deepStrictEqual(p.errs, []);
