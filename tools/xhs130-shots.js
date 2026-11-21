@@ -1,8 +1,8 @@
-// 小红书小工具 1.3.0（同步网页版 v5.11.0.15）：手机截图 + 检查，跑在打好的包上（390×844 @3x，真触摸事件）。
+// 小红书小工具 1.3.0（同步网页版 v5.11.0.16）：手机截图 + 检查，跑在打好的包上（390×844 @3x，真触摸事件）。
 //   bash platforms/xhs/pack.sh && node tools/xhs130-shots.js [name-filter]   writes /workspace/pf-shots/xhs130_*.png (PF_SHOTS / PF_TAG)
 // Checks the v5.11 features on the phone layout: 活动倒计时 in the HUD (tap opens the list), the hotbar in the 背包 dock, 相册 as a tab of the
 // diary (no new bottom-bar button; the photo toast opens it), the restaurant panel, the opaque cloud over locked districts, the party spread,
-// the codex still in the trophy sheet, no web 存档 button anywhere, ⚒ toolbox, version 5.11.0.15 / save v15, and the compact save under 64KB.
+// the codex still in the trophy sheet, no web 存档 button anywhere, ⚒ toolbox, version 5.11.0.16 / save v15, and the compact save under 64KB.
 // Never loads a real player's save (fixtures only).
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
@@ -44,6 +44,14 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
     const saveBtns = () => [...document.querySelectorAll('button, .pbtn')].filter(e => vis(e) && /存档|保存进度|导出|导入/.test(e.textContent + ' ' + (e.title || ''))).map(e => e.id || e.textContent.trim());
     const at = T => { S.t = Math.floor(S.t / 1440) * 1440 + T; }; const day = d => { S.t = d * 1440 + (S.t % 1440); S.day = d; };
     const until = (ok, n) => { for (let i = 0; i < (n || 600) && !ok(); i++) f.advance(1, 10); return ok(); };`;
+  // the album photo toast and the #xhs-toast line (achievements, log) both sit under the HUD: their text boxes (plus the toast's glow) never intersect
+  const TOASTS = `(() => { const vis = e => !!e && !e.hidden && getComputedStyle(e).display !== 'none' && e.getClientRects().length > 0;
+    const a = document.getElementById('albumToast'), t = document.getElementById('xhs-toast'), tx = t && t.querySelector('.xhs-toast-text');
+    const photo = vis(a) && !a.classList.contains('out'), msg = vis(t) && t.classList.contains('show') && !!(tx && tx.textContent);
+    const A = photo ? a.getBoundingClientRect() : null, T = msg ? tx.getBoundingClientRect() : null;
+    const overlap = !!(A && T && A.left < T.right && T.left < A.right && A.top < T.bottom + 8 && T.top - 8 < A.bottom);
+    return { photo, msg, text: msg ? tx.textContent : '', gap: A && T ? Math.round(T.top - A.bottom) : null, overlap, inside: !T || T.bottom < innerHeight }; })()`;
+  const toastBad = r => r.overlap ? 'toasts overlap: ' + JSON.stringify(r) : !r.inside ? 'toast off screen' : null;
   const step = async (p, name, fn, check) => { name = TAG + name; if (only && !name.includes(only)) return null; let r; try { r = await fn(); } catch (e) { r = { error: String(e).slice(0, 400) }; }
     await p.waitForTimeout(300); if (!(r && r._shot === false)) await p.screenshot({ path: path.join(OUT, name) }); if (r) delete r._shot; const bad = r && r.error ? r.error : check(r);
     console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 700)); if (bad) fails.push(name + ': ' + bad); return r; };
@@ -54,7 +62,7 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
       const snap = f.snapshot(), json = JSON.stringify(f.SAVE.compact ? f.SAVE.compact(snap) : snap);
       return { ver: f.version, sv: snap.saveVersion, bytes: new Blob([json]).size, bar: vis('#xhs-bar'), hud: vis('#hud'), cd: vis('#countdown'), cdText: (document.getElementById('countdown') || {}).textContent,
         web: ['navBtns', 'menuBtn', 'albumBtn', 'diaryBtn', 'codexBtn', 'mmJump', 'mapBtn', 'title', 'titleS'].filter(id => vis('#' + id)), saveBtns: saveBtns(), hudIn: inside('#hud') }; })()`),
-      r => r.ver !== '5.11.0.15' ? 'game version ' + r.ver : r.sv !== 15 ? 'save v' + r.sv : r.bytes >= 65536 ? 'compact save ' + r.bytes + ' >= 64KB' : !r.bar || !r.hud || !r.hudIn ? 'chrome missing' : r.web.length ? 'web chrome showing: ' + r.web : r.saveBtns.length ? 'a save button: ' + r.saveBtns : null);
+      r => r.ver !== '5.11.0.16' ? 'game version ' + r.ver : r.sv !== 15 ? 'save v' + r.sv : r.bytes >= 65536 ? 'compact save ' + r.bytes + ' >= 64KB' : !r.bar || !r.hud || !r.hudIn ? 'chrome missing' : r.web.length ? 'web chrome showing: ' + r.web : r.saveBtns.length ? 'a save button: ' + r.saveBtns : null);
     await step(p, 'hotbar.png', async () => { await touch(p, [[200, 500]]); await tapEl(p, '#xhs-btn-bag'); await p.waitForTimeout(300);
       return p.evaluate(`(() => { ${H} const s = [...document.querySelectorAll('#inv .slot')].filter(vis); return { dock: vis('#xhs-inv-dock'), slots: s.length, min: Math.min(...s.map(e => Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))), off: s.filter(e => !inside(e)).length, inv: inside('#inv') }; })()`); },
       r => !r.dock || !r.slots ? 'bag dock empty' : r.min < 40 ? 'slots ' + r.min + 'px' : r.off || !r.inv ? r.off + ' slots off screen' : null);
@@ -110,8 +118,16 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
       S.decor.party.at = S.day - 1; S.decor.party.last = S.day - 9; at(16 * 60 + 50); S.decor.party.tonight = S.day; S.decor.party.guests = 2; until(() => S.t % 1440 >= 18 * 60 + 30, 900);
       for (let i = 0; i < 240; i++) { at(18 * 60 + 30); f.advance(1, 10); const plan = f.partyPlan ? f.partyPlan() : {}; if (f.actors().concat(f.GUESTS).every(a => { const q = plan[a === f.FARMER ? 'farmer' : a.id]; return q && !a.moving && !a.home && Math.hypot(a.x - q.x, a.y - q.y) < 1.2; })) break; }
       at(18 * 60 + 30); if (S.weather) S.weather.rained = false; PFPlatform.setFollow && PFPlatform.setFollow(false); f.setAngle(0.25); f.panTo(area.x, area.y + 4); f.advance(0.4, 10); f.render();
-      const plan = f.partyPlan ? f.partyPlan() : {}; return { area: true, people: f.actors().concat(f.GUESTS).length, placed: Object.keys(plan).length, sv: f.snapshot().saveVersion }; })()`),
-      r => !r.area ? 'no party area' : r.placed < 4 ? 'party plan ' + r.placed : r.sv !== 15 ? 'save v' + r.sv : null);
+      const plan = f.partyPlan ? f.partyPlan() : {}; return { area: true, people: f.actors().concat(f.GUESTS).length, placed: Object.keys(plan).length, sv: f.snapshot().saveVersion }; })()`).then(async r => {
+        await p.waitForTimeout(500); return Object.assign(r, await p.evaluate(TOASTS)); }),
+      r => !r.area ? 'no party area' : r.placed < 4 ? 'party plan ' + r.placed : r.sv !== 15 ? 'save v' + r.sv : toastBad(r));
+    // both arrival orders on purpose (the party above may only raise one of them on a given run)
+    for (const first of ['photo', 'achievement']) await step(p, 'toast_stack_' + first + '.png', async () => {
+      await p.evaluate(first => { const v = __farm.albumView(), s = v.shots[0] || { id: 'party', title: '第一次家庭聚会', url: '' };
+        const photo = () => dispatchEvent(new CustomEvent('pf:album', { detail: { id: s.id, title: s.title, url: s.url } })), ach = () => dispatchEvent(new CustomEvent('pf:say', { detail: '成就：我家大门常打开' }));
+        if (first === 'photo') { photo(); ach(); } else { ach(); photo(); } }, first);
+      await p.waitForTimeout(500); return p.evaluate(TOASTS); },
+      r => !r.photo || !r.msg ? 'both toasts should show ' + JSON.stringify(r) : toastBad(r));
     await p.context().close(); }
 
   console.log('app', APPV, 'game', VER); console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

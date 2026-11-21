@@ -80,8 +80,16 @@
       el.style.top = Math.max(0, Math.round(bottom - 64)) + 'px';
       return;
     }
-    if (r.height) el.style.top = Math.round(r.bottom + 14) + 'px';
+    var top = r.height ? r.bottom + 14 : 0;
+    // 1.3.0：相册新照片提示（#albumToast）也在 HUD 下面。两条一起来（第一次家庭聚会 + 成就）时，这条排在照片提示下面，不叠字。
+    var alb = doc.getElementById('albumToast');
+    if (alb && !alb.hidden && doc.documentElement.classList.contains('pf-alb-toast')) {
+      var ar = alb.getBoundingClientRect();
+      if (ar.height) top = Math.max(top, ar.bottom + 18); // 18：暗晕比字框上沿多出约 10px
+    }
+    if (top) el.style.top = Math.round(top) + 'px';
   }
+  root.addEventListener('pf:toaststack', function () { if (toastEl) placeToast(); });
   P.toast = function (msg) {
     if (!msg) return;
     var el = ensureToast();
