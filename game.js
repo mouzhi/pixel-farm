@@ -924,7 +924,7 @@ function homeTask() { const me = F; return { kind: 'home', label: '回家睡觉'
 // seafood stall serves at 11:30 (SEA_QUOTA_MIN).
 const CHOP_ORDER_BASE = 95, CHOP_CHAIN_R = 48, REST_CAP = 60, SEA_QUOTA_MIN = 60, SEA_QUOTA_BY = 11 * 60 + 15;
 const HELP_WIN = [[6 * 60, 8 * 60], [17 * 60, 19 * 60]], HELP_KINDS = ['harvest', 'collect', 'pick', 'honey', 'water', 'refill', 'sell', 'deliver'];
-const DEMAND_TILES = { wheat: 8, cabbage: 4, carrot: 4 };
+const DEMAND_TILES = { wheat: 8, cabbage: 4, carrot: 4 }; // the mill's wheat run is an errand too (worksBoard), so the flour does not wait behind field work
 const orderedChop = () => S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && S.eff.axe && WD.choppable(t, S.eff.regions));
 function chopNext() { // the marked tree beside the one just felled (chopTask leaves it in F._chopNext)
   const t0 = F._chopNext; F._chopNext = null; if (!t0 || F.crops.length >= BASK() || F._helpWin) return null;
@@ -984,8 +984,11 @@ function seaHold(a) { // index flags: sea fish that wait in the basket for the s
   a.crops.forEach((it, i) => { if (n > 0 && typeof it === 'string' && IN.isSeaFish(it)) { keep[i] = true; n--; } });
   return keep;
 }
-function helpEnd() { // the window is over: a spouse (not saved) hands what they gathered to the married child's basket
-  F._helpWin = 0; if (!F._spouse || !F.crops.length) return;
+function helpEnd() { // the window is over: workshop goods go to the farmer; a spouse (not saved) hands the rest to the married child's basket
+  F._helpWin = 0; if (!F.crops.length) return;
+  { const keep = worksKeep(F), give = F.crops.filter((_, i) => keep[i]); // what a workshop waits for (the mill's wheat) goes to the farmer, who delivers it
+    if (give.length) { const left = F.crops.filter((_, i) => !keep[i]); F.crops.length = 0; F.crops.push(...left); FARMER.crops.push(...give); } }
+  if (!F._spouse || !F.crops.length) return;
   const m = memberOf(F._spouse); if (m) { m.crops.push(...F.crops); F.crops.length = 0; }
 }
 function helpWinNow(T) { const i = HELP_WIN.findIndex(w => T >= w[0] && T < w[1]); return i < 0 ? 0 : S.day * 2 + i + 1; }
@@ -2285,7 +2288,7 @@ function worksBoard(post, T) {
   if (dinerNeed) F.crops.forEach((it, i) => { const ty = innType(it); if (ty && dinerNeed[ty] > 0 && !reserved[i]) { reserved[i] = true; dinerNeed[ty]--; } });
   for (const id of PW.WORK_IDS) { const w = W.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], door = PWA.doorOf(id);
     const carry = F.crops.filter((it, i) => !reserved[i] && def.inputs.includes(typ(it))).length;
-    if (PW.canDeliver(carry, def.need, def.inCap, w.inp)) post('deliver', space <= 0 ? 100 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
+    if (PW.canDeliver(carry, def.need, def.inCap, w.inp)) post('deliver', space <= 0 ? 100 : id === 'mill' ? 70 + travel(F, door) / 8 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
     if (w.ready > 0 && space > 0 && T < 18 * 60) post('pickup', w.ready >= def.outCap ? 72 : 60, door, () => pickupTask(id), 'w:' + id + ':out', workArea[id]); }
   if (space > 0 && T < 18 * 60) W.hives.forEach((h, i) => { const sp = PWA.hiveSpots()[i]; if (h.ready > 0 && sp) post('honey', 58, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard'); });
 }
