@@ -978,7 +978,7 @@ function board() {
     const lonely = S.animals.filter(a => !a.pet);
     if (lonely.length && T < 18 * 60) { const a = rngNear(lonely.map(animalSpot)); if (a) post('pet', 26, a, () => petTask(a.an)); }
     const short = S.hay + inTroughs < need; // tonight's feed is not covered: buying hay beats almost everything
-    if (S.hay < need * 2 && S.coins >= AN.HAY.price * need && (short || T < 17 * 60)) post('hay', short ? 80 + late : 54, STALL_SPOT, sellTask);
+    if (!machAllFed() && S.hay < need * 2 && S.coins >= AN.HAY.price * need && (short || T < 17 * 60)) post('hay', short ? 80 + late : 54, STALL_SPOT, sellTask);
   }
   // v4.7: a pat for each pet once a day, when nothing better is waiting
   if (T < 18 * 60) { const p = PETS_LIVE.find(p => !p.patted && !CLAIM.has(petView(p))); if (p) { const v = petView(p); post('petpet', 20, { x: v.x - 7, y: v.y + 1 }, () => patPetTask(p), v); } }
@@ -2139,6 +2139,8 @@ function machBought(id) {
   machCollect(true); if (WORKS_ON) PWA.sync();
 }
 // fitted pens: troughs topped up from the storehouse's hay (and water from the wheel)
+// every pen with animals has a feeder: the morning delivery brings the hay, so nobody walks to the stall for it
+function machAllFed() { const m = S.works && S.works.mach; return !!(m && m.f) && S.animals.length > 0 && PW.MACH_PENS.every(k => !(AN.penNeed(S.animals, k) > 0) || PW.fitted(m, k)); }
 function machFeed() { if (!S.works.mach || !S.works.mach.f) return 0; const used = PW.machFill(S.works.mach, S.troughs, k => AN.penNeed(S.animals, k), S.hay); S.hay -= used; return used; }
 // with feeders, the hay stall delivers every morning: up to three nights' worth, paid like a stall purchase (never more than half the coins)
 function machHay() {

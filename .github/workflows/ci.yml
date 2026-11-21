@@ -130,7 +130,9 @@ jobs:
             # (album run 44777224060: agrilot 11m44s with fog+hotbar, recent-b 24m43s with rain;
             #  expected agrilot ~19–20m with rain+restaurant, >=3m headroom under 25m)
             # v5.11.0.13: fog-shots -> fog2-shots (~3m more than the old one), so rain-shots (~7m) goes on to scale (9m41s on run 44782373476)
-            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js
+            # v5.11.1 自动化机械: + mach-shots (feeder/chute/milker/tray checks, ~3.5m locally; agrilot was 9m30s on the last main run,
+            #  the lightest leg, so ~13–14m expected, well under 22m)
+            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js mach-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
