@@ -99,7 +99,7 @@
     { id: 'pie', name: '苹果派坊', icon: 'jam', works: 1, p8: 1, levels: [{ cost: 4000, wood: 80, label: '苹果派坊', desc: '书屋里学到的配方：1 份面粉和 2 个苹果做成 1 个苹果派（卖 140），给面包房订单用' }] }, // v5.10.9
     { id: 'wheel', name: '水车', icon: 'wheel', works: 1, p8: 1, levels: [{ cost: 1500, wood: 60, label: '修好水车', desc: '动力坝上的水车转起来给农场供电：家人在院子、新地门口和加工坊前立起电灯，离水车不太远的灯夜里会亮，灯下的果树结果快一点' }, { cost: 2500, wood: 80, label: '第二架水车', desc: '再修一架（要第二块动力坝），远处的灯也能亮' }] },
     { id: 'hive', name: '蜂箱', icon: 'hive', works: 1, p8: 1, levels: Array.from({ length: 6 }, (_, i) => ({ cost: 800, wood: 20, label: `第 ${i + 1} 箱`, desc: '放在花甸里（没有花甸时果园坡最多放 2 箱）。家人自己照看，每 2 天收 1 瓶蜂蜜（卖 40），花多时偶尔多一瓶' })) },
-    // v5.11.1 自动化机械 (rules in works.js; the level counts mirror works.mach). Never in AUTO_BUY.
+    // v5.11.0.27 自动化机械 (rules in works.js; the level counts mirror works.mach). Never in AUTO_BUY.
     { id: 'feeder', name: '自动饲喂槽', icon: 'feeder', works: 1, p8: 1, mach: 1, flat: 1, levels: ['第一个', '第二个', '第三个', '第四个', '第五个', '第六个', '第七个', '第八个'].map(l => ({ cost: 2500, wood: 30, label: l + '棚子', desc: '装在一个棚子的饲料槽上：料斗自己从仓库添干草，自来水管接上水车的水，槽里一直满着。这个棚子不用再有人去添草、加水' })) },
     { id: 'feedset', name: '自动饲喂槽整套', icon: 'feeder', works: 1, p8: 1, mach: 1, levels: [{ cost: 12000, wood: 0, label: '整套', desc: '还没装的棚子一次全装上（5 个以上时比单个买便宜）。装好以后，干草铺每天早上把干草送进仓库' }] },
     { id: 'chute', name: '集蛋滑道', icon: 'chute', works: 1, p8: 1, mach: 1, levels: [{ cost: 5000, wood: 0, label: '集蛋滑道', desc: '两座鸡舍的蛋顺着滑道滚进小木箱，直接收进仓库，不用人去捡。偶尔滚出的金蛋、双黄蛋会放在鸡舍门口' }] },
@@ -128,12 +128,12 @@
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
     { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : [])] },
     { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
-    { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'feeder', 'feedset', 'chute', 'milker', 'tray'] }, // v5.6.0; v5.10.9 pie; v5.11.1 machines
+    { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'feeder', 'feedset', 'chute', 'milker', 'tray'] }, // v5.6.0; v5.10.9 pie; v5.11.0.27 machines
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
     ...(YD ? [{ id: 'yard', name: '院子', title: '院子、阿禾的小摊和动物照护', ids: YD.IDS.slice() }] : []), // v5.10.3
     ...(DC ? [{ id: 'decor', name: '装饰', title: '装饰、夜灯和派对区', ids: DC.SHOP_IDS.slice() }] : []), // v5.7.0
   ];
-  const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.filter(k => !SHOP.find(s => s.id === k).mach).map(k => [k, 0])); // v5.11.1: machines live in works.mach, not upgrades
+  const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.filter(k => !SHOP.find(s => s.id === k).mach).map(k => [k, 0])); // v5.11.0.27: machines live in works.mach, not upgrades
   const shopItem = id => SHOP.find(s => s.id === id);
   function effects(up) {
     up = up || {};

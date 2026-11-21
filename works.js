@@ -60,6 +60,11 @@
     pie: { name: '苹果派坊', inputs: ['flour', 'apple'], need: 3, out: 'apple_pie', mins: 180, inCap: 8, outCap: 4, cost: 4000, wood: 80, recipe: [{ id: 'flour', n: 1 }, { id: 'apple', n: 2 }], lib: 1 }, // v5.10.9: unlocked at the 书屋
   };
   const WORK_IDS = Object.keys(WORKS);
+  // room 0 made Math.min(need, inCap-inp) === 0, so any carried input (even fruit held for the bakery) posted a useless trip
+  const canDeliver = (carry, need, inCap, inp) => {
+    const room = Math.max(0, (inCap | 0) - (inp | 0));
+    return room > 0 && (carry | 0) > 0 && (carry | 0) >= Math.min(need | 0, room);
+  };
   // products (fixed prices; the stall buys them like vegetables)
   const PRODUCTS = { flour: { name: '面粉', price: 60 }, jam: { name: '果酱', price: 80 }, cheese: { name: '奶酪', price: 130 }, honey: { name: '蜂蜜', price: 40 }, apple_pie: { name: '苹果派', price: 140 } };
   const PRODUCT_IDS = Object.keys(PRODUCTS);
@@ -208,7 +213,7 @@
   const HERD = { out: [8 * 60, 8 * 60 + 45], back: [16 * 60 + 40, 17 * 60 + 30], noon: 12 * 60, bonus: 3 };
   const herdPhase = T => T >= HERD.out[0] && T < HERD.out[1] ? 'out' : T >= HERD.out[1] && T < HERD.back[0] ? 'graze' : T >= HERD.back[0] && T < HERD.back[1] ? 'back' : null;
 
-  // ---------- v5.11.1 自动化机械（第一批）: auto feeder + waterer, egg chute, milker, honey tray ----------
+  // ---------- v5.11.0.27 自动化机械（第一批）: auto feeder + waterer, egg chute, milker, honey tray ----------
   // Bought in the shop's 「工坊」 tab (never by 家人帮忙添置), fitted onto what is already there: the pens' troughs, the coops,
   // the cow sheds, the meadow's hives. Saved as works.mach = { f, e, m, h, eg, mk, hn } (small ints; zero keys left out):
   // f: a bit per pen with a feeder (MACH_PENS order), e / m / h: chute / milker / tray, eg / mk / hn: goods waiting in the
@@ -302,7 +307,7 @@
       if (typeof q.x === 'number' && typeof q.y === 'number') { out.works[id].x = num(q.x, 0, -260, 452); out.works[id].y = num(q.y, 0, -212, 388); } } // v5.7.0 moved
     out.hives = (Array.isArray(o.hives) ? o.hives : []).slice(0, HIVE.max).filter(h => h && typeof h === 'object').map(h => ({ at: h.at === 'orchard' || PL.isPlotId(h.at) ? h.at : null, s: Math.round(num(h.s, 0, 0, 5)), cd: Math.round(num(h.cd, HIVE.every, 0, 9)), ready: Math.round(num(h.ready, 0, 0, HIVE.readyCap)), ...(typeof h.x === 'number' && typeof h.y === 'number' ? { x: num(h.x, 0, -260, 452), y: num(h.y, 0, -212, 388) } : {}) })); // v5.7.0: x, y once moved
     out.penHost = typeof o.penHost === 'string' && PL.isPlotId(o.penHost) ? o.penHost : null;
-    const mach = machValid(o.mach); if (mach) out.mach = mach; // v5.11.1 append-only (v15): only once a machine is bought
+    const mach = machValid(o.mach); if (mach) out.mach = mach; // v5.11.0.27 append-only (v15): only once a machine is bought
     return out;
   }
 
@@ -311,7 +316,7 @@
   if (AN && AN.PEN_IDS) for (const k of PEN2_IDS) if (!AN.PEN_IDS.includes(k)) AN.PEN_IDS.push(k);
 
   const api = { TILE, SPRINKLER, reachOf, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
-    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, slotIn, evacuate, restock, workGate, hasOrchard,
+    WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, canDeliver, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, slotIn, evacuate, restock, workGate, hasOrchard,
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,

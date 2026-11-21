@@ -1,4 +1,4 @@
-// Screenshots + browser checks for v5.11.1 自动化机械 (auto feeder + waterer, egg chute, milker, honey tray):  node tools/mach-shots.js [name-filter]
+// Screenshots + browser checks for v5.11.0.27 自动化机械 (auto feeder + waterer, egg chute, milker, honey tray):  node tools/mach-shots.js [name-filter]
 //   writes /workspace/pf-shots/mach_*.png (PF_SHOTS to change); exits 1 on a page error, a console error or a failed check
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');

@@ -819,7 +819,7 @@ const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so 
 // walking speed and basket; children only take light jobs (family.js canDo).
 const BASK = () => { const base = F === FARMER ? S.eff.basket : Math.max(4, Math.round(S.eff.basket * (F.bmul || 1)));
   const extra = (S.eff && S.eff.marketExtra) | 0; if (!extra || !MK || !S.town || !S.town.hall || !MK.isDay(S.town.hall, S.day)) return base; return base + extra; }; // v5.10.5: the smithy cart carries more on market day
-const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond'];
+const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond', 'bakery']; // v5.11.0.26: only one adult walks a bakery order
 let CLAIM = new Set();
 // v5.3 roles: while one person picks a job, CROWD holds where the others stand and where they are heading. A target near
 // them costs up to CROWD_K px of extra walk per px inside CROWD_R (rngNear) and a quarter of that in score (chooseTask), so
@@ -847,7 +847,7 @@ function syncAnimals() { // the shop says how many of each kind; new ones arrive
   if (typeof syncPastureProps === 'function') syncPastureProps();
 }
 function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
-  if (S.works) machSyncUp(); // v5.11.1: a new pen changes what the feeder set can still fit
+  if (S.works) machSyncUp(); // v5.11.0.27: a new pen changes what the feeder set can still fit
   S.eff = SIM.effects(S.up); if (SM && S.town && S.town.hall) { const e = SM.effects((S.town.hall.smithy || {}).up); S.eff.sprReach = e.sprReach; S.eff.workSpeed = e.workSpeed; S.eff.smithAxe = e.axeBonus; S.eff.smithAxeCut = e.axeCut; S.eff.smithRod = e.rod; S.eff.marketExtra = e.cartExtra; } XP.applyEff(S); S.waterMax = S.eff.waterMax;
   SPR_COVER = null; FOG.next = 0; // v5.11.0.6: look at the locks again on the next frame
   for (const t of tiles) if (!t.open && tileOpen(t, S.eff)) t.open = true;
@@ -966,7 +966,7 @@ function board() {
     const late = T >= 14 * 60 ? 40 : 0; // a far pen loses to field work all day on a big farm; by afternoon the night's feed and water win anyway
     let inTroughs = 0;
     for (const pen of AN.PEN_IDS) { const pn = AN.penNeed(S.animals, pen); if (!pn) continue; const tr = S.troughs[pen], at = troughSpot(pen); inTroughs += Math.min(tr.feed, pn);
-      if (machFit(pen)) continue; // v5.11.1: the auto feeder keeps this one full
+      if (machFit(pen)) continue; // v5.11.0.27: the auto feeder keeps this one full
       if (tr.feed < pn && S.hay > 0) post('feed', (T < 12 * 60 ? 82 : 66) + late, at, () => feedTask(pen), PENS[pen].trough);
       if (!tr.water) { if (F.water >= PENS[pen].water) post('trough', 70 + late, at, () => troughTask(pen), PENS[pen].trough);
         else { const w = rngNear(waterSpots()); post('refill', 62 + late, w, () => refillTask(w), undefined, 'animal'); } } }
@@ -1312,7 +1312,7 @@ function storehouse() {
     ornament: FS.ORNAMENTAL.filter(o => (S.ornament[o.id] || 0)).map(o => ({ id: o.id, kind: 'ornament', name: o.name, n: S.ornament[o.id] || 0 })),
     pondFish: S.pondFish.length,
     saplings: WD.FRUIT_IDS.map(k => ({ id: k, kind: 'sapling', name: WD.FRUIT[k].name + '树苗', n: (FARMER.saplings[k] || 0) })).filter(r => r.n),
-    bin: S.works.mach ? PW.BIN_IDS.map(k => { const n = PW.binHas(S.works.mach, k), unit = basePrice(k); return n ? { id: k, type: k, kind: 'item', name: binName(k) + '（仓库）', n, unit, gold: n * unit, keep: PW.BIN[k].keep } : null; }).filter(Boolean) : [], // v5.11.1
+    bin: S.works.mach ? PW.BIN_IDS.map(k => { const n = PW.binHas(S.works.mach, k), unit = basePrice(k); return n ? { id: k, type: k, kind: 'item', name: binName(k) + '（仓库）', n, unit, gold: n * unit, keep: PW.BIN[k].keep } : null; }).filter(Boolean) : [], // v5.11.0.27
     sellGold: basketGold + woodGold,
   };
 }
@@ -1474,7 +1474,7 @@ function releaseTask(o) {
 function looseTask(it) {
   return { label: it.item ? '正在捡滑道滚出来的蛋' : '正在捡狗发现的松露', to: { x: it.x - 6, y: it.y + 2 }, tile: it, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
     const i = S.loose.indexOf(it); if (i < 0 || F.crops.length >= BASK()) return;
-    if (it.item) { S.loose.splice(i, 1); F.crops.push(it.item); popText(it.x, it.y, 12, '+1', '#fff6dc'); log(`${F === FARMER ? '农夫' : F.name}捡起了集蛋滑道滚出来的${SU.itemName(it.item, { egg: '鸡蛋' })}`); return; } // v5.11.1 (recorded when it rolled out)
+    if (it.item) { S.loose.splice(i, 1); F.crops.push(it.item); popText(it.x, it.y, 12, '+1', '#fff6dc'); log(`${F === FARMER ? '农夫' : F.name}捡起了集蛋滑道滚出来的${SU.itemName(it.item, { egg: '鸡蛋' })}`); return; } // v5.11.0.27 (recorded when it rolled out)
     S.loose.splice(i, 1); const item = SU.rollProduct('truffle', rand); F.crops.push(item);
     const ck = BOOK.itemKey(item); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: true }); }
     const ev = SU.productToast(item); if (ev) surpriseNote(ev, it.x, it.y); else popText(it.x, it.y, 12, '+1', '#fff6dc');
@@ -1520,7 +1520,7 @@ function fishDone() {
 function overnight() {
   noteLog('closeDay', logSnap());
   noteProgress(); // catch a 2,000-gold day before todayEarn is cleared
-  machShip(); // v5.11.1: the produce cart takes the bin's extra eggs, milk and honey
+  machShip(); // v5.11.0.27: the produce cart takes the bin's extra eggs, milk and honey
   if (DY && S.diary && S.todayEarn > 0) DY.entry(S.diary, S.day).in = S.todayEarn; // v5.10.13: the day's takings go in the diary
   S.day++; try { albumBackfill(); } catch (e) {} S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
   let grew = 0; const justRipe = [];
@@ -1540,7 +1540,7 @@ function overnight() {
   woodNight(); // v5.3.1: the lumber hut replants 林场 stumps before they age
   for (const t of S.trees) { const before = t.stage + t.ripe; WD.treeOvernight(t); if (t.stage + t.ripe !== before) treeChanged(t); }
   S.prices = Object.assign(SIM.driftPrices(S.prices, rand), driftProducts(S.prices));
-  machFeed(); // v5.11.1: fitted troughs are full before the animals eat
+  machFeed(); // v5.11.0.27: fitted troughs are full before the animals eat
   if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0, YD.penBonus(S.homeyard.put, yardPens()), CL && S.town ? CL.floor(S.town.hall) : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
     log((r.report.hungry ? `有 ${r.report.hungry} 只动物没吃饱，` : '') + (t ? `夜里产了：${t}` : '动物们夜里没有新产出')); }
   if (CL && S.town && CL.isCheck(S.town.hall, S.day)) { const n = CL.checkup(S.town.hall, S.animals, S.day), pets = PETS_LIVE.length; // v5.10.10 monthly checkup
@@ -1559,7 +1559,7 @@ function overnight() {
   if (HM) { homeNight(); homeMorning(); } // v5.9.0: the little farms grow; a wedding tonight?
   if (S.doorGift && S.doorGift.day < S.day) S.doorGift = null;
   S.loose = []; // a truffle a dog found and nobody picked up does not linger
-  machCollect(); machHay(); machFeed(); // v5.11.1: the night's eggs, milk and honey into the storehouse; troughs full again for the day
+  machCollect(); machHay(); machFeed(); // v5.11.0.27: the night's eggs, milk and honey into the storehouse; troughs full again for the day
   S.streaks = BOOK.tickStreaks(S.streaks, S.day, S.animals);
   planDogDay();
   noteProgress();
@@ -2045,7 +2045,7 @@ SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the sh
   if (PW.WORKS[id]) return PW.workGate(id, worksCtx());
   if (id === 'wheel') return PW.wheelGate(S.plots, have);
   if (id === 'hive') return PW.hiveGate(S.plots, S.eff.regions, have, S.works.hives);
-  if (PW.MACH[id]) return PW.machGate(id, MC(), machCtx()); // v5.11.1
+  if (PW.MACH[id]) return PW.machGate(id, MC(), machCtx()); // v5.11.0.27
   if (PW.PEN2[id]) return PW.pen2Gate(id, S.plots, S.works.penHost);
   if (AN.KINDS[id]) return PW.animalGate(id, have, S.eff);
   if (id === 'party') return S.family.moved ? null : '阿禾搬来以后才办得起派对'; // v5.7.0
@@ -2064,7 +2064,7 @@ const revealSteps = id => { // the outside conditions behind a gate, in order; e
   if (id === 'wheel') return [moved, plotMod('dam')];
   if (id === 'hive') return [moved, plotMod('meadow', 'orchard')];
   if (PW.PEN2[id]) return [moved, plotMod('pasture')];
-  if (PW.MACH[id]) { const c = machCtx(); return id === 'chute' ? [moved, c.coop2] : id === 'milker' ? [moved, c.shed2] : id === 'tray' ? [moved, c.meadow, c.hives >= PW.HIVE.max] : [moved, c.wheel > 0, c.smithy]; } // v5.11.1
+  if (PW.MACH[id]) { const c = machCtx(); return id === 'chute' ? [moved, c.coop2] : id === 'milker' ? [moved, c.shed2] : id === 'tray' ? [moved, c.meadow, c.hives >= PW.HIVE.max] : [moved, c.wheel > 0, c.smithy]; } // v5.11.0.27
   if (id === 'party') return [moved];
   return null;
 };
@@ -2087,7 +2087,7 @@ function worksBought(id) { // before applyUpgrades: put the new thing in its pla
   if (id === 'hive') { const sl = PW.hiveFree(S.plots, S.eff.regions, W.hives); if (sl) { W.hives.push({ at: sl.at, s: sl.s, cd: PW.HIVE.every, ready: 0 }); if (HM && S.home.houses.length) { const h = W.hives[W.hives.length - 1], p = PW.hivePos(h, S.plots, S.eff.regions); if (p && homeFeet().some(f => HM.inBox(p, f, 3))) homeHiveAside(h, p); } } // v5.9.0: not in the new house's yard
     if (W.hives.length === 1) { BOOK.record(S.codex, 'bug:bee', S.day); log('蜜蜂飞起来了，图鉴「昆虫」页记下了蜜蜂'); } }
   if (PW.PEN2[id] && !W.penHost) { W.penHost = PW.pastureHost(S.plots, null); PW.applyPenLayout(PENS, W.penHost); }
-  if (PW.MACH[id]) machBought(id); // v5.11.1
+  if (PW.MACH[id]) machBought(id); // v5.11.0.27
 }
 // v5.10.12: a 工坊院 being re-zoned: its workshops move to another yard (same state), or wait in the storehouse until one is free
 function worksVacate(id, mod) {
@@ -2117,7 +2117,7 @@ function worksBoughtLog(id) {
   if (id === 'wheel') { const n = PW.wheelsOf(S.plots, S.eff.wheel).length; log(n ? '水车转起来了，天黑后够得着的路灯会亮' : '水车修好了'); }
   if (PW.PEN2[id]) log(`${PW.PEN2[id].name}盖在了${PL.plot(S.works.penHost).name}`);
 }
-// ---------- v5.11.1 自动化机械 (rules: works.js; art: works-art.js) ----------
+// ---------- v5.11.0.27 自动化机械 (rules: works.js; art: works-art.js) ----------
 // Saved as works.mach. The shop's levels (S.up.feeder ...) mirror it and are never saved under upgrades.
 const MC = () => S.works.mach || (S.works.mach = {});
 const machBuilt = () => PW.MACH_PENS.filter(k => (S.up[k] | 0) > 0);
@@ -2213,10 +2213,11 @@ function dinerReserveNeed() {
   return IN.reserveNeed(S.inn, want, innStaffedNow(), innCounts(), innPay);
 }
 function worksKeep(a) { const keep = new Array(a.crops.length).fill(false); if (a.role && !FAM.canDo(a.role, 'deliver')) return keep;
+  const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (SU && SU.itemType ? SU.itemType(it) : (it && it.type)));
+  // v5.11.0.26: a taken bakery order is held first (including rare/object crops), so it is not sold or poured into a workshop on the walk to 小桃
+  const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(a.crops, ord.need, keep, typ);
   for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at) continue; let room = PW.WORKS[id].inCap - w.inp;
-    a.crops.forEach((it, i) => { if (room > 0 && !keep[i] && typeof it === 'string' && PW.WORKS[id].inputs.includes(it)) { keep[i] = true; room--; } }); }
-  const ord = bakeryTaken(); if (ord) { const need = {}; for (const x of ord.need) need[x.id] = (need[x.id] | 0) + x.n; // v5.10.4: hold the day's order back from the stall
-    a.crops.forEach((it, i) => { const ty = typeof it === 'string' ? it : null; if (ty && need[ty] > 0 && !keep[i]) { keep[i] = true; need[ty]--; } }); }
+    a.crops.forEach((it, i) => { const ty = typ(it); if (room > 0 && !keep[i] && ty && PW.WORKS[id].inputs.includes(ty)) { keep[i] = true; room--; } }); }
   const dinerNeed = dinerReserveNeed(); // v5.11.0.12: hold tonight's restaurant ingredients until 11:30, like the bakery
   if (dinerNeed) a.crops.forEach((it, i) => {
     const ty = innType(it);
@@ -2228,7 +2229,15 @@ const workArea = { mill: 'field', jam: 'orchard', cheese: 'animal' };
 function deliverTask(id) { const def = PW.WORKS[id];
   return { kind: 'deliver', key: 'w:' + id + ':in', label: `正在把原料送去${def.name}`, to: PWA.doorOf(id), dur: 6, pose: 'pull', done: () => {
     const w = S.works.works[id]; if (!w) return; let n = 0;
-    for (let i = F.crops.length - 1; i >= 0 && w.inp < def.inCap; i--) { const it = F.crops[i]; if (typeof it === 'string' && def.inputs.includes(it)) { F.crops.splice(i, 1); w.inp++; n++; } }
+    const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (it && it.type));
+    // bakery / diner fruit stays in the basket
+    const reserved = new Array(F.crops.length).fill(false);
+    const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(F.crops, ord.need, reserved, typ);
+    const dinerNeed = dinerReserveNeed();
+    if (dinerNeed) F.crops.forEach((it, i) => { const ty = innType(it); if (ty && dinerNeed[ty] > 0 && !reserved[i]) { reserved[i] = true; dinerNeed[ty]--; } });
+    for (let i = F.crops.length - 1; i >= 0 && w.inp < def.inCap; i--) {
+      const ty = typ(F.crops[i]); if (!reserved[i] && ty && def.inputs.includes(ty)) { F.crops.splice(i, 1); w.inp++; n++; }
+    }
     if (n) { log(`${F === FARMER ? '' : F.name}往${def.name}送了 ${n} 份原料`); burst(PWA.doorOf(id).x, PWA.doorOf(id).y - 4, 8, [Ac[1], Wd[4]], 6, 'leaf'); } } };
 }
 function pickupTask(id) { const def = PW.WORKS[id], name = PW.PRODUCTS[def.out].name;
@@ -2251,10 +2260,14 @@ function worksBoard(post, T) {
   const W = S.works, space = BASK() - F.crops.length;
   const spr = S.eff.sprinkler > S.works.sprinklers.length; if (!spr) sprSince = null; else if (sprSince === null) sprSince = S.t; // v5.10.11.1: it climbs while it waits
   if (T < 18 * 60 && spr) { const sp = sprinklerNext(); if (sp) post('install', 66 + WAIT_BOOST(sprSince), { x: sp.x - 4, y: sp.y + 2 }, () => installTask(sp), 'spr:install', 'field'); }
-  const keep = worksKeep(F);
+  const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (it && it.type));
+  const reserved = new Array(F.crops.length).fill(false);
+  const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(F.crops, ord.need, reserved, typ);
+  const dinerNeed = dinerReserveNeed();
+  if (dinerNeed) F.crops.forEach((it, i) => { const ty = innType(it); if (ty && dinerNeed[ty] > 0 && !reserved[i]) { reserved[i] = true; dinerNeed[ty]--; } });
   for (const id of PW.WORK_IDS) { const w = W.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], door = PWA.doorOf(id);
-    const carry = F.crops.filter((it, i) => keep[i] && def.inputs.includes(it)).length;
-    if (carry >= Math.min(def.need, def.inCap - w.inp) && carry > 0) post('deliver', space <= 0 ? 100 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
+    const carry = F.crops.filter((it, i) => !reserved[i] && def.inputs.includes(typ(it))).length;
+    if (PW.canDeliver(carry, def.need, def.inCap, w.inp)) post('deliver', space <= 0 ? 100 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
     if (w.ready > 0 && space > 0 && T < 18 * 60) post('pickup', w.ready >= def.outCap ? 72 : 60, door, () => pickupTask(id), 'w:' + id + ':out', workArea[id]); }
   if (space > 0 && T < 18 * 60) W.hives.forEach((h, i) => { const sp = PWA.hiveSpots()[i]; if (h.ready > 0 && sp) post('honey', 58, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard'); });
 }
@@ -2901,21 +2914,22 @@ const bakeryH = () => (BK && HL && TN && S.town && S.town.hall && BK.built(S.tow
 const bakeryPrice = ty => basePrice(ty);
 function bakeryCounts() {
   const c = {};
-  const add = (ty, n) => { if (!ty || !BK.WORD[ty]) return; c[ty] = (c[ty] | 0) + (n || 1); };
+  const add = (ty, n) => { if (!ty || !BK.WORD[ty]) return; BK.addCount(c, ty, n); };
   for (const a of actors()) for (const it of a.crops) add(typeof it === 'string' ? it : SU.itemType(it));
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (w && def) add(def.out, w.ready | 0); }
   if (S.works && S.works.hives) for (const h of S.works.hives) if (h) add('honey', h.ready | 0);
-  machCounts(add); // v5.11.1: the storehouse bin
+  machCounts(add); // v5.11.0.27: the storehouse bin
   return c;
 }
 function bakeryTaken() { const H = bakeryH(); if (!H || H.bakery.done) return null; return BK.taken(H.bakery); }
-function bakeryPull(need) { // take the goods from baskets first, then the workshop shelves
+function bakeryPull(need) { // check the whole order first; never take honey / flour / etc. if the rest is short
+  if (!BK.have(need, bakeryCounts())) return false;
   const left = {}; for (const x of need) left[x.id] = (left[x.id] | 0) + x.n;
   const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) { const ty = typeof arr[i] === 'string' ? arr[i] : SU.itemType(arr[i]); if (left[ty] > 0) { arr.splice(i, 1); left[ty]--; } } };
   pull(F.crops); for (const a of actors()) if (a !== F) pull(a.crops);
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def || !(left[def.out] > 0)) continue; const n = Math.min(w.ready | 0, left[def.out]); w.ready -= n; left[def.out] -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
-  machPull(left); // v5.11.1
+  machPull(left); // v5.11.0.27
   return Object.keys(left).every(k => left[k] <= 0);
 }
 function bakeryMorning() {
@@ -2924,27 +2938,81 @@ function bakeryMorning() {
   const texts = B.offer.map(q => q.text).join('；');
   log(`小桃的订单板：${texts}。家人会接更划算的一单送到面包房，按单多付五成；不接也没有惩罚`);
 }
+function bakeryMarkShort(B, o, counts) {
+  const short = (BK.shortOf ? BK.shortOf(o.need, counts || bakeryCounts()) : o.need.filter(x => ((counts || bakeryCounts())[x.id] | 0) < x.n));
+  B.short = short.map(x => x.id);
+  const tag = S.day + ':' + o.id;
+  if (B._shortLog === tag) return;
+  B._shortLog = tag;
+  const bit = short.map(x => (BK.needText ? BK.needText([x]) : ((x.n | 0) + (BK.NAME && BK.NAME[x.id] || x.id)))).join('、');
+  log(`小桃这一单还缺${bit || '原料'}，凑齐了再送`);
+}
+function bakeryHeldReturn(need) {
+  if (!need || !F) return;
+  for (const x of need) for (let i = 0; i < (x.n | 0); i++) F.crops.push(x.id);
+}
+// when a taken order is short, pick up / collect the missing product first (never a town / hall / inn autobuy)
+function bakeryGatherBoard(post, T, o) {
+  const short = BK.shortOf ? BK.shortOf(o.need, bakeryCounts()) : [];
+  if (!short.length || T >= 18 * 60) return;
+  const want = {}; for (const x of short) want[x.id] = x.n;
+  const space = BASK() - F.crops.length; if (space <= 0) return;
+  for (const id of PW.WORK_IDS) {
+    const w = S.works && S.works.works && S.works.works[id], def = PW.WORKS[id];
+    if (!w || !w.at || !def || !want[def.out] || !(w.ready > 0)) continue;
+    post('pickup', 86, PWA.doorOf(id), () => pickupTask(id), 'w:' + id + ':out', workArea[id]);
+  }
+  if (want.honey && S.works && S.works.hives) S.works.hives.forEach((h, i) => {
+    const sp = PWA.hiveSpots()[i];
+    if (h && h.ready > 0 && sp) post('honey', 86, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard');
+  });
+  // flour is milled from wheat already in a basket; do not buy mill / hall / town items
+  if (want.flour) {
+    const w = S.works && S.works.works && S.works.works.mill, def = PW.WORKS && PW.WORKS.mill;
+    if (w && w.at && def && w.inp < def.inCap) {
+      const typ = it => typeof it === 'string' ? it : SU.itemType(it);
+      const carry = F.crops.filter(it => typ(it) === 'wheat').length;
+      if (carry > 0) post('deliver', 86, PWA.doorOf('mill'), () => deliverTask('mill'), 'w:mill:in', workArea.mill);
+    }
+  }
+}
 function bakeryBoard(post, T) {
   const H = bakeryH(); if (!H || !tradeOk(F) || !BK.open(H, T)) return;
   const B = H.bakery; if (B.last !== S.day) { BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined)); log(`小桃的订单板：${B.offer.map(q => q.text).join('；')}`); }
+  if (B.skip) return;
   BK.autoTake(B, bakeryCounts(), bakeryPrice); const o = BK.taken(B); if (!o || B.done) return;
-  if (!BK.have(o.need, bakeryCounts())) return;
-  post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery:' + (F === FARMER ? 'farmer' : F.id));
+  bakeryGatherBoard(post, T, o);
+  if (!BK.have(o.need, bakeryCounts())) { bakeryMarkShort(B, o); return; }
+  post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery');
 }
 function bakeryTask() {
-  const at = BK.STAND;
-  return { kind: 'bakery', label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: () => {
-    const H = bakeryH(); if (!H || !BK.open(H, S.t % 1440)) { log('面包房已经打烊了，东西先带回家'); return; }
-    const B = H.bakery; const o = BK.taken(B); if (!o || B.done) return;
-    if (!BK.have(o.need, bakeryCounts()) || !bakeryPull(o.need)) { log('送到门口才发现原料不够，这一单改日再说'); return; }
-    const base = BK.baseOf(o.need, bakeryPrice), sum = BK.payOf(o.need, bakeryPrice), extra = sum - base, n = o.need.reduce((s, x) => s + x.n, 0);
+  const at = BK.STAND, KEY = 'town:bakery';
+  const H0 = bakeryH(), B0 = H0 && H0.bakery, o0 = B0 && BK.taken(B0);
+  if (!o0 || B0.done || B0.skip) return { kind: 'idle', key: KEY, label: '在农场里走走', to: { x: F.x, y: F.y }, dur: 2 };
+  const counts = bakeryCounts();
+  // v5.11.0.26: pull the goods when the job is taken, not at 小桃's door (a second adult or a workshop run used to empty the basket on the walk)
+  if (!BK.have(o0.need, counts)) {
+    bakeryMarkShort(B0, o0, counts);
+    return { kind: 'idle', key: KEY, label: '先凑齐面包房的原料', to: { x: F.x, y: F.y }, dur: 2 };
+  }
+  if (!bakeryPull(o0.need)) {
+    B0.skip = 1;
+    bakeryMarkShort(B0, o0, counts);
+    return { kind: 'idle', key: KEY, label: '这一单今天先放下', to: { x: F.x, y: F.y }, dur: 2 };
+  }
+  if (B0.short) delete B0.short;
+  const held = o0.need.map(x => ({ id: x.id, n: x.n })), text = o0.text;
+  return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: () => {
+    const H = bakeryH(); if (!H || !BK.open(H, S.t % 1440)) { bakeryHeldReturn(held); log('面包房已经打烊了，东西先带回家'); return; }
+    const B = H.bakery, o = BK.taken(B); if (!o || B.done) { bakeryHeldReturn(held); return; }
+    const base = BK.baseOf(held, bakeryPrice), sum = BK.payOf(held, bakeryPrice), extra = sum - base, n = held.reduce((s, x) => s + x.n, 0);
     S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
-    B.done = 1; B.days++; B.gold += sum; B.extra += extra;
+    B.done = 1; B.days++; B.gold += sum; B.extra += extra; delete B.short;
     if (HM) HM.clampAdd(S.home.nb, 'n3', BK.FAVOR);
     emit('income', { gold: sum, items: n, source: 'bakery', by: { works: sum }, who: F === FARMER ? 'farmer' : F.id });
     noteLog('income', 'works', sum); if (F !== FARMER) noteLog('work', F.id, 0, sum);
     popText(at.x, at.y - 8, 26, '+' + sum, '#ffd76a'); burst(at.x, at.y - 4, 12, ['#ffd76a', '#fff2a8', Ac[0]], 8, 'coin'); hearts(at.x, at.y - 2, 14);
-    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${o.text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`); } };
+    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`); } };
 }
 function woodshopMorning() { // v5.10.5: once a day, if auto is on and the pile is above the reserve, 阿松 makes a bench
   const H = S.town && S.town.hall; if (!H || !WS || !WS.built(H) || !townOpen()) return;
@@ -3249,22 +3317,24 @@ function careerMorning() {
   if (TOWN_ON && TA && TA.sync) TA.sync(true);
 }
 function careerStock() {
-  const c = {}, add = (ty, n) => { if (ty) c[ty] = (c[ty] | 0) + (n || 1); };
+  const c = {}, add = (ty, n) => { if (ty) BK.addCount(c, ty, n); };
   for (const a of actors()) for (const it of a.crops) add(typeof it === 'string' ? it : SU.itemType(it));
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (w && def) add(def.out, w.ready | 0); }
   if (S.works && S.works.hives) for (const h of S.works.hives) if (h) add('honey', h.ready | 0);
-  machCounts(add); // v5.11.1: the storehouse bin
+  machCounts(add); // v5.11.0.27: the storehouse bin
   if (S.fishFood) add('fishFood', S.fishFood);
   return c;
 }
 function careerPull(take) {
+  const have = careerStock();
+  if (!(take || []).every(x => (have[x.id] | 0) >= (x.n | 0))) return;
   const left = {}; for (const x of take) left[x.id] = (left[x.id] | 0) + x.n;
   const isFish = id => FS && FS.isFish && FS.isFish(id);
   const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) { const ty = typeof arr[i] === 'string' ? arr[i] : SU.itemType(arr[i]); const key = isFish(ty) && left.fish ? 'fish' : ty; if (left[key] > 0 || left[ty] > 0) { const k = left[ty] > 0 ? ty : key; arr.splice(i, 1); left[k]--; } } };
   pull(FARMER.crops); for (const a of actors()) if (a !== FARMER) pull(a.crops);
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def) continue; const k = def.out; if (!(left[k] > 0)) continue; const n = Math.min(w.ready | 0, left[k]); w.ready -= n; left[k] -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
-  machPull(left); // v5.11.1
+  machPull(left); // v5.11.0.27
   if (left.fishFood > 0 && S.fishFood) { const n = Math.min(S.fishFood, left.fishFood); S.fishFood -= n; left.fishFood -= n; }
 }
 function careerDayPay() {
@@ -3380,15 +3450,17 @@ function innType(it) {
 }
 function innCounts() {
   const c = {};
-  const add = (ty, n) => { if (!ty) return; c[ty] = (c[ty] | 0) + (n || 1); };
+  const add = (ty, n) => { if (!ty) return; BK.addCount(c, ty, n); };
   if (!IN) return c;
   for (const a of actors()) for (const it of a.crops) add(innType(it), 1);
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (w && def) add(innType(def.out) || (IN.UNIT[def.out] ? def.out : null), w.ready | 0); }
   if (S.works && S.works.hives) for (const h of S.works.hives) if (h) add('honey', h.ready | 0);
-  machCounts(add); // v5.11.1: the storehouse bin
+  machCounts(add); // v5.11.0.27: the storehouse bin
   return c;
 }
 function innPullNeed(need) {
+  const have = innCounts();
+  if (!(need || []).every(x => (have[x.id] | 0) >= (x.n | 0))) return false;
   const left = {}; for (const x of need) left[x.id] = (left[x.id] | 0) + x.n;
   const takeTy = ty => {
     if (!ty) return false;
@@ -3401,7 +3473,7 @@ function innPullNeed(need) {
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def) continue; const ty = innType(def.out) || (IN.UNIT[def.out] ? def.out : null); if (!ty) continue;
     let n = 0; while (n < (w.ready | 0) && takeTy(ty)) n++; w.ready -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
-  machPull(left); // v5.11.1
+  machPull(left); // v5.11.0.27
   return Object.keys(left).every(k => left[k] <= 0);
 }
 function innEarn(gold, src, x, y) {
@@ -5600,7 +5672,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.25';
+const GAME_VERSION = '5.11.0.27';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5703,7 +5775,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   innMigrate(); // v5.11.0.5
   S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speedRefund = s.settings.speedRefund | 0; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; S.decorLayout = s.settings.decorLayout | 0; // v5.10.1; v5.10.3/4 decorLayout
-  machSyncUp(); // v5.11.1: the machines' shop levels come from works.mach
+  machSyncUp(); // v5.11.0.27: the machines' shop levels come from works.mach
   S.offlineWin = (s.offline && Array.isArray(s.offline.win) ? s.offline.win : []).map(w => ({ at: w.at, days: w.days }));
   applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;

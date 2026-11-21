@@ -1,7 +1,7 @@
 // Unit tests for v5.10.4 (bakery.js: 面包房 + 订单板 — the lot, daily orders, 50% pay, 「我来挑」, saved inside town.hall):  node tools/bakery-test.js
 const assert = require('assert');
 const WD = require('../world.js'); globalThis.PFWorld = WD;
-const TN = require('../town.js'), HL = require('../hall.js'), MK = require('../market.js'), BK = require('../bakery.js');
+const TN = require('../town.js'), HL = require('../hall.js'), MK = require('../market.js'), BK = require('../bakery.js'), SIM = require('../sim.js');
 let n = 0; const ok = (name, fn) => { fn(); n++; console.log('ok  ', name); };
 const overlap = (a, b, pad = 0) => a[0] < b[2] + pad && b[0] < a[2] + pad && a[1] < b[3] + pad && b[1] < a[3] + pad;
 const rectOf = b => [b.x - b.hw, b.y - b.hd, b.x + b.hw, b.y + b.hd];
@@ -77,5 +77,39 @@ ok('valid(): junk in, a clean bakery out; old halls gain an automatic bakery; a 
   assert.deepStrictEqual(v.offer[0].need, [{ id: 'flour', n: 6 }]);
   const B = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0', done: 1 });
   BK.roll(B, 10); assert.strictEqual(B.last, 10); assert.strictEqual(B.take, null); assert.strictEqual(B.done, 0); assert.strictEqual(B.offer.length, 2);
+});
+
+ok('v5.11.0.26: shortOf names what is missing; reserve holds string and object crops before a workshop would take them', () => {
+  assert.deepStrictEqual(BK.shortOf([{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], { milk: 3, honey: 3 }), []);
+  assert.deepStrictEqual(BK.shortOf([{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], { milk: 1, honey: 3 }), [{ id: 'milk', n: 2 }]);
+  const crops = ['milk', 'milk', { type: 'milk', rare: 'big' }, 'egg', 'honey', 'honey'], keep = crops.map(() => false);
+  const left = BK.reserve(crops, [{ id: 'milk', n: 3 }, { id: 'honey', n: 2 }], keep, it => it && it.type);
+  assert.deepStrictEqual(keep, [true, true, true, false, true, true]);
+  assert.deepStrictEqual(left, { milk: 0, honey: 0 });
+});
+ok('v5.11.0.26: valid() keeps short append-only; a new day clears it; autobuy still never buys town / hall / inn / resort / festival items', () => {
+  const v = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'milk', n: 3 }] }], take: 'o0', short: ['milk', 'nope', 'honey'] });
+  assert.deepStrictEqual(v.short, ['milk', 'honey']);
+  const plain = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0' });
+  assert.ok(!('short' in plain), 'missing short stays omitted');
+  BK.roll(v, 10); assert.ok(!v.short, 'a new day drops yesterday\'s short');
+  const ban = ['town', 'hall', 'shop', 'inn', 'inn2', 'cabin', 'diner', 'kitchen', 'resort', 'hut', 'parasol', 'pier', 'deck',
+    'smithy', 'school', 'library', 'clinic', 'cottage', 'gravel', 'party', 'festival', 'h1', 'h2', 'h3', 'h4', 'h5', 'L5', 'L8', 'L11', 'market', 'bakery', 'woodshop', 'roof'];
+  for (const id of ban) assert.ok(!SIM.AUTO_BUY.includes(id), id + ' must stay off 家人帮忙添置');
+});
+ok('v5.11.0.26: addCount treats ready 0 as 0, not 1; a new day clears skip; autoTake leaves a skipped order alone', () => {
+  const c = {};
+  BK.addCount(c, 'honey'); BK.addCount(c, 'honey', 0); BK.addCount(c, 'flour', 0); BK.addCount(c, 'cheese', 0); BK.addCount(c, 'apple_pie', 0);
+  BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0); BK.addCount(c, 'honey', 0);
+  assert.deepStrictEqual(c, { honey: 1, flour: 0, cheese: 0, apple_pie: 0 });
+  assert.ok(!BK.have([{ id: 'apple_pie', n: 1 }, { id: 'honey', n: 2 }], c), 'empty workshops and hives must not look fillable');
+  BK.addCount(c, 'honey', 2); BK.addCount(c, 'apple_pie', 1);
+  assert.ok(BK.have([{ id: 'apple_pie', n: 1 }, { id: 'honey', n: 2 }], c));
+  const v = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'honey', n: 2 }] }], take: 'o0', skip: 1 });
+  assert.strictEqual(v.skip, 1); assert.strictEqual(BK.taken(v), null);
+  const plain = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0' });
+  assert.ok(!('skip' in plain), 'missing skip stays omitted');
+  BK.autoTake(v, { honey: 9 }, BK.payOf); assert.strictEqual(v.take, 'o0', 'skip blocks auto on the failed order');
+  BK.roll(v, 10); assert.ok(!v.skip, 'a new day drops yesterday\'s skip'); assert.strictEqual(v.take, null);
 });
 console.log('bakery-test: ' + n + ' ok');

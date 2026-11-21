@@ -298,7 +298,7 @@ ok('chop drops: about 60% of chops drop something; fruit, flower, rare seed, coi
     if (y.drop === 'coins') assert(y.gold >= 10 && y.gold <= 30); }
   for (const d of WD.DROPS) assert(Math.abs(n[d.id] / N - d.p) < 0.02, d.id); assert(Math.abs(n.none / N - 0.4) < 0.02);
 });
-ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS.filter(k => k !== 'speed'), SIM.SHOP_IDS.filter(k => !SIM.shopItem(k).mach)); }); // v5.11.1: machines are saved in works.mach // v5.10.2: save.js keeps the legacy speed level to refund it
+ok('save.js and sim.js agree on crops and shop items', () => { assert.deepStrictEqual(SAVE.CROP_IDS, SIM.IDS); assert.deepStrictEqual(SAVE.UPGRADE_IDS.filter(k => k !== 'speed'), SIM.SHOP_IDS.filter(k => !SIM.shopItem(k).mach)); }); // v5.11.0.27: machines are saved in works.mach // v5.10.2: save.js keeps the legacy speed level to refund it
 ok('shop tabs cover every item once', () => {
   const ids = SIM.SHOP_TABS.flatMap(t => t.ids);
   assert.deepStrictEqual(ids.slice().sort(), SIM.SHOP_IDS.slice().sort());

@@ -94,7 +94,7 @@
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   const DART = () => window.PFDecorArt; // v5.7.0: decorations draw their own icons from their models
   const YART = id => window.PFYardArt && PFYardArt.iconURL(id); // v5.10.3: the yard things
-  const MART = id => window.PFWorksArt && PFWorksArt.machIconURL && SIM.shopItem(id) && SIM.shopItem(id).mach ? PFWorksArt.machIconURL(id) : null; // v5.11.1: the machines draw their own icons
+  const MART = id => window.PFWorksArt && PFWorksArt.machIconURL && SIM.shopItem(id) && SIM.shopItem(id).mach ? PFWorksArt.machIconURL(id) : null; // v5.11.0.27: the machines draw their own icons
   const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || MART(id) || BLANK;
   const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || MART(id));
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${iconURL(id)});background-size:32px;image-rendering:pixelated"></i>`);
@@ -630,7 +630,7 @@
     else for (const b of data.baskets) { h += (data.baskets.length > 1 || b.who !== '农夫' ? `<div class="who">${esc(b.who)}</div>` : '') + `<div class="cards">${b.rows.map(r => storeCard(r)).join('')}</div>`; }
     h += `<div class="sec">材料</div><div class="cards">`;
     h += storeCard({ id: 'wood', kind: 'item', name: `木材（${data.wood.n}/${data.wood.cap}）`, n: data.wood.n, unit: data.wood.unit, gold: data.wood.gold }, data.wood.spare ? `<div class="d">仓库放得下 ${data.wood.cap} 份，多出 ${data.wood.spare} 份可卖</div>` : `<div class="d">扩建房子和围篱笆要用，满了才拿去卖（${data.wood.unit} 金一份）${autoWood()}</div>`);
-    for (const r of (data.bin || [])) h += storeCard(r, `<div class="d">机器直接收进仓库：订单和菜馆先用，多过 ${r.keep} 的每晚由收货车拉去集市卖</div>`); // v5.11.1
+    for (const r of (data.bin || [])) h += storeCard(r, `<div class="d">机器直接收进仓库：订单和菜馆先用，多过 ${r.keep} 的每晚由收货车拉去集市卖</div>`); // v5.11.0.27
     h += storeCard({ id: 'hay', kind: 'item', name: '干草', n: data.hay.n }, `<div class="d">喂动物用，集市 ${data.hay.unit} 金一捆</div>`);
     h += storeCard({ id: 'fishfood', kind: 'item', name: '鱼食', n: data.fishFood.n }, `<div class="d">家里有鱼食时，空闲的家人会自己去池塘撒一把，那天稀有鱼更容易上钩（${data.fishFood.unit} 金一包）</div>`);
     for (const r of (data.ornament || [])) h += storeCard(r, '<div class="d">用右下角的放养按钮，放到家门口池塘里看着玩，不再卖掉</div>');
@@ -668,7 +668,7 @@
     }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     if (it.group === 'decor' && DART()) { const url = DART().bookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.7.0: 36px art at 2x, like fish and bugs
-    if (it.group === 'mach' && window.PFWorksArt && PFWorksArt.machBookURL) { const url = PFWorksArt.machBookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.11.1
+    if (it.group === 'mach' && window.PFWorksArt && PFWorksArt.machBookURL) { const url = PFWorksArt.machBookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.11.0.27
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
   function drawCodex(force) {
