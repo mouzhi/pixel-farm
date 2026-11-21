@@ -769,3 +769,14 @@ html.pf-touch #tools { display: none !important; }
 #pt-float button { white-space: nowrap; min-width: 56px; height: 44px; padding: 0 12px; border-radius: 22px; border: 2px solid #5b3a1e; background: #fff6df; font: 700 14px sans-serif; color: #4a2e14; box-shadow: 0 2px 0 #5b3a1e; }
 #pt-float button.p { background: #7ccf5a; color: #fff; }
 html.pf-touch.pt-mode #xhs-bar, html.pf-touch.pt-mode #xhs-toast { visibility: hidden; }
+
+/* 1.3.0：主线 v5.11.0.7 物品栏（xhs 用 full 样式：54px 格子带名字）。手机一行放不下 9 格，横向滑会藏住后几格，
+   改成折行居中，所有格子都看得见、都在屏幕里。 */
+html.xhs-mobile #xhs-inv-dock #inv { flex-wrap: wrap; justify-content: center; overflow: visible; touch-action: manipulation; row-gap: 4px; }
+html.xhs-mobile #diary { box-sizing: border-box; }
+/* 相册新照片的小提示：放在 HUD 下面，不压住天数和金币 */
+html.xhs-mobile #albumToast { top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 116px)) !important; }
+#pt-sheet .row2.go { align-items: center; }
+#pt-sheet .row2.go span { font: 700 13px sans-serif; color: #8a5a2c; flex: none; }
+#pt-sheet .row2.go button { font-size: 13px; padding: 0 2px; white-space: nowrap; }
+#pt-sheet .row2.go button.locked { color: #8a7a6a; background: #efe6d2; }

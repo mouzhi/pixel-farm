@@ -72,6 +72,13 @@
     var ic = t.m === 'plant' ? (ICON[t.k] || '🌳') : (ICON[t.m] || '•');
     return '<button ' + attr + '="' + i + '"' + (t.full ? ' class="full"' : '') + '><span class="i">' + ic + '</span><span class="nm">' + t.name.replace(/^摆/, '') + '</span><span class="c">' + (t.n ? '×' + t.n : '&nbsp;') + '</span></button>';
   }
+  // 1.3.0：网页 v5.11.0 小地图下的「家 / 农家乐 / 小镇 / 海边」跳转在手机上藏着（会压住右上角），搬进工具箱的一行；
+  // 还在云里的区域照样能点：镜头过去，再说一句怎么开（和网页一样）。
+  function jumps() { var j = $('mmJump'); return j ? Array.prototype.slice.call(j.querySelectorAll('button[data-j]')) : []; }
+  function jumpRow() {
+    var J = jumps(); if (!J.length) return '';
+    return '<div class="row2 go"><span>去</span>' + J.map(function (b, i) { return '<button data-g="' + i + '"' + (b.classList.contains('locked') ? ' class="locked"' : '') + '>' + (b.classList.contains('locked') ? '☁ ' : '') + b.textContent + '</button>'; }).join('') + '</div>';
+  }
   function drawSheet() {
     var L = tools(), main = L.filter(function (t) { return !/^clear/.test(t.m); }), clr = L.filter(function (t) { return /^clear/.test(t.m); });
     var deco = main.filter(function (t) { return t.m === 'decor'; }), rest = main.filter(function (t) { return t.m !== 'decor'; });
@@ -86,11 +93,12 @@
       if (deco.length) { var mv = rest.map(function (t) { return t.m; }).indexOf('move');
         cells.splice(mv >= 0 ? mv : cells.length, 0, '<button data-a="deco"><span class="i">' + ICON.decor + '</span><span class="nm">摆装饰</span><span class="c">×' + deco.reduce(function (s, t) { return s + t.n; }, 0) + '</span></button>'); }
       h = '<h4><span>⚒ 工具</span><small>点一个工具，再拖地图对准</small></h4><div class="grid">' + cells.join('') + '</div>' +
-        (clr.length ? '<div class="row2">' + clr.map(function (t, i) { return '<button data-c="' + i + '">撤销' + (t.m === 'clear' ? '指令' : '要搬的') + ' ' + (t.n || '') + '</button>'; }).join('') + '</div>' : '');
+        jumpRow() + (clr.length ? '<div class="row2">' + clr.map(function (t, i) { return '<button data-c="' + i + '">撤销' + (t.m === 'clear' ? '指令' : '要搬的') + ' ' + (t.n || '') + '</button>'; }).join('') + '</div>' : '');
     }
     sheet.innerHTML = h;
     sheet.onclick = function (e) {
       var b = e.target.closest ? e.target.closest('button') : null; if (!b) return; var a = b.getAttribute('data-a');
+      if (b.hasAttribute('data-g')) { var jb = jumps()[+b.getAttribute('data-g')]; closeSheet(); if (jb) { if (P.setFollow) P.setFollow(false); jb.click(); haptic(); } return; }
       if (a === 'deco') { subDecor = true; drawSheet(); return; }
       if (a === 'back') { subDecor = false; drawSheet(); return; }
       if (a === 'no') { confirming = null; drawSheet(); return; }
@@ -190,7 +198,9 @@
     place();
     var m = G.input && G.input.mode, L = tools().filter(function (t) { return !/^clear/.test(t.m); });
     if (m !== lastMode) { if (m) enterMode(m); else leaveMode(); lastMode = m; }
-    box.hidden = !L.length || !!m; if (box.hidden && !m) closeSheet();
+    // 1.3.0：背包（v5.11.0.7 物品栏）、日记 / 相册、商店等面板打开时 ⚒ 让开，不压在面板和物品栏上
+    var covered = ['shop', 'store', 'diary', 'xhs-board', 'xhs-inv-dock', 'menu', 'career', 'loveTip', 'offline'].some(function (id) { var e = $(id); return e && !e.hidden && e.getClientRects().length > 0; });
+    box.hidden = !L.length || !!m || covered; if (box.hidden && !m) closeSheet();
     html.classList.toggle('pt-mode', !!m); ret.hidden = bar.hidden = !m;
     if (m) {
       var r = RET(); ret.style.left = r.x + 'px'; ret.style.top = r.y + 'px';

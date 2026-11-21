@@ -127,7 +127,7 @@ jobs:
             scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js
           # 小红书小工具: pack the zip (ES2017 check + official audit), then phone shots on the packed tree (~4m)
           - group: xhs
-            scripts: xhs-shots.js
+            scripts: xhs-shots.js xhs130-shots.js
           # 小红书 触屏工具模式 (touch.js): ⚒ toolbox, crosshair + ✖/✔ bar, tap-to-aim, 砍树, long-press 移动/收回, 撤销 confirm (~1m)
           - group: xhs-touch
             scripts: xhs-touch-shots.js

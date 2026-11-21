@@ -420,7 +420,7 @@
     let h = '';
     h += `<div class="sec">农家乐区 · 民宿${v.inn2 ? ' · 二层客栈' : ''}</div>`; // v5.11.0.5: its own district by the town gate, no plot is rezoned
     if (!v.plot) h += `<div class="more">农家乐区在镇门口东大道两边，是一块专门的空地，不占家里的地块。先修好东大道、开了镇门，就能在这里盖小木屋和菜馆。</div>`;
-    else h += `<div class="more">小木屋、二层客栈、农家菜馆和厨房都盖在镇门口的农家乐区（东大道北边是民宿，南边是菜馆和菜园），不用改建任何地块。小地图下面点「农家乐」就能过去看。</div>`;
+    else h += `<div class="more">小木屋、二层客栈、农家菜馆和厨房都盖在镇门口的农家乐区（东大道北边是民宿，南边是菜馆和菜园），不用改建任何地块。${window.PFPlatform && PFPlatform.mobile ? '点 ⚒ 工具箱里的「农家乐」就能过去看。' : '小地图下面点「农家乐」就能过去看。'}</div>`;
     if (v.freed && v.freed.length) h += `<div class="more">民宿已经从「${esc(v.freed.join('、'))}」搬到农家乐区，原来那块地空出来了，可以在「地块」里免费改建一次。</div>`;
     h += `<div class="more">现在 ${v.cabins} / 4 间小木屋${v.inn2 ? '（每间可住两组）' : ''}，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
       (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +

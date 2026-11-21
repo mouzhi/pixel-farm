@@ -141,6 +141,22 @@ ok('late-game compact JSON also stays under the 64KB cloud content cap', () => {
   assert(bytes < 65536, 'late-game save must fit in one cloud content object');
 });
 
+ok('1.3.0: real v15 saves, compact (v5.11.0.8) with a full album, stay well under the 64KB cloud cap; photos never go in the save', () => {
+  const AL = require('../album.js');
+  for (const f of ['save-v15-day72-cottage.json', 'save-v15-inn-resort.json']) {
+    const s = SAVE.migrate(JSON.parse(fs.readFileSync(path.join(FIX, f), 'utf8')));
+    const A = AL.valid(s.album || []);
+    AL.MOMENTS.forEach((m, i) => AL.add(A, { id: m.id, d: 300 + i, t: 600, x: 100.5, y: 80.25, w: ['farmer', 'partner', 'kid0', 'kid1'] }));
+    s.album = AL.pack(A);
+    const json = JSON.stringify(SAVE.compact(s)), bytes = Buffer.byteLength(json, 'utf8');
+    console.log('  ', f, 'compact + full album:', bytes, 'bytes,', A.list.length, 'photos');
+    assert(A.list.length === AL.MOMENTS.length, 'every moment is in the album');
+    assert(bytes < 48 * 1024, f + ' must leave headroom under the 64KB cloud content cap');
+    assert(!/data:image\//.test(json), 'album pictures live in localStorage, never in the cloud save');
+    assert.strictEqual(SAVE.migrate(JSON.parse(json)).saveVersion, 15);
+  }
+});
+
 const PLATFORM = fs.readFileSync(path.join(__dirname, '../platforms/xhs/platform.js'), 'utf8');
 
 function lsMock(init) {

@@ -195,7 +195,7 @@ def stage() -> None:
         raise SystemExit("staged JS is not ES2017 (see above); run `npm --prefix tools ci` first")
     leftover = []
     for staged in STAGE.rglob("*.js"):
-        text = staged.read_text(errors="ignore")
+        text = re.sub(r"\?{3,}", "", staged.read_text(errors="ignore"))  # 1.3.0: the album's "???" placeholders are text, not syntax
         if "?." in text or "??" in text:
             leftover.append(str(staged.relative_to(STAGE)))
     if leftover:
