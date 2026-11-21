@@ -780,3 +780,5 @@ html.xhs-mobile #albumToast { top: var(--xhs-sheet-top, calc(var(--xhs-top-clear
 #pt-sheet .row2.go span { font: 700 13px sans-serif; color: #8a5a2c; flex: none; }
 #pt-sheet .row2.go button { font-size: 13px; padding: 0 2px; white-space: nowrap; }
 #pt-sheet .row2.go button.locked { color: #8a7a6a; background: #efe6d2; }
+/* Chrome 61 没有 aspect-ratio：相册里还没拍好的格子（灰底 / 锁着的 ???）给一个固定高度，不塌成 0 */
+html.xhs-mobile .alb .grid .pol span.pic, html.xhs-mobile .alb .grid .pol i.pic { min-height: 96px; }

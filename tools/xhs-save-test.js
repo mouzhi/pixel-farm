@@ -345,6 +345,27 @@ function cloudCases() {
       });
     })
     .then(() => {
+      // 1.3.0: album thumbnails go to the container Storage only (official §3.6), never localStorage, and the save flush does not rewrite them
+      const AK = 'mouzhi/pixel-farm:album:123';
+      const { P, calls, local, xhsMem } = loadPlatform({ noCloud: true, local: {}, xhs: { [AK]: JSON.stringify({ open: ['data:image/png;base64,AAAA', 0] }) } });
+      return waitReady(P).then(() => {
+        const A = P.albumStore();
+        assert.strictEqual(JSON.parse(A.getItem(AK)).open[0], 'data:image/png;base64,AAAA', 'album thumbs read back from the container Storage');
+        const before = calls.setStorage;
+        A.setItem(AK, JSON.stringify({ open: ['data:image/png;base64,BBBB', 1] }));
+        assert.strictEqual(calls.setStorage, before + 1, 'one setStorage for the album key');
+        assert.strictEqual(local.getItem(AK), null, 'album thumbs never go to localStorage');
+        assert.throws(() => A.setItem('mouzhi/pixel-farm:save', '{}'), /album store/);
+        P.store().setItem('mouzhi/pixel-farm:save', JSON.stringify(saveObj(500, 3)));
+        return P.flush().then(() => {
+          assert.strictEqual(local.getItem(AK), null, 'the save flush does not copy album thumbs to localStorage');
+          assert.strictEqual(JSON.parse(JSON.parse(xhsMem.get(AK))).open[0], 'data:image/png;base64,BBBB');
+          console.log('ok   1.3.0 album thumbs: container Storage only, not localStorage, not in the save flush');
+          n++;
+        });
+      });
+    })
+    .then(() => {
       console.log('passed', n, 'xhs-save tests; late-game bytes', globalThis.__LATE_GAME_SAVE_BYTES);
     });
 }

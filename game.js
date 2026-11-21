@@ -5039,7 +5039,7 @@ const albumQ = []; let albumBusy = 0, albumMs = 0;
 const ALBUM_MS = { open: 'open', animal: 'animal', fish: 'fish', met: 'met', moved: 'moved', manor: 'manor' };
 const ALBUM_ACH = { kidwork: 'kidwork', school: 'school', firstrain: 'rain', truecatch: 'rarefish', firstbug: 'bug', firstpark: 'park' };
 const ALBUM_WAIT = { moved: 90, kidwork: 150, open: 0 }; // game minutes to wait so the people are out of the door
-const albumStore = () => { try { return window.localStorage; } catch (e) { return null; } };
+const albumStore = () => { try { return (window.PFPlatform && typeof PFPlatform.albumStore === 'function' && PFPlatform.albumStore()) || window.localStorage; } catch (e) { return null; } }; // xhs 1.3.0: the container Storage, not localStorage
 const albumFarm = () => S.createdAt || 0;
 function albumPlace(at) { // a world spot for a moment's place (old saves, re-staging, moments with nobody out)
   const P2 = (x, y) => ({ x, y });
