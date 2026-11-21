@@ -1620,7 +1620,7 @@ function followInsect(k) { // play-chase: keep walking toward the live butterfly
 }
 function idleHold() { return { kind: 'idle', label: '歇一会儿', to: { x: F.x, y: F.y }, dur: 8, rest: true }; }
 function pickTask() { // v5.11.0.23: chooseTask may return null (a spouse with no party seat); never hand that to stepActor
-  try { const t = chooseTask(); if (t && t.to) return t; } catch (e) { try { console.warn('[pixel-farm] chooseTask', F && (F.id || 'farmer'), e); } catch (x) {} }
+  try { const t = chooseTask(); if (t) return t; } catch (e) { try { console.warn('[pixel-farm] chooseTask', F && (F.id || 'farmer'), e); } catch (x) {} }
   return idleHold(); }
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
   try { stepActorInner(dm); }
