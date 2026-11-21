@@ -73,7 +73,7 @@ fs.mkdirSync(OUT, { recursive: true });
       tao: tao && tao.spot, log: S.events.map(e => e.msg).filter(m => /面包房|订单/.test(m)).slice(0, 5) }; })()`,
     r => !(r.done && r.days >= 1) ? 'not delivered ' + JSON.stringify(r) : r.gold !== r.pay ? 'pay ' + r.gold + ' vs ' + r.pay : r.fav !== 3 ? 'favor ' + r.fav : !r.log.some(m => /送到小桃的面包房/.test(m)) ? 'log ' + r.log : null);
 
-  // 5. v5.11.0.25: milk reserved for a taken bakery order is not poured into the cheese workshop; only one adult walks it; no 「送到门口才发现」 loop
+  // 5. v5.11.0.26: milk reserved for a taken bakery order is not poured into the cheese workshop; only one adult walks it; no 「送到门口才发现」 loop
   await shot('v511025_bakery_short.png', `(() => { ${setup} ${houses} f.hallStart('bakery'); nextMorning();
     f.buy('cheese');
     if (!S.works.works.cheese || !S.works.works.cheese.at) {
@@ -124,7 +124,7 @@ fs.mkdirSync(OUT, { recursive: true });
       look(96, 60, 0);
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, bakery: s2.town.hall.bakery, layout: s2.settings.decorLayout, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.25' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.26' ? 'ver ' + r.ver : !r.bakery || r.bakery.pick !== 0 ? 'bakery ' + JSON.stringify(r.bakery) : r.layout !== 2 ? 'layout ' + r.layout : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
 
   // 7. (local only) the real save and the friend's save load, decorations keep their counts, lamps use the wider spots

@@ -83,7 +83,7 @@ jobs:
           - group: works-town
             # v5.11.0.15: party-shots (~1.5m locally); works-town 14m01s on main run 44800040270, ample headroom
             # v5.11.0.22: party-shots -> hall-market (works-town was 22m23s on run 44888658203, over the 22m cap)
-            # v5.11.0.25: workshop-shots tried here (works-town was 11m09s on run 44916066351) then got its own leg
+            # v5.11.0.26: workshop-shots tried here (works-town was 11m09s on run 44916066351) then got its own leg
             # (works-town hit 25m01s on run 44918453900, over the 22m cap)
             scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
           # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
@@ -97,7 +97,7 @@ jobs:
             scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js party-shots.js
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
-            # v5.11.0.25: workshop-shots -> works-town, festival-shots -> agrilot
+            # v5.11.0.26: workshop-shots -> works-town, festival-shots -> agrilot
             # (recent-a was already 21m50s on main run 44914449486; the new bakery short-order
             # shot pushed it to 23m12s on run 44916066351, over the 22m cap)
             scripts: bakery-shots.js careers-shots.js
@@ -135,9 +135,9 @@ jobs:
             # (album run 44777224060: agrilot 11m44s with fog+hotbar, recent-b 24m43s with rain;
             #  expected agrilot ~19–20m with rain+restaurant, >=3m headroom under 25m)
             # v5.11.0.13: fog-shots -> fog2-shots (~3m more than the old one), so rain-shots (~7m) goes on to scale (9m41s on run 44782373476)
-            # v5.11.0.25: festival-shots tried here then got its own leg (agrilot hit 21m34s on run 44918453900)
+            # v5.11.0.26: festival-shots tried here then got its own leg (agrilot hit 21m34s on run 44918453900)
             scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js
-          # v5.11.0.25: workshop-shots and festival-shots each get their own leg. recent-a was 23m12s
+          # v5.11.0.26: workshop-shots and festival-shots each get their own leg. recent-a was 23m12s
           # with both plus the new bakery shot (run 44916066351); parking them on works-town / agrilot
           # then made those groups 25m01s and 21m34s (run 44918453900).
           - group: workshop

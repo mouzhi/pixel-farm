@@ -79,7 +79,7 @@ ok('valid(): junk in, a clean bakery out; old halls gain an automatic bakery; a 
   BK.roll(B, 10); assert.strictEqual(B.last, 10); assert.strictEqual(B.take, null); assert.strictEqual(B.done, 0); assert.strictEqual(B.offer.length, 2);
 });
 
-ok('v5.11.0.25: shortOf names what is missing; reserve holds string and object crops before a workshop would take them', () => {
+ok('v5.11.0.26: shortOf names what is missing; reserve holds string and object crops before a workshop would take them', () => {
   assert.deepStrictEqual(BK.shortOf([{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], { milk: 3, honey: 3 }), []);
   assert.deepStrictEqual(BK.shortOf([{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }], { milk: 1, honey: 3 }), [{ id: 'milk', n: 2 }]);
   const crops = ['milk', 'milk', { type: 'milk', rare: 'big' }, 'egg', 'honey', 'honey'], keep = crops.map(() => false);
@@ -87,7 +87,7 @@ ok('v5.11.0.25: shortOf names what is missing; reserve holds string and object c
   assert.deepStrictEqual(keep, [true, true, true, false, true, true]);
   assert.deepStrictEqual(left, { milk: 0, honey: 0 });
 });
-ok('v5.11.0.25: valid() keeps short append-only; a new day clears it; autobuy still never buys town / hall / inn / resort / festival items', () => {
+ok('v5.11.0.26: valid() keeps short append-only; a new day clears it; autobuy still never buys town / hall / inn / resort / festival items', () => {
   const v = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'milk', n: 3 }] }], take: 'o0', short: ['milk', 'nope', 'honey'] });
   assert.deepStrictEqual(v.short, ['milk', 'honey']);
   const plain = BK.valid({ last: 9, offer: [{ id: 'o0', need: [{ id: 'egg', n: 2 }] }], take: 'o0' });
