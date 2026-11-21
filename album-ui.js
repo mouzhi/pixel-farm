@@ -36,6 +36,7 @@
   #albumToast[hidden]{display:none}#albumToast.out{opacity:0;transform:translate(-50%,-6px)}
   html.xhs-mobile #albumBtn{display:none!important}html.xhs-mobile #albumToast{top:calc(var(--xhs-top-clear,0px) + 64px)}
   html.xhs-mobile .alb .shead .tab,html.xhs-mobile .alb .shead .x,html.xhs-mobile .alb .big .pbtn{min-width:44px;min-height:44px;font-size:15px}
+  @media (min-width:721px){html.pf-alb-toast #say{top:calc(var(--pf-alb-toast-bottom,151px) + 6px)}}
   #albumToast img{width:80px;height:55px;image-rendering:pixelated;box-shadow:0 0 0 1px #c9a46a}#albumToast small{display:block;font-size:11px;color:#8a6a44;font-weight:600}`;
   document.head.appendChild(css);
   const dock = $('rightDock') || document.body;
@@ -94,11 +95,17 @@
   let toast = null, toastT = 0;
   addEventListener('pf:album', e => { const d = e.detail || {};
     if (!toast) { toast = document.createElement('div'); toast.id = 'albumToast'; toast.hidden = true; document.body.appendChild(toast);
-      toast.addEventListener('click', () => { const id = toast.dataset.id; toast.hidden = true; if (window.PFDiaryUI && !isShown(btn)) PFDiaryUI.album(id); else open(id); }); }
+      toast.addEventListener('click', () => { const id = toast.dataset.id; toast.hidden = true; stack(false); if (window.PFDiaryUI && !isShown(btn)) PFDiaryUI.album(id); else open(id); }); }
     toast.dataset.id = d.id || ''; toast.innerHTML = `${d.url ? `<img alt="" src="${d.url}">` : ''}<span>📷 存进相册<small>${esc(d.title)}</small></span>`;
-    toast.hidden = false; toast.classList.remove('out'); clearTimeout(toastT);
-    toastT = setTimeout(() => { toast.classList.add('out'); toastT = setTimeout(() => { toast.hidden = true; }, 450); }, 4200);
+    toast.hidden = false; toast.classList.remove('out'); clearTimeout(toastT); stack(true);
+    toastT = setTimeout(() => { toast.classList.add('out'); stack(false); toastT = setTimeout(() => { toast.hidden = true; }, 450); }, 4200);
     if (!el.hidden) draw(el); const dy = $('diary'); if (dy && !dy.hidden && dy._albOn) draw(dy); });
   const isShown = b => !!(b && b.offsetParent);
+  // v5.11.0.16: other top-centre messages (the #say line: 「成就：…」, and the 小红书 #xhs-toast) stack below the photo toast instead of
+  // being drawn over it. While it shows, <html> gets .pf-alb-toast and --pf-alb-toast-bottom (its bottom edge in CSS px); pf:toaststack tells hosts.
+  function stack(on) { const R = document.documentElement;
+    if (on && toast && !toast.hidden) { R.style.setProperty('--pf-alb-toast-bottom', Math.ceil(toast.getBoundingClientRect().bottom) + 'px'); R.classList.add('pf-alb-toast'); }
+    else R.classList.remove('pf-alb-toast');
+    dispatchEvent(new CustomEvent('pf:toaststack', { detail: { album: R.classList.contains('pf-alb-toast') } })); }
   window.PFAlbumUI = { open, close, toggle, renderInto, draw, html, el };
 })();
