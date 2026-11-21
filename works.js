@@ -213,6 +213,76 @@
   const HERD = { out: [8 * 60, 8 * 60 + 45], back: [16 * 60 + 40, 17 * 60 + 30], noon: 12 * 60, bonus: 3 };
   const herdPhase = T => T >= HERD.out[0] && T < HERD.out[1] ? 'out' : T >= HERD.out[1] && T < HERD.back[0] ? 'graze' : T >= HERD.back[0] && T < HERD.back[1] ? 'back' : null;
 
+  // ---------- v5.11.0.29 自动化机械（第一批）: auto feeder + waterer, egg chute, milker, honey tray ----------
+  // Bought in the shop's 「工坊」 tab (never by 家人帮忙添置), fitted onto what is already there: the pens' troughs, the coops,
+  // the cow sheds, the meadow's hives. Saved as works.mach = { f, e, m, h, eg, mk, hn } (small ints; zero keys left out):
+  // f: a bit per pen with a feeder (MACH_PENS order), e / m / h: chute / milker / tray, eg / mk / hn: goods waiting in the
+  // storehouse bin. Products go straight into the bin; nobody carries them. The bin feeds orders and meals like a workshop's
+  // finished goods, and what is above `keep` goes out with the night's produce cart at the stall's price.
+  const MACH = {
+    feeder: { name: '自动饲喂槽', cost: 2500, wood: 30 },
+    feedset: { name: '自动饲喂槽整套', cost: 12000, wood: 0, min: 5 },
+    chute: { name: '集蛋滑道', cost: 5000, wood: 0 },
+    milker: { name: '挤奶机', cost: 6000, wood: 0 },
+    tray: { name: '蜂蜜收集槽', cost: 1500, wood: 0 },
+  };
+  const MACH_IDS = Object.keys(MACH);
+  const MACH_PENS = ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'];
+  const BIN = { egg: { key: 'eg', cap: 48, keep: 8 }, milk: { key: 'mk', cap: 24, keep: 6 }, honey: { key: 'hn', cap: 24, keep: 6 } };
+  const BIN_IDS = Object.keys(BIN);
+  const bitOf = pen => { const i = MACH_PENS.indexOf(pen); return i < 0 ? 0 : 1 << i; };
+  const fitted = (m, pen) => !!(m && ((m.f | 0) & bitOf(pen)));
+  const fitCount = m => { let n = 0, f = (m && m.f) | 0; while (f) { n += f & 1; f >>= 1; } return n; };
+  // built: pens that stand now -> the ones still without a feeder, in MACH_PENS order
+  const unfitted = (m, built) => MACH_PENS.filter(k => (built || []).includes(k) && !fitted(m, k));
+  // why a machine cannot be bought yet (null: it can). ctx: { wheel, smithy, built: [pen ids], coop2, shed2, hives, meadow }
+  function machGate(id, m, ctx) {
+    ctx = ctx || {};
+    if (id === 'feeder' || id === 'feedset') {
+      if (!(ctx.wheel > 0) || !ctx.smithy) return !(ctx.wheel > 0) && !ctx.smithy ? '先修好水车，再在镇上盖好铁匠铺' : !(ctx.wheel > 0) ? '先修好水车（自来水要靠水车抽）' : '先在镇上盖好铁匠铺（饲喂槽要阿锤来打）';
+      const left = unfitted(m, ctx.built);
+      if (!left.length) return (ctx.built || []).length ? '每个盖好的棚子都装上了' : '先盖一个鸡舍、猪圈、羊圈或牛棚';
+      if (id === 'feedset' && left.length < MACH.feedset.min) return `只剩 ${left.length} 个棚子没装，单个装更划算`;
+      return null;
+    }
+    if (id === 'chute') return m && m.e ? null : ctx.coop2 ? null : '先盖第二鸡舍';
+    if (id === 'milker') return m && m.m ? null : ctx.shed2 ? null : '先盖第二牛棚';
+    if (id === 'tray') return m && m.h ? null : !ctx.meadow ? '先有花甸（新地选「花甸」）' : (ctx.hives | 0) < HIVE.max ? `花甸里放满 ${HIVE.max} 个蜂箱（现在 ${ctx.hives | 0} 个）` : null;
+    return null;
+  }
+  // the shop's level count for each machine, read from works.mach (the shop keeps S.up in step with it)
+  function machLevels(m, built) {
+    return { feeder: fitCount(m), feedset: fitCount(m) && !unfitted(m, built).length ? 1 : 0, chute: m && m.e ? 1 : 0, milker: m && m.m ? 1 : 0, tray: m && m.h ? 1 : 0 };
+  }
+  // a purchase: fit the machine in place (feeder: the first pen without one; set: every pen without one) -> pens fitted now
+  function machBuy(m, id, built) {
+    if (id === 'feeder') { const k = unfitted(m, built)[0]; if (!k) return []; m.f = (m.f | 0) | bitOf(k); return [k]; }
+    if (id === 'feedset') { const ks = unfitted(m, built); for (const k of ks) m.f = (m.f | 0) | bitOf(k); return ks; }
+    if (id === 'chute') m.e = 1; if (id === 'milker') m.m = 1; if (id === 'tray') m.h = 1;
+    return [];
+  }
+  // fitted pens keep their trough full of hay (from the storehouse) and water. -> hay used
+  function machFill(m, troughs, need, hay) {
+    let used = 0;
+    for (const k of MACH_PENS) { if (!fitted(m, k)) continue; const n = need(k) | 0; if (!n) continue; const t = troughs[k] || (troughs[k] = { feed: 0, water: 0 });
+      const add = Math.max(0, Math.min(n - (t.feed | 0), (hay | 0) - used)); t.feed = (t.feed | 0) + add; used += add; t.water = 1; }
+    return used;
+  }
+  const binHas = (m, id) => (m && BIN[id] ? m[BIN[id].key] | 0 : 0);
+  const binRoom = (m, id) => BIN[id].cap - binHas(m, id);
+  function binAdd(m, id, n) { const k = Math.max(0, Math.min(n | 0, binRoom(m, id))); if (k) m[BIN[id].key] = binHas(m, id) + k; return k; }
+  function binTake(m, id, n) { const k = Math.max(0, Math.min(n | 0, binHas(m, id))); if (k) m[BIN[id].key] = binHas(m, id) - k; return k; }
+  // the night's produce cart: everything above `keep` -> { egg, milk, honey } taken out of the bin
+  function binShip(m) { const out = {}; for (const id of BIN_IDS) { const n = Math.max(0, binHas(m, id) - BIN[id].keep); if (n) out[id] = binTake(m, id, n); } return out; }
+  // the save: small non-negative ints, zero keys dropped; null when nothing is bought and the bin is empty
+  function machValid(o) {
+    if (!o || typeof o !== 'object' || Array.isArray(o)) return null; const out = {};
+    const f = Math.round(num(o.f, 0, 0, (1 << MACH_PENS.length) - 1)); if (f) out.f = f;
+    for (const k of ['e', 'm', 'h']) if (o[k]) out[k] = 1;
+    for (const id of BIN_IDS) { const b = BIN[id], n = Math.round(num(o[b.key], 0, 0, b.cap)); if (n) out[b.key] = n; }
+    return Object.keys(out).length ? out : null;
+  }
+
   // ---------- rules that span things ----------
   // a plot that has phase-8 buildings on it cannot be re-zoned (nothing would know where to go): returns why, or null
   function plotBusy(id, st) {
@@ -237,6 +307,7 @@
       if (typeof q.x === 'number' && typeof q.y === 'number') { out.works[id].x = num(q.x, 0, -260, 452); out.works[id].y = num(q.y, 0, -212, 388); } } // v5.7.0 moved
     out.hives = (Array.isArray(o.hives) ? o.hives : []).slice(0, HIVE.max).filter(h => h && typeof h === 'object').map(h => ({ at: h.at === 'orchard' || PL.isPlotId(h.at) ? h.at : null, s: Math.round(num(h.s, 0, 0, 5)), cd: Math.round(num(h.cd, HIVE.every, 0, 9)), ready: Math.round(num(h.ready, 0, 0, HIVE.readyCap)), ...(typeof h.x === 'number' && typeof h.y === 'number' ? { x: num(h.x, 0, -260, 452), y: num(h.y, 0, -212, 388) } : {}) })); // v5.7.0: x, y once moved
     out.penHost = typeof o.penHost === 'string' && PL.isPlotId(o.penHost) ? o.penHost : null;
+    const mach = machValid(o.mach); if (mach) out.mach = mach; // v5.11.0.29 append-only (v15): only once a machine is bought
     return out;
   }
 
@@ -249,6 +320,7 @@
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,
-    HERD, herdPhase, plotBusy, empty, valid, ownedSorted };
+    HERD, herdPhase, plotBusy, empty, valid, ownedSorted,
+    MACH, MACH_IDS, MACH_PENS, BIN, BIN_IDS, fitted, fitCount, unfitted, machGate, machLevels, machBuy, machFill, binHas, binRoom, binAdd, binTake, binShip, machValid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorks = api;
 })(typeof window !== 'undefined' ? window : globalThis);

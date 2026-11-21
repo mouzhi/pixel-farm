@@ -6,7 +6,7 @@
   const PW = root.PFWorks, PL = root.PFPlots;
   const PAL = root.PF_PALETTE, R = PAL.ramps, Wd = R.wood, St = R.stone, Wt = R.water, Rf = R.roof, Ac = R.accent, Ink = R.ink, G = R.green;
   let X = null, S = null, MD = null, ICON = null, lastKey = '', mounted = false;
-  const own = { spr: [], works: [], hives: [], lamps: [] }; // props this file put down
+  const own = { spr: [], works: [], hives: [], lamps: [], mach: [] }; // props this file put down (v5.11.0.29: machines)
   const removeFrom = (arr, o) => { const i = arr.indexOf(o); if (i >= 0) arr.splice(i, 1); };
 
   // ---------- models (voxel = 1 screen px; 2 voxels per world unit) ----------
@@ -81,7 +81,60 @@
       if (z === 23) return x >= 1 && x <= 4 && y >= 1 && y <= 4 ? Ink[1] : null;
       if (z === 24) return (x === 2 || x === 3) && (y === 2 || y === 3) ? Ink[1] : null;
       return null; });
-    return { sprinkler, mill, jam, cheese, pie: jam, hive, lamp };
+    // ---------- v5.11.0.29 自动化机械 ----------
+    // 自动饲喂槽 + 自来水槽: stands right behind a pen's trough (same width): a plank hopper with a tin funnel over the hay half,
+    // a crank wheel on its side that turns while it feeds, and a blue pipe from the wheel's main with a tap over the water half.
+    const spokes = (u, v, a, r0, r1, rim, spoke, hub) => { const r = Math.hypot(u, v); if (r > r1) return null; if (r > r1 - 1) return rim; if (r < r0) return hub;
+      const k = (((Math.atan2(v, u) - a) % (Math.PI / 2)) + Math.PI / 2) % (Math.PI / 2); return (k < 0.38 || k > Math.PI / 2 - 0.38) ? spoke : null; };
+    const feederAt = a => B(18, 7, 16, (x, y, z) => {
+      if (x >= 1 && x <= 9 && y >= 0 && y <= 3) {                                      // the hopper
+        if (z <= 4) return (x === 1 || x === 9) && (y === 0 || y === 3) ? Wd[1] : null;   // legs
+        if (z <= 12) { const edge = x === 1 || x === 9 || y === 0 || y === 3; if (!edge) return z === 12 ? Ac[1] : null; return z === 12 ? Wd[4] : (z === 5 || z === 9 ? Wd[2] : Wd[3]); }
+        if (z === 13) return x >= 2 && x <= 8 && y >= 1 && y <= 2 ? Ac[1] : null;           // hay heaped on top
+        return null; }
+      if (z >= 5 && z <= 6 && x >= 2 && x <= 4 && y >= 4 && y <= 5) return z === 5 ? St[2] : St[3]; // the tin chute over the hay
+      if (y === 4 && x >= 4 && x <= 10 && z >= 6 && z <= 12) return spokes(x - 7, z - 9, a, 0.9, 3.4, St[2], St[3], Ink[1]); // the crank wheel, turning
+      if (x >= 13 && x <= 14 && y <= 1 && z <= 13) return z % 4 === 0 ? Wt[2] : Wt[3];    // the water pipe up from the ground
+      if (z >= 12 && z <= 13 && x >= 13 && x <= 14 && y >= 2 && y <= 4) return Wt[3];      // over the trough
+      if (z === 11 && x >= 13 && x <= 14 && y === 4) return St[3];                         // the tap
+      if (z === 14 && x >= 12 && x <= 15 && y === 0) return Rf[3];                         // its red valve handle
+      return null; });
+    const feeder = [0, 1, 2, 3].map(i => feederAt(i * Math.PI / 8));
+    // 集蛋滑道: a plank chute sloping down east from a hatch in the coop wall into a straw-lined crate (eggs roll down it: draw())
+    const chute = B(16, 10, 14, (x, y, z) => {
+      if (x >= 11 && x <= 15 && y >= 1 && y <= 8) {                                      // the crate
+        const edge = x === 11 || x === 15 || y === 1 || y === 8; if (z === 0) return Wd[2];
+        if (z <= 4) return edge ? (z === 4 ? Wd[4] : z === 2 ? Wd[2] : Wd[3]) : (z <= 2 ? Ac[1] : z === 3 && (x * 3 + y) % 4 === 0 ? Ac[0] : null);
+        return null; }
+      const top = 12 - Math.floor(x * 9 / 11);                                           // slope: 12 at the wall → 3 over the crate
+      if (x <= 11 && y >= 3 && y <= 6) { if (z === top) return y === 3 || y === 6 ? Wd[2] : Wd[4]; if (z === top + 1 && (y === 3 || y === 6)) return Wd[3]; }
+      if ((y === 3 || y === 6) && x === 5 && z < top) return Wd[1];                       // a prop under it
+      if (x <= 1 && y >= 2 && y <= 7 && z >= 11 && z <= 14) return z === 14 ? Wd[4] : (y === 2 || y === 7 ? Wd[2] : Ink[1]); // the hatch in the wall
+      return null; });
+    // 挤奶机: a squat steel milk tank on legs with a pump, a gauge and a turning flywheel; a hose runs into the shed
+    const milkerAt = a => B(18, 12, 18, (x, y, z) => {
+      const c = Math.hypot(x - 6, y - 6);
+      if (z <= 2) return c < 4.6 && c > 3.4 && (x + y) % 3 === 0 ? St[1] : null;                         // legs
+      if (z >= 3 && z <= 14 && c < 5) { if (c > 4) { if (y >= 10 && x >= 4 && x <= 7 && z >= 9 && z <= 12) return (x === 4 || x === 7 || z === 9 || z === 12) ? Ink[1] : (x === 6 && z === 11 ? Rf[2] : Ac[0]); // gauge
+        return z === 3 || z === 14 ? St[2] : (z === 8 ? St[1] : ((x + z) % 7 === 0 ? St[2] : St[3])); } return null; } // the tank
+      if (z === 15 && c < 3) return c < 1.4 ? St[1] : St[2];                                              // its lid
+      if (z === 16 && c < 1) return Ink[1];
+      if (y === 10 && x >= 10 && x <= 17 && z >= 3 && z <= 11) return spokes(x - 13.5, z - 7, a, 1, 3.8, Ink[1], St[2], St[3]); // the flywheel, turning
+      if (x >= 11 && x <= 15 && y >= 6 && y <= 9 && z >= 2 && z <= 6) return z === 6 ? St[2] : St[1];       // the pump body
+      if (x >= 16 && y >= 4 && y <= 5 && z >= 6 && z <= 7) return Ink[1];                                  // the hose into the stalls
+      return null; });
+    const milker = [0, 1, 2, 3].map(i => milkerAt(i * Math.PI / 8));
+    // 蜂蜜收集槽: the honey barrel in the middle of the meadow (hives drain into it), a wooden tap and a jar under it
+    const vat = B(12, 12, 16, (x, y, z) => {
+      const c = Math.hypot(x - 5.5, y - 5);
+      if (z <= 12 && c < 4.6) { if (c > 3.6) return z === 2 || z === 10 ? Ink[1] : z === 0 ? Wd[1] : ((Math.atan2(y - 5, x - 5.5) * 6 / Math.PI + 6) | 0) % 2 ? Wd[3] : Wd[2]; return z === 12 ? Ac[1] : null; }
+      if (z === 13 && c < 3.6 && c > 2.4) return Wd[4];                                                    // rim
+      if (y >= 9 && y <= 10 && x >= 5 && x <= 6 && z >= 3 && z <= 4) return z === 4 ? Wd[4] : Wd[2];        // the tap
+      if (y === 11 && x >= 4 && x <= 7 && z <= 2) return z === 2 ? St[3] : Ac[1];                           // a jar filling up
+      return null; });
+    // the little gutter under each hive (a golden lip on a short trough), drawn as its own tiny model in front of the hive
+    const gutter = B(12, 4, 3, (x, y, z) => { if (x < 1 || x > 10 || y > 3) return null; const rim = x === 1 || x === 10 || y === 0 || y === 3; if (z === 0) return Wd[2]; if (z === 1) return rim ? Wd[1] : Ac[1]; return z === 2 && rim && (x + y) % 3 === 0 ? Wd[1] : null; });
+    return { sprinkler, mill, jam, cheese, pie: jam, hive, lamp, feeder, chute, milker, vat, gutter };
   }
   // ---------- small pixel icons (products, the lamp's 'too far' mark) ----------
   function makeIcons(x) { const pix = x.pix;
@@ -98,16 +151,17 @@
 
   // ---------- mount / sync ----------
   function mount(x) { X = x; S = x.S; MD = makeModels(x); ICON = makeIcons(x); mounted = true; sync(true); warm(); return api; }
-  const keyOf = () => JSON.stringify([S.works.sprinklers.map(s => [s.x, s.y, s._c]), S.works.works, S.works.hives.map(h => [h.at, h.s, h.x, h.y, h._c]), S.plots, S.eff && S.eff.wheel, (S.eff && S.eff.regions || []).includes('orchard')]);
+  const keyOf = () => JSON.stringify([S.works.sprinklers.map(s => [s.x, s.y, s._c]), S.works.works, S.works.hives.map(h => [h.at, h.s, h.x, h.y, h._c]), S.plots, S.eff && S.eff.wheel, (S.eff && S.eff.regions || []).includes('orchard'), machKey()]);
   function clearList(list) { for (const q of list) removeFrom(X.props, q); list.length = 0; }
   function sync(force) {
     if (!mounted) return; const k = keyOf(); if (!force && k === lastKey) return; lastKey = k;
-    clearList(own.spr); clearList(own.works); clearList(own.hives); clearList(own.lamps);
+    clearList(own.spr); clearList(own.works); clearList(own.hives); clearList(own.lamps); clearList(own.mach);
     for (const s of S.works.sprinklers) if (!s._c) own.spr.push(X.addProp(MD.sprinkler, s.x, s.y, 0, { xp: 1 }));
     for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.workPos(w);
       own.works.push(X.addProp(MD[id], p.x, p.y, 0, { xp: 1, big: 1, work: id })); }
     hiveSpots().forEach((h, i) => h && !S.works.hives[i]._c && own.hives.push(X.addProp(MD.hive, h.x, h.y, 0, { xp: 1 })));
     if ((S.eff && S.eff.wheel) > 0) for (const l of lamps()) own.lamps.push(X.addProp(MD.lamp, l.x, l.y, 0, { xp: 1, lamp: l.id }));
+    for (const q of machSpots()) own.mach.push(X.addProp(q.frames ? MD[q.kind][0] : MD[q.kind], q.x, q.y, 0, { xp: 1, mach: q.kind, frames: q.frames ? MD[q.kind] : null }));
     X.markNavDirty();
   }
   // where the hives stand: hive i takes slot i (the meadow's six first, then the orchard pair)
@@ -119,8 +173,42 @@
   function blocks() { const out = []; for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const p = PW.workPos(w); out.push([p.x - 7, p.y - 5, p.x + 7, p.y + 4]); } return out; }
   // where someone stands to hand goods in / take them out: in front of the door
   function doorOf(id) { const w = S.works.works[id]; const p = PW.workPos(w); return { x: p.x + 1, y: p.y + 8 }; }
+  // ---------- v5.11.0.29 machines: where each one stands (fixed spots on what is already there) ----------
+  const PENS = () => (root.PFWorld && root.PFWorld.PENS) || {};
+  const machKey = () => JSON.stringify([S.works.mach || 0, PW.MACH_PENS.map(k => !!(S.eff && S.eff[k])), PW.MACH_PENS.map(k => { const P = PENS()[k]; return P && P.bld ? [P.bld.x, P.bld.y] : 0; })]);
+  const meadowCentre = () => { const sl = PW.hiveSlots(S.plots, S.eff ? S.eff.regions : []).filter(q => q.at !== 'orchard'); if (sl.length < 6) return null;
+    return { x: Math.round((sl[0].x + sl[1].x) / 2), y: Math.round((sl[0].y + sl[3].y) / 2) }; };
+  function machSpots() {
+    const m = S.works.mach, out = []; if (!m || !S.eff) return out; const P = PENS();
+    for (const k of PW.MACH_PENS) { if (!S.eff[k] || !PW.fitted(m, k) || !P[k] || !P[k].trough) continue; const t = P[k].trough; out.push({ kind: 'feeder', pen: k, x: t.x, y: t.y - 3.5, frames: 1 }); }
+    if (m.e) for (const k of ['coop', 'coop2']) { if (!S.eff[k] || !P[k]) continue; const b = P[k].bld; out.push({ kind: 'chute', pen: k, x: b.x + 9.5, y: b.y + 1 }); }
+    if (m.m) for (const k of ['shed', 'shed2']) { if (!S.eff[k] || !P[k]) continue; const b = P[k].bld; out.push({ kind: 'milker', pen: k, x: b.x - 14, y: b.y + 3, frames: 1 }); }
+    if (m.h) { const c = meadowCentre(); if (c) out.push({ kind: 'vat', x: c.x, y: c.y });
+      hiveSpots().forEach((h, i) => { if (h && !S.works.hives[i]._c && h.at !== 'orchard') out.push({ kind: 'gutter', x: h.x, y: h.y + 4 }); }); }
+    return out;
+  }
+  // the shop and the codex draw the machines from their models (like the decorations)
+  const MACH_ART = { feeder: 'feeder', feedset: 'feeder', chute: 'chute', milker: 'milker', tray: 'vat' };
+  const ICON_URL = {}, BOOK_URL = {};
+  function machModel(id) { const m = MD && MD[MACH_ART[id]]; return Array.isArray(m) ? m[0] : m; }
+  function cropURL(m, N, seen) {
+    const k = X.stackCanvas(m, -0.6), src = k.c, d = src.getContext('2d').getImageData(0, 0, src.width, src.height).data;
+    let x0 = src.width, y0 = src.height, x1 = -1, y1 = -1;
+    for (let y = 0; y < src.height; y++) for (let x = 0; x < src.width; x++) if (d[(y * src.width + x) * 4 + 3]) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+    if (x1 < 0) return null;
+    const w = x1 - x0 + 1, h = y1 - y0 + 1, big = Math.max(w, h), sc = big <= N - 2 ? Math.max(1, Math.floor((N - 2) / big)) : (N - 2) / big;
+    const dw = Math.max(1, Math.round(w * sc)), dh = Math.max(1, Math.round(h * sc)), c = document.createElement('canvas'); c.width = c.height = N;
+    const g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.drawImage(src, x0, y0, w, h, Math.floor((N - dw) / 2), N - 1 - dh, dw, dh);
+    const ICN = root.PFCodexIcons;
+    if (seen === false && ICN && ICN.silhouette) { const im = g.getImageData(0, 0, N, N), sil = ICN.silhouette({ w: N, h: N, px: im.data }); g.putImageData(new ImageData(sil.px, N, N), 0, 0); }
+    return c.toDataURL();
+  }
+  function machIconURL(id) { if (ICON_URL[id] !== undefined) return ICON_URL[id]; const m = machModel(id); if (!m || typeof document === 'undefined') return null;
+    try { return (ICON_URL[id] = cropURL(m, 32, true)); } catch (e) { return null; } }
+  function machBookURL(id, seen) { const key = id + (seen ? '' : ':sil'); if (BOOK_URL[key] !== undefined) return BOOK_URL[key]; const m = machModel(id); if (!m || typeof document === 'undefined') return null;
+    try { return (BOOK_URL[key] = cropURL(m, 36, !!seen)); } catch (e) { return null; } }
   function warm() {
-    const list = [MD.sprinkler, MD.mill, MD.jam, MD.cheese, MD.hive, MD.lamp, ...((X.wheelFrames && X.wheelFrames()) || [])]; let n = 0, base = null, idx = 0;
+    const list = [MD.sprinkler, MD.mill, MD.jam, MD.cheese, MD.hive, MD.lamp, ...((X.wheelFrames && X.wheelFrames()) || []), ...(S.works.mach ? [...MD.feeder, MD.chute, ...MD.milker, MD.vat, MD.gutter] : [])]; let n = 0, base = null, idx = 0;
     const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }
       while (n <= 8 && performance.now() - t0 < 5) { const m = list[idx], a = (base + (n & 1 ? -(n + 1) / 2 : n / 2)) * X.ASTEP; X.stackCanvas(m, a); if (++idx >= list.length) { idx = 0; n++; } }
       setTimeout(step, n > 8 ? 900 : 80); };
@@ -129,6 +217,7 @@
 
   // ---------- every frame: turning wheels ----------
   function frame(realT) {
+    if (own.mach.length) { const i = Math.floor(realT * 4); for (const q of own.mach) if (q.frames) q.m = q.frames[(i + (q.x & 3)) % q.frames.length]; } // v5.11.0.29: cranks and flywheels turn
     const n = (S.eff && S.eff.wheel) | 0; if (!n || !X.wheelProp) return; const frames = X.wheelFrames();
     PW.wheelsOf(S.plots, n).forEach(w => { const q = X.wheelProp(w.plot), fr = (q && q.frames) || frames; if (q) q.m = fr[Math.floor(realT * 5) % fr.length]; }); // v5.11.0.20: each wheel has its bank side's frames
   }
@@ -148,6 +237,13 @@
     for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at || !(w.ready > 0)) continue; const p = PW.workPos(w); if (!onScreen(p.x, p.y, 40)) continue;
       const [sx, sy] = proj(p.x, p.y), ic = ICON[PW.WORKS[id].out]; ctx.drawImage(ic, Math.round(sx) - (ic.width >> 1), Math.round(sy) - 40 + bob); }
     const hs = hiveSpots(); S.works.hives.forEach((hv, i) => { const h = hs[i]; if (!h || hv._c || !(hv.ready > 0) || !onScreen(h.x, h.y, 30)) return; const [sx, sy] = proj(h.x, h.y); ctx.drawImage(ICON.honey, Math.round(sx) - 3, Math.round(sy) - 22 + bob); });
+    // v5.11.0.29 machines: eggs roll down the chute, water drips from the feeder's tap, honey drips into the jar
+    if (own.mach.length && T >= 5 * 60 && T < 21 * 60) for (const q of own.mach) { if (!onScreen(q.x, q.y, 30)) continue;
+      if (q.mach === 'chute') for (let k = 0; k < 2; k++) { const t = (realT * 0.45 + k * 0.5 + (q.x & 7) * 0.13) % 1; if (t > 0.8) continue; const u = t / 0.8;
+        const [sx, sy] = proj(q.x - 4 + u * 5.5, q.y); const z = 13 - 9 * u; ctx.fillStyle = '#f6ecd0'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy - z) - 1, 2, 2); ctx.fillStyle = '#cfd0c6'; ctx.fillRect(Math.round(sx), Math.round(sy - z), 1, 1); }
+      else if (q.mach === 'feeder') { const t = (realT * 1.3 + (q.x & 3) * 0.25) % 1, [sx, sy] = proj(q.x + 2.5, q.y + 2); ctx.fillStyle = '#6fc0dc'; ctx.fillRect(Math.round(sx), Math.round(sy - 10 + t * 7), 1, 2); }
+      else if (q.mach === 'vat') { const t = (realT * 0.9) % 1, [sx, sy] = proj(q.x + 0.25, q.y + 5); ctx.fillStyle = '#f2cf55'; ctx.fillRect(Math.round(sx), Math.round(sy - 3 + t * 2), 1, 1); }
+      else if (q.mach === 'milker') { const [sx, sy] = proj(q.x, q.y); if (Math.floor(realT * 2) % 2) { ctx.fillStyle = '#9a9ea0'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 21 - Math.floor((realT * 6) % 4), 2, 1); } } } // a puff over the lid
     // lamps: lit bulbs, and a small grey 'too far' bolt over the ones the wheel can't reach (only at dusk / night)
     if (night > 0.2 && (S.eff && S.eff.wheel) > 0) for (const l of lamps()) { if (!onScreen(l.x, l.y, 30)) continue; const [sx, sy] = proj(l.x, l.y);
       if (l.on) { ctx.fillStyle = '#fff4b8'; ctx.fillRect(Math.round(sx) - 1, Math.round(sy) - 12, 2, 2); }
@@ -169,6 +265,6 @@
   }
   // the lamp ids that are lit now (works.js decides the fruit bonus from these)
   const litLamps = () => (S.eff && S.eff.wheel) > 0 ? lamps().filter(l => l.on) : [];
-  const api = { mount, sync, frame, draw, lights, blocks, doorOf, hiveSpots, litLamps, icons: () => ICON, models: () => MD, own };
+  const api = { mount, sync, frame, draw, lights, blocks, doorOf, hiveSpots, litLamps, icons: () => ICON, models: () => MD, own, machSpots, machIconURL, machBookURL };
   root.PFWorksArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

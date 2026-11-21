@@ -142,7 +142,8 @@ jobs:
           # then made those groups 25m01s and 21m34s (run 44918453900).
           - group: workshop
             # v5.11.0.28: + workprio-test (~40s locally; workshop-shots alone is a light leg)
-            scripts: workshop-shots.js workprio-test.js
+            # v5.11.0.29 自动化机械: + mach-shots (feeder/chute/milker/tray checks; workshop+mach was 6m53s on run 44927967839)
+            scripts: workshop-shots.js workprio-test.js mach-shots.js
           - group: festival
             scripts: festival-shots.js
     steps:
