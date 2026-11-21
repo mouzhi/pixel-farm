@@ -1312,6 +1312,7 @@ function storehouse() {
     ornament: FS.ORNAMENTAL.filter(o => (S.ornament[o.id] || 0)).map(o => ({ id: o.id, kind: 'ornament', name: o.name, n: S.ornament[o.id] || 0 })),
     pondFish: S.pondFish.length,
     saplings: WD.FRUIT_IDS.map(k => ({ id: k, kind: 'sapling', name: WD.FRUIT[k].name + '树苗', n: (FARMER.saplings[k] || 0) })).filter(r => r.n),
+    bin: S.works.mach ? PW.BIN_IDS.map(k => { const n = PW.binHas(S.works.mach, k), unit = basePrice(k); return n ? { id: k, type: k, kind: 'item', name: binName(k) + '（仓库）', n, unit, gold: n * unit, keep: PW.BIN[k].keep } : null; }).filter(Boolean) : [], // v5.11.1
     sellGold: basketGold + woodGold,
   };
 }
@@ -2158,11 +2159,12 @@ function machCollect(now) {
       while (a.ready > 0) { if (ch && ch.at && ch.inp < def.inCap) { a.ready--; ch.inp++; got.milk++; continue; } if (PW.binAdd(m, 'milk', 1)) { a.ready--; got.milk++; continue; } break; } } }
   if (m.h) for (const h of S.works.hives) { const n = PW.binAdd(m, 'honey', h.ready | 0); h.ready -= n; got.honey += n; }
   for (const k of PW.BIN_IDS) if (got[k]) { if (DY && S.diary) DY.add(S.diary, S.day, 'pr', k, got[k], 'mach'); }
-  const t = PW.BIN_IDS.filter(k => got[k]).map(k => `${binName(k)} ${got[k]}`).join('、');
+  const t = PW.BIN_IDS.filter(k => got[k]).map(k => binText(k, got[k])).join('、');
   if (t) log(`机器把${t}收进了仓库` + (rare ? '，鸡舍门口还滚出一个特别的蛋' : ''));
   if (rare) { const ev = SU.productToast(rare); if (ev) surpriseNote(ev, PENS.coop.door.x, PENS.coop.door.y); }
 }
 const binName = k => (AN.PRODUCTS[k] || PW.PRODUCTS[k]).name;
+const binText = (k, n) => `${n} ${({ egg: '个', milk: '瓶', honey: '罐' })[k] || '份'}${binName(k)}`;
 // the night's produce cart: what is above the bin's keep goes at the stall's price (with its awning / scale bonus)
 function machShip() {
   const m = S.works.mach; if (!m) return; const out = PW.binShip(m), ks = Object.keys(out); if (!ks.length) return;
@@ -2170,7 +2172,7 @@ function machShip() {
   for (const k of ks) { const g = Math.round(basePrice(k) * out[k] * sm); sum += g; n += out[k]; if (AN.PRODUCTS[k]) { by.animals += g; S.animalGold = (S.animalGold || 0) + g; } else by.crops += g; } // honey counts like at the stall
   emit('income', { gold: sum, items: n, source: 'market', by, who: 'mach' }); S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
   for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]);
-  log(`收货车拉走了仓库里的${ks.map(k => `${out[k]} ${binName(k)}`).join('、')}，得 ${sum} 金`);
+  log(`收货车拉走了仓库里的${ks.map(k => binText(k, out[k])).join('、')}，得 ${sum} 金`);
 }
 // orders, meals and the town shops draw on the bin like a workshop's finished goods
 function machCounts(add) { const m = S.works.mach; if (m) for (const k of PW.BIN_IDS) { const n = PW.binHas(m, k); if (n) add(k, n); } }

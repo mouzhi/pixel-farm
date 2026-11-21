@@ -49,6 +49,8 @@
     out.days.sort((x, y) => x.d - y.d); return out;
   }
   const UNIT = { egg: '个', milk: '瓶', wool: '份', truffle: '颗', honey: '罐' };
+  // v5.11.1 自动化机械: the day one is fitted
+  const MACH_LINE = { feeder: '棚子装上了自动饲喂槽和自来水槽，以后不用人去添草加水了。', chute: '鸡舍装上了集蛋滑道，鸡蛋自己滚进仓库。', milker: '牛棚装上了挤奶机，牛奶直接灌进奶酪坊和仓库。', tray: '蜂箱接上了蜂蜜收集槽，蜂蜜自己流进仓库。' };
   const total = o => Object.values(o || {}).reduce((s, n) => s + n, 0);
   const isEmpty = e => !e || (!Object.keys(e.a).some(w => ACTS.some(k => total(e.a[w][k]))) && !total(e.pr) && !e.wd && !e.in && !e.out && !e.buy.length && !e.ev.length);
   // L: { who(id) -> name, item(id) -> name, buy(id) -> name, weather(entry) -> '晴' }
@@ -76,7 +78,8 @@
       else if (k === 'rare') out.push(`钓到了难得的${L.item(v)}！`);
       else if (k === 'giant') out.push(`田里长出了一个巨大的${L.item(v)}。`);
       else if (k === 'guests') out.push(`民宿来了 ${v} 组客人。`);
-      else if (k === 'pond') out.push(`池塘里多了一条${L.item(v)}。`); }
+      else if (k === 'pond') out.push(`池塘里多了一条${L.item(v)}。`)
+      else if (k === 'mach' && MACH_LINE[v]) out.push(MACH_LINE[v]); }
     const money = [];
     if (e.in) money.push(`赚了 ${e.in} 金`); if (e.out) money.push(`花了 ${e.out} 金`);
     const buys = e.buy.map(L.buy).filter(Boolean); if (buys.length) money.push('添置了' + buys.slice(0, 4).join('、') + (buys.length > 4 ? '等' : ''));
