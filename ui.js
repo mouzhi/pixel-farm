@@ -94,8 +94,9 @@
   const BLANK = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
   const DART = () => window.PFDecorArt; // v5.7.0: decorations draw their own icons from their models
   const YART = id => window.PFYardArt && PFYardArt.iconURL(id); // v5.10.3: the yard things
-  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || BLANK;
-  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)) || YART(id));
+  const MART = id => window.PFWorksArt && PFWorksArt.machIconURL && SIM.shopItem(id) && SIM.shopItem(id).mach ? PFWorksArt.machIconURL(id) : null; // v5.11.0.29: the machines draw their own icons
+  const iconURL = id => ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || MART(id) || BLANK;
+  const hasIcon = id => !!(ICONS[id] || (DART() && DART().iconURL(id)) || YART(id) || MART(id));
   const icon = id => (SIM.CROPS[id] ? cropIcon(id) : `<i style="background:url(${iconURL(id)});background-size:32px;image-rendering:pixelated"></i>`);
   const typ = it => (window.PFSurprise ? PFSurprise.itemType(it) : it);
   const ICN = window.PFCodexIcons, BOOK = window.PFCodex;
@@ -244,9 +245,12 @@
         const noteOf = k => { const HS = HSK.find(q => q.id === k.id); return HS && HS.note ? '，' + HS.note : ''; };
         const lines = S.members.filter(m => !fam.kids.some(k => k.id === m.id)).map(m => `${m.name}：${jobOf(m)}`);
         for (const k of fam.kids) lines.push(`${k.name}（${stageOf(k)}）：${jobOf(S.members.find(q => q.id === k.id))}${noteOf(k)}`);
-        const busy = S.members.filter(m => !m.home && !m.away && m.task).length;
-        const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length;
-        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${tier.pop}`, tip: `${tier.name}：最多住 ${tier.pop} 人，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
+        // v5.11.0.19: a married child's husband or wife counts as family (they live in the new house, not the manor)
+        const inl = G.spousesIn ? G.spousesIn() : [], spA = G.SPOUSES || [];
+        for (const q of inl) { const a = spA.find(x => x._spouse === q.kid); lines.push(`${q.name}（${(fam.kids.find(k => k.id === q.kid) || {}).name || '孩子'}的爱人）：${jobOf(a)}`); }
+        const busy = S.members.filter(m => !m.home && !m.away && m.task).length + spA.filter(a => !a.home && a.task && inl.some(q => q.kid === a._spouse)).length;
+        const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length + inl.length, room = tier.pop + inl.length;
+        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
@@ -345,6 +349,7 @@
     if (tabId === 'works' && ['mill', 'jam', 'cheese', 'pie'].includes(it.id)) return '加工坊（盖在选成「工坊院」的地块里，家人送原料、取成品）';
     if (tabId === 'works' && it.id === 'wheel') return '水车和路灯（动力坝上的水车点亮附近的路灯）';
     if (tabId === 'works' && it.id === 'hive') return '养蜂（花甸或果园坡）';
+    if (tabId === 'works' && it.mach) return '自动化机械（装在现有的棚子、鸡舍、牛棚和蜂箱上；产出直接收进仓库。家人帮忙添置不会买）';
     if (tabId === 'decor' && PFDecor.CATALOG[it.id] && PFDecor.CATALOG[it.id].light && it.id !== 'party') return '夜灯（接上水车的电，天一黑自己亮；没电时也能先摆着）';
     if (tabId === 'decor' && it.id === 'party') return '派对区（不定期的晚上一家人聚在这里，有时镇上的人来做客）';
     if (tabId === 'yard' && it.yard) { const k = window.PFYard && PFYard.ITEM[it.id] && PFYard.ITEM[it.id].kind; // v5.10.3
@@ -626,6 +631,7 @@
     else for (const b of data.baskets) { h += (data.baskets.length > 1 || b.who !== '农夫' ? `<div class="who">${esc(b.who)}</div>` : '') + `<div class="cards">${b.rows.map(r => storeCard(r)).join('')}</div>`; }
     h += `<div class="sec">材料</div><div class="cards">`;
     h += storeCard({ id: 'wood', kind: 'item', name: `木材（${data.wood.n}/${data.wood.cap}）`, n: data.wood.n, unit: data.wood.unit, gold: data.wood.gold }, data.wood.spare ? `<div class="d">仓库放得下 ${data.wood.cap} 份，多出 ${data.wood.spare} 份可卖</div>` : `<div class="d">扩建房子和围篱笆要用，满了才拿去卖（${data.wood.unit} 金一份）${autoWood()}</div>`);
+    for (const r of (data.bin || [])) h += storeCard(r, `<div class="d">机器直接收进仓库：订单和菜馆先用，多过 ${r.keep} 的每晚由收货车拉去集市卖</div>`); // v5.11.0.29
     h += storeCard({ id: 'hay', kind: 'item', name: '干草', n: data.hay.n }, `<div class="d">喂动物用，集市 ${data.hay.unit} 金一捆</div>`);
     h += storeCard({ id: 'fishfood', kind: 'item', name: '鱼食', n: data.fishFood.n }, `<div class="d">家里有鱼食时，空闲的家人会自己去池塘撒一把，那天稀有鱼更容易上钩（${data.fishFood.unit} 金一包）</div>`);
     for (const r of (data.ornament || [])) h += storeCard(r, '<div class="d">用右下角的放养按钮，放到家门口池塘里看着玩，不再卖掉</div>');
@@ -663,6 +669,7 @@
     }
     if (it.group === 'glow' || it.group === 'giant') return decorateCrop(it.type, it.group, seen);
     if (it.group === 'decor' && DART()) { const url = DART().bookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.7.0: 36px art at 2x, like fish and bugs
+    if (it.group === 'mach' && window.PFWorksArt && PFWorksArt.machBookURL) { const url = PFWorksArt.machBookURL(it.id, seen); return url ? icoTag(url, 'decor', 72, 72) : '<i class="ico"></i>'; } // v5.11.0.29
     return itemArt(it, { seen, fit: 32 }) || '<i class="ico"></i>';
   }
   function drawCodex(force) {
@@ -800,13 +807,30 @@
     const b = $('syncHint'); if (!b || !L) return;
     const st = L.status();
     b.hidden = !st.needGesture;
+    b.textContent = st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步';
   }
+  function paintSync() {
+    hintSync();
+    if (!menu.hidden) drawMenu();
+  }
+  // v5.11.0.22: never leave a click silent — tell the player it worked, or why it didn't.
+  function announceSync(st) {
+    if (!st || st.aborted) return;
+    if (st.folderBlocked) return; // toast comes from pf:sync so a boot hydrate is not silent
+    const msg = st.granted && !st.lastError ? '本地同步已恢复'
+      : st.lastError ? '本地同步没能恢复：' + st.lastError
+      : st.needsRepick ? '请再点一次，重新选择同步文件夹'
+      : '';
+    if (msg) dispatchEvent(new CustomEvent('pf:say', { detail: msg }));
+  }
+  function afterResume(st) { paintSync(); announceSync(st); }
   function syncLine() {
     if (!L) return '';
     const st = L.status();
     if (!st.supported) return `<div class="note">当前浏览器不能把文件写到本机文件夹（Chrome 可以）。可以用「导出游玩记录」下载 JSON。</div>`;
+    if (st.folderBlocked) return `<div class="note bad">${esc(st.lastError || '文件夹里的存档读不出来，先没有写入，以免覆盖。')}</div>`;
     if (st.granted) return `<div class="note">已同步到本机「${esc(st.dirName || '文件夹')}」· <span id="syncAgo">${agoSync(st.lastSyncAt)}</span>${st.lastError ? ` <span class="bad">上次出错：${esc(st.lastError)}</span>` : ''}</div>`;
-    if (st.needGesture) return `<div class="note">本地同步需要点一下重新授权。</div>`;
+    if (st.needGesture) return `<div class="note">本地同步需要点一下重新授权。${st.lastError ? ` <span class="bad">原因：${esc(st.lastError)}</span>` : ''}${st.needsRepick ? ' 请重新选择一次文件夹。' : ''}</div>`;
     return `<div class="note">选一个本机文件夹后，存档和游玩记录会自动写进去（建议放在「文稿 / pixel-farm-sync」）。</div>`;
   }
   function syncButtons() {
@@ -815,10 +839,20 @@
     let h = `<div class="row">`;
     if (st.supported && !st.granted && !st.needGesture) h += `<button class="pbtn" data-a="syncpick">同步到本地文件夹…</button>`;
     if (st.supported && st.granted) h += `<button class="pbtn" data-a="syncpick">更换本地文件夹…</button>`;
-    if (st.needGesture) h += `<button class="pbtn" data-a="syncresume">点此恢复本地同步</button>`;
+    if (st.needGesture) h += `<button class="pbtn" data-a="syncresume">${st.needsRepick ? '重新选择同步文件夹' : '点此恢复本地同步'}</button>`;
     if (st.granted) h += `<button class="pbtn" data-a="syncnow">立即同步</button><button class="pbtn" data-a="syncstop">停止本地同步</button>`;
+    if (!hosted() && st.supported) h += `<button class="pbtn" data-a="syncrewind">回到某一天</button>`;
     h += `<button class="pbtn" data-a="exportlog">导出游玩记录</button></div>`;
     return h;
+  }
+  function rewindRow(e) {
+    const clock = e.clock ? ' ' + e.clock : '';
+    const title = e.role === 'before-rewind' || e.label === '回溯前的进度'
+      ? '回溯前的进度 · 第' + (e.day != null ? e.day : '?') + '天' + clock
+      : '第' + (e.day != null ? e.day : '?') + '天' + clock;
+    const at = e.savedAt ? new Date(e.savedAt).toLocaleString('zh-CN') : '';
+    const tl = e.timeline && e.timeline !== 'a' ? ' · 另一条进度' : '';
+    return `<button class="pbtn copt" data-a="rewindpick" data-n="${esc(e.name)}">${esc(title)}<span class="cd">${at ? '保存于 ' + esc(at) : ''}${e.coins != null ? ' · ' + esc(String(e.coins)) + ' 金' : ''}${esc(tl)}</span></button>`;
   }
   function drawMenu() {
     const st = G.SAVE;
@@ -830,12 +864,26 @@
     h += syncLine() + syncButtons();
     if (mode === 'export') h += `<textarea id="io" readonly>${esc(SAVE.encode(G.snapshot()))}</textarea><div class="row"><button class="pbtn" data-a="copy">复制</button><span class="note" id="msg">复制后可以在别的浏览器里导入</span></div>`;
     if (mode === 'import') h += `<textarea id="io" placeholder="把导出的存档文字粘贴到这里"></textarea><div class="row"><button class="pbtn" data-a="check">检查</button><span class="note" id="msg"></span></div>`;
+    if (mode === 'rewind') {
+      h += `<div class="note">选一天回到当时的进度。读档后用的是现在的游戏（婚礼会是新的样子）。当前进度会先存成「回溯前的进度」，可以再选回来。</div>`;
+      if (!rewindEntries) h += `<div class="note">正在读取每日存档…</div>`;
+      else if (!rewindEntries.length) h += `<div class="note">文件夹里还没有每日存档。同步过之后，每一天都会留一份。</div>`;
+      else h += `<div class="rewind-list">${rewindEntries.map(rewindRow).join('')}</div>`;
+    }
+    if (mode === 'rewind-confirm' && pendingRewind) {
+      const e = pendingRewind;
+      const clock = e.clock ? ' ' + e.clock : '';
+      const title = e.role === 'before-rewind' ? '回溯前的进度（第' + (e.day != null ? e.day : '?') + '天' + clock + '）' : '第' + (e.day != null ? e.day : '?') + '天' + clock;
+      h += `<div class="note bad">确定回到${esc(title)}吗？当前进度会先另存为「回溯前的进度」，可以再选回来。</div>`;
+      h += `<div class="row"><button class="pbtn warn" data-a="rewindgo">确定回到这一天</button><button class="pbtn" data-a="rewindno">取消</button></div>`;
+    }
     if (resetArm > Date.now()) h += `<div class="note bad">重置会从第 1 天重新开始；当前存档会另存一份留底。游玩记录会留着，另起一个农场时间线。</div>`;
     menu.innerHTML = h;
   }
-  let pending = null;
+  let pending = null, rewindEntries = null, pendingRewind = null;
   menu.addEventListener('click', e => {
-    const a = e.target && e.target.dataset && e.target.dataset.a; if (!a) return;
+    const btn = e.target && e.target.closest && e.target.closest('[data-a]');
+    const a = btn && btn.dataset && btn.dataset.a; if (!a) return;
     if (a === 'export') { mode = mode === 'export' ? '' : 'export'; G.saveNow(); drawMenu(); }
     else if (a === 'import') { mode = mode === 'import' ? '' : 'import'; pending = null; drawMenu(); }
     else if (a === 'copy') { const io = $('io'); io.select(); (navigator.clipboard ? navigator.clipboard.writeText(io.value) : Promise.reject()).then(() => $('msg').textContent = '已复制', () => { document.execCommand && document.execCommand('copy'); $('msg').textContent = '已选中，按 Ctrl+C 复制'; }); }
@@ -845,15 +893,56 @@
     }
     else if (a === 'doimport' && pending) { pending.savedAt = Date.now(); const r = G.importState(pending); if (!r.ok) $('msg').innerHTML = `<span class="bad">导入失败：${esc(r.error)}</span>`; }
     else if (a === 'reset') { if (resetArm > Date.now()) G.reset(); else { resetArm = Date.now() + 4000; drawMenu(); setTimeout(() => { if (!menu.hidden) drawMenu(); }, 4100); } }
-    else if (a === 'syncpick' && L) { L.pickDir().then(() => { drawMenu(); hintSync(); }).catch(err => { if (err && err.name === 'AbortError') return; drawMenu(); }); }
-    else if (a === 'syncresume' && L) { L.resumeDir().then(() => { drawMenu(); hintSync(); }); }
-    else if (a === 'syncnow' && L) { G.saveNow(); L.syncNow('manual').then(() => drawMenu()); }
-    else if (a === 'syncstop' && L) { L.forgetDir().then(() => { drawMenu(); hintSync(); }); }
+    else if (a === 'syncpick' && L) { L.pickDir().then(st => { drawMenu(); hintSync(); announceSync(st); }).catch(err => { if (err && err.name === 'AbortError') return; drawMenu(); dispatchEvent(new CustomEvent('pf:say', { detail: '本地同步没能恢复：' + (err && err.message || err) })); }); }
+    else if (a === 'syncresume' && L) { L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); }); }
+    else if (a === 'syncnow' && L) { G.saveNow(); L.syncNow('manual').then(() => { paintSync(); }); }
+    else if (a === 'syncstop' && L) { L.forgetDir().then(() => { paintSync(); }); }
     else if (a === 'exportlog' && L) { L.downloadLog(G.version); }
+    else if (a === 'syncrewind' && L) {
+      mode = 'rewind'; rewindEntries = null; pendingRewind = null; drawMenu();
+      L.openRewind().then(st => {
+        if (st.aborted) { mode = ''; drawMenu(); return; }
+        if (!st.granted) {
+          dispatchEvent(new CustomEvent('pf:say', { detail: st.rewindHint || '请先点「恢复本地同步」，再打开「回到某一天」。' }));
+          mode = ''; drawMenu(); return;
+        }
+        rewindEntries = st.entries || [];
+        drawMenu();
+      }).catch(err => { dispatchEvent(new CustomEvent('pf:say', { detail: '读不了每日存档：' + (err && err.message || err) })); mode = ''; drawMenu(); });
+    }
+    else if (a === 'rewindpick' && L) {
+      const n = btn.dataset.n;
+      pendingRewind = (rewindEntries || []).find(x => x.name === n) || { name: n };
+      mode = 'rewind-confirm'; drawMenu();
+    }
+    else if (a === 'rewindno') { mode = 'rewind'; pendingRewind = null; drawMenu(); }
+    else if (a === 'rewindgo' && L && pendingRewind) {
+      const name = pendingRewind.name;
+      G.saveNow();
+      L.rewindTo(name).then(r => {
+        if (!r.ok) { dispatchEvent(new CustomEvent('pf:say', { detail: '没能回到那一天：' + (r.error || r.reason || '') })); return; }
+        dispatchEvent(new CustomEvent('pf:say', { detail: '正在回到那一天…' }));
+        const ir = G.importState(r.save);
+        if (ir && ir.ok === false) dispatchEvent(new CustomEvent('pf:say', { detail: '导入失败：' + (ir.error || '') }));
+      }).catch(err => { dispatchEvent(new CustomEvent('pf:say', { detail: '没能回到那一天：' + (err && err.message || err) })); });
+    }
   });
   $('menuBtn').addEventListener('click', () => { menu.hidden = !menu.hidden; if (!menu.hidden) { shop.hidden = true; store.hidden = true; if ($('codex')) $('codex').hidden = true; } mode = ''; resetArm = 0; if (!menu.hidden) drawMenu(); });
-  if ($('syncHint') && L) $('syncHint').addEventListener('click', () => { L.resumeDir().then(() => { hintSync(); if (!menu.hidden) drawMenu(); }); });
+  if ($('syncHint') && L) $('syncHint').addEventListener('click', () => {
+    L.resumeDir().then(afterResume).catch(err => { if (err && err.name === 'AbortError') return; afterResume({ lastError: String(err && err.message || err) }); });
+  });
   hintSync();
+  paintSync();
+  addEventListener('pf:sync', ev => {
+    paintSync();
+    const st = ev.detail;
+    if (st && st.folderBlocked) dispatchEvent(new CustomEvent('pf:say', { detail: st.lastError || '文件夹里的存档读不出来，先没有写入，以免覆盖。' }));
+  });
+  // v5.11.0.22: if Chrome already granted the folder (site settings still lists it) but the
+  // warning is stuck, re-query when the window is focused and clear it if the handle can write.
+  const recanSync = () => { if (!L || !L.refreshPerm) return; L.refreshPerm().then(st => { paintSync(); }); };
+  addEventListener('focus', recanSync);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) recanSync(); });
   // ---- offline summary ----
   const dur = s => { s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} 小时 ${m} 分` : m ? `${m} 分钟` : `${s} 秒`; };
   const OFFLINE_POP_SEC = 600; // v5.9.1: the welcome-back box only after 10 minutes away

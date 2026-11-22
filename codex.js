@@ -68,6 +68,8 @@
   const keyGiant = id => 'giant:' + id;
   const keyDecor = id => 'decor:' + id;
   const keyBug = id => 'bug:' + id;
+  const keyMach = id => 'mach:' + id; // v5.11.0.29 自动化机械, recorded when bought
+  const MACH_ITEMS = [{ id: 'feeder', name: '自动饲喂槽' }, { id: 'chute', name: '集蛋滑道' }, { id: 'milker', name: '挤奶机' }, { id: 'tray', name: '蜂蜜收集槽' }];
 
   function emptyCodex() { return { entries: {} }; }
   function emptyList() { return []; }
@@ -126,7 +128,8 @@
     const bugs = (INS && INS.catalog) ? INS.catalog() : [];
     const DC = root.PFDecor || (typeof require === 'function' && typeof document === 'undefined' ? require('./decor.js') : null); // v5.7.0
     const decor = DC ? DC.IDS.map(id => withRarity({ key: keyDecor(id), id, name: DC.CATALOG[id].name, group: 'decor', shop: DC.CATALOG[id].shop ? 1 : 0 })) : [];
-    return { fish, rare: rares, glow, giant, bug: bugs, decor };
+    const mach = MACH_ITEMS.map(m => withRarity({ key: keyMach(m.id), id: m.id, name: m.name, group: 'mach' }));
+    return { fish, rare: rares, glow, giant, bug: bugs, decor, mach };
   }
 
   function groups() {
@@ -137,6 +140,7 @@
       { id: 'giant', name: '巨大作物', items: catalog().giant },
       { id: 'bug', name: '昆虫', items: catalog().bug },
       { id: 'decor', name: '装饰', items: catalog().decor },
+      { id: 'mach', name: '机械', items: catalog().mach }, // v5.11.0.29
     ];
   }
 
@@ -150,7 +154,7 @@
     const src = (c && c.entries && typeof c.entries === 'object') ? c.entries : (c && typeof c === 'object' && !Array.isArray(c) ? c : {});
     const entries = {};
     for (const k of Object.keys(src)) {
-      if (!/^(fish|rare|glow|giant|decor|bug):[a-z0-9_]+$/i.test(k) || k.length > 40) continue;
+      if (!/^(fish|rare|glow|giant|decor|bug|mach):[a-z0-9_]+$/i.test(k) || k.length > 40) continue;
       const e = validEntry(src[k]); if (e) entries[k] = e;
     }
     return { entries };
@@ -328,7 +332,7 @@
 
   const api = {
     REGIONS7, ACHIEVEMENTS, MILESTONES, RARE_ITEMS, GLOW_CROPS, GIANT_CROPS, ACH_BY, MS_BY,
-    keyFish, keyRare, keyGlow, keyGiant, keyDecor, keyBug, itemKey,
+    keyFish, keyRare, keyGlow, keyGiant, keyDecor, keyBug, keyMach, MACH_ITEMS, itemKey,
     emptyCodex, emptyList, emptyStreaks, record, has, entryOf, catalog, groups, rarityOf,
     validEntry, validCodex, validUnlocks, validStreaks, validPondFish, validOrnament,
     seedFromSave, inferAchievements, inferMilestones, regionsBought, allRegions,

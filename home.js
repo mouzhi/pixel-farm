@@ -225,6 +225,13 @@
     if ((ctx.lastWed | 0) > 0 && ctx.day - ctx.lastWed < WED.gap) return null;
     const b = best(st, k.id); return b && b.v >= REL.close ? b.id : null;
   }
+  // v5.11.0.21 the wedding clothes: who wears the gown and who the suit. 小米 and 朵朵 are girls, 小豆 and 石头 boys; 阿团 is
+  // whichever the other one is not. Two girls are two brides, two boys two grooms (the second one's colours differ a little).
+  const WED_LOOK = { kid0: 'groom', kid1: 'bride', m1: 'bride', m2: 'groom' };
+  function wedLooks(kid, mate) {
+    const k = WED_LOOK[kid] || 'groom', m = WED_LOOK[mate] || (k === 'bride' ? 'groom' : 'bride');
+    return { kid: k, mate: m === k ? m + '2' : m };
+  }
   const isMarried = (st, kid) => !!(st.wed[kid] && st.wed[kid].moved > 0);
   const houseOf = (st, kid) => st.houses.find(h => h.kid === kid) || null;
   // a teen's friend drops by now and then (no more school to meet at): ctx { day, last, rain, party }
@@ -300,7 +307,7 @@
   }
 
   const api = { HS, REL, NB, LEVELS, levelOf, MATE_IDS, NB_IDS, KID_IDS, PREF, schoolDay, visit, best, taken, mateIndex, mateName, nbName, clampAdd,
-    HOUSE, TILE_AT, GARDEN, HENS, layout, boxHit, inBox, spotsIn, freeSites, SITE_HINT, houseGate, WED, wedReady, isMarried, houseOf, TEEN, teenVisit,
+    HOUSE, TILE_AT, GARDEN, HENS, layout, boxHit, inBox, spotsIn, freeSites, SITE_HINT, houseGate, WED, WED_LOOK, wedLooks, wedReady, isMarried, houseOf, TEEN, teenVisit,
     HELP, helpNow, empty, emptyTile, valid, kidRel, nbRel, kidNote,
     HOME_FIELD, isHomeSite, isRegionId, siteOf, siteName, siteRect, siteAt, siteOwned, siteAllowsHouse, fieldBox, staticBlocks, moveOk };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHome = api;

@@ -834,7 +834,7 @@ const standAt = t => ({ x: t.x - 7, y: t.y + 1 }); // stand beside the tile, so 
 // walking speed and basket; children only take light jobs (family.js canDo).
 const BASK = () => { const base = F === FARMER ? S.eff.basket : Math.max(4, Math.round(S.eff.basket * (F.bmul || 1)));
   const extra = (S.eff && S.eff.marketExtra) | 0; if (!extra || !MK || !S.town || !S.town.hall || !MK.isDay(S.town.hall, S.day)) return base; return base + extra; }; // v5.10.5: the smithy cart carries more on market day
-const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond'];
+const EXCLUSIVE = ['hay', 'buy', 'fetch', 'fish', 'feedpond', 'bakery']; // v5.11.0.26: only one adult walks a bakery order
 let CLAIM = new Set();
 // v5.3 roles: while one person picks a job, CROWD holds where the others stand and where they are heading. A target near
 // them costs up to CROWD_K px of extra walk per px inside CROWD_R (rngNear) and a quarter of that in score (chooseTask), so
@@ -848,7 +848,7 @@ function crowdFor(me) { const out = [];
   return out; }
 const whoId = a => a === FARMER ? 'farmer' : a.id;
 const actors = () => S.members.length ? [FARMER, ...S.members] : [FARMER];
-function claimsFor(me) { const c = new Set(); for (const a of actors()) { const k = a.task; if (a === me || !k) continue;
+function claimsFor(me) { const c = new Set(); for (const a of actors().concat(SPOUSES.filter(s => s._helpWin))) { const k = a.task; if (a === me || !k) continue; // v5.11.0.28: a spouse helping out claims too
   if (k.tile) c.add(k.tile); if (k.an) c.add(k.an); if (k.key) c.add(k.key); if (EXCLUSIVE.includes(k.kind)) c.add('kind:' + k.kind); } return c; }
 const seedCount = o => CROP_IDS.reduce((n, k) => n + (o[k] || 0), 0);
 const seedText = o => CROP_IDS.filter(k => o[k] > 0).map(k => `${SIM.CROPS[k].name}×${o[k]}`).join('、');
@@ -862,6 +862,7 @@ function syncAnimals() { // the shop says how many of each kind; new ones arrive
   if (typeof syncPastureProps === 'function') syncPastureProps();
 }
 function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
+  if (S.works) machSyncUp(); // v5.11.0.29: a new pen changes what the feeder set can still fit
   S.eff = SIM.effects(S.up); if (SM && S.town && S.town.hall) { const e = SM.effects((S.town.hall.smithy || {}).up); S.eff.sprReach = e.sprReach; S.eff.workSpeed = e.workSpeed; S.eff.smithAxe = e.axeBonus; S.eff.smithAxeCut = e.axeCut; S.eff.smithRod = e.rod; S.eff.marketExtra = e.cartExtra; } XP.applyEff(S); S.waterMax = S.eff.waterMax;
   SPR_COVER = null; FOG.next = 0; // v5.11.0.6: look at the locks again on the next frame
   for (const t of tiles) if (!t.open && tileOpen(t, S.eff)) t.open = true;
@@ -930,10 +931,92 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
 // kind makes him work along a row instead of zigzagging. Later, helpers will read the same board and claim tiles.
 function storeTask() { return { kind: 'store', label: '正在把种子放进仓库', to: BARN_DOOR, dur: 8, done: () => { log(`把 ${F.gathered} 颗胡萝卜种子放进仓库`); S.store.carrot += F.gathered; F.gathered = 0; } }; }
 function homeTask() { const me = F; return { kind: 'home', label: '回家睡觉', to: DOOR, dur: 5, done: () => { me.home = true; me.sleeping = true; if (me === FARMER) log('回到家，躺下睡觉 Zzz'); } }; }
+// ---- v5.11.0.28 work priorities (day-132 farm: chores piled up while the family sat on the deck and the marked trees waited) ----
+// The player's chop marks come first (CHOP_ORDER_BASE, above harvest 90) and whoever fells one walks on to the next marked
+// tree beside it in the same trip. The sunset deck and the market-day gathering only run long when nothing urgent waits;
+// otherwise an hour each a day (REST_CAP). Demand crops (DEMAND_TILES: wheat for the mill, cabbage and carrot for the
+// diner) keep a few tiles of their own. The married children and their partners come over 6–8 and 17–19 for the harvest
+// and the collecting (HELP_WIN, HELP_KINDS), and on a day with beach guests the farmer fishes about an hour before the
+// seafood stall serves at 11:30 (SEA_QUOTA_MIN).
+const CHOP_ORDER_BASE = 95, CHOP_CHAIN_R = 48, REST_CAP = 60, SEA_QUOTA_MIN = 60, SEA_QUOTA_BY = 11 * 60 + 15;
+const HELP_WIN = [[6 * 60, 8 * 60], [17 * 60, 19 * 60]], HELP_KINDS = ['harvest', 'collect', 'pick', 'honey', 'water', 'refill', 'sell', 'deliver'];
+const DEMAND_TILES = { wheat: 8, cabbage: 4, carrot: 4 }; // the mill's wheat run is an errand too (worksBoard), so the flour does not wait behind field work
+const orderedChop = () => S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && S.eff.axe && WD.choppable(t, S.eff.regions));
+function chopNext() { // the marked tree beside the one just felled (chopTask leaves it in F._chopNext)
+  const t0 = F._chopNext; F._chopNext = null; if (!t0 || F.crops.length >= BASK() || F._helpWin) return null;
+  const T = S.t % 1440; if (T >= sleepAt() - 20) return null;
+  const taken = claimsFor(F); const t = orderedChop().filter(t => t !== t0 && !taken.has(t) && Math.hypot(t.x - t0.x, t.y - t0.y) <= CHOP_CHAIN_R).sort((a, b) => Math.hypot(a.x - F.x, a.y - F.y) - Math.hypot(b.x - F.x, b.y - F.y))[0];
+  if (!t) return null; F.idleCount = 0; return Object.assign(chopTask(t), { kind: 'chop', label: '接着砍旁边标记的树' });
+}
+function workPending() { // what should not wait for the deck or the shop gathering
+  if (orderedChop().length) return true;
+  for (const t of tiles) if (t.open && t.crop && SU.canHarvest(t.crop, SIM.ripe)) return true;
+  if (S.animals.some(a => a.ready > 0)) return true;
+  return !!(S.works && S.works.hives && S.works.hives.some(h => h && h.ready > 0));
+}
+const restDay = () => (F._rest && F._rest.day === S.day ? F._rest : (F._rest = { day: S.day }));
+const restWorker = () => F === FARMER || F.role === 'partner' || F.role === 'teen';
+const restOk = k => !restWorker() || (restDay()[k.kind] | 0) < REST_CAP || !workPending();
+const restUse = k => { if (restWorker()) { const d = restDay(); d[k.kind] = (d[k.kind] | 0) + (k.dur | 0); } return k; };
+function demandGrowing() { const c = {}; for (const t of tiles) if (t.open && t.crop && DEMAND_TILES[t.crop.type]) c[t.crop.type] = (c[t.crop.type] | 0) + 1; return c; }
+function demandWant() { // tiles each demand crop should keep going today
+  const w = {};
+  if (S.eff.mill && S.works && S.works.works && S.works.works.mill) w.wheat = DEMAND_TILES.wheat;
+  if (IN && S.inn && IN.dinerUp(S.inn)) { w.cabbage = DEMAND_TILES.cabbage; w.carrot = DEMAND_TILES.carrot; }
+  for (const k of Object.keys(w)) if (!(S.eff.crops || []).includes(k) && k !== 'wheat') delete w[k];
+  return w;
+}
+function demandPick(bag) { // a demand crop that is short and in this bag (null: plant as usual)
+  const w = demandWant(), g = demandGrowing();
+  for (const k of Object.keys(w)) if ((g[k] | 0) < w[k] && (bag[k] | 0) > 0) return k;
+  return null;
+}
+function demandFetchN() { // demand seed waiting in the storehouse for tiles that are short (0: nothing to fetch)
+  const w = demandWant(), g = demandGrowing(); let n = 0;
+  for (const k of Object.keys(w)) n += Math.min(S.store[k] | 0, Math.max(0, w[k] - (g[k] | 0) - (F.bag[k] | 0)));
+  return n;
+}
+function demandStoreSeeds() { // morning: demand seed in the bag of someone who does not sow the fields goes to the storehouse
+  for (const a of S.members) { if (FAM.areasOf(a.id, a.role).includes('field')) continue;
+    for (const k of Object.keys(DEMAND_TILES)) if ((a.bag[k] | 0) > 0) { S.store[k] = (S.store[k] | 0) + a.bag[k]; a.bag[k] = 0; } }
+}
+function demandShort(k) { // seeds still to buy for a demand crop: its tiles minus what grows and what the family holds
+  const w = demandWant()[k]; if (!w) return 0;
+  let n = demandGrowing()[k] | 0; n += S.store[k] | 0; for (const a of actors()) n += a.bag[k] | 0;
+  return Math.max(0, w - n);
+}
+function seaQuota() { // sea fish the stall still lacks for today's beach guests (only before it serves at 11:30)
+  if (F !== FARMER || !IN || !S.inn || !IN.stallUp(S.inn) || !IN.stallMealsWanted) return 0;
+  if (S.inn.resort && S.inn.resort._meal === S.day) return 0;
+  const T = S.t % 1440; if (T < WAKE || T >= SEA_QUOTA_BY || !(S.eff.searod && S.eff.regions.includes('coast'))) return 0;
+  const want = IN.stallMealsWanted(S.inn, S.day) | 0; if (!want) return 0;
+  let have = 0; for (const a of actors()) for (const it of a.crops) if (typeof it === 'string' && IN.isSeaFish(it)) have++;
+  return Math.max(0, want - have);
+}
+function seaHold(a) { // index flags: sea fish that wait in the basket for the stall's 11:30 meal
+  const keep = new Array(a.crops.length).fill(false);
+  if (!IN || !S.inn || !IN.stallUp(S.inn) || (S.inn.resort && S.inn.resort._meal === S.day) || S.t % 1440 >= 11 * 60 + 30) return keep;
+  let n = IN.stallMealsWanted ? IN.stallMealsWanted(S.inn, S.day) | 0 : 0;
+  a.crops.forEach((it, i) => { if (n > 0 && typeof it === 'string' && IN.isSeaFish(it)) { keep[i] = true; n--; } });
+  return keep;
+}
+function helpEnd() { // the window is over: workshop goods go to the farmer; a spouse (not saved) hands the rest to the married child's basket
+  F._helpWin = 0; if (!F.crops.length) return;
+  { const keep = worksKeep(F), give = F.crops.filter((_, i) => keep[i]); // what a workshop waits for (the mill's wheat) goes to the farmer, who delivers it
+    if (give.length) { const left = F.crops.filter((_, i) => !keep[i]); F.crops.length = 0; F.crops.push(...left); FARMER.crops.push(...give); } }
+  if (!F._spouse || !F.crops.length) return;
+  const m = memberOf(F._spouse); if (m) { m.crops.push(...F.crops); F.crops.length = 0; }
+}
+function helpWinNow(T) { const i = HELP_WIN.findIndex(w => T >= w[0] && T < w[1]); return i < 0 ? 0 : S.day * 2 + i + 1; }
+function farmHands() { // the main farm's harvest / collecting backlog the married ones would come over for
+  let n = 0; for (const t of tiles) if (t.open && t.crop && SU.canHarvest(t.crop, SIM.ripe)) n++;
+  for (const a of S.animals) if (a.ready > 0) n++;
+  return n;
+}
 function board() {
   const T = S.t % 1440, E = S.eff, out = [];
   const shut = T < SHOP_OPEN || T >= SHOP_CLOSE - 20; // v5.0: no trips to a closed stall (crops wait in the basket until morning)
-  const post = (kind, base, at, make, key, area) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key, area: area || FAM.AREA_OF[kind] }); }; // at = null: every target is claimed
+  const post = (kind, base, at, make, key, area, order) => { if (at && !(shut && at === STALL_SPOT)) out.push({ kind, base, at, make, key, area: area || FAM.AREA_OF[kind], order: !!order }); }; // at = null: every target is claimed; v5.11.0.28 order: the player's own command (or a demand seed), no "someone else's area" penalty
   const open = tiles.filter(t => t.open && !CLAIM.has(t));
   const ripe = open.filter(t => t.crop && SU.canHarvest(t.crop, SIM.ripe));
   const dry = open.filter(t => t.crop && SU.canGrow(t.crop, SIM.ripe) && !t.watered);
@@ -947,7 +1030,8 @@ function board() {
     else { let t = rngNear(dry); // v5.0 sprinkler can: aim at the tile with the most thirsty crops around it
       if (t && E.water3) t = dry.reduce((b, u) => { const v = dry.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - travel(F, u); return v > b.v ? { t: u, v } : b; }, { t, v: -1e9 }).t;
       post('water', late ? 96 : 61, t, () => waterTask(t)); } }
-  if (tilledEmpty.length && bagN > 0) { const t = SU.pickPlantTile(tilledEmpty, tiles, F.bag, rand) || rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t)); }
+  if (tilledEmpty.length && !demandPick(F.bag)) { const n = demandFetchN(); if (n > 0) post('fetch', 72, BARN_DOOR, () => fetchTask(n)); } // v5.11.0.28: the mill's / diner's seed from the storehouse
+  if (tilledEmpty.length && bagN > 0) { const t = SU.pickPlantTile(tilledEmpty, tiles, F.bag, rand) || rngNear(tilledEmpty); post('plant', 70, t, () => plantTask(t), undefined, undefined, !!demandPick(F.bag)); } // v5.11.0.28: 阿禾 sows a short demand crop too
   else if (tilledEmpty.length && (storeN > 0 || F.gathered > 0)) post('fetch', 68, BARN_DOOR, () => fetchTask(tilledEmpty.length + tillable.length));
   else if (tilledEmpty.length && S.coins >= SIM.CROPS.carrot.seed && T < 17 * 60) post('buy', 55, STALL_SPOT, sellTask);
   if (weeds.length) { const t = rngNear(weeds); post('weed', 45, t, () => weedTask(t)); }
@@ -958,6 +1042,7 @@ function board() {
   if (T < 19 * 60 && F.crops.length < BASK() && !fishedOut) {
     if (E.searod && E.regions.includes('coast')) { const sp = fishSpot('sea'); post('fish', 12, sp.stand, () => fishTask('sea')); }
     else post('fish', 8, FS.POND_SPOT.stand, () => fishTask('pond')); }
+  { const q = seaQuota(); if (q > 0 && F.crops.length < BASK() && (F.fishDay !== S.day || F.fishMin < SEA_QUOTA_MIN)) { const sp = fishSpot('sea'); post('fish', 80 + travel(F, sp.stand) / 8, sp.stand, () => Object.assign(fishTask('sea'), { label: '给海鲜摊钓今天的海鱼' })); } } // v5.11.0.28: an errand (the walk to the pier is not held against it)
   if (F.gathered > 0 && (F.gathered >= 12 || (weeds.length === 0 && (F.gathered >= 4 || T >= 18 * 60)))) post('store', 50, BARN_DOOR, storeTask);
   if (tillable.length && T < 17 * 60) { // the wide hoe aims at the tile whose 3x3 has the most soil to turn
     const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
@@ -966,7 +1051,7 @@ function board() {
   const ripeTrees = S.trees.filter(t => t.stage === 'tree' && t.ripe && WD.FRUIT[t.kind] && treeReachable(t));
   if (ripeTrees.length && F.crops.length + WD.FRUIT.apple.n <= BASK()) { const t = rngNear(ripeTrees); post('pick', 75, t, () => pickTask(t)); }
   const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
-  if (chop.length) { const t = rngNear(chop); post('chop', 64, t, () => chopTask(t)); }
+  if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.28: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0);
   if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
@@ -980,6 +1065,7 @@ function board() {
     const late = T >= 14 * 60 ? 40 : 0; // a far pen loses to field work all day on a big farm; by afternoon the night's feed and water win anyway
     let inTroughs = 0;
     for (const pen of AN.PEN_IDS) { const pn = AN.penNeed(S.animals, pen); if (!pn) continue; const tr = S.troughs[pen], at = troughSpot(pen); inTroughs += Math.min(tr.feed, pn);
+      if (machFit(pen)) continue; // v5.11.0.29: the auto feeder keeps this one full
       if (tr.feed < pn && S.hay > 0) post('feed', (T < 12 * 60 ? 82 : 66) + late, at, () => feedTask(pen), PENS[pen].trough);
       if (!tr.water) { if (F.water >= PENS[pen].water) post('trough', 70 + late, at, () => troughTask(pen), PENS[pen].trough);
         else { const w = rngNear(waterSpots()); post('refill', 62 + late, w, () => refillTask(w), undefined, 'animal'); } } }
@@ -991,7 +1077,7 @@ function board() {
     const lonely = S.animals.filter(a => !a.pet);
     if (lonely.length && T < 18 * 60) { const a = rngNear(lonely.map(animalSpot)); if (a) post('pet', 26, a, () => petTask(a.an)); }
     const short = S.hay + inTroughs < need; // tonight's feed is not covered: buying hay beats almost everything
-    if (S.hay < need * 2 && S.coins >= AN.HAY.price * need && (short || T < 17 * 60)) post('hay', short ? 80 + late : 54, STALL_SPOT, sellTask);
+    if (!machAllFed() && S.hay < need * 2 && S.coins >= AN.HAY.price * need && (short || T < 17 * 60)) post('hay', short ? 80 + late : 54, STALL_SPOT, sellTask);
   }
   // v4.7: a pat for each pet once a day, when nothing better is waiting
   if (T < 18 * 60) { const p = PETS_LIVE.find(p => !p.patted && !CLAIM.has(petView(p))); if (p) { const v = petView(p); post('petpet', 20, { x: v.x - 7, y: v.y + 1 }, () => patPetTask(p), v); } }
@@ -1064,23 +1150,27 @@ function chooseTask() {
   const T = S.t % 1440;
   if (HM) { const wt = weddingTask(); if (wt) return wt; } // v5.9.0: the wedding
   { const ft = feastTask(); if (ft) return ft; } // v5.10.11: harvest feast (runs past bedtime, to 22:00)
-  if (HM) { if (F._spouse) return spouseTask(); const ht = homeChoose(); if (ht) return ht; } // the couple's own day
+  if (HM) { if (F._spouse) { const st = spouseTask(); if (st) return st; } else { const ht = homeChoose(); if (ht) return ht; } } // the couple's own day (v5.11.0.28: null = helping on the main farm)
   { const pt = partyTask(); if (pt) return pt; } // v5.7.0: a party evening (runs past bedtime, to 20:30)
   { const sp = sportsTask(); if (sp) return sp; } // v5.10.9: watch the sports day on the playground
-  { const st = sunsetTask(); if (st) return st; } // v5.10.8: sit on the sunset deck 17:00–19:00
-  if (CR) { const cft = careerFest(); if (cft && !F._spouse && !(F.id && HM && HM.isMarried(S.home, F.id))) return cft; } // v5.10.6: on a festival the family gathers at the child's shop
+  { const st = F._helpWin ? null : sunsetTask(); if (st && restOk(st)) return restUse(st); } // v5.10.8: sit on the sunset deck 17:00–19:00 (v5.11.0.28: an hour while work waits)
+  if (CR) { const cft = careerFest(); if (cft && !F._spouse && !(F.id && HM && HM.isMarried(S.home, F.id)) && restOk(cft)) return restUse(cft); } // v5.10.6: on a festival the family gathers at the child's shop
   if (T >= sleepAt() || T < WAKE - 30) {
     if (F.crops.length - worksKeepN(F) > 0 && shopOpen(T)) return sellTask(); // v5.0: the stall is shut at night; the basket waits until morning
     if (F.gathered > 0 && T < sleepAt() + 60) return storeTask();
     return homeTask();
   }
-  if (window.PFKids && F.id && /^kid/.test(F.id)) { const k = kidPickTask(); if (k) return k; }
+  if (window.PFKids && F.id && /^kid/.test(F.id) && !F._helpWin) { const k = kidPickTask(); if (k) return k; }
+  { const ct = chopNext(); if (ct) return ct; } // v5.11.0.28: the next marked tree beside the one just felled, same trip
   let best = null, bs = -Infinity;
   const others = workingOthers(F).map(a => ({ id: whoId(a), role: a.role })), me = whoId(F);
   const taken = CLAIM = claimsFor(F); CROWD = crowdFor(F); const jobs = board();
   for (const j of jobs) { if (F.role && !FAM.canDo(F.role, j.kind)) continue; if ((j.key && taken.has(j.key)) || taken.has('kind:' + j.kind)) continue;
-    const s = j.base - travel(F, j.at) / 8 + FAM.affinity(me, F.role, j.area, others) - crowd(j.at) / 4; if (s > bs) { bs = s; best = j; } }
+    if (F._helpWin && !HELP_KINDS.includes(j.kind)) continue; // v5.11.0.28: the married ones come over for the harvest and the collecting
+    const aff = FAM.affinity(me, F.role, j.area, others); // v5.11.0.28: a player's order (or a demand seed) is everyone's job: no -HELP
+    const s = j.base - travel(F, j.at) / 8 + (j.order && aff < 0 ? 0 : aff) - crowd(j.at) / 4; if (s > bs) { bs = s; best = j; } }
   CLAIM = new Set(); CROWD = [];
+  if (!best && F._helpWin) { F._helpOff = F._helpWin; helpEnd(); return F._spouse ? spouseTask() : homeChoose() || null; } // v5.11.0.28: nothing left to help with
   if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
   // nothing on the board: rest or stroll. v5.4.3: a child who is not working goes off to play (pets, pens, pond, skip)
   F.idleCount++;
@@ -1126,14 +1216,16 @@ function waterTask(t) {
   } };
 }
 function plantTask(t) {
-  const ty = SU.pickSeed(t, tiles, F.bag, () => wheatPick() || SIM.pickFromBag(F.bag, S.prices)); // v5.6.0: wheat only while the mill wants it
+  const ty = demandPick(F.bag) || SU.pickSeed(t, tiles, F.bag, () => wheatPick() || SIM.pickFromBag(F.bag, S.prices)); // v5.6.0: wheat only while the mill wants it; v5.11.0.28: a short demand crop first (before the giant-patch habit)
   return { label: `正在播种${SIM.CROPS[ty].name}`, to: standAt(t), tile: t, dur: 3, fx: 'seed', pose: 'pull', done: () => { if (t.crop || !t.tilled || !ty || F.bag[ty] <= 0) return; F.bag[ty]--; diary('p', ty); t.crop = { type: ty, age: 0, n: 0, stage: 0, rot: R(0, 6.28) }; if (WX && WX.isRaining(S.weather, S.day, S.t)) t.watered = true; groundDirty = true; } };
 }
 function fetchTask(need) { // take the best seeds from the barn first
   return { label: '正在从仓库取种子', to: BARN_DOOR, dur: 5, done: () => {
     if (F.gathered > 0) { S.store.carrot += F.gathered; F.gathered = 0; }
     const order = CROP_IDS.slice().sort((a, b) => SIM.netPerDay(b, S.prices, true) - SIM.netPerDay(a, S.prices, true)), took = SIM.emptySeeds();
-    let left = need; for (const k of order) { const m = Math.min(left, S.store[k]); S.store[k] -= m; F.bag[k] += m; took[k] = m; left -= m; if (left <= 0) break; }
+    let left = need; const dw = demandWant(), dg = demandGrowing(); // v5.11.0.28: a short demand crop's seed comes along first
+    for (const k of Object.keys(dw)) { const m = Math.min(left, S.store[k] | 0, Math.max(0, dw[k] - (dg[k] | 0) - (F.bag[k] | 0))); if (m > 0) { S.store[k] -= m; F.bag[k] += m; took[k] = m; left -= m; } }
+    for (const k of order) { if (left <= 0) break; const m = Math.min(left, S.store[k]); S.store[k] -= m; F.bag[k] += m; took[k] += m; left -= m; if (left <= 0) break; }
     log(`从仓库取出种子：${seedText(took) || '没有了'}`);
   } };
 }
@@ -1196,6 +1288,7 @@ function chopTask(t) {
     log(`砍倒一棵树：木材 ${y.wood} 份进仓库，${WD.FRUIT[y.sapling].name}树苗 1 棵` + (back ? '' : '（这里的树不会再长，树桩夜里挖走）'));
     if (y.drop) chopDrop(t, y);
     decorDrop('chop', t.x, t.y); // v5.7.0: now and then a carving or a stone lamp
+    F._chopNext = t; // v5.11.0.28: chooseTask walks on to a marked tree beside this one
   } };
 }
 // v5.0: a felled tree sometimes drops something small (world.js DROPS): fruit, a wildflower (a gift for 阿禾), rare seeds, coins, a nest
@@ -1325,6 +1418,7 @@ function storehouse() {
     ornament: FS.ORNAMENTAL.filter(o => (S.ornament[o.id] || 0)).map(o => ({ id: o.id, kind: 'ornament', name: o.name, n: S.ornament[o.id] || 0 })),
     pondFish: S.pondFish.length,
     saplings: WD.FRUIT_IDS.map(k => ({ id: k, kind: 'sapling', name: WD.FRUIT[k].name + '树苗', n: (FARMER.saplings[k] || 0) })).filter(r => r.n),
+    bin: S.works.mach ? PW.BIN_IDS.map(k => { const n = PW.binHas(S.works.mach, k), unit = basePrice(k); return n ? { id: k, type: k, kind: 'item', name: binName(k) + '（仓库）', n, unit, gold: n * unit, keep: PW.BIN[k].keep } : null; }).filter(Boolean) : [], // v5.11.0.29
     sellGold: basketGold + woodGold,
   };
 }
@@ -1349,12 +1443,14 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   const fam = S.family, max = FAM.LOVE_MAX, tier = WD.HOUSE_TIERS[S.eff.house || 0];
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby').length;
   const people = 1 + S.members.length + babies;
+  const inlaws = spousesIn(); // v5.11.0.19: a married child's husband or wife is family too (they live in the new house, so the manor's room count is unchanged)
   const today = (fam.today && fam.today.day === S.day) ? fam.today : { chat: 0, gift: 0, giftName: '', sales: 0 };
   let hint;
   if (fam.moved) {
     const kids = fam.kids.map(k => FAM.kidLine(k, S.day));
     const nk = FAM.kidText(FAM.nextKid(fam, S.day, tier.pop)); // v5.3: 「小豆还有 N 天到来」
-    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人。` + (nk ? nk + '。' : '');
+    const sps = inlaws.map(q => `${q.name}（${kidName(q.kid)}的爱人）`);
+    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}${sps.length ? '、' + sps.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人${inlaws.length ? `；新房子里还有 ${inlaws.length} 位家人` : ''}。` + (nk ? nk + '。' : '');
   } else if (!fam.met) hint = '去集市逛逛，就能认识店主阿禾。';
   else if (fam.love >= max && S.eff.house >= 1) hint = '好感已满，她答应明天搬过来。';
   else if (fam.love >= max) hint = '已满，等待大木屋';
@@ -1366,16 +1462,22 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   const total = today.chat + today.gift + today.sales;
   const todayText = bits.length ? ('今天：' + bits.join('，') + '，共 +' + total) : (fam.moved ? '' : '今天还没去集市');
   if (HM && fam.moved) { const notes = fam.kids.map(k => HM.kidNote(S.home, k.id, k.name)).filter(Boolean); if (notes.length) hint += notes.join('；') + '。'; } // v5.9.0
-  return { home: HM ? homeStatus() : null, met: fam.met, moved: fam.moved, love: fam.love, max, people, pop: tier.pop, today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
-    label: fam.moved ? `一家 ${people}/${tier.pop}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
+  const all = people + inlaws.length, room = tier.pop + inlaws.length;
+  return { home: HM ? homeStatus() : null, met: fam.met, moved: fam.moved, love: fam.love, max, people: all, pop: room, manor: people, manorPop: tier.pop, inlaws: inlaws.map(q => q.name), today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
+    label: fam.moved ? `一家 ${all}/${room}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
+}
+// v5.11.0.19: the married children's partners, from the save (S.home.wed), so the count does not wait for their actor
+function spousesIn() {
+  if (!HM || !S.home || !S.home.wed) return [];
+  return HM.KID_IDS.filter(k => HM.isMarried(S.home, k) && S.family.kids.some(q => q.id === k)).map(k => ({ kid: k, mate: S.home.wed[k].mate, name: HM.mateName(S.home.wed[k].mate) }));
 }
 // one stop at the stall: sell the whole basket at today's prices and any spare seeds, then buy seeds for the empty tiles
 function sellTask() {
-  const kid = F.role === 'child'; // children sell what they picked; buying stays with the grown-ups
+  const kid = F.role === 'child' || !!F._spouse; // children sell what they picked; buying stays with the grown-ups (v5.11.0.28: a helping spouse too)
   return { label: F.crops.length ? '正在去市场卖菜' : S.animals.length && S.hay < AN.need(S.animals) * 2 ? '正在去市场买干草' : '正在去市场买种子', to: STALL_SPOT, via: Math.hypot(F.x - STALL_SPOT.x, F.y - STALL_SPOT.y) > 3 && F.y < STALL_SPOT.y - 2 ? [{ x: 140, y: Math.min(92, Math.max(F.y, 56)) }, { x: 140, y: STALL_SPOT.y }] : [], dur: 6, fx: 'coin', done: () => {
     if (!shopOpen()) { if (F === FARMER) log('集市已经关门了，明天早上再来卖'); return; }
     if (F === FARMER) giftAtStall();
-    const keep = TN ? tradeKeep(F, worksKeep(F)) : worksKeep(F), sell = F.crops.filter((_, i) => !keep[i]), kept = F.crops.filter((_, i) => keep[i]), n = sell.length, open = tiles.filter(t => t.open); // v5.6.0: workshop goods stay in the basket
+    const hold = seaHold(F), keep = F._spouse ? F.crops.map(() => false) : (TN ? tradeKeep(F, worksKeep(F)) : worksKeep(F)).map((v, i) => v || hold[i]), sell = F.crops.filter((_, i) => !keep[i]), kept = F.crops.filter((_, i) => keep[i]), n = sell.length, open = tiles.filter(t => t.open); // v5.6.0: workshop goods stay in the basket
     let sum = 0, nFish = 0, by = { crops: 0, fruit: 0, animals: 0, fish: 0, wood: 0 };
     const sm = YD.stallMult(S.homeyard.put); // v5.10.3: the awning, the new scale, the sign
     for (const it of sell) { const ty = SU.itemType(it), g = Math.round(priceOfAny(it) * sm), base = basePrice(ty); sum += g;
@@ -1396,8 +1498,10 @@ function sellTask() {
     const need = open.filter(t => !t.crop).length - seedCount(F.bag) - seedCount(S.store) + S.store.carrot;
     if (need > 0) { const p = SIM.planSeeds(S.coins, S.prices, need, S.store.carrot + F.gathered, S.eff.crops.filter(k => k !== 'wheat')); // v5.6.0: wheat is bought for the mill below
       if (p.cost > 0) { emit('purchase', { item: 'seeds', n: seedCount(p.buy), gold: p.cost }); S.coins -= p.cost; for (const k of CROP_IDS) F.bag[k] += p.buy[k]; S.flow.bought += seedCount(p.buy); S.flow.boughtGold += p.cost; noteLog('spend', 'seeds', p.cost); log(`买了种子：${seedText(p.buy)}（${p.cost} 金）`); } }
-    const ws = wheatShort(), wk = Math.min(ws, Math.floor(S.coins * 0.3 / SIM.CROPS.wheat.seed)); // v5.6.0: seed for the mill's wheat
+    const ws = Math.max(wheatShort(), demandShort('wheat')), wk = Math.min(ws, Math.floor(S.coins * 0.3 / SIM.CROPS.wheat.seed)); // v5.6.0: seed for the mill's wheat; v5.11.0.28: its tiles too
     if (wk > 0) { diary('out', null, wk * SIM.CROPS.wheat.seed); S.coins -= wk * SIM.CROPS.wheat.seed; F.bag.wheat += wk; noteLog('spend', 'seeds', wk * SIM.CROPS.wheat.seed); log(`给磨坊买了 ${wk} 颗小麦种子（${wk * SIM.CROPS.wheat.seed} 金）`); }
+    for (const k of ['cabbage', 'carrot']) { const c = SIM.CROPS[k].seed, m = Math.min(demandShort(k), Math.floor(S.coins * 0.1 / c)); // v5.11.0.28: the diner's vegetables
+      if (m > 0) { diary('out', null, m * c); S.coins -= m * c; F.bag[k] += m; noteLog('spend', 'seeds', m * c); log(`给菜馆买了 ${m} 颗${SIM.CROPS[k].name}种子（${m * c} 金）`); } }
     noteProgress();
   } };
 }
@@ -1476,8 +1580,9 @@ function releaseTask(o) {
   } };
 }
 function looseTask(it) {
-  return { label: '正在捡狗发现的松露', to: { x: it.x - 6, y: it.y + 2 }, tile: it, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
+  return { label: it.item ? '正在捡滑道滚出来的蛋' : '正在捡狗发现的松露', to: { x: it.x - 6, y: it.y + 2 }, tile: it, dur: 4, fx: 'leaf', pose: 'pull', done: () => {
     const i = S.loose.indexOf(it); if (i < 0 || F.crops.length >= BASK()) return;
+    if (it.item) { S.loose.splice(i, 1); F.crops.push(it.item); popText(it.x, it.y, 12, '+1', '#fff6dc'); log(`${F === FARMER ? '农夫' : F.name}捡起了集蛋滑道滚出来的${SU.itemName(it.item, { egg: '鸡蛋' })}`); return; } // v5.11.0.29 (recorded when it rolled out)
     S.loose.splice(i, 1); const item = SU.rollProduct('truffle', rand); F.crops.push(item);
     const ck = BOOK.itemKey(item); if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: true }); }
     const ev = SU.productToast(item); if (ev) surpriseNote(ev, it.x, it.y); else popText(it.x, it.y, 12, '+1', '#fff6dc');
@@ -1523,6 +1628,7 @@ function fishDone() {
 function overnight() {
   noteLog('closeDay', logSnap());
   noteProgress(); // catch a 2,000-gold day before todayEarn is cleared
+  machShip(); // v5.11.0.29: the produce cart takes the bin's extra eggs, milk and honey
   if (DY && S.diary && S.todayEarn > 0) DY.entry(S.diary, S.day).in = S.todayEarn; // v5.10.13: the day's takings go in the diary
   S.day++; try { albumBackfill(); } catch (e) {} S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
   let grew = 0; const justRipe = [];
@@ -1542,6 +1648,7 @@ function overnight() {
   woodNight(); // v5.3.1: the lumber hut replants 林场 stumps before they age
   for (const t of S.trees) { const before = t.stage + t.ripe; WD.treeOvernight(t); if (t.stage + t.ripe !== before) treeChanged(t); }
   S.prices = Object.assign(SIM.driftPrices(S.prices, rand), driftProducts(S.prices));
+  machFeed(); // v5.11.0.29: fitted troughs are full before the animals eat
   if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0, YD.penBonus(S.homeyard.put, yardPens()), CL && S.town ? CL.floor(S.town.hall) : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
     log((r.report.hungry ? `有 ${r.report.hungry} 只动物没吃饱，` : '') + (t ? `夜里产了：${t}` : '动物们夜里没有新产出')); }
   if (CL && S.town && CL.isCheck(S.town.hall, S.day)) { const n = CL.checkup(S.town.hall, S.animals, S.day), pets = PETS_LIVE.length; // v5.10.10 monthly checkup
@@ -1560,6 +1667,7 @@ function overnight() {
   if (HM) { homeNight(); homeMorning(); } // v5.9.0: the little farms grow; a wedding tonight?
   if (S.doorGift && S.doorGift.day < S.day) S.doorGift = null;
   S.loose = []; // a truffle a dog found and nobody picked up does not linger
+  machCollect(); machHay(); machFeed(); // v5.11.0.29: the night's eggs, milk and honey into the storehouse; troughs full again for the day
   S.streaks = BOOK.tickStreaks(S.streaks, S.day, S.animals);
   planDogDay();
   noteProgress();
@@ -1625,10 +1733,21 @@ function followInsect(k) { // play-chase: keep walking toward the live butterfly
   k.to = { x: bug.x, y: bug.y }; k.insect = bug;
   if (moved > 5) k.via = routeVia(F, k.to);
 }
+function idleHold() { return { kind: 'idle', label: '歇一会儿', to: { x: F.x, y: F.y }, dur: 8, rest: true }; }
+function nextTask() { // v5.11.0.23: chooseTask may return null (a spouse with no party seat); never hand that to stepActor
+  try { const t = chooseTask(); if (t) return t; } catch (e) { try { console.warn('[pixel-farm] chooseTask', F && (F.id || 'farmer'), e); } catch (x) {} }
+  return idleHold(); }
 function stepActor(dm) { // one person's step: pick a job from the board (claims respected), walk there, work, finish
+  try { stepActorInner(dm); }
+  catch (e) {
+    try { console.warn('[pixel-farm] stepActor', F && (F.id || 'farmer'), e); } catch (x) {}
+    if (F) { F.task = idleHold(); F.task.work = 0; }
+  }
+}
+function stepActorInner(dm) {
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = chooseTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (!F.task) { F.task = nextTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   if (k && k.kind === 'play-chase') followInsect(k);
@@ -1671,7 +1790,7 @@ function familyMorning() {
     if (st !== was) { const msg = window.PFKids ? PFKids.stageChangeLog(k.name, st) : (st === 'child' || st === 'helper' ? `${k.name}会走路了，能帮忙喂鸡、摸摸动物、摘果子` : `${k.name}长成了少年，田里的活都能干了`);
       if (msg) log(msg); if (k.id === 'kid0' && (st === 'child' || st === 'helper')) kidStarted = true; } }
   if (kidStarted) noteProgress({ kidStarted: true });
-  syncFamily(); if (S.members.map(m => m.id + m.role).join() !== before && window.__farm && window.__farm.onFamily) window.__farm.onFamily();
+  syncFamily(); demandStoreSeeds(); if (S.members.map(m => m.id + m.role).join() !== before && window.__farm && window.__farm.onFamily) window.__farm.onFamily();
 }
 function fxTick(k) {
   const t = k.tile || { x: F.x, y: F.y - 4 };
@@ -1787,12 +1906,14 @@ const fieldYard = r => r.field && [r.field.c0 * TILE - 6, r.field.r0 * TILE - 6,
 const YARD = { x0: 68, x1: 124, y0: 52, y1: 92 }; // packed-dirt yard around the field (like the mock)
 const inYard = (x, y, pad = 0) => x > YARD.x0 - pad && x < YARD.x1 + pad && y > YARD.y0 - pad && y < YARD.y1 + pad;
 // ground: flat palette areas only (grass, dirt, water). All texture lives in decals that never rotate, so nothing crawls.
+let COAST_OLD = false; // the decal scatter below draws its random stream against the old coast, so nothing else on the map moves
 function groundAt(x, y) { // -> [palette colour, kind]
   const e = ((x - POND.x) / POND.rx) ** 2 + ((y - POND.y) / POND.ry) ** 2 + (vnoise(x / 4, y / 4, 11) - 0.5) * 0.34;
   if (e < 1) return [Wt[2], 'water'];           // one flat tone: the layered water is painted over it in screen space (waterPass)
   if (e < 1.3) return [G[3], 'shore'];
-  const sea = WD.seaAt(x, y);
+  const sea = COAST_OLD ? WD.seaAt(x, y) : WD.seaLook(x, y); // v5.11.0.20: the picture's irregular coast (rules keep seaAt)
   if (sea === 'water') return [Wt[2], 'water'];
+  if (sea === 'sand' && !COAST_OLD) { const o = XP.mouthWater(x, y); if (o) return o; } // v5.11.0.20: the river runs on across the beach into the sea
   if (sea === 'sand') { const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; }
   const wob = (vnoise(x / 3, y / 3, 7) - 0.5) * 1.6;
   const pd = pathD(x, y), pw = 4.2 + wob;
@@ -1843,6 +1964,7 @@ function syncAvenue() { if (!TN || !TN.AVENUE) return; const k = [roadBuilt(), !
   if (k === aveKey) return; const first = aveKey === null; aveKey = k; if (!first && groundReady) buildGroundBase([356, TN.RECT[1] - 4, TN.RECT[2] + 4, TN.RECT[3] + 4]); }
 // decals: grass tufts, flowers, pebbles; placed in the world but drawn upright, like billboards lying on the ground
 const decals = [];
+COAST_OLD = true;
 { const r = mulberry32(777), blocked = (x, y) => { const k = groundAt(x, y)[1];
     return Math.hypot(x - HOUSE.x, (y - HOUSE.y) * 1.2) < 22 || Math.hypot(x - BARN.x, (y - BARN.y) * 1.2) < 20 || (x > 66 && x < 126 && y > 50 && y < 94 && k !== 'grass'); };
   for (let i = 0; i < 900 && decals.length < 330; i++) { const x = -M * 0.8 + r() * (WW + M * 1.6), y = -M * 0.8 + r() * (WH + M * 1.6); const k = groundAt(x, y)[1];
@@ -1863,6 +1985,7 @@ const decals = [];
   scatter(mulberry32(778), WORLD55);
   if (WORLD.x1 > WORLD55.x1) scatter(mulberry32(7781), { x0: WORLD55.x1, y0: WORLD.y0, x1: WORLD.x1, y1: WORLD.y1 }, (x, y) => TN && TN.inTown(x, y) && Math.hypot(x - TN.PLAZA.x, y - TN.PLAZA.y) < TN.PLAZA.r + 2);
 }
+COAST_OLD = false; for (let i = decals.length - 1; i >= 0; i--) { const d = decals[i]; if (WD.seaLook(d.x, d.y) !== WD.seaAt(d.x, d.y)) decals.splice(i, 1); } // none on the new beach strip
 // ---------- the big map (v4.3): roads cut through the forest rim, wild forest between the clearings, fenced regions ----------
 for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (!p.tree) continue;
   if (nearRoute(p.x, p.y, 14) || WD.seaAt(p.x, p.y) || PL.clearAt(p.x, p.y, 10) || WD.REGIONS.some(r => WD.inRect(p.x, p.y, r.rect, 10) || (r.water && WD.inRect(p.x, p.y, r.water, 8))) || PEN1.some(k => WD.inRect(p.x, p.y, penBox(PENS[k]), 8))) props.splice(i, 1); }
@@ -2030,6 +2153,7 @@ SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the sh
   if (PW.WORKS[id]) return PW.workGate(id, worksCtx());
   if (id === 'wheel') return PW.wheelGate(S.plots, have);
   if (id === 'hive') return PW.hiveGate(S.plots, S.eff.regions, have, S.works.hives);
+  if (PW.MACH[id]) return PW.machGate(id, MC(), machCtx()); // v5.11.0.29
   if (PW.PEN2[id]) return PW.pen2Gate(id, S.plots, S.works.penHost);
   if (AN.KINDS[id]) return PW.animalGate(id, have, S.eff);
   if (id === 'party') return S.family.moved ? null : '阿禾搬来以后才办得起派对'; // v5.7.0
@@ -2048,6 +2172,7 @@ const revealSteps = id => { // the outside conditions behind a gate, in order; e
   if (id === 'wheel') return [moved, plotMod('dam')];
   if (id === 'hive') return [moved, plotMod('meadow', 'orchard')];
   if (PW.PEN2[id]) return [moved, plotMod('pasture')];
+  if (PW.MACH[id]) { const c = machCtx(); return id === 'chute' ? [moved, c.coop2] : id === 'milker' ? [moved, c.shed2] : id === 'tray' ? [moved, c.meadow, c.hives >= PW.HIVE.max] : [moved, c.wheel > 0, c.smithy]; } // v5.11.0.29
   if (id === 'party') return [moved];
   return null;
 };
@@ -2070,6 +2195,7 @@ function worksBought(id) { // before applyUpgrades: put the new thing in its pla
   if (id === 'hive') { const sl = PW.hiveFree(S.plots, S.eff.regions, W.hives); if (sl) { W.hives.push({ at: sl.at, s: sl.s, cd: PW.HIVE.every, ready: 0 }); if (HM && S.home.houses.length) { const h = W.hives[W.hives.length - 1], p = PW.hivePos(h, S.plots, S.eff.regions); if (p && homeFeet().some(f => HM.inBox(p, f, 3))) homeHiveAside(h, p); } } // v5.9.0: not in the new house's yard
     if (W.hives.length === 1) { BOOK.record(S.codex, 'bug:bee', S.day); log('蜜蜂飞起来了，图鉴「昆虫」页记下了蜜蜂'); } }
   if (PW.PEN2[id] && !W.penHost) { W.penHost = PW.pastureHost(S.plots, null); PW.applyPenLayout(PENS, W.penHost); }
+  if (PW.MACH[id]) machBought(id); // v5.11.0.29
 }
 // v5.10.12: a 工坊院 being re-zoned: its workshops move to another yard (same state), or wait in the storehouse until one is free
 function worksVacate(id, mod) {
@@ -2099,6 +2225,68 @@ function worksBoughtLog(id) {
   if (id === 'wheel') { const n = PW.wheelsOf(S.plots, S.eff.wheel).length; log(n ? '水车转起来了，天黑后够得着的路灯会亮' : '水车修好了'); }
   if (PW.PEN2[id]) log(`${PW.PEN2[id].name}盖在了${PL.plot(S.works.penHost).name}`);
 }
+// ---------- v5.11.0.29 自动化机械 (rules: works.js; art: works-art.js) ----------
+// Saved as works.mach. The shop's levels (S.up.feeder ...) mirror it and are never saved under upgrades.
+const MC = () => S.works.mach || (S.works.mach = {});
+const machBuilt = () => PW.MACH_PENS.filter(k => (S.up[k] | 0) > 0);
+const machCtx = () => ({ wheel: S.up.wheel | 0, smithy: !!(S.town && S.town.hall && S.town.hall.built && S.town.hall.built.smithy), built: machBuilt(),
+  coop2: (S.up.coop2 | 0) > 0, shed2: (S.up.shed2 | 0) > 0, hives: S.works.hives.length, meadow: Object.values(S.plots || {}).some(p => p && p.mod === 'meadow') });
+const machFit = pen => PW.fitted(S.works.mach, pen);
+function machStrip(up) { for (const id of PW.MACH_IDS) delete up[id]; return up; }
+function machSyncUp() { const lv = PW.machLevels(S.works.mach, machBuilt()); for (const id of PW.MACH_IDS) S.up[id] = lv[id]; }
+const MACH_LOG = { feeder: '自动饲喂槽', feedset: '自动饲喂槽', chute: '集蛋滑道', milker: '挤奶机', tray: '蜂蜜收集槽' };
+function machBought(id) {
+  const ks = PW.machBuy(MC(), id, machBuilt()); machSyncUp();
+  BOOK.record(S.codex, 'mach:' + (id === 'feedset' ? 'feeder' : id), S.day);
+  const names = ks.map(k => PENS[k].name).join('、');
+  if (id === 'feeder' || id === 'feedset') { machFeed(); log(`${names}装上了自动饲喂槽和自来水槽：料斗自己添干草，水管接着水车，槽里一直是满的，不用再有人去喂`); }
+  if (id === 'chute') log('两座鸡舍装上了集蛋滑道：鸡蛋顺着滑道滚进木箱，直接收进仓库');
+  if (id === 'milker') log('两座牛棚装上了挤奶机：牛奶先灌进奶酪坊，剩下的收进仓库');
+  if (id === 'tray') log('花甸的蜂箱底下接上了集蜜槽：蜂蜜流进中间的蜜桶，再收进仓库，蜂箱不会再攒满停工');
+  if (DY && S.diary) diaryNote('mach:' + (id === 'feedset' ? 'feeder' : id));
+  machCollect(true); if (WORKS_ON) PWA.sync();
+}
+// fitted pens: troughs topped up from the storehouse's hay (and water from the wheel)
+// every pen with animals has a feeder: the morning delivery brings the hay, so nobody walks to the stall for it
+function machAllFed() { const m = S.works && S.works.mach; return !!(m && m.f) && S.animals.length > 0 && PW.MACH_PENS.every(k => !(AN.penNeed(S.animals, k) > 0) || PW.fitted(m, k)); }
+function machFeed() { if (!S.works.mach || !S.works.mach.f) return 0; const used = PW.machFill(S.works.mach, S.troughs, k => AN.penNeed(S.animals, k), S.hay); S.hay -= used; return used; }
+// with feeders, the hay stall delivers every morning: up to three nights' worth, paid like a stall purchase (never more than half the coins)
+function machHay() {
+  if (!S.works.mach || !S.works.mach.f || !S.animals.length) return;
+  const need = AN.need(S.animals), want = Math.min(AN.HAY.stock, need * 3) - S.hay, can = Math.floor(S.coins * 0.5 / AN.HAY.price), n = Math.max(0, Math.min(want, can)); if (n <= 0) return;
+  const g = n * AN.HAY.price; emit('purchase', { item: 'hay', n, gold: g }); S.coins -= g; S.hay += n; S.hayGold = (S.hayGold || 0) + g; noteLog('spend', 'hay', g);
+  log(`干草铺一早送来 ${n} 捆干草，直接放进仓库（${g} 金）`);
+}
+// eggs, milk and honey straight into the storehouse bin (milk fills the cheese shop first); a rare egg waits at the coop door
+function machCollect(now) {
+  const m = S.works.mach; if (!m) return; const got = { egg: 0, milk: 0, honey: 0 }, r = worksRng(0x3A1C + (now ? 7 : 0)); let rare = null;
+  if (m.e) for (const a of S.animals) { if (a.kind !== 'chicken') continue;
+    while (a.ready > 0 && PW.binRoom(m, 'egg') > 0) { a.ready--; const it = SU.rollProduct('egg', r); const ck = BOOK.itemKey(it);
+      if (ck) { BOOK.record(S.codex, ck, S.day); noteProgress({ sawRare: true }); rare = it; const P = PENS[homeOf(a)]; S.loose.push({ id: 'chute' + S.day + a.id, type: 'egg', item: it, x: P.door.x + 6, y: P.door.y + 2 }); continue; }
+      got.egg += PW.binAdd(m, 'egg', 1); } }
+  if (m.m) { const ch = S.works.works.cheese, def = PW.WORKS.cheese;
+    for (const a of S.animals) { if (a.kind !== 'cow') continue;
+      while (a.ready > 0) { if (ch && ch.at && ch.inp < def.inCap) { a.ready--; ch.inp++; got.milk++; continue; } if (PW.binAdd(m, 'milk', 1)) { a.ready--; got.milk++; continue; } break; } } }
+  if (m.h) for (const h of S.works.hives) { const n = PW.binAdd(m, 'honey', h.ready | 0); h.ready -= n; got.honey += n; }
+  for (const k of PW.BIN_IDS) if (got[k]) { if (DY && S.diary) DY.add(S.diary, S.day, 'pr', k, got[k], 'mach'); }
+  const t = PW.BIN_IDS.filter(k => got[k]).map(k => binText(k, got[k])).join('、');
+  if (t) log(`机器把${t}收进了仓库` + (rare ? '，鸡舍门口还滚出一个特别的蛋' : ''));
+  if (rare) { const ev = SU.productToast(rare); if (ev) surpriseNote(ev, PENS.coop.door.x, PENS.coop.door.y); }
+}
+const binName = k => (AN.PRODUCTS[k] || PW.PRODUCTS[k]).name;
+const binText = (k, n) => `${n} ${({ egg: '个', milk: '瓶', honey: '罐' })[k] || '份'}${binName(k)}`;
+// the night's produce cart: what is above the bin's keep goes at the stall's price (with its awning / scale bonus)
+function machShip() {
+  const m = S.works.mach; if (!m) return; const out = PW.binShip(m), ks = Object.keys(out); if (!ks.length) return;
+  const sm = YD.stallMult(S.homeyard.put); let sum = 0, n = 0; const by = { animals: 0, crops: 0 };
+  for (const k of ks) { const g = Math.round(basePrice(k) * out[k] * sm); sum += g; n += out[k]; if (AN.PRODUCTS[k]) { by.animals += g; S.animalGold = (S.animalGold || 0) + g; } else by.crops += g; } // honey counts like at the stall
+  emit('income', { gold: sum, items: n, source: 'market', by, who: 'mach' }); S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
+  for (const k of Object.keys(by)) if (by[k]) noteLog('income', k, by[k]);
+  log(`收货车拉走了仓库里的${ks.map(k => binText(k, out[k])).join('、')}，得 ${sum} 金`);
+}
+// orders, meals and the town shops draw on the bin like a workshop's finished goods
+function machCounts(add) { const m = S.works.mach; if (m) for (const k of PW.BIN_IDS) { const n = PW.binHas(m, k); if (n) add(k, n); } }
+function machPull(left) { const m = S.works.mach; if (m) for (const k of PW.BIN_IDS) if (left[k] > 0) left[k] -= PW.binTake(m, k, left[k]); }
 // a field's outline from its tiles (home first, then in tile order)
 function fieldList() { const by = new Map();
   for (const t of tiles) { let f = by.get(t.f); if (!f) by.set(t.f, f = { id: t.f, x0: 1e9, y0: 1e9, x1: -1e9, y1: -1e9 }); f.x0 = Math.min(f.x0, t.x); f.y0 = Math.min(f.y0, t.y); f.x1 = Math.max(f.x1, t.x); f.y1 = Math.max(f.y1, t.y); }
@@ -2133,10 +2321,11 @@ function dinerReserveNeed() {
   return IN.reserveNeed(S.inn, want, innStaffedNow(), innCounts(), innPay);
 }
 function worksKeep(a) { const keep = new Array(a.crops.length).fill(false); if (a.role && !FAM.canDo(a.role, 'deliver')) return keep;
+  const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (SU && SU.itemType ? SU.itemType(it) : (it && it.type)));
+  // v5.11.0.26: a taken bakery order is held first (including rare/object crops), so it is not sold or poured into a workshop on the walk to 小桃
+  const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(a.crops, ord.need, keep, typ);
   for (const id of PW.WORK_IDS) { const w = S.works.works[id]; if (!w || !w.at) continue; let room = PW.WORKS[id].inCap - w.inp;
-    a.crops.forEach((it, i) => { if (room > 0 && !keep[i] && typeof it === 'string' && PW.WORKS[id].inputs.includes(it)) { keep[i] = true; room--; } }); }
-  const ord = bakeryTaken(); if (ord) { const need = {}; for (const x of ord.need) need[x.id] = (need[x.id] | 0) + x.n; // v5.10.4: hold the day's order back from the stall
-    a.crops.forEach((it, i) => { const ty = typeof it === 'string' ? it : null; if (ty && need[ty] > 0 && !keep[i]) { keep[i] = true; need[ty]--; } }); }
+    a.crops.forEach((it, i) => { const ty = typ(it); if (room > 0 && !keep[i] && ty && PW.WORKS[id].inputs.includes(ty)) { keep[i] = true; room--; } }); }
   const dinerNeed = dinerReserveNeed(); // v5.11.0.12: hold tonight's restaurant ingredients until 11:30, like the bakery
   if (dinerNeed) a.crops.forEach((it, i) => {
     const ty = innType(it);
@@ -2148,7 +2337,15 @@ const workArea = { mill: 'field', jam: 'orchard', cheese: 'animal' };
 function deliverTask(id) { const def = PW.WORKS[id];
   return { kind: 'deliver', key: 'w:' + id + ':in', label: `正在把原料送去${def.name}`, to: PWA.doorOf(id), dur: 6, pose: 'pull', done: () => {
     const w = S.works.works[id]; if (!w) return; let n = 0;
-    for (let i = F.crops.length - 1; i >= 0 && w.inp < def.inCap; i--) { const it = F.crops[i]; if (typeof it === 'string' && def.inputs.includes(it)) { F.crops.splice(i, 1); w.inp++; n++; } }
+    const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (it && it.type));
+    // bakery / diner fruit stays in the basket
+    const reserved = new Array(F.crops.length).fill(false);
+    const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(F.crops, ord.need, reserved, typ);
+    const dinerNeed = dinerReserveNeed();
+    if (dinerNeed) F.crops.forEach((it, i) => { const ty = innType(it); if (ty && dinerNeed[ty] > 0 && !reserved[i]) { reserved[i] = true; dinerNeed[ty]--; } });
+    for (let i = F.crops.length - 1; i >= 0 && w.inp < def.inCap; i--) {
+      const ty = typ(F.crops[i]); if (!reserved[i] && ty && def.inputs.includes(ty)) { F.crops.splice(i, 1); w.inp++; n++; }
+    }
     if (n) { log(`${F === FARMER ? '' : F.name}往${def.name}送了 ${n} 份原料`); burst(PWA.doorOf(id).x, PWA.doorOf(id).y - 4, 8, [Ac[1], Wd[4]], 6, 'leaf'); } } };
 }
 function pickupTask(id) { const def = PW.WORKS[id], name = PW.PRODUCTS[def.out].name;
@@ -2171,10 +2368,14 @@ function worksBoard(post, T) {
   const W = S.works, space = BASK() - F.crops.length;
   const spr = S.eff.sprinkler > S.works.sprinklers.length; if (!spr) sprSince = null; else if (sprSince === null) sprSince = S.t; // v5.10.11.1: it climbs while it waits
   if (T < 18 * 60 && spr) { const sp = sprinklerNext(); if (sp) post('install', 66 + WAIT_BOOST(sprSince), { x: sp.x - 4, y: sp.y + 2 }, () => installTask(sp), 'spr:install', 'field'); }
-  const keep = worksKeep(F);
+  const typ = it => (BK && BK.cropId) ? BK.cropId(it, SU && SU.itemType) : (typeof it === 'string' ? it : (it && it.type));
+  const reserved = new Array(F.crops.length).fill(false);
+  const ord = bakeryTaken(); if (ord && BK.reserve) BK.reserve(F.crops, ord.need, reserved, typ);
+  const dinerNeed = dinerReserveNeed();
+  if (dinerNeed) F.crops.forEach((it, i) => { const ty = innType(it); if (ty && dinerNeed[ty] > 0 && !reserved[i]) { reserved[i] = true; dinerNeed[ty]--; } });
   for (const id of PW.WORK_IDS) { const w = W.works[id]; if (!w || !w.at || !S.plots[w.at]) continue; const def = PW.WORKS[id], door = PWA.doorOf(id);
-    const carry = F.crops.filter((it, i) => keep[i] && def.inputs.includes(it)).length;
-    if (carry >= Math.min(def.need, def.inCap - w.inp) && carry > 0) post('deliver', space <= 0 ? 100 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
+    const carry = F.crops.filter((it, i) => !reserved[i] && def.inputs.includes(typ(it))).length;
+    if (PW.canDeliver(carry, def.need, def.inCap, w.inp)) post('deliver', space <= 0 ? 100 : id === 'mill' ? 70 + travel(F, door) / 8 : 70, door, () => deliverTask(id), 'w:' + id + ':in', workArea[id]);
     if (w.ready > 0 && space > 0 && T < 18 * 60) post('pickup', w.ready >= def.outCap ? 72 : 60, door, () => pickupTask(id), 'w:' + id + ':out', workArea[id]); }
   if (space > 0 && T < 18 * 60) W.hives.forEach((h, i) => { const sp = PWA.hiveSpots()[i]; if (h.ready > 0 && sp) post('honey', 58, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard'); });
 }
@@ -2233,7 +2434,7 @@ let worksSyncT = 0;
 function worksFrame() { if (!WORKS_ON) return; if (realT - worksSyncT > 0.2 || realT < worksSyncT) { worksSyncT = realT; PWA.sync(); } PWA.frame(realT); } // the key check is a few JSON strings: 5 times a second is plenty
 function worksBusy(id) { return PW.plotBusy(id, { worksMove: true, works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }) || (DECOR_ON ? decorBusy(id) : null) || (HM ? homeBusy(id) : null) || (IN ? IN.plotBusy(id, S.plots, S.inn) : null); }
 PWA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, tiles, markNavDirty: () => markNavDirty(), wheelProp: id => XP.wheelProp(id),
-  wheelFrames: () => { const md = XP.models(); return md ? [md.wheelFull, ...md.wheelTurn] : []; } });
+  wheelFrames: () => { const md = XP.models(); return md ? [...md.wheelSets[1], ...md.wheelSets[-1]] : []; } }); // v5.11.0.20: both bank sides
 WORKS_ON = true;
 // ---------- v5.7.0 phase 9: decorations, night lamps, the party area, moving things ----------
 // Rules: decor.js (pure). Art: decor-art.js. S.decor is saved as `decor` (save v13).
@@ -2522,16 +2723,17 @@ const partyKeyOf = a => (a === FARMER ? 'farmer' : String(a.id));
 let partyReg = { day: -1, keys: [], kid: {} }, partyLawnC = { key: '', lawn: [], extra: [] }, partyPlanC = { key: '', plan: {} };
 function partyLawnNow() {
   const a = partyArea(); if (!a) return { lawn: [], extra: [] };
-  ensureNav(); const key = [S.day, a.x, a.y, navVer].join('|'); if (partyLawnC.key === key) return partyLawnC;
-  partyLawnC = Object.assign({ key }, lawnAt(a)); partyPlanC.key = ''; return partyLawnC;
+  ensureNav(); const wt = wedNow(), key = [S.day, a.x, a.y, navVer, wt ? wt.kid : ''].join('|'); if (partyLawnC.key === key) return partyLawnC;
+  partyLawnC = Object.assign({ key }, lawnAt(a, !!wt)); // v5.11.0.21: + wed
+  partyPlanC.key = ''; return partyLawnC;
 }
 let lawnSeen = { v: -1, seen: null };
-function lawnAt(a) { // the lawn corners an area at a would get (also asked by autoSpot, before the area is put down)
+function lawnAt(a, wedFirst) { // the lawn corners an area at a would get (also asked by autoSpot, before the area is put down); v5.11.0.21 wedFirst: the wedding's aisle and rows first
   const g = ensureNav(); if (lawnSeen.v !== navVer) lawnSeen = { v: navVer, seen: DC.reach(g, NAV.LAYOUT.DOOR, []) }; const seen = lawnSeen.seen;
   const seat = DC.partySeats(a)[0], near = c => { const r = pathTo(seat, c); return !!r.reached && r.length <= Math.hypot(c.x - seat.x, c.y - seat.y) * 1.6 + 12; }; // a short walk from the table (not round a fence)
   const why = {}, no = r => { why[r] = (why[r] | 0) + 1; return false; }, by = o => Math.abs(o.x - a.x) < 80 && Math.abs(o.y - a.y) < 80; // only what is near (autoSpot asks this for many spots)
   const nTiles = tiles.filter(t => (t.open || t.tilled || t.crop) && by(t)), nTrees = S.trees.filter(by), nYard = yard.filter(by), nProps = props.filter(p => !p.decor && !p.region && by(p));
-  const free = (b, c) => { for (const [i, j] of DC.cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return no('edge'); const k = j * g.w + i; if (g.cost[k] !== NAV.GRASS || !seen[k]) return no('ground'); }
+  let free = (b, c) => { for (const [i, j] of DC.cellsOf(g, b)) { if (i < 0 || j < 0 || i >= g.w || j >= g.h) return no('edge'); const k = j * g.w + i; if (g.cost[k] !== NAV.GRASS || !seen[k]) return no('ground'); }
     if (![[b[0], b[1]], [b[2], b[1]], [b[0], b[3]], [b[2], b[3]], [(b[0] + b[2]) / 2, (b[1] + b[3]) / 2]].every(([x, y]) => ownGround(x, y))) return no('locked');
     const under = (t, up, side) => t.x > b[0] - side && t.x < b[2] + side && t.y > b[1] - 3 && t.y < b[3] + up; // a tree (or stump) south of the box would stand over it
     if (nTiles.some(t => ptIn(t, b, 4)) || nTrees.some(t => t.stage === 'tree' ? under(t, 28, 6) : under(t, 6, 3.5)) || nYard.some(c => ptIn(c, b, 2))) return no('field/tree');
@@ -2543,6 +2745,8 @@ function lawnAt(a) { // the lawn corners an area at a would get (also asked by a
     if (AN.PEN_IDS.some(k => S.eff[k] && PENS[k].roam && boxHit(b, PENS[k].roam, 2))) return no('pen');
     if (c && !near(c)) return no('far');
     return true; };
+  const wed = wedFirst ? DC.weddingLayout(a, free, []) : null, wb = wed ? wed.boxes : [], free0 = free; // v5.11.0.21: on a wedding evening the corners fit round the ceremony
+  free = wb.length ? (b, c) => !wb.some(w => boxHit(b, w)) && free0(b, c) : free0;
   const lawn = DC.partyLawn(a, free), extra = [];
   for (const [dx, dy] of [[-16, 11], [16, 11], [-16, -11], [16, -11], [-8, 12.5], [8, 12.5], [0, 12.5], [-8, -12.5], [8, -12.5], [0, -12.5], [-17, 0], [17, 0]]) {
     const x = a.x + dx, y = a.y + dy; if (free([x - 2, y - 2, x + 2, y + 2], { x, y }) && !DC.partySeats(a).concat(extra, lawn.flatMap(l => l.spots)).some(p => Math.hypot(x - p.x, y - p.y) < 7) && !lawn.some(l => ptIn({ x, y }, l.box, 3))) extra.push({ x, y }); }
@@ -2551,22 +2755,30 @@ function lawnAt(a) { // the lawn corners an area at a would get (also asked by a
   for (const p of DC.ringSpots(a, 60, 7)) { if (extra.length >= 48) break;
     if (all.concat(extra).some(q => Math.hypot(q.x - p.x, q.y - p.y) < 7) || ptIn(p, DC.boxOf(a.x, a.y, DC.CATALOG.party.foot), 2) || lawn.some(l => ptIn(p, l.box, 3))) continue;
     if (free([p.x - 2, p.y - 2, p.x + 2, p.y + 2], p)) extra.push({ x: p.x, y: p.y }); }
-  return { lawn, extra, why }; // why: how often each reason ruled a spot out (for the shots)
+  return { lawn, extra, why, wed }; // why: how often each reason ruled a spot out (for the shots); wed: v5.11.0.21 the ceremony's layout (wedding evenings)
 }
 function partyPlanNow() {
   const area = partyArea(); if (!area) return {};
   if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
-  const L = partyLawnNow(), ph = DC.partyPhase(S.t % 1440), key = [L.key, ph, partyReg.keys.join(',')].join('|');
-  if (partyPlanC.key !== key) partyPlanC = { key, plan: DC.partyPlan(area, L.lawn, partyReg.keys.map(k => ({ key: k, kid: partyReg.kid[k] })), ph, L.extra) };
+  const L = partyLawnNow(), T = S.t % 1440, W = L.wed && DC.wedOn(T) ? L.wed : null, couple = L.wed ? wedCouple() : null;
+  const ph = W ? 'w' + DC.wedPhase(T) : DC.partyPhase(T), key = [L.key, ph, partyReg.keys.join(',')].join('|');
+  if (partyPlanC.key !== key) { // v5.11.0.21: a wedding evening opens with the ceremony; afterwards the couple sit at the table first
+    // v5.11.0.23: the family (farmer, members, spouses) sit before town guests, so a cramped ceremony still has 阿禾 in the rows
+    const fam = new Set(['farmer'].concat(S.members.map(m => m.id), (typeof SPOUSES !== 'undefined' ? SPOUSES : []).map(s => s.id)));
+    const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k) && fam.has(k)), partyReg.keys.filter(k => !couple.includes(k) && !fam.has(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
+    partyPlanC = { key, plan: W ? DC.weddingPlan(W, roster, couple, DC.wedPhase(T), L.extra) : DC.partyPlan(area, L.lawn, roster, ph, L.extra) }; }
   return partyPlanC.plan;
 }
 function partySpot(a, key) { // a: the actor or guest; their place for this hour of the party
   const area = partyArea(); if (!area) return null; key = key || partyKeyOf(a);
   if (partyReg.day !== S.day) partyReg = { day: S.day, keys: [], kid: {} };
   if (!partyReg.keys.includes(key)) { partyReg.keys.push(key); partyReg.kid[key] = partyKid(a); }
-  const p = partyPlanNow()[key]; return p ? { x: p.x, y: p.y } : null;
+  const p = partyPlanNow()[key]; if (p) return { x: p.x, y: p.y };
+  // v5.11.0.23: a missing place used to make spouseTask return null and crash the frame loop
+  const i = Math.max(0, partyReg.keys.indexOf(key));
+  return { x: area.x + 12 + (i % 4) * 3, y: area.y + 10 + Math.floor(i / 4) * 3 };
 }
-const partyDur = T => Math.max(3, Math.min(30, DC.phaseEnd(T) - T, DC.PARTY.to - T));
+const partyDur = T => Math.max(3, Math.min(30, (wedCer() ? DC.wedPhaseEnd(T) : DC.phaseEnd(T)) - T, DC.PARTY.to - T)); // v5.11.0.21: the ceremony's beats too
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
 function sunsetTask() { // v5.10.8: once the deck is up, the family sits and watches the sea 17:00–19:00
   if (!IN || !S.inn || !IN.deckUp(S.inn) || !IN.isSunset(S.t) || F.away || F.sleeping) return null;
@@ -2578,7 +2790,8 @@ function sunsetTask() { // v5.10.8: once the deck is up, the family sits and wat
   return { kind: 'sunset', label: '去观景台看落日', to: { x: seat.x + (i % 2 ? 0.6 : -0.6), y: seat.y }, dur: Math.max(8, Math.min(22, IN.SUNSET.to - T)), rest: true };
 }
 function partyTask() { // chooseTask asks first: on a party evening everyone who is around comes over
-  const T = S.t % 1440; if (!partyTonight() || !DC.partyOn(T) || F.away || F.sleeping) return null;
+  const T = S.t % 1440, early = T < DC.PARTY.from && DC.wedOn(T) && (wedCouple() || []).includes(F.id); // v5.11.0.21: the couple go over first, to wait at the end of the aisle
+  if (!partyTonight() || !(DC.partyOn(T) || early) || F.away || F.sleeping) return null;
   const seat = partySpot(F); if (!seat) return null; // v5.11.0.15: their own place this hour (was one of 10 seats a few px apart)
   return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true };
 }
@@ -2736,7 +2949,7 @@ function hallView() { // what the board shows (ui.js)
     festival: FV && FV.ready(H) ? { today: FV.isDay(H, S.day), next: FV.nextDay(H, S.day), lantern: FV.hasShops(H), gift: FV.GIFT } : null }; }
 // ---- the town shop: a grown-up takes workshop goods, honey and fish over at a fifth more ----
 const tradeOk = a => townOpen() && (!a.role || FAM.canDo(a.role, 'towntrade')) && a.role !== 'child';
-const tradeList = a => a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && TN.tradeable(o.ty, FS.isFish(o.ty)));
+const tradeList = a => { const hold = seaHold(a); return a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && !hold[o.i] && TN.tradeable(o.ty, FS.isFish(o.ty))); }; // v5.11.0.28: not the stall's sea fish
 function tradeKeep(a, keep) { // while the town shop is still open today, the tradeable goods stay in the basket for it
   const T = S.t % 1440; if (marketDay() && tradeOk(a)) return marketKeep(a, keep, T); // v5.10.3
   if (!tradeOk(a) || T >= TN.TRADE.to - 30) return keep;
@@ -2765,8 +2978,8 @@ const marketOpenNow = () => { const H = marketH(); return !!(H && townOpen() && 
 const MK_F = { fish: ty => FS.isFish(ty), fruit: ty => !!WD.FRUIT[ty], animal: ty => !!AN.PRODUCTS[ty], good: ty => !!(PW && PW.PRODUCTS[ty]) };
 const marketKind = ty => MK.kindOf(ty, MK_F);
 function marketList(a) { // what of this basket goes to the market (not what a workshop is waiting for; 「我来挑」 kinds only)
-  const M = marketH().market, wk = worksKeep(a);
-  return a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && !wk[o.i] && MK.takes(M, marketKind(o.ty)));
+  const M = marketH().market, wk = worksKeep(a), hold = seaHold(a);
+  return a.crops.map((it, i) => ({ it, i, ty: SU.itemType(it) })).filter(o => typeof o.it === 'string' && !wk[o.i] && !hold[o.i] && MK.takes(M, marketKind(o.ty)));
 }
 function marketKeep(a, keep, T) { if (T >= MK.HOURS.to - 30) return keep; const k = keep.slice(); for (const o of marketList(a)) k[o.i] = true; return k; }
 function marketBoard(post, T) {
@@ -2809,48 +3022,133 @@ const bakeryH = () => (BK && HL && TN && S.town && S.town.hall && BK.built(S.tow
 const bakeryPrice = ty => basePrice(ty);
 function bakeryCounts() {
   const c = {};
-  const add = (ty, n) => { if (!ty || !BK.WORD[ty]) return; c[ty] = (c[ty] | 0) + (n || 1); };
+  const add = (ty, n) => { if (!ty || !BK.WORD[ty]) return; BK.addCount(c, ty, n); };
   for (const a of actors()) for (const it of a.crops) add(typeof it === 'string' ? it : SU.itemType(it));
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (w && def) add(def.out, w.ready | 0); }
   if (S.works && S.works.hives) for (const h of S.works.hives) if (h) add('honey', h.ready | 0);
+  machCounts(add); // v5.11.0.29: the storehouse bin
   return c;
 }
 function bakeryTaken() { const H = bakeryH(); if (!H || H.bakery.done) return null; return BK.taken(H.bakery); }
-function bakeryPull(need) { // take the goods from baskets first, then the workshop shelves
+function bakeryPull(need) { // check the whole order first; never take honey / flour / etc. if the rest is short
+  if (!BK.have(need, bakeryCounts())) return false;
   const left = {}; for (const x of need) left[x.id] = (left[x.id] | 0) + x.n;
   const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) { const ty = typeof arr[i] === 'string' ? arr[i] : SU.itemType(arr[i]); if (left[ty] > 0) { arr.splice(i, 1); left[ty]--; } } };
   pull(F.crops); for (const a of actors()) if (a !== F) pull(a.crops);
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def || !(left[def.out] > 0)) continue; const n = Math.min(w.ready | 0, left[def.out]); w.ready -= n; left[def.out] -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
+  machPull(left); // v5.11.0.29
   return Object.keys(left).every(k => left[k] <= 0);
+}
+function bakeryReleaseHeld(B) {
+  if (!B || !B.held) return;
+  bakeryHeldReturn(B.held);
+  delete B.held;
+}
+function bakeryRoll(B) {
+  if (!B || B.last === S.day) return B;
+  bakeryReleaseHeld(B);
+  BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined));
+  return B;
 }
 function bakeryMorning() {
   const H = bakeryH(); if (!H || !townOpen()) return; const B = H.bakery; if (B.last === S.day) return;
-  BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined)); BK.autoTake(B, bakeryCounts(), bakeryPrice);
+  bakeryRoll(B); BK.autoTake(B, bakeryCounts(), bakeryPrice);
   const texts = B.offer.map(q => q.text).join('；');
   log(`小桃的订单板：${texts}。家人会接更划算的一单送到面包房，按单多付五成；不接也没有惩罚`);
 }
+function bakeryMarkShort(B, o, counts) {
+  const short = (BK.shortOf ? BK.shortOf(o.need, counts || bakeryCounts()) : o.need.filter(x => ((counts || bakeryCounts())[x.id] | 0) < x.n));
+  B.short = short.map(x => x.id);
+  const tag = S.day + ':' + o.id;
+  if (B._shortLog === tag) return;
+  B._shortLog = tag;
+  const bit = short.map(x => (BK.needText ? BK.needText([x]) : ((x.n | 0) + (BK.NAME && BK.NAME[x.id] || x.id)))).join('、');
+  log(`小桃这一单还缺${bit || '原料'}，凑齐了再送`);
+}
+function bakeryHeldReturn(need) {
+  if (!need) return;
+  const bag = (F && Array.isArray(F.crops)) ? F : FARMER;
+  if (!bag || !Array.isArray(bag.crops)) return;
+  const m = S.works && S.works.mach, own = { egg: 'e', milk: 'm', honey: 'h' }; // v5.11.0.29: eggs / milk / honey go back into the machine bin (no basket to overfill) when that machine is installed
+  for (const x of need) { let n = x.n | 0; if (m && own[x.id] && m[own[x.id]]) n -= PW.binAdd(m, x.id, n); for (let i = 0; i < n; i++) bag.crops.push(x.id); }
+}
+// when a taken order is short, pick up / collect the missing product first (never a town / hall / inn autobuy)
+function bakeryGatherBoard(post, T, o) {
+  const short = BK.shortOf ? BK.shortOf(o.need, bakeryCounts()) : [];
+  if (!short.length || T >= 18 * 60) return;
+  const want = {}; for (const x of short) want[x.id] = x.n;
+  const space = BASK() - F.crops.length; if (space <= 0) return;
+  for (const id of PW.WORK_IDS) {
+    const w = S.works && S.works.works && S.works.works[id], def = PW.WORKS[id];
+    if (!w || !w.at || !def || !want[def.out] || !(w.ready > 0)) continue;
+    post('pickup', 86, PWA.doorOf(id), () => pickupTask(id), 'w:' + id + ':out', workArea[id]);
+  }
+  if (want.honey && S.works && S.works.hives) S.works.hives.forEach((h, i) => {
+    const sp = PWA.hiveSpots()[i];
+    if (h && h.ready > 0 && sp) post('honey', 86, { x: sp.x - 6, y: sp.y + 4 }, () => honeyTask(i), 'hive:' + i, 'orchard');
+  });
+  // flour is milled from wheat already in a basket; do not buy mill / hall / town items
+  if (want.flour) {
+    const w = S.works && S.works.works && S.works.works.mill, def = PW.WORKS && PW.WORKS.mill;
+    if (w && w.at && def && w.inp < def.inCap) {
+      const typ = it => typeof it === 'string' ? it : SU.itemType(it);
+      const carry = F.crops.filter(it => typ(it) === 'wheat').length;
+      if (carry > 0) post('deliver', 86, PWA.doorOf('mill'), () => deliverTask('mill'), 'w:mill:in', workArea.mill);
+    }
+  }
+}
 function bakeryBoard(post, T) {
   const H = bakeryH(); if (!H || !tradeOk(F) || !BK.open(H, T)) return;
-  const B = H.bakery; if (B.last !== S.day) { BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined)); log(`小桃的订单板：${B.offer.map(q => q.text).join('；')}`); }
+  const B = H.bakery; if (B.last !== S.day) { bakeryRoll(B); log(`小桃的订单板：${B.offer.map(q => q.text).join('；')}`); }
+  // cargo already pulled for today's walk: finish the trip even if skip was set, and do not pull twice
+  if (B.held && B.held.length && !B.done) { post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery'); return; }
+  if (B.skip) return;
   BK.autoTake(B, bakeryCounts(), bakeryPrice); const o = BK.taken(B); if (!o || B.done) return;
-  if (!BK.have(o.need, bakeryCounts())) return;
-  post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery:' + (F === FARMER ? 'farmer' : F.id));
+  bakeryGatherBoard(post, T, o);
+  if (!BK.have(o.need, bakeryCounts())) { bakeryMarkShort(B, o); return; }
+  post('bakery', 74 + travel(F, BK.STAND) / 8, BK.STAND, () => bakeryTask(), 'town:bakery');
 }
 function bakeryTask() {
-  const at = BK.STAND;
-  return { kind: 'bakery', label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: () => {
-    const H = bakeryH(); if (!H || !BK.open(H, S.t % 1440)) { log('面包房已经打烊了，东西先带回家'); return; }
-    const B = H.bakery; const o = BK.taken(B); if (!o || B.done) return;
-    if (!BK.have(o.need, bakeryCounts()) || !bakeryPull(o.need)) { log('送到门口才发现原料不够，这一单改日再说'); return; }
-    const base = BK.baseOf(o.need, bakeryPrice), sum = BK.payOf(o.need, bakeryPrice), extra = sum - base, n = o.need.reduce((s, x) => s + x.n, 0);
+  const at = BK.STAND, KEY = 'town:bakery';
+  const H0 = bakeryH(), B0 = H0 && H0.bakery, o0 = B0 && (BK.taken(B0) || (B0.held && B0.held.length && B0.offer && B0.offer.find(q => q.id === B0.take)));
+  if (B0 && B0.held && B0.held.length && !B0.done) {
+    const text = (o0 && o0.text) || BK.needText(B0.held);
+    return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: bakeryArrive(at, text) };
+  }
+  if (!o0 || B0.done || B0.skip) return { kind: 'idle', key: KEY, label: '在农场里走走', to: { x: F.x, y: F.y }, dur: 2 };
+  const counts = bakeryCounts();
+  // v5.11.0.26: pull the goods when the job is taken, not at 小桃's door (a second adult or a workshop run used to empty the basket on the walk)
+  // v5.11.0.27: the pulled cargo is saved as bakery.held so a reload mid-walk cannot drop it
+  if (!BK.have(o0.need, counts)) {
+    bakeryMarkShort(B0, o0, counts);
+    return { kind: 'idle', key: KEY, label: '先凑齐面包房的原料', to: { x: F.x, y: F.y }, dur: 2 };
+  }
+  if (!bakeryPull(o0.need)) {
+    B0.skip = 1;
+    bakeryMarkShort(B0, o0, counts);
+    return { kind: 'idle', key: KEY, label: '这一单今天先放下', to: { x: F.x, y: F.y }, dur: 2 };
+  }
+  if (B0.short) delete B0.short;
+  B0.held = o0.need.map(x => ({ id: x.id, n: x.n }));
+  return { kind: 'bakery', key: KEY, label: '正在把订单送到小桃的面包房', to: at, dur: 8, pose: 'pull', done: bakeryArrive(at, o0.text) };
+}
+function bakeryArrive(at, text) {
+  return () => {
+    const H = bakeryH(), B = H && H.bakery, held = B && B.held;
+    if (!H || !BK.open(H, S.t % 1440)) { bakeryReleaseHeld(B); log('面包房已经打烊了，东西先带回家'); return; }
+    const o = B && (BK.taken(B) || (held && B.offer && B.offer.find(q => q.id === B.take)));
+    if (!B || !o || B.done) { bakeryReleaseHeld(B); return; }
+    if (!held || !held.length) return;
+    const base = BK.baseOf(held, bakeryPrice), sum = BK.payOf(held, bakeryPrice), extra = sum - base, n = held.reduce((s, x) => s + x.n, 0);
     S.coins += sum; S.earned += sum; S.todayEarn += sum; S.soldToday += n; S.totalSold += n;
-    B.done = 1; B.days++; B.gold += sum; B.extra += extra;
+    B.done = 1; B.days++; B.gold += sum; B.extra += extra; delete B.short; delete B.held;
     if (HM) HM.clampAdd(S.home.nb, 'n3', BK.FAVOR);
     emit('income', { gold: sum, items: n, source: 'bakery', by: { works: sum }, who: F === FARMER ? 'farmer' : F.id });
     noteLog('income', 'works', sum); if (F !== FARMER) noteLog('work', F.id, 0, sum);
     popText(at.x, at.y - 8, 26, '+' + sum, '#ffd76a'); burst(at.x, at.y - 4, 12, ['#ffd76a', '#fff2a8', Ac[0]], 8, 'coin'); hearts(at.x, at.y - 2, 14);
-    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${o.text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`); } };
+    const who = F === FARMER ? '' : F.name; log(`${who ? who : '家人'}把 ${text} 送到小桃的面包房，按单收了 ${sum} 金（比平时多 ${extra} 金），小桃很高兴（好感 +${BK.FAVOR}）`);
+  };
 }
 function woodshopMorning() { // v5.10.5: once a day, if auto is on and the pile is above the reserve, 阿松 makes a bench
   const H = S.town && S.town.hall; if (!H || !WS || !WS.built(H) || !townOpen()) return;
@@ -2888,13 +3186,16 @@ function smithyView() {
 function setBakeryPick(on, id) { // 「我来挑」 (ui.js): on = 0/1 switches the mode; id accepts one of today's orders
   const H = bakeryH(); if (!H) return; const B = H.bakery;
   if (on === 0 || on === 1 || on === true || on === false) B.pick = on ? 1 : 0;
-  if (id !== undefined) BK.setTake(B, id);
+  if (id !== undefined) {
+    if (B.held && B.take !== id) bakeryReleaseHeld(B);
+    BK.setTake(B, id);
+  }
 }
 function bakeryView() {
   const H = bakeryH(); if (!H) return null; const B = H.bakery;
-  if (B.last !== S.day) BK.roll(B, S.day, CR ? CR.extraOrders(S.home) : 0, (LB && LB.built(S.town.hall) ? LB.TEMPLATES : undefined));
-  const o = BK.taken(B);
-  return { pick: B.pick, offer: B.offer.map(q => ({ id: q.id, text: q.text, need: q.need, pay: q.pay, base: q.base, take: B.take === q.id, have: BK.have(q.need, bakeryCounts()) })), take: B.take, done: B.done, days: B.days, gold: B.gold, extra: B.extra, open: BK.open(H, S.t % 1440), text: o ? o.text : null };
+  if (B.last !== S.day) bakeryRoll(B);
+  const o = BK.taken(B) || (B.held && B.offer && B.offer.find(q => q.id === B.take));
+  return { pick: B.pick, offer: B.offer.map(q => ({ id: q.id, text: q.text, need: q.need, pay: q.pay, base: q.base, take: B.take === q.id, have: (B.held && B.take === q.id) || BK.have(q.need, bakeryCounts()) })), take: B.take, done: B.done, days: B.days, gold: B.gold, extra: B.extra, open: BK.open(H, S.t % 1440), text: o ? o.text : null };
 }
 // the crowd on market day: pedlars at the stalls nobody lives here to keep, and shoppers going round them
 const MKT = [];
@@ -2977,6 +3278,13 @@ const kidName = id => { const k = S.family.kids.find(q => q.id === id); return k
 const memberOf = id => S.members.find(m => m.id === id) || null;
 const homeOfActor = a => { if (!a || !S.home) return null; const id = a._spouse || a.id; return id && HM.isMarried(S.home, id) ? HM.houseOf(S.home, id) : null; };
 const weddingTonight = () => { for (const k of HM.KID_IDS) { const w = S.home.wed[k]; if (w && w.day === S.day && !w.moved) return { kid: k, w }; } return null; };
+// ---- v5.11.0.21 婚礼: the couple's wedding clothes (bride / groom sheets, home.js wedLooks), and the ceremony at the party area ----
+const wedNow = () => (HM && S.home ? weddingTonight() : null);
+const wedCouple = () => { const w = wedNow(); return w ? [w.kid, 'sp_' + w.kid] : null; };
+function wedLook(a) { // the sheet for one of tonight's couple from 17:00 until the evening ends (null: everyday clothes)
+  if (!a || !HM || !S.home) return null; const w = wedNow(); if (!w) return null; const T = S.t % 1440; if (T < HM.WED.from - 30 || T >= HM.WED.to) return null;
+  const L = HM.wedLooks(w.kid, w.w.mate); return a.id === w.kid ? L.kid : a._spouse === w.kid && a.id === 'sp_' + w.kid ? L.mate : null; }
+const wedCer = () => { if (!DECOR_ON || !partyTonight() || !DC.wedOn(S.t % 1440)) return null; const L = partyLawnNow(); return L.wed || null; }; // the ceremony layout while it lasts
 function homeTilesSync() { // runtime tile views of every built house (state lives on h._tiles; the save gets { t, w, c })
   HT.length = 0;
   S.home.houses.forEach((h, hi) => { if (!h._tiles) { const L = HM.layout(h); h._tiles = L.tiles.map((p, i) => { const o = h.tiles[i] || HM.emptyTile();
@@ -3148,20 +3456,24 @@ function careerMorning() {
   if (TOWN_ON && TA && TA.sync) TA.sync(true);
 }
 function careerStock() {
-  const c = {}, add = (ty, n) => { if (ty) c[ty] = (c[ty] | 0) + (n || 1); };
+  const c = {}, add = (ty, n) => { if (ty) BK.addCount(c, ty, n); };
   for (const a of actors()) for (const it of a.crops) add(typeof it === 'string' ? it : SU.itemType(it));
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (w && def) add(def.out, w.ready | 0); }
   if (S.works && S.works.hives) for (const h of S.works.hives) if (h) add('honey', h.ready | 0);
+  machCounts(add); // v5.11.0.29: the storehouse bin
   if (S.fishFood) add('fishFood', S.fishFood);
   return c;
 }
 function careerPull(take) {
+  const have = careerStock();
+  if (!(take || []).every(x => (have[x.id] | 0) >= (x.n | 0))) return;
   const left = {}; for (const x of take) left[x.id] = (left[x.id] | 0) + x.n;
   const isFish = id => FS && FS.isFish && FS.isFish(id);
   const pull = arr => { for (let i = arr.length - 1; i >= 0; i--) { const ty = typeof arr[i] === 'string' ? arr[i] : SU.itemType(arr[i]); const key = isFish(ty) && left.fish ? 'fish' : ty; if (left[key] > 0 || left[ty] > 0) { const k = left[ty] > 0 ? ty : key; arr.splice(i, 1); left[k]--; } } };
   pull(FARMER.crops); for (const a of actors()) if (a !== FARMER) pull(a.crops);
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def) continue; const k = def.out; if (!(left[k] > 0)) continue; const n = Math.min(w.ready | 0, left[k]); w.ready -= n; left[k] -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
+  machPull(left); // v5.11.0.29
   if (left.fishFood > 0 && S.fishFood) { const n = Math.min(S.fishFood, left.fishFood); S.fishFood -= n; left.fishFood -= n; }
 }
 function careerDayPay() {
@@ -3199,12 +3511,12 @@ function careerVia(from, dest, homeward) {
   const onRoad = Math.abs(from.y - 66) < 8 && from.x > 200;
   const via = [];
   if (!homeward && from.x < dest.x && from.x < gate.x + 20) {
-    for (const p of along) if (p.x >= Math.min(from.x, gate.x) - 20 && p.x <= Math.max(dest.x, gate.x) + 4) via.push(p);
+    for (const p of along) if (p.x >= Math.min(from.x, gate.x) - 20 && p.x <= (dest.x < gate.x - 8 ? dest.x : Math.max(dest.x, gate.x)) + 4) via.push(p); // v5.11.0.19: the 农家乐区 is short of the gate
     if (dest.y !== 66) via.push({ x: dest.x, y: 66 });
   } else if (homeward) {
     via.push({ x: from.x, y: 66 });
     const back = along.slice().reverse();
-    for (const p of back) if (p.x <= from.x + 8) via.push(p);
+    for (const p of back) if (p.x <= from.x + 8 && p.x >= dest.x - 8) via.push(p); // v5.11.0.19: stop at the house (a new house east of the farm was reached by walking to the farm gate and back)
   }
   return via;
 }
@@ -3234,6 +3546,28 @@ function innStand() {
   if ((S.inn && S.inn.cabins | 0) > 0 && L.cabins[0]) return { x: L.cabins[0].door.x + 8, y: L.cabins[0].door.y + 4 };
   return L.yard || L.gate;
 }
+// v5.11.0.19: what a married child (and their spouse) who runs the 民宿 / 菜馆 does on shift. They take turns round these
+// spots, a step apart so the two are not on top of each other; the labels say what they are doing.
+const inAgri = a => { const r = IN && IN.AGRI; return !!(r && a.x >= r[0] - 2 && a.x <= r[2] + 2 && a.y >= r[1] - 2 && a.y <= r[3] + 2); };
+function innDuties() {
+  const L = innLay(); if (!L) return [];
+  const I = S.inn || {}, out = [], nc = Math.min(L.cabins.length, I.cabins | 0);
+  if (IN.dinerUp(I)) { const d = L.diner;
+    out.push({ to: d.stand, label: '在菜馆门口招呼食客', rest: true });
+    for (const t of (d.tables || []).slice(0, 3)) out.push({ to: { x: t.x + 6, y: t.y + 1 }, label: '给客人端菜、擦桌子', pose: 'pull' });
+    if (L.garden) out.push({ to: { x: Math.round((L.garden[0] + L.garden[2]) / 2), y: L.garden[1] - 3 }, label: '在菜园摘菜', pose: 'pull' }); }
+  for (let i = 0; i < nc; i++) { const c = L.cabins[i], g = (I.guests || []).some(q => IN.cabinOf(q, I) === i && (q.from | 0) <= S.day && (q.until | 0) >= S.day);
+    out.push({ to: { x: c.door.x + 5, y: c.door.y + 4 }, label: g ? `给${i + 1}号小木屋的客人送热水` : `打扫${i + 1}号小木屋、换床单`, pose: g ? null : 'pull', rest: !!g }); }
+  out.push({ to: { x: L.gate.x + 6, y: L.gate.y + 6 }, label: '在农家乐门口迎客', rest: true });
+  return out;
+}
+function innDuty(a, sp) {
+  const ds = innDuties(); if (!ds.length) return null;
+  a._innStep = (a._innStep | 0) + 1;
+  const d = ds[(a._innStep + (sp ? Math.ceil(ds.length / 2) : 0)) % ds.length];
+  return { kind: 'inn-keep', label: d.label, to: { x: d.to.x + R(-0.6, 0.6), y: d.to.y + R(-0.4, 0.4) }, dur: d.pose ? 10 : 14, pose: d.pose || null, rest: !!d.rest,
+    done: d.pose ? () => burst(a.x, a.y - 2, 3, ['#fff2a8', '#ffffff'], 6, 'spark') : null };
+}
 function innFest() { const H = S.town && S.town.hall; return !!(IN && IN.isFest({ market: MK && H && MK.isDay(H, S.day), harvest: FV && H && FV.isDay(H, S.day), lantern: FV && H && FV.hasLantern(H, S.day) })); }
 function innFurnished() { const W = S.town && S.town.hall && S.town.hall.woodshop; return !!(W && ((W.used | 0) > 0 || (W.days | 0) > 0 || (W.made | 0) > 0)); }
 function innStaffedNow() { return !!(CR && S.home && CR.innStaffed(S.home)); }
@@ -3255,14 +3589,17 @@ function innType(it) {
 }
 function innCounts() {
   const c = {};
-  const add = (ty, n) => { if (!ty) return; c[ty] = (c[ty] | 0) + (n || 1); };
+  const add = (ty, n) => { if (!ty) return; BK.addCount(c, ty, n); };
   if (!IN) return c;
   for (const a of actors()) for (const it of a.crops) add(innType(it), 1);
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (w && def) add(innType(def.out) || (IN.UNIT[def.out] ? def.out : null), w.ready | 0); }
   if (S.works && S.works.hives) for (const h of S.works.hives) if (h) add('honey', h.ready | 0);
+  machCounts(add); // v5.11.0.29: the storehouse bin
   return c;
 }
 function innPullNeed(need) {
+  const have = innCounts();
+  if (!(need || []).every(x => (have[x.id] | 0) >= (x.n | 0))) return false;
   const left = {}; for (const x of need) left[x.id] = (left[x.id] | 0) + x.n;
   const takeTy = ty => {
     if (!ty) return false;
@@ -3275,6 +3612,7 @@ function innPullNeed(need) {
   if (S.works && S.works.works) for (const id of Object.keys(S.works.works)) { const w = S.works.works[id], def = PW.WORKS[id]; if (!w || !def) continue; const ty = innType(def.out) || (IN.UNIT[def.out] ? def.out : null); if (!ty) continue;
     let n = 0; while (n < (w.ready | 0) && takeTy(ty)) n++; w.ready -= n; }
   if (S.works && S.works.hives) for (const h of S.works.hives) { if (!h || !(left.honey > 0)) continue; const n = Math.min(h.ready | 0, left.honey); h.ready -= n; left.honey -= n; }
+  machPull(left); // v5.11.0.29
   return Object.keys(left).every(k => left[k] <= 0);
 }
 function innEarn(gold, src, x, y) {
@@ -3640,18 +3978,23 @@ const mainBacklog = () => { let n = 0; for (const t of tiles) if (t.open && t.cr
 function homeChoose() { // null: not one of the couple (or helping on the main farm right now); else their next job
   const h = homeOfActor(F); if (!h) return null;
   const T = S.t % 1440, L = HM.layout(h), sp = !!F._spouse, kid = F._spouse || F.id;
-  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F); if (!seat) return null;
-    return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
+  if (partyTonight() && DC.partyOn(T) && !F.sleeping) { if (!sp) return null; const seat = partySpot(F);
+    if (seat) return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
   if (T >= sleepAt() || T < WAKE - 30) { if (!sp && ((F.crops.length && shopOpen(T)) || (F.gathered && T < sleepAt() + 60))) return null; const me = F;
     return { kind: 'home', label: '回新房子睡觉', to: L.door, dur: 5, done: () => { me.home = true; me.sleeping = true; } }; }
+  { const win = helpWinNow(T); // v5.11.0.28: 6–8 and 17–19 the married ones come over for the main farm's harvest and collecting
+    if (win && F._helpOff !== win && (F._helpWin === win || farmHands() >= HM.HELP.backlog)) { if (F._helpWin !== win) { F._helpWin = win; log(`${F.name}从新房子过来帮忙收菜捡蛋`); } return null; }
+    if (F._helpWin && F._helpWin !== win) helpEnd(); }
   const path = CR ? CR.pathOf(S.home, kid) : null;
   const fest = !!(MK && S.town && S.town.hall && MK.isDay(S.town.hall, S.day));
   const work = !!(CR && CR.worksToday(S.home, kid, fest));
   const shop = !!(CR && CR.shopsToday(S.home, kid, S.day));
-  const inn = !!(CR && IN && CR.innsToday(S.home) && innStand());
+  const inn = !!(CR && IN && CR.innsToday(S.home, kid) && innStand()); // v5.11.0.19: the kid was missing here, so 经营民宿 / 菜馆 never left the bench
   const dest = work ? CR.standOf(path.at) : shop ? (CR.standOf(path.at) || CR.doorOf(path.at)) : inn ? innStand() : null;
   // v5.10.6: commute to a job (rain still goes; a festival is a day off) or keep their own shop 9:00–17:00 (the spouse comes too)
   // v5.10.7: 经营民宿 / 菜馆 walks to the inn yard (same hours as a shop)
+  // v5.11.0.19: once in the 农家乐区 on shift they move between the restaurant, the cabins and the gate (innDuty)
+  if (inn && CR.shouldLeave(T) && T < CR.SHOP_HOURS.to && inAgri(F)) { const d = innDuty(F, sp); if (d) return d; }
   if (dest && (work || shop || inn) && CR.shouldLeave(T)) {
     const onShift = work ? CR.workHours(T) : CR.shopHours(T);
     const at = Math.hypot(F.x - dest.x, F.y - dest.y) < 5;
@@ -3665,7 +4008,10 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     }
   }
   if (dest && (work || shop || inn) && T >= (work ? CR.WORK.end : CR.SHOP_HOURS.to) && T < BEDTIME) {
-    if (Math.hypot(F.x - L.door.x, F.y - L.door.y) > 5) return { kind: 'work-back', label: inn ? '从民宿回家' : '下班回家', to: L.door, via: careerVia(F, L.door, true), keepVia: true, dur: 8 };
+    // v5.11.0.19: once home (by the door, the bench or their little field) they stay; it used to send them up to the road and
+    // back every time they stepped off the doorstep, which looked like an evening of commuting
+    if (F._backDay !== S.day && Math.hypot(F.x - L.door.x, F.y - L.door.y) < 40) F._backDay = S.day;
+    if (F._backDay !== S.day) { const me = F; return { kind: 'work-back', label: inn ? '从民宿回家' : '下班回家', to: L.door, via: careerVia(F, L.door, true), keepVia: true, dur: 4, done: () => { me._backDay = S.day; } }; }
   }
   if (fest && path && path.way === 'shop' && CR.shopReady(path, S.day) && T >= 10 * 60 && T < 16 * 60) {
     const d = CR.doorOf(path.at); if (d) return { kind: 'shop-fest', label: '节日在店门口和家人聚', to: { x: d.x + (sp ? 2 : -2), y: d.y + 3 }, dur: 16, rest: true }; }
@@ -3678,7 +4024,7 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
   const tendOk = !work && !shop && !inn || (sp && (T < 9 * 60 || T >= 17 * 60)) || (!sp && !work && !shop && !inn);
   if (tendOk && jobs.length) { let best = null, bd = 1e9; for (const j of jobs) { const q = j.t || j.at, d = Math.hypot(q.x - F.x, q.y - F.y) + (j.k === 'harvest' ? -20 : j.k === 'water' ? -10 : 0); if (d < bd) { bd = d; best = j; } }
     F.idleCount = 0; return homeJobTask(h, best); }
-  if (!sp && !work && !shop && HM.helpNow(help, { T, own: 0, backlog: mainBacklog(), helpDay: homeDayRng(0x4E1 + kidSalt(kid))() < (CR ? CR.helpDayP(S.home, kid) : HM.HELP.dayP) }, S.day, hr)) { const n = help && help.day === S.day ? help.n + 1 : 1;
+  if (!sp && !work && !shop && !inn && HM.helpNow(help, { T, own: 0, backlog: mainBacklog(), helpDay: homeDayRng(0x4E1 + kidSalt(kid))() < (CR ? CR.helpDayP(S.home, kid) : HM.HELP.dayP) }, S.day, hr)) { const n = help && help.day === S.day ? help.n + 1 : 1;
     S.home.help[kid] = { day: S.day, n, last: T, until: Math.min(1440, T + HM.HELP.minutes) }; log(`${F.name}从新房子过来帮一会儿忙`); return null; }
   F.idleCount = (F.idleCount || 0) + 1;
   if (F.idleCount % 3 === 0) { const tile = h._tiles && h._tiles[Math.floor(hr() * h._tiles.length)]; if (tile) return { kind: 'idle', label: '在自家小田边转转', to: { x: tile.x + (hr() - 0.5) * 6, y: tile.y + 6 }, dur: 10 }; }
@@ -3691,16 +4037,19 @@ function spouseSync() {
   for (let i = SPOUSES.length - 1; i >= 0; i--) { const sp = SPOUSES[i], w = S.home.wed[sp._spouse]; if (!w || !w.mate || TN.MATES[HM.mateIndex(w.mate)].look !== sp.look) SPOUSES.splice(i, 1); }
   for (const k of HM.KID_IDS) { const w = S.home.wed[k]; if (!w || !w.moved || SPOUSES.some(s => s._spouse === k)) continue; SPOUSES.push(makeSpouse(k, w)); }
 }
-let homeLogDay = 0, weddingFxT = 0;
+let homeLogDay = 0, weddingFxT = 0, wedVowDay = 0;
 function homeTick(dm) {
   if (!HM || !S.home) return; const T = S.t % 1440;
   homeParty(T); if (TN && S.family.kids.length) homeTeenVisit(T);
+  wedGather(T); // v5.11.0.21
   if (WX && WX.isRaining(S.weather, S.day, S.t)) for (const t of HT) if (t.crop) t.watered = true;
   // the wedding evening: the other half walks over from town (or up the east road), the couple moves in when it ends
   const w = weddingTonight();
   if (w) { if (T >= HM.WED.from - 60 && !SPOUSES.some(s => s._spouse === w.kid) && T < HM.WED.to) { const sp = makeSpouse(w.kid, w.w), from = townOpen() ? TN.SCHOOL_DOOR : EAST_IN[0];
       Object.assign(sp, { x: from.x, y: from.y, home: false }); SPOUSES.push(sp); log(`${sp.name}从${townOpen() ? '镇上' : '东边的路上'}走过来了`); }
     if (T >= HM.WED.from && T < HM.WED.to && !w.w.began) { w.w.began = 1; log(`婚礼开始了：${kidName(w.kid)}和${HM.mateName(w.w.mate)}，一家人都来了`); }
+    { const W = wedCer(); if (W && DC.wedPhase(T) === 2 && wedVowDay !== S.day) { wedVowDay = S.day; const c = { x: (W.couple[0].x + W.couple[1].x) / 2, y: (W.couple[0].y + W.couple[1].y) / 2 }; // v5.11.0.21: under the arch
+      burst(c.x, c.y, 28, [Ac[3], Ac[0], '#fff2a8', Rf[3]], 22, 'spark'); hearts(c.x, c.y, 26); log(`${kidName(w.kid)}和${HM.mateName(w.w.mate)}走到了花拱门下，交换了戒指`); } }
     if (T >= HM.WED.from && T < HM.WED.to && realT - weddingFxT > 1.2) { weddingFxT = realT; const a = memberOf(w.kid); if (a && !a.home) { hearts(a.x, a.y, 14); if (hr() < 0.3) burst(a.x, a.y, 20, [Ac[3], Rf[3], '#fff2a8'], 10, 'spark'); } }
     if (T >= HM.WED.to || (T < HM.WED.from - 120 && w.w.began)) { if (CR) careerEnsure(w.kid); homeMoveIn(w.kid, true); } }
   // the spouses: wake with the morning, then their own little farm
@@ -3710,6 +4059,13 @@ function homeTick(dm) {
   if (T >= 18 * 60 && homeLogDay !== S.day) { homeLogDay = S.day; for (const h of S.home.houses) if (h.kid && h._todayDay === S.day && h._today) log(`${kidName(h.kid)}家的小田和小鸡今天挣了 ${h._today} 金，算进家里的收入`); }
   if (HOME_ON) HA.sync();
 }
+function wedGather(T) { // the ceremony is about to start: whoever is only pottering about (idle, playing) comes over now, not after it
+  const W = wedCer(); if (!W) return; const ph = DC.wedPhase(T), c = wedCouple() || [];
+  const all = actors(); for (const a of all.concat(SPOUSES.filter(s => !all.includes(s)))) { const k = a.task; if (!k || a.away || a.sleeping) continue;
+    const i = c.indexOf(a.id); if (i >= 0 && ph < 2 && Math.hypot(a.x - W.start[i].x, a.y - W.start[i].y) < 2) a._wedStart = S.day; // ready at the far end: the walk may start
+    if (ph < 2 && (i >= 0 || T >= DC.PARTY.from) && /^(idle|play-)/.test(k.kind || '')) { if (partySpot(a)) a.task = null; continue; }
+    if (k.kind === 'party' && k.to) { const p = partySpot(a); if (p && Math.hypot(p.x - k.to.x, p.y - k.to.y) > 1.5) a.task = null; } } // the places moved on (a new phase): go to the new one now
+}
 function homeNight() { // a little-farm crop grows one day overnight if it was watered
   for (const t of HT) { if (t.crop && t.watered && !SIM.ripe(t.crop)) { t.crop.age++; t.crop.stage = SIM.stageOf(t.crop); } t.watered = false; }
   for (const id of Object.keys(S.home.help)) if (S.home.help[id].day < S.day) delete S.home.help[id];
@@ -3717,7 +4073,7 @@ function homeNight() { // a little-farm crop grows one day overnight if it was w
 // hens pecking round their little coop
 const HENS_VIEW = [];
 function homeDraw(list) {
-  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(sp.look, 3); if (!sh) continue; const d = Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp)); partyLook(d, sp, sp.id); list.push(d); }
+  for (const sp of SPOUSES) { if (sp.home) continue; const sh = famSheet(wedLook(sp) || sp.look, 3); if (!sh) continue; const d = Object.assign({ bb: 1, x: sp.x, y: sp.y, sheet: sh, cut: 3 }, carryFields(sp), farmerPose(sp)); partyLook(d, sp, sp.id); list.push(d); }
   const T = S.t % 1440, sp = ANIMAL_SPR.chicken; if (!sp || !sp.r || !(T >= WAKE && T < BEDTIME)) return;
   S.home.houses.forEach((h, hi) => { if (!h.built || !h.hens) return; const L = HM.layout(h);
     for (let i = 0; i < h.hens; i++) { const k = hi * 2 + i; let v = HENS_VIEW[k]; if (!v) v = HENS_VIEW[k] = { x: L.coop.x, y: L.coop.y + 6, tx: L.coop.x, ty: L.coop.y + 6, step: 0, flip: false, cd: 0 };
@@ -3738,11 +4094,14 @@ function homeStatus() {
   return { kids, nb: HM.nbRel(S.home), houses: S.home.houses.map(h => ({ site: h.site, name: HM.siteName(h.site), built: h.built, kid: h.kid })), earn: S.home.earn, wage: S.home.wage || 0, open: townOpen() };
 }
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
+  if (F.crops.length && !F._helpWin && shopOpen(S.t % 1440) && homeOfActor(F)) return Object.assign(sellTask(), { kind: 'sell' }); // v5.11.0.28: what they gathered on the main farm goes to market
   const own = homeChoose(); if (own) return own;
+  if (F._helpWin) return null; // v5.11.0.28: helping on the main farm (chooseTask's board)
   const T = S.t % 1440;
-  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F); if (!seat) return null;
-    return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
-  const d = weddingSpot() || DOOR; return { kind: 'idle', label: '来参加婚礼', to: { x: d.x + 3, y: d.y + 6 }, dur: 10, rest: true };
+  if (partyTonight() && T >= DC.PARTY.from - 60 && T < DC.PARTY.to) { const seat = partySpot(F);
+    if (seat) return { kind: 'party', label: T >= DC.PARTY.from ? '在派对区参加婚礼' : '来参加婚礼', to: { x: seat.x, y: seat.y }, dur: T >= DC.PARTY.from ? partyDur(T) : 10, rest: true }; }
+  const area = partyArea(), d = weddingSpot() || (area ? { x: area.x + 12, y: area.y + 8 } : DOOR);
+  return { kind: 'idle', label: weddingTonight() ? '来参加婚礼' : '在附近等一会儿', to: { x: d.x + 3, y: d.y + 6 }, dur: 10, rest: true };
 }
 let decorSyncT = 0, partyFxT = 0;
 function decorFrame() {
@@ -3828,13 +4187,76 @@ const PARTY_BARREL = pix(['.c.c.c.', 'btttttb', 'bwwwwwb', 'btttttb', 'btttttb',
 const partyHash = s => { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h; };
 function facePose(fx, fy) { const sx = fx * CA - fy * SA, sy = fx * SA + fy * CA, side = Math.abs(sx) > Math.abs(sy) * 0.9;
   return side ? { row: 'idle_side', flip: sx < 0, side: 1 } : { row: sy > 0 ? 'idle_front' : 'idle_back', flip: false, side: 0 }; }
+// ---- v5.11.0.21 婚礼 at the party area: the walk up the aisle and the ceremony poses (drawn only, from the clock; nothing saved) ----
+// the couple's drawn place while they walk the aisle (17:45–18:00): slowly from the far end to the arch, side by side
+function wedWalkAt(i, T) { const W = wedCer(); if (!W || DC.wedPhase(T) !== 1) return null;
+  const u = Math.min(1, (T - DC.WEDDING.walk) / (DC.WEDDING.at - 2 - DC.WEDDING.walk)), s = W.start[i], e = W.couple[i];
+  return { x: s.x + (e.x - s.x) * u, y: s.y + (e.y - s.y) * u, u, f: facePose(e.x - s.x, e.y - s.y) }; }
+function wedWalk(d, a) {
+  if (a.home || a.away || !a.task || a.task.kind !== 'party') return false; const c = wedCouple(), i = c ? c.indexOf(a.id) : -1; if (i < 0) return false;
+  if (a._wedStart !== S.day) return false; const p = wedWalkAt(i, S.t % 1440); if (!p || p.u >= 1) return false;
+  d.x = p.x; d.y = p.y; d.row = p.f.side ? 'walk_side' : p.f.row === 'idle_front' ? 'walk_front' : 'walk_back'; d.flip = p.f.flip; d.fr = Math.floor(realT * 3) % 4; d.z = 0; d.partyKey = c[i]; return true; }
+function wedPose(d, a, P, h, ph, fx) {
+  const W = wedCer(); if (!W) return; const T = S.t % 1440, wp = DC.wedPhase(T);
+  if (P.act === 'wed-couple') {
+    if (wp === 2) { const o = W.couple[1 - P.i], f = facePose(o.x - P.x, o.y - P.y); d.row = f.row; d.flip = f.flip; d.fr = 0; // face each other under the arch
+      const t = realT / 2.6 + P.i * 0.5, u = t - Math.floor(t); d.z = u < 0.25 ? Math.floor(u * 16) % 2 : 0;
+      if (P.i === 0) { const m = W.couple[1]; fx('wheart', { x: (P.x + m.x) / 2, y: (P.y + m.y) / 2, u: (realT / 2.6) % 1 }); } return; }
+    const f = facePose(W.arch.x - P.x, W.arch.y - P.y); d.row = f.row; d.flip = f.flip; d.fr = 0; return; } // waiting at the far end, looking up the aisle
+  // a guest: turned to the couple (wherever they are on the aisle), clapping now and then once they stand under the arch
+  const c = wp === 1 ? [wedWalkAt(0, T), wedWalkAt(1, T)].filter(Boolean) : wp === 2 ? W.couple : W.couple, m = c.length ? { x: (c[0].x + c[c.length - 1].x) / 2, y: (c[0].y + c[c.length - 1].y) / 2 } : W.arch;
+  const f = facePose(m.x - P.x, m.y - P.y); d.row = f.row; d.flip = f.flip; d.fr = 0;
+  if (wp === 2) { const t = realT / 3.4 + ph, n = Math.floor(t), u = t - n; if (u < 0.3) d.z = Math.floor(u * 26) % 2; else if (u > 0.55 && u < 0.85 && (n + h) % 3 === 0) fx('say', { u: (u - 0.55) / 0.3, icon: 0 }); }
+}
+const ARCH_SPR = (() => { // a white arch wound with greenery, pink and cream roses (billboard, anchored at its foot)
+  const w = 27, hh = 32, cx = 13, cy = 13, R0 = 13, R1 = 10, rows = [];
+  const hsh = (x, y) => ((x * 73856093) ^ (y * 19349663)) >>> 0;
+  for (let y = 0; y < hh; y++) { let r = '';
+    for (let x = 0; x < w; x++) { const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy), k = hsh(x, y) % 11;
+      const band = y <= cy ? d <= R0 && d >= R1 : (x <= 2 || x >= w - 3);
+      if (!band) { r += '.'; continue; }
+      if (y > cy && y >= hh - 2) { r += (x === 0 || x === w - 1) ? 'w' : 'b'; continue; }           // the feet
+      if (y > cy + 6 && k > 5) { r += (x === 1 || x === w - 2) ? 'c' : 'E'; continue; }             // bare white posts lower down
+      r += k === 0 || k === 5 ? 'p' : k === 3 ? 'c' : k === 8 ? 'y' : k % 2 ? 'g' : 'l'; }
+    rows.push(r); }
+  return pix(rows);
+})();
+const WED_CAKE = pix(['....p....', '...cpc...', '...ccc...', '..cEcEc..', '..ccccc..', '.pcpcpcp.', '.ccccccc.', '.cEcEcEc.', 'eeeeeeeee']);
+function wedList(list) { // the arch (all evening) and the cake on the table (once the party is on)
+  const L = partyLawnNow(), W = L.wed; if (!W || fogHid(W.arch.x, W.arch.y)) return; list.push({ spr: ARCH_SPR, x: W.arch.x, y: W.arch.y, w: 1 });
+  const area = partyArea(); if (partyLive()) list.push({ spr: WED_CAKE, x: area.x, y: area.y, lift: 6, at: area });
+}
+function wedGround() { // the cream runner up the aisle, petals on it (flat, under everyone)
+  const W = partyLawnNow().wed; if (!W || fogHid(W.arch.x, W.arch.y)) return; const [a, b] = W.runner, hw = 2;
+  const x0 = Math.min(a.x, b.x) - (W.u[1] ? hw : 0), x1 = Math.max(a.x, b.x) + (W.u[1] ? hw : 0), y0 = Math.min(a.y, b.y) - (W.u[0] ? hw : 0), y1 = Math.max(a.y, b.y) + (W.u[0] ? hw : 0);
+  const u0 = Math.round((x0 - GX0) * RS), v0 = Math.round((y0 - GY0) * RS), w = Math.round((x1 - x0) * RS), hh = Math.round((y1 - y0) * RS);
+  ctx.fillStyle = St[2]; ctx.fillRect(u0 - 1, v0 - 1, w + 2, hh + 2); ctx.fillStyle = Ac[0]; ctx.fillRect(u0, v0, w, hh);
+  ctx.fillStyle = St[3]; if (W.u[1]) { ctx.fillRect(u0, v0, 1, hh); ctx.fillRect(u0 + w - 1, v0, 1, hh); } else { ctx.fillRect(u0, v0, w, 1); ctx.fillRect(u0, v0 + hh - 1, w, 1); }
+  for (let i = 0; i < 40; i++) { const hx = (i * 2654435761) >>> 0, px = u0 + 2 + (hx % Math.max(1, w - 4)), py = v0 + 2 + ((hx >> 8) % Math.max(1, hh - 4)); ctx.fillStyle = i % 3 ? Ac[3] : Rf[3]; ctx.fillRect(px, py, 1 + (i % 2), 1); }
+}
+function wedFxDraw() { // bunting from the arch to the area's near posts; falling petals and the rings' little hearts during the ceremony
+  const W = partyLawnNow().wed; if (!W || fogHid(W.arch.x, W.arch.y)) return; const area = partyArea(), posts = DC.partyPosts(area), T = S.t % 1440;
+  const vx = -W.u[1], vy = W.u[0], ends = [-1, 1].map(s => ({ x: W.arch.x + vx * 6 * s, y: W.arch.y + vy * 6 * s }));
+  for (const e of ends) { const p = posts.slice().sort((a, b) => Math.hypot(a.x - e.x, a.y - e.y) - Math.hypot(b.x - e.x, b.y - e.y))[0];
+    const [ax, ay] = proj(e.x, e.y), [bx, by] = proj(p.x, p.y), za = 26, zb = 20, n = Math.max(4, Math.round(Math.hypot(bx - ax, by - ay) / 4));
+    for (let i = 0; i <= n; i++) { const t = i / n, x = Math.round(ax + (bx - ax) * t), y = Math.round(ay + (by - ay) * t - (za + (zb - za) * t) + Math.sin(Math.PI * t) * 5);
+      ctx.fillStyle = Wd[2]; ctx.fillRect(x, y, 1, 1); if (i % 2 || i === 0 || i === n) continue;
+      ctx.fillStyle = (i >> 1) % 2 ? Ac[3] : Ac[0]; ctx.fillRect(x - 1, y + 1, 3, 1); ctx.fillRect(x, y + 2, 1, 1); } }
+  const wp = DC.wedOn(T) ? DC.wedPhase(T) : -1; if (wp !== 2 && !(T >= DC.WEDDING.end && T < DC.WEDDING.end + 15)) return;
+  const fade = wp === 2 ? 1 : 1 - (T - DC.WEDDING.end) / 15, n = Math.round(22 * fade), c = { x: (W.couple[0].x + W.couple[1].x) / 2, y: (W.couple[0].y + W.couple[1].y) / 2 };
+  for (let i = 0; i < n; i++) { const hx = (Math.imul(i + 1, 2654435761) >>> 0), per = 2.6 + (hx % 7) / 5, t = ((realT + (hx % 97) / 31) % per) / per;
+    const wx = c.x + ((hx >> 4) % 25) - 12, wy = c.y + ((hx >> 10) % 11) - 5, [sx, sy] = proj(wx, wy), z = 38 * (1 - t);
+    ctx.fillStyle = [Ac[3], Ac[0], Rf[3], Ac[1]][i % 4]; ctx.fillRect(Math.round(sx + Math.sin(t * 9 + i) * 3), Math.round(sy - z), 2 - (i % 2), 1); }
+}
 const partyLive = () => DECOR_ON && partyTonight() && DC.partyOn(S.t % 1440) && partyBegun === S.day;
 const partyProps = () => { const T = S.t % 1440; return DECOR_ON && partyTonight() && T >= DC.PARTY.from - 20 && T < DC.PARTY.to; };
 function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a: the actor or guest
+  if (d && a && wedWalk(d, a)) return; // v5.11.0.21: the couple walking up the aisle
   if (!d || !a || a.moving || a.home || !partyLive()) return;
   if (!a.pts && !(a.task && a.task.kind === 'party')) return;
   const P = partyPlanNow()[key]; if (!P || Math.hypot(a.x - P.x, a.y - P.y) > 2.5) return;
   d.partyKey = key; const area = partyArea(), h = partyHash(key), ph = (h % 997) / 997 * 6.283, cut = d.cut || 0, fx = (k, o) => PARTY_FX.push(Object.assign({ k, x: d.x, y: d.y, cut }, o));
+  if (P.act === 'wed-guest' || P.act === 'wed-couple') { wedPose(d, a, P, h, ph, fx); return; } // v5.11.0.21
   if (P.act === 'eat') {
     const f = facePose(0, area.y - P.y), col = P.seat % 3, per = 2.4, t = realT / per + col * 0.07, n = Math.floor(t), u = t - n;
     d.row = f.row; d.flip = f.flip; d.fr = 0;
@@ -3860,6 +4282,7 @@ function partyLook(d, a, key) { // d: the draw entry (x, y, row, fr, flip, z), a
 }
 function partyList(list) { // plates under the diners, the barrel, the lantern poles, the ball
   if (!partyProps()) return; const area = partyArea(), L = partyLawnNow(), live = partyLive(), T = S.t % 1440;
+  if (L.wed) wedList(list); // v5.11.0.21
   for (const l of L.lawn) { if (fogHid(l.x, l.y)) continue; list.push({ spr: PARTY_POLE, x: l.pole.x, y: l.pole.y, w: 1 }); if (l.barrel) list.push({ spr: PARTY_BARREL, x: l.barrel.x, y: l.barrel.y, w: 1 }); }
   if (!live) return;
   const plan = partyPlanNow(), u = (T - DC.phaseStart(T)) / (DC.phaseEnd(T) - DC.phaseStart(T)), here = k => { const a = k === 'farmer' ? FARMER : (memberOf(k) || GUESTS.find(g => g.id === k) || SPOUSES.find(s => s.id === k)); const P = plan[k]; return a && P && !a.moving && !a.home && Math.hypot(a.x - P.x, a.y - P.y) < 2.5; };
@@ -3869,8 +4292,9 @@ function partyList(list) { // plates under the diners, the barrel, the lantern p
   if (play && Object.keys(plan).some(k => plan[k] && plan[k].act === 'play' && here(k))) { const u = (Math.sin(realT * 2.2) + 1) / 2, a = play.spots[0], b = play.spots[1]; PARTY_FX.push({ k: 'ball', x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, z: Math.abs(Math.sin(realT * 4.4)) * 6 }); }
 }
 function partyGround() { // the dance floor's boards and the picnic rug, flat on the grass under everyone
-  if (!partyProps()) return; const L = partyLawnNow().lawn; if (!L.length) return;
+  if (!partyProps()) return; const L = partyLawnNow().lawn, wed = partyLawnNow().wed; if (!L.length && !wed) return;
   const [gx, gy] = proj(GX0, GY0); ctx.setTransform(CA, SA * K, -SA, CA * K, Math.round(gx), Math.round(gy));
+  if (wed) wedGround(); // v5.11.0.21: the aisle
   for (const l of L) { if (fogHid(l.x, l.y) || !onScreen(l.x, l.y, 40)) continue; const b = l.box, u0 = Math.round((b[0] + 1.5 - GX0) * RS), v0 = Math.round((b[1] + 1.5 - GY0) * RS), w = Math.round((b[2] - b[0] - 3) * RS), hh = Math.round((b[3] - b[1] - 3) * RS);
     if (l.kind === 'dance') { ctx.fillStyle = Wd[1]; ctx.fillRect(u0 - 1, v0 - 1, w + 2, hh + 2); for (let i = 0; i < hh; i += 4) { ctx.fillStyle = (i >> 2) % 2 ? Wd[3] : Wd[4]; ctx.fillRect(u0, v0 + i, w, Math.min(3, hh - i)); } }
     if (l.kind === 'chat') { const u1 = u0 + 2, v1 = v0 + 2, w1 = w - 4, h1 = hh - 4; ctx.fillStyle = Rf[1]; ctx.fillRect(u1 - 1, v1 - 1, w1 + 2, h1 + 2);
@@ -3880,7 +4304,8 @@ function partyGround() { // the dance floor's boards and the picnic rug, flat on
 function partyFxDraw(night) { // after the objects: lantern strings out to the lawn, then cups, bites, crumbs, notes, bubbles, the ball
   if (partyProps()) { const area = partyArea(), posts = DC.partyPosts(area), lit = night > 0.15;
     for (const [i, l] of partyLawnNow().lawn.entries()) { if (fogHid(l.x, l.y)) continue; const p = posts.slice().sort((a, b) => Math.hypot(a.x - l.pole.x, a.y - l.pole.y) - Math.hypot(b.x - l.pole.x, b.y - l.pole.y))[0];
-      DA.string(ctx, proj, p, l.pole, 20, 18, 12, lit, realT, 5 + i); } }
+      DA.string(ctx, proj, p, l.pole, 20, 18, 12, lit, realT, 5 + i); }
+    if (partyLawnNow().wed) wedFxDraw(); } // v5.11.0.21
   for (const o of PARTY_FX) { if (fogHid(o.x, o.y)) continue; const [sx0, sy0] = proj(o.x, o.y), x = Math.round(sx0), top = Math.round(sy0) - 22 + o.cut, mouth = top + 8;
     if (o.k === 'cup') { const lift = Math.round(Math.min(1, o.u * 4, (1 - o.u) * 4) * 5), cx = x + (o.back ? 0 : 5 * o.side) - 1, cy = mouth - lift;
       ctx.fillStyle = Ink[0]; ctx.fillRect(cx - 1, cy - 1, 5, 6); ctx.fillStyle = Ac[0]; ctx.fillRect(cx, cy, 3, 4); ctx.fillStyle = Ac[1]; ctx.fillRect(cx, cy, 3, 2); ctx.fillStyle = Ac[0]; ctx.fillRect(cx, cy - 1, 3, 1);
@@ -3896,6 +4321,10 @@ function partyFxDraw(night) { // after the objects: lantern strings out to the l
       else if (o.icon === 2) { const k = Math.floor(o.u * 9) % 4; for (let i = 0; i < 3; i++) if (i < k) ctx.fillRect(bx + 2 + i * 2, by + 3, 1, 1); }
       else { ctx.fillRect(bx + 2, by + 2, 1, 1); ctx.fillRect(bx + 6, by + 2, 1, 1); ctx.fillRect(bx + 2, by + 4, 5, 1); ctx.fillRect(bx + 3, by + 5, 3, 1); }
       continue; }
+    if (o.k === 'wheart') { const [hx0, hy0] = proj(o.x, o.y), hx = Math.round(hx0), hy = Math.round(hy0) - 20 - Math.round(o.u * 10); ctx.globalAlpha = Math.max(0, 1 - o.u); // v5.11.0.21: the vows
+      ctx.fillStyle = Ink[0]; ctx.fillRect(hx - 3, hy - 1, 7, 4); ctx.fillRect(hx - 2, hy + 3, 5, 1); ctx.fillRect(hx - 1, hy + 4, 3, 1);
+      ctx.fillStyle = Ac[3]; ctx.fillRect(hx - 2, hy, 2, 1); ctx.fillRect(hx + 1, hy, 2, 1); ctx.fillRect(hx - 2, hy + 1, 5, 1); ctx.fillRect(hx - 1, hy + 2, 3, 1); ctx.fillRect(hx, hy + 3, 1, 1);
+      if (o.u < 0.3) { ctx.fillStyle = '#fff4b8'; ctx.fillRect(hx - 5, hy + 6, 1, 1); ctx.fillRect(hx + 5, hy + 6, 1, 1); ctx.fillRect(hx, hy - 3, 1, 1); } ctx.globalAlpha = 1; continue; }
     if (o.k === 'ball') { const y = Math.round(sy0) - 2 - Math.round(o.z); ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(x - 2, Math.round(sy0) - 1, 5, 1);
       ctx.fillStyle = Ink[0]; ctx.fillRect(x - 2, y - 2, 5, 5); ctx.fillStyle = Ac[0]; ctx.fillRect(x - 1, y - 1, 3, 3); ctx.fillStyle = Rf[2]; ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); }
   }
@@ -4154,12 +4583,14 @@ const FAM_LOOK = {
   beachF: { '#4fa3cf': '#b08ad0', '#2f6ea0': '#8a62b0', '#1f3d68': '#5a3a80', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626', '#8a5530': '#f6ecd0', '#5e3524': '#666a73' },
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
 };
+// v5.11.0.21: a second bride or groom the same evening (two of the same) gets a recoloured copy: yellow flowers / a navy suit
+const FAM_DERIVE = { bride2: ['bride', { '#e57fa0': '#f2cf55', '#f2cf55': '#e06a2c' }], groom2: ['groom', { '#3e3f4c': '#1f3d68', '#3a2b38': '#16294a' }] };
 const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 8 (v5.8.1: the children's school look) (partner, father, two children x child / teen)
 function famSheet(look, cut = 0) {
   const key = look + ':' + cut; let sh = FAM_SPR.get(key); if (sh || !SPR.ok) return sh || null;
-  const pre = FAM_PRE[look]; if (pre && !(pre.complete && pre.naturalWidth)) return null; // still decoding: skip a frame
+  const der = FAM_DERIVE[look], pre = FAM_PRE[der ? der[0] : look]; if (pre && !(pre.complete && pre.naturalWidth)) return null; // still decoding: skip a frame
   const W0 = SPR.img.width, H0 = SPR.img.height, src = mkc(W0, H0), g = src.getContext('2d', { willReadFrequently: true }); g.drawImage(pre || SPR.img, 0, 0);
-  if (!pre) { const id = g.getImageData(0, 0, W0, H0), d = id.data, map = FAM_LOOK[look], hex = (r, gg, b) => '#' + [r, gg, b].map(v => v.toString(16).padStart(2, '0')).join('');
+  if (!pre || der) { const id = g.getImageData(0, 0, W0, H0), d = id.data, map = der ? der[1] : FAM_LOOK[look], hex = (r, gg, b) => '#' + [r, gg, b].map(v => v.toString(16).padStart(2, '0')).join('');
     for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const to = map[hex(d[i], d[i + 1], d[i + 2])]; if (to) { d[i] = parseInt(to.slice(1, 3), 16); d[i + 1] = parseInt(to.slice(3, 5), 16); d[i + 2] = parseInt(to.slice(5, 7), 16); } }
     g.putImageData(id, 0, 0); }
   let img = src;
@@ -4169,7 +4600,7 @@ function famSheet(look, cut = 0) {
   const flip = mkc(W0, H0), fc = flip.getContext('2d'); fc.translate(W0, 0); fc.scale(-1, 1); fc.drawImage(img, 0, 0);
   sh = { img, flip }; FAM_SPR.set(key, sh); return sh;
 }
-const lookOf = m => { if (m.id === 'partner') return ['partner', 0];
+const lookOf = m => { if (m.id === 'partner') return ['partner', 0]; const wl = wedLook(m); if (wl) return [wl, 3]; // v5.11.0.21: the wedding clothes
   const cut = (m.role === 'child' || m.role === 'play' || m.role === 'school') ? 6 : 3;
   return [schoolWalk(m) && FAM_PRE[m.id + '_school'] ? m.id + '_school' : m.id, cut]; }; // v5.8.1: on the school walk no straw hat, a school backpack
 const CLOSED = pix(['..b.....b..', 'bbbbbbbbbbb', 'bkikkkkkikb', 'bkkiikiikkb', 'bkkkkikkkkb', 'bkkiikiikkb', 'bkikkkkkikb', 'bbbbbbbbbbb']); // a pale board hung on the counter: shut for the night
@@ -4177,7 +4608,7 @@ const CRADLE = pix(['t.........t', 't.kk......t', 'tkkkpppppct', 'tssssssssst', 
 const schoolWalk = a => !!(a && a.task && /^(school-go|school-back|race|library-go|library)$/.test(a.task.kind)); // v5.8.1; v5.10.9: sports day and the 书屋 stop use the same school look
 const workWalk = a => !!(a && a.task && /^work|^shop-|^inn-/.test(a.task.kind)); // v5.10.6: commuting or keeping a shop, no field tool; v5.10.7 inn too
 function carryFields(actor) { // hide the hip basket while a giant crop is held overhead
-  if (schoolWalk(actor) || workWalk(actor)) return { basket: null, carry: null }; // v5.8.1: nothing in hand on the walk to and from school; v5.10.6: same on the way to work
+  if (schoolWalk(actor) || workWalk(actor) || wedLook(actor)) return { basket: null, carry: null }; // v5.11.0.21: nothing at the hip with the gown or the suit // v5.8.1: nothing in hand on the walk to and from school; v5.10.6: same on the way to work
   const last = actor.crops.length ? actor.crops[actor.crops.length - 1] : null;
   const carry = actor.crops.slice().reverse().find(it => SU.itemOf(it).giant) || null;
   return { basket: carry ? null : last, carry };
@@ -4393,12 +4824,13 @@ function drawCrop(c, o, poseT) { // ripe crops are 16x16 billboards; the leafy t
 // Everything runs on one 5 s loop with whole cycles, so it never jumps.
 const WLOOP = 5, wph = (t, n) => 2 * Math.PI * n * t / WLOOP;
 const WSENT = u32(Wt[2]);
+const RIVC = [Wt[1], Wt[3], Wt[4], PAL.ramps.shallow[0]].map(u32); // the river's own tones on the ground (expansion.js)
 const WTONE = [Wt[0], Wt[1], Wt[2], Wt[3], Wt[4], Wt[5], Ac[0], PAL.ramps.shallow[0], Wd[0], G[0]].map(u32);
 const LUM = c => 0.3 * (c & 255) + 0.59 * (c >>> 8 & 255) + 0.11 * (c >>> 16 & 255);
 const RTONE = new Map(); for (const c of [...PAL.colors, '#1c1626']) { const v = u32(c), l = LUM(v); RTONE.set(v, l < 70 ? 0 : l < 118 ? 1 : 2); }
 let WG = { pond: null, sea: null };
-function seaBox() { // southern ocean, clipped to the screen (a second pass so pond and sea do not share a midY)
-  const pts = []; for (const [ux, uy] of [[155, 240], [WORLD.x1, 240], [155, WORLD.y1], [WORLD.x1, WORLD.y1]]) pts.push(proj(ux, uy));
+function seaBox() { // southern ocean, clipped to the screen (a second pass so pond and sea do not share a midY); v5.11.0.20: from the river mouth (x 122) and out over the ground margin
+  const pts = []; for (const [ux, uy] of [[122, 230], [WORLD.x1 + GM, 230], [122, WORLD.y1 + GM], [WORLD.x1 + GM, WORLD.y1 + GM]]) pts.push(proj(ux, uy));
   const x0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[0]))) - 4), x1 = Math.min(W, Math.ceil(Math.max(...pts.map(p => p[0]))) + 4);
   const y0 = Math.max(0, Math.floor(Math.min(...pts.map(p => p[1]))) - 10), y1 = Math.min(H, Math.ceil(Math.max(...pts.map(p => p[1]))) + 4);
   return [x0, y0, x1 - x0, y1 - y0];
@@ -4419,37 +4851,48 @@ function waterGeom(d, bx, by, bw, bh, open) { // per camera view: mask, distance
   const N = bw * bh, mask = new Uint8Array(N), dist = new Float32Array(N); let n = 0, sx = 0, sy = 0, ys = [];
   for (let i = 0; i < N; i++) if (d[i] === WSENT) { mask[i] = 1; n++; sx += i % bw; sy += (i / bw) | 0; ys.push((i / bw) | 0); }
   if (!n) return { bx, by, bw, bh, n: 0, aq: AQ };
-  for (let i = 0; i < N; i++) dist[i] = mask[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
-  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
+  // v5.11.0.20: river water next to the sea is not a bank: at the mouth the sea runs on into the river with no shore line
+  const wet = open ? new Uint8Array(N) : mask; if (open) { const [r0, r1, r2, r3] = RIVC; for (let i = 0; i < N; i++) { const c = d[i]; wet[i] = mask[i] || c === r0 || c === r1 || c === r2 || c === r3 ? 1 : 0; } }
+  for (let i = 0; i < N; i++) dist[i] = wet[i] ? 1e4 : 0; // two-pass chamfer distance (1, 1.414) to the nearest dry pixel
+  for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!wet[i]) continue; let v = dist[i];
     v = Math.min(v, x > 0 ? dist[i - 1] + 1 : OUT, y > 0 ? dist[i - bw] + 1 : OUT, x > 0 && y > 0 ? dist[i - bw - 1] + 1.414 : OUT, x < bw - 1 && y > 0 ? dist[i - bw + 1] + 1.414 : OUT); dist[i] = v; }
-  for (let y = bh - 1; y >= 0; y--) for (let x = bw - 1; x >= 0; x--) { const i = y * bw + x; if (!mask[i]) continue; let v = dist[i];
+  for (let y = bh - 1; y >= 0; y--) for (let x = bw - 1; x >= 0; x--) { const i = y * bw + x; if (!wet[i]) continue; let v = dist[i];
     v = Math.min(v, x < bw - 1 ? dist[i + 1] + 1 : OUT, y < bh - 1 ? dist[i + bw] + 1 : OUT, x < bw - 1 && y < bh - 1 ? dist[i + bw + 1] + 1.414 : OUT, x > 0 && y < bh - 1 ? dist[i + bw - 1] + 1.414 : OUT); dist[i] = v; }
   const far = new Int16Array(bw).fill(-1), near = new Int16Array(bw).fill(-1);
   for (let x = 0; x < bw; x++) for (let y = 0; y < bh; y++) if (mask[y * bw + x]) { if (far[x] < 0) far[x] = y; near[x] = y; }
   ys.sort((a, b) => a - b); const midY = ys[ys.length >> 1], top = ys[0], pondH = ys[ys.length - 1] - top + 1, cx = sx / n, cy = sy / n;
   const along = new Float32Array(N), sky = [], deep = [], damp = [], back = [];
-  const band = open ? seaBands(mask, bx, by, bw, bh) : null; // open sea: 0 near the shore, 1 and 2 further out (world units)
+  const SB = {}, band = open ? seaBands(mask, bx, by, bw, bh, SB) : null; // open sea: 0 near the shore, 1 and 2 further out (world units)
   for (let i = 0; i < N; i++) { const x = i % bw, y = (i / bw) | 0;
     if (mask[i]) { along[i] = Math.atan2((y - cy) * 2.2, x - cx) * 60; if ((band ? band[i] >= 1 : y - far[x] >= pondH * 0.3) && dist[i] >= 2) sky.push(i); if (dist[i] >= 4) deep.push(i); continue; }
+    if (wet[i]) continue;
     if (open ? far[x] >= 0 && y >= far[x] : y > midY - 6) for (const o of [-1, 1, -bw, bw]) { const j = i + o; if (j >= 0 && j < N && mask[j]) { damp.push(i); break; } } }
-  for (let x = 0; x < bw; x++) if (far[x] >= 2 && (open ? far[x] < bh - 4 : far[x] < midY)) back.push(x);
-  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, band, open: !!open, tone: new Uint8Array(N), aq: AQ, cX: CX, cY: CY };
+  // no back bank (mud lip, mirrored shore) where the sea's top edge meets the river: that is open water running on, not a bank
+  const riverBy = (x, f) => { for (let dx = -3; dx <= 3; dx++) for (let dy = 1; dy <= 3; dy++) { const X = x + dx, Y = f - dy; if (X < 0 || X >= bw || Y < 0) continue; const j = Y * bw + X; if (wet[j] && !mask[j]) return true; } return false; };
+  for (let x = 0; x < bw; x++) if (far[x] >= 2 && (open ? far[x] < bh - 4 && !riverBy(x, far[x]) : far[x] < midY)) back.push(x);
+  return { bx, by, bw, bh, n, mask, dist, far, near, midY, pondH, cx, cy, along, sky, deep, damp, back, band, open: !!open, tone: new Uint8Array(N), ph: SB.ph, lp: SB.lp, pl: SB.pl, aq: AQ, cX: CX, cY: CY };
 }
 const SEA_B1 = 22, SEA_B2 = 50; // world units past the shoreline where the open sea turns a shade lighter, then lighter again
 let SEA_BAND = null; // one byte per world unit over the sea, built once: the band each spot of open water belongs to
 function seaBandMap() {
-  if (SEA_BAND) return SEA_BAND; const x0 = 150, y0 = 230, w = WORLD.x1 + GM - x0, h = WORLD.y1 + GM - y0, m = new Uint8Array(w * h);
+  if (SEA_BAND) return SEA_BAND; const x0 = 122, y0 = 225, w = WORLD.x1 + GM - x0, h = WORLD.y1 + GM - y0, m = new Uint8Array(w * h), ph = new Uint8Array(w * h), lp = new Uint8Array(w * h), pl = new Uint8Array(w * h);
   for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) { const wx = x0 + i + 0.5, wy = y0 + j + 0.5, s = WD.seaShore(wx);
-    const e = wy - (250 + (s - 250) * 0.45) + (vnoise(wx / 14, wy / 9, 29) - 0.5) * 10; // contours: softer than the shore, a little noise
-    m[j * w + i] = e >= SEA_B2 ? 2 : e >= SEA_B1 ? 1 : 0; }
-  return (SEA_BAND = { x0, y0, w, h, m });
+    const n = vnoise(wx / 14, wy / 9, 29) - 0.5, e = Math.min(wy - (250 + (s - 250) * 0.45), (wx - WD.seaWestEdge(wy)) * 0.9) + n * 10; // contours: softer than the shore, a little noise; v5.11.0.20: round the west coast too
+    const k = j * w + i; m[k] = e >= SEA_B2 ? 2 : e >= SEA_B1 ? 1 : 0;
+    // v5.11.0.20: swell crests run along the contours (one every 11 units, in broken dashes), the lapping edge has its own slow phase,
+    // and the river's water fans out a little way into the sea at the mouth
+    const c = WD.coastDist(wx, wy); ph[k] = c < 7 || vnoise(wx / 8, wy / 3.2, 37) < 0.4 ? 255 : Math.floor(((e / 11 + vnoise(wx / 40, wy / 30, 41) * 1.6) % 1 + 1) % 1 * 254);
+    lp[k] = Math.floor(vnoise(wx / 26, wy / 26, 43) * 255);
+    const a = wx - WD.MOUTH.x; if (a > -14 && a < 40) { const r = PL.riverNear(wx, wy); const f = Math.max(0, 1 - a / 40) * Math.max(0, 1 - r.d / (10 + Math.max(0, a) * 0.45)); pl[k] = f > 0.5 ? 16 : f > 0.38 ? 8 : 0; } }
+  return (SEA_BAND = { x0, y0, w, h, m, ph, lp, pl });
 }
-function seaBands(mask, bx, by, bw, bh) { // depth contours in world space, so they stay put on the map while the camera moves
-  const band = new Uint8Array(bw * bh), B = seaBandMap();
+function seaBands(mask, bx, by, bw, bh, G2) { // depth contours in world space, so they stay put on the map while the camera moves
+  const N = bw * bh, band = new Uint8Array(N), B = seaBandMap(), ph = G2.ph = new Uint8Array(N).fill(255), lp = G2.lp = new Uint8Array(N), pl = G2.pl = new Uint8Array(N);
   for (let y = 0; y < bh; y++) for (let x = 0; x < bw; x++) { const i = y * bw + x; if (!mask[i]) continue;
     const rx = (bx + x + 0.5 - CX) / RS, ry = (by + y + 0.5 - CY) / (K * RS), wx = rx * CA + ry * SA, wy = -rx * SA + ry * CA;
     const u = Math.floor(wx - B.x0), v = Math.floor(wy - B.y0);
-    band[i] = u < 0 || v < 0 || u >= B.w ? 0 : v >= B.h ? 2 : B.m[v * B.w + u]; }
+    if (u < 0 || v < 0 || u >= B.w) { band[i] = 0; continue; } if (v >= B.h) { band[i] = 2; continue; }
+    const k = v * B.w + u; band[i] = B.m[k]; ph[i] = B.ph[k]; lp[i] = B.lp[k]; pl[i] = B.pl[k]; }
   return band;
 }
 function reflectInto(G2, tone, src, sw, sh, footRow, left, footY, t) { // flip about the foot row, squash to 55%, cut to 3 dark tones
@@ -4509,6 +4952,8 @@ function paintWater(t, box, key) {
   // 1 + 2: depth and sky
   for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i], row = ((i / bw) | 0) - far[i % bw];
     let tn = dd > 7 ? 1 : 2; if (dd < 3) tn = 3; else if (band) { if (band[i] >= 1) tn = 3; if (band[i] >= 2) tn = 4; } else { if (row >= S1) tn = 3; if (row >= S2) tn = 4; } tone[i] = tn; }
+  // v5.11.0.20: at the mouth the river's mid blue fans out into the sea and thins away (ordered dither, fixed on the map)
+  if (Gm.open) { const pl = Gm.pl; for (let i = 0; i < N; i++) if (pl[i] && (pl[i] === 16 || (((i % bw) + ((i / bw) | 0)) & 1))) tone[i] = 3; } // solid, a checker fringe
   // 3: reflections of the trees and reeds behind the pond (their current wind pose)
   for (const o of props) { if (!o.tree) continue; const [sx, sy] = proj(o.x, o.y), X = Math.round(sx) - bx, Y = Math.round(sy);
     if (X < -40 || X > bw + 40 || Y < by - 70 || Y > by + bh) continue; const fx = clamp(X, 0, bw - 1); if (far[fx] < 0 || Y - by >= far[fx]) continue;
@@ -4519,7 +4964,14 @@ function paintWater(t, box, key) {
     reflectInto(Gm, tone, s.d32, s.width, s.height, s.height - 3, Math.round(sx) - (s.width >> 1), Y, t); }
   // 4: shallow edge on the near side, lapping dashes, foam where things stand in the water
   const ring = Math.sin(wph(t, 2)) > 0.35 ? 3 : 2;
-  for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
+  if (Gm.open) { // v5.11.0.20: the sea moves. The wash runs up the beach and back (a slow phase that wanders along the shore), its
+    // front a broken line of foam; further out, low swell crests drift shoreward along the depth contours, one every 5 s loop
+    const sh = Math.floor((t % WLOOP) / WLOOP * 256), LAPF = new Float32Array(256), ph = Gm.ph, lp = Gm.lp;
+    for (let j = 0; j < 256; j++) LAPF[j] = 1.2 + 2.3 * (0.5 + 0.5 * Math.sin(j / 256 * 2 * Math.PI * 3 - wph(t, 1)));
+    for (let i = 0; i < N; i++) { if (!mask[i]) continue; const dd = dist[i];
+      if (dd < 4) { const F = LAPF[lp[i]]; if (dd <= F) tone[i] = dd > F - 1.2 ? (i * 7 % 5 ? 5 : 6) : 7; else if (dd < F + 1 && tone[i] > 3) tone[i] = 3; continue; }
+      const q = ph[i]; if (q !== 255 && ((q + sh) & 255) < 18) tone[i] = Math.min(5, tone[i] + 1); } }
+  else for (let i = 0; i < N; i++) { if (!mask[i]) continue; const y = (i / bw) | 0, dd = dist[i];
     if (dd < 1.5 && (Gm.open ? y > far[i % bw] + 2 : y > midY) && tone[i] >= 3) tone[i] = 7;
     if (Math.round(dd) === ring && tone[i] >= 2 && Math.sin(along[i] * 0.55 - wph(t, 2)) + 0.6 * Math.sin(along[i] * 0.23 + 1.3 - wph(t, 1)) > 0.55) tone[i] = 5; }
   for (const s of (key === 'sea' ? SEA_SOLIDS : POND_SOLIDS)) { const [sx, sy] = proj(s.x, s.y), cx = Math.round(sx) - bx, cy = Math.round(sy) - by;
@@ -4571,6 +5023,39 @@ function waterPass(t) {
   paintWater(t, seaBox(), 'sea');
 }
 
+// v5.11.0.20 河水在流: the river is baked into the ground picture, so the flow is a light layer of moving marks on top: pale
+// streaks and darker ripples drifting downstream (faster mid-stream), glints that blink, now and then a leaf. They follow the
+// centre line (plots.js riverAt), spread across the widening mouth and thin out in the sea. ~520 marks, culled to the screen,
+// a few pixels each. At each water wheel: foam where the paddles enter and leave the water and a short wake downstream.
+const FLOW = (() => { const r = mulberry32(90517), L = PL.RIVER_LEN[PL.RIVER_LEN.length - 1], out = [];
+  for (let i = 0; i < 520; i++) { const u = (r() * 2 - 1) * 0.78, k = r(), kind = k < 0.58 ? 0 : k < 0.8 ? 3 : k < 0.985 ? 1 : 2;
+    out.push({ s0: r() * L, u, kind, v: (4.2 + r() * 1.6) * (1 - 0.45 * u * u) * (kind === 2 ? 0.75 : 1), ph: r(), cut: r() }); }
+  return { L, out }; })();
+function drawRiverFlow(t) {
+  const L = FLOW.L, M = WD.MOUTH, hx = XP.riverHalf;
+  for (const q of FLOW.out) {
+    const s = ((q.s0 + q.v * t) % L + L) % L, c = PL.riverAt(s); if (c.x - M.x > q.cut * 34) continue; // thins out in the sea
+    const hw = hx(c.x, c.y) - 1.4, x = c.x - c.fy * q.u * hw, y = c.y + c.fx * q.u * hw, [sx, sy] = proj(x, y), X = Math.round(sx), Y = Math.round(sy);
+    if (X < -4 || Y < -4 || X > W + 4 || Y > H + 4) continue;
+    const [ex, ey] = proj(x + c.fx, y + c.fy), dl = Math.hypot(ex - sx, ey - sy) || 1, dx = (ex - sx) / dl, dy = (ey - sy) / dl;
+    const life = ((t * 0.4 + q.ph) % 1); // each mark fades in and out on its own beat, so they never read as a conveyor belt
+    if (q.kind === 0) { if (life > 0.75) continue; const n = life < 0.1 || life > 0.65 ? 2 : 4;
+      ctx.fillStyle = Wt[4]; for (let k = 1; k < n; k++) ctx.fillRect(X - Math.round(dx * k), Y - Math.round(dy * k), 1, 1); ctx.fillStyle = Wt[5]; ctx.fillRect(X, Y, 1, 1); }
+    else if (q.kind === 3) { if (life > 0.6) continue; ctx.fillStyle = Wt[1]; for (let k = 0; k < 3; k++) ctx.fillRect(X - Math.round(dx * k), Y - Math.round(dy * k) + 1, 1, 1); }
+    else if (q.kind === 1) { if (life > 0.14) continue; ctx.fillStyle = Ac[0]; ctx.fillRect(X, Y, 1, 1); if (life > 0.04 && life < 0.1) { ctx.fillRect(X - 1, Y, 3, 1); ctx.fillRect(X, Y - 1, 1, 3); } }
+    else { const turn = Math.floor(t * 1.6 + q.ph * 4) & 1; ctx.fillStyle = Wt[1]; ctx.fillRect(X, Y + 1, 2, 1); ctx.fillStyle = q.ph < 0.5 ? G[4] : Ac[1]; ctx.fillRect(X, Y, turn ? 2 : 1, turn ? 1 : 2); }
+  }
+  // the wheels: the bottom paddles go downstream with the current, so they dip in on the upstream side and lift out downstream
+  const sites = XP.wheelSites(); if (!sites.length) return; const on = new Set(PW.wheelsOf(S.plots, (S.eff && S.eff.wheel) | 0).map(w => w.plot));
+  for (const w of sites) { const [cx0, cy0] = proj(w.x, w.y); if (cx0 < -40 || cy0 < -40 || cx0 > W + 40 || cy0 > H + 40) continue; const turning = on.has(w.plot);
+    for (const side of [-1, 1]) { const px = w.x + w.fx * 4.9 * side, py = w.y + w.fy * 4.9 * side, [sx, sy] = proj(px, py), X = Math.round(sx), Y = Math.round(sy);
+      const fr = Math.floor(t * (turning ? 8 : 2) + (side > 0 ? 0 : 3)), n = turning ? 9 : 3;
+      for (let k = 0; k < n; k++) { const h = ((fr * 7 + k * 13) % 11) / 11, ox = Math.round((h - 0.5) * 7), oy = Math.round((((fr + k * 5) % 7) / 7 - 0.5) * 4);
+        ctx.fillStyle = k % 2 ? Wt[5] : Ac[0]; ctx.fillRect(X + ox, Y + oy, 1, 1); } }
+    if (!turning) continue;
+    for (let k = 0; k < 7; k++) { const a = ((t * 0.9 + k / 7) % 1), d = 5 + a * 9, sp = (k % 3 - 1) * (0.6 + a * 1.4), px = w.x + w.fx * d - w.fy * sp, py = w.y + w.fy * d + w.fx * sp; // the wake
+      if (a > 0.8) continue; const [sx, sy] = proj(px, py); ctx.fillStyle = a < 0.35 ? Ac[0] : Wt[5]; ctx.fillRect(Math.round(sx), Math.round(sy), a < 0.3 ? 2 : 1, 1); } }
+}
 function drawPondLeaves() {
   for (const [x, y, c, sink] of pondLeaves) { ctx.fillStyle = c; ctx.fillRect(x, y, sink ? 1 : 2, 1); }
   for (const [x, y, c, sh] of pondDecor) { ctx.fillStyle = c; if (sh === 1) { ctx.fillRect(x - 1, y, 3, 1); ctx.fillRect(x, y - 1, 1, 3); } else if (sh === 2) ctx.fillRect(x, y, 1, 2); else ctx.fillRect(x, y, 1, 1); }
@@ -4729,6 +5214,7 @@ function render() {
   waterPass(realT); drawRiverRipples(); tick('water');
   if (IN && S.inn && IN.deckUp(S.inn) && IN.isSunset(T)) captureSunsetWater();
   else { SUN_WMASK = null; }
+  drawRiverFlow(realT); tick('flow'); // v5.11.0.20: after the sunset capture (it matches the river by colour)
   if (WX) WX.drawWet(ctx, proj, RS, { pathSegs, W, H, regionOpen });
   // flat things on the ground: tilled soil tiles (rotation-cached stacks), decals, seeds
   const allTiles = HT.length ? tiles.concat(HT) : tiles; // v5.9.0: the little farms' six tiles each
@@ -5305,7 +5791,11 @@ function frame() {
   if (!(dt > 0)) dt = 1 / 60;
   else if (dt > 0.1) dt = 0.1;
   noteLog('sampleFps', 1 / dt);
-  advance(dt); render(); albumTick(); hud(); requestAnimationFrame(frame);
+  // v5.11.0.23: one actor or draw error must not black out the canvas or freeze the HUD at its HTML defaults
+  try { advance(dt); } catch (e) { try { console.warn('[pixel-farm] advance', e); } catch (x) {} }
+  try { render(); } catch (e) { try { console.warn('[pixel-farm] render', e); } catch (x) {} }
+  try { albumTick(); hud(); } catch (e) { try { console.warn('[pixel-farm] hud', e); } catch (x) {} }
+  requestAnimationFrame(frame);
 }
 window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math.round(sec * fps); for (let i = 0; i < n; i++) advance(1 / fps); render(); albumTick(); hud(); }, setSpeed: v => SPEED = v, render: () => { render(); albumTick(); hud(); }, spritesReady: () => SPR.ok, setAngle: a => { cam.a = cam.ta = a; }, setRealT: v => { realT = +v || 0; }, getRealT: () => realT, fishTask, fishSpot, proj: (x, y) => { setCam(); return proj(x, y); }, HOUSE, BARN, STALL, POND, playFx: (k, x, y, z, o) => { if (window.PF_FX) PF_FX.play(k, x, y, z, o); }, fxCount: () => window.PF_FX ? PF_FX.count() : 0, cropArt: v => { CROPI.on = v; } };
 // Warm per-angle caches of the big buildings after the loop is already painting,
@@ -5357,7 +5847,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.16';
+const GAME_VERSION = '5.11.0.29';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5413,7 +5903,7 @@ function snapshot() {
     inventory: { water: FARMER.water, waterMax: S.waterMax, store: Object.assign({}, S.store), bag: Object.assign({}, FARMER.bag), gathered: FARMER.gathered, basket: FARMER.crops.slice(), wood: FARMER.wood, saplings: Object.assign({}, FARMER.saplings), hay: S.hay, fishFood: S.fishFood, ornament: Object.assign({}, S.ornament) },
     farmer: { x: Math.round(FARMER.x * 100) / 100, y: Math.round(FARMER.y * 100) / 100, sleeping: FARMER.sleeping, home: FARMER.home },
     tiles: tiles.map(t => ({ f: t.f, c: t.c, r: t.r, open: t.open, tilled: t.tilled, watered: t.watered, debris: t.debris && Object.assign({}, t.debris), weed: t.weed && Object.assign({}, t.weed), crop: t.crop && SU.validCropExtras(t.crop, { type: t.crop.type, age: t.crop.age, n: t.crop.n || 0, rot: t.crop.rot }) })),
-    upgrades: Object.assign({}, S.up), settings: { speed: 1, ...(S.decorLayout ? { decorLayout: S.decorLayout | 0 } : {}), speedRefund: S.speedRefund | 0, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
+    upgrades: machStrip(Object.assign({}, S.up)), settings: { speed: 1, ...(S.decorLayout ? { decorLayout: S.decorLayout | 0 } : {}), speedRefund: S.speedRefund | 0, autoBuy: !!S.autoBuy, autoDay: S.autoDay | 0, autoN: S.autoN | 0 },
     offline: { win: (S.offlineWin || []).map(w => ({ at: w.at, days: w.days })) },
     yard: yard.map(c => ({ type: c.type, v: c.v, rot: c.rot, x: Math.round(c.x * 100) / 100, y: Math.round(c.y * 100) / 100 })),
     trees: S.trees.map(t => Object.assign({}, t)), orders: S.orders.map(o => Object.assign({}, o)),
@@ -5460,6 +5950,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   innMigrate(); // v5.11.0.5
   S.works = PW.valid(s.works, S.plots); if (S.works.penHost) PW.applyPenLayout(PENS, S.works.penHost); SPR_COVER = null; // v5.6.0 (before applyUpgrades: the second pens' plot)
   S.up = Object.assign(SIM.emptyUpgrades(), s.upgrades); S.speedRefund = s.settings.speedRefund | 0; S.autoBuy = s.settings.autoBuy === true; S.autoDay = s.settings.autoDay | 0; S.autoN = s.settings.autoN | 0; S.decorLayout = s.settings.decorLayout | 0; // v5.10.1; v5.10.3/4 decorLayout
+  machSyncUp(); // v5.11.0.29: the machines' shop levels come from works.mach
   S.offlineWin = (s.offline && Array.isArray(s.offline.win) ? s.offline.win : []).map(w => ({ at: w.at, days: w.days }));
   applyUpgrades(); // opens tiles a v1 save did not know about
   yard.length = 0;
@@ -5606,7 +6097,7 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { ALB, albumSnap: (id, x, y, o) => albumSnap(id, x, y, o), albumView: () => albumView(), albumRestage: id => albumRestage(id), albumBackfill: () => albumBackfill(), albumFacts: () => albumFacts(), albumPlace: at => albumPlace(at), albumShot: (x, y, st) => albumShot(x, y, st), albumQueue: () => albumQ.length, albumPending: () => albumQ.map(q => [q.e.id, q.at]), albumMs: () => albumMs }); // v5.11.0.11
 Object.assign(window.__farm, { snapshot: () => snapshot(), YD, yardTodo: () => yardTodo(), yardWalk: (x, y) => yardWalk(x, y), yardNight: () => yardNight(), clothesOut: () => clothesOut(), petBed: (d, k) => petBed(d, k), yardSetup: id => { const q = yardSetupTask(id); q.done(); }, priceMult: () => YD.stallMult(S.homeyard.put) });
-Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryPull: need => bakeryPull(need), bakeryHeldReturn: need => bakeryHeldReturn(need), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, pondRoom: () => pondRoom(), pondCatchUp: () => pondCatchUp(), DY, diaryView: d => diaryView(d), diaryMorning: () => diaryMorning(), KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },
@@ -5615,7 +6106,7 @@ Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHo
   cropAtlasURL: () => { const a = cropAtlas(); return a ? a.toDataURL() : null; },
   cropFrame: k => { const a = cropAtlas(); if (!a) return null; const i = CROP_IDS.indexOf(k); if (i < 0) return null;
     const t = 16, c = document.createElement('canvas'); c.width = t; c.height = t; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
-    g.drawImage(a, i * t, 0, t, t, 0, 0, t, t); return c; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, hud,
+    g.drawImage(a, i * t, 0, t, t, 0, 0, t, t); return c; }, restore, saveNow, settleOffline, version: GAME_VERSION, playlog: window.PFPlaylog, surprise: SU, storehouse, priceOfAny, itemType: SU.itemType, loveStatus, spousesIn: () => spousesIn(), hud,
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
@@ -5626,9 +6117,9 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
-  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
+  partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), wedCer: () => wedCer(), wedLook: a => wedLook(a), famSheet: (l, c) => famSheet(l, c), wedCouple: () => wedCouple(), weddingTonight: () => wedNow(), homeTick: dm => homeTick(dm), homeMorning: () => homeMorning(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
-Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
+Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), demandWant: () => demandWant(), demandPick: bag => demandPick(bag), chooseTask: () => chooseTask(), restOk: k => restOk(k), helpWinNow: T => helpWinNow(T), farmHands: () => farmHands(), demandGrowing: () => demandGrowing(), demandShort: k => demandShort(k), seaQuota: () => seaQuota(), workPending: () => workPending(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
