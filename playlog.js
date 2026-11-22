@@ -676,6 +676,9 @@
       // First write after preserving the folder's latest: never clobber a snapshot
       // whose actual save content differs, even if day/clock/coins/createdAt match.
       // Later writes on the same farm may update that day's current-timeline file.
+      // Same content: leave the file alone (exportedAt must stay put so a later-day
+      // snapshot is still intact after rewind snapshots the present).
+      if (existing != null && sameSaveContent(existing, incoming)) return name;
       if (existing != null && !sameSaveContent(existing, incoming)) {
         const protect = opts && opts.protectExisting;
         if (protect || !sameFarm(existing, s)) {
