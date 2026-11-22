@@ -71,6 +71,20 @@ ok('a plot with phase-8 buildings cannot be re-zoned', () => {
   assert(PW.plotBusy('wbank', { works: { mill: { at: 'wbank' } } })); assert(PW.plotBusy('glade', { hives: [{ at: 'glade' }] }));
   assert(PW.plotBusy('alp', { penHost: 'alp', pens2: true })); assert.strictEqual(PW.plotBusy('alp', { penHost: 'alp', pens2: false }), null);
 });
+ok('v5.11.0.32: second pens can leave a pasture when another 牧场 exists (pensMove); otherwise they still block', () => {
+  const one = { alp: { mod: 'pasture', day: 51 } };
+  const two = { alp: { mod: 'pasture', day: 51 }, neslope: { mod: 'pasture', day: 40 } };
+  assert.strictEqual(PW.otherPasture(one, 'alp'), null);
+  assert.strictEqual(PW.otherPasture(two, 'alp'), 'neslope');
+  assert.strictEqual(PW.penMoveOk(two, 'alp', 'neslope').ok, true);
+  assert.strictEqual(PW.penMoveOk(two, 'alp', 'alp').ok, false);
+  assert.strictEqual(PW.penMoveOk(two, 'alp', 'glade').ok, false);
+  assert(/改成牧场/.test(PW.plotBusy('alp', { penHost: 'alp', pens2: true, pensMove: true, plots: one })));
+  assert.strictEqual(PW.plotBusy('alp', { penHost: 'alp', pens2: true, pensMove: true, plots: two }), null);
+  // without pensMove the guard still stands, even if another pasture exists (assets stay protected)
+  assert(PW.plotBusy('alp', { penHost: 'alp', pens2: true, plots: two }));
+  assert.strictEqual(PW.plotBusy('neslope', { penHost: 'alp', pens2: true, pensMove: true, plots: two }), null);
+});
 ok('save: works round-trips through valid(); junk is dropped', () => {
   const plots = { wbank: { mod: 'workshop', day: 1 } };
   const v = PW.valid({ sprinklers: [{ x: 10, y: 20 }, { x: 'a' }], works: { mill: { at: 'wbank', slot: 1, inp: 99, left: 30, ready: 2 }, jam: { at: 'nowhere' }, bogus: {} }, hives: [{ at: 'orchard', s: 1, cd: 1, ready: 5 }, 'x'], penHost: 'alp' }, plots);

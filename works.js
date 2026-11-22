@@ -285,11 +285,24 @@
 
   // ---------- rules that span things ----------
   // a plot that has phase-8 buildings on it cannot be re-zoned (nothing would know where to go): returns why, or null
+  // v5.11.0.32: the second pens move as a set to another owned 牧场 (pensMove), like workshops (worksMove)
+  const otherPasture = (plots, host) => ownedSorted(plots, 'pasture').find(id => id !== host) || null;
+  function penMoveOk(plots, host, dest) {
+    if (!host) return { ok: false, why: '还没有第二套棚舍' };
+    if (!dest) return { ok: false, why: '再点另一块已买下的牧场' };
+    if (dest === host) return { ok: false, why: '已经在这块牧场里' };
+    const p = plots && plots[dest];
+    if (!(p && p.mod === 'pasture')) return { ok: false, why: '第二套棚舍只能挪到另一块已买下的牧场' };
+    return { ok: true, to: dest };
+  }
   function plotBusy(id, st) {
     if (!st) return null;
     if (!st.worksMove && Object.values(st.works || {}).some(w => w && w.at === id)) return '院子里有加工坊，暂时不能改建'; // v5.10.12: the game moves them (worksMove)
     if ((st.hives || []).some(h => h && h.at === id)) return '花甸里有蜂箱，暂时不能改建';
-    if (st.penHost === id && st.pens2) return '草场上有第二套棚舍，暂时不能改建';
+    if (st.penHost === id && st.pens2) {
+      if (st.pensMove && otherPasture(st.plots, id)) return null; // v5.11.0.32: the game moves them to another 牧场
+      return otherPasture(st.plots, id) ? '草场上有第二套棚舍，先用「挪东西」把它们挪到另一块牧场' : '草场上有第二套棚舍，先把另一块地改成牧场，再把棚舍挪过去';
+    }
     return null;
   }
 
@@ -320,7 +333,7 @@
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
     HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,
-    HERD, herdPhase, plotBusy, empty, valid, ownedSorted,
+    HERD, herdPhase, otherPasture, penMoveOk, plotBusy, empty, valid, ownedSorted,
     MACH, MACH_IDS, MACH_PENS, BIN, BIN_IDS, fitted, fitCount, unfitted, machGate, machLevels, machBuy, machFill, binHas, binRoom, binAdd, binTake, binShip, machValid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFWorks = api;
 })(typeof window !== 'undefined' ? window : globalThis);
