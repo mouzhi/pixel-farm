@@ -52,7 +52,7 @@ fs.mkdirSync(OUT, { recursive: true });
     look(96, 60, 0);
     return { hidden: !box || box.hidden, title: box && box.querySelector('h3') && box.querySelector('h3').textContent, opts, txt: box ? box.innerText.replace(/\\s+/g, ' ').slice(0, 240) : '',
       v, wed: S.home.wed.kid0, ver: f.version, lv: f.townLv() }; })()`,
-    r => r.ver !== '5.11.0.31' ? 'ver ' + r.ver
+    r => r.ver !== '5.11.0.34' ? 'ver ' + r.ver
       : r.hidden ? 'modal hidden'
       : !/成家以后做什么/.test(r.title || '') ? 'title ' + r.title
       : !r.wed || r.wed.mate !== 'm1' ? 'no wedding'
@@ -172,7 +172,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, path: s2.home && s2.home.path, lots: s2.town && s2.town.lots, woodshop: s2.town.hall && s2.town.hall.woodshop, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.31' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.34' ? 'ver ' + r.ver
         : r.path && Object.keys(r.path).length ? 'path not empty' : r.lots && Object.keys(r.lots).length ? 'lots not empty'
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts' : null, save);
   }
@@ -185,7 +185,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const c = {}; for (const p of S.decor.placed) c[p.id] = (c[p.id] || 0) + 1; for (const [k, v] of Object.entries(S.decor.inv)) c[k] = (c[k] || 0) + v;
       const s2 = f.snapshot();
       return { day: s.clock.day, sv: s.saveVersion, ver: f.version, town: !!(S.eff && S.eff.town), path: s2.home && s2.home.path, lots: s2.town && s2.town.lots, counts: c }; })()`,
-      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.31' ? 'ver ' + r.ver
+      r => r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.11.0.34' ? 'ver ' + r.ver
         : JSON.stringify(Object.entries(r.counts).sort()) !== JSON.stringify(Object.entries(want).sort()) ? 'counts changed' : null, save);
   }
 

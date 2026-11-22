@@ -6,7 +6,7 @@ const ROOT = path.join(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspa
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
 const only = process.argv[2] || null;
-const VER = '5.11.0.31';
+const VER = '5.11.0.34';
 const FIX = path.join(__dirname, 'fixtures', 'save-v15-day72-cottage.json');
 const readSave = f => { const t = fs.readFileSync(f, 'utf8'); const s = JSON.parse(t); return s.save || s; };
 fs.mkdirSync(OUT, { recursive: true });
