@@ -176,7 +176,7 @@
   // ---------- v5.11.0.29 machines: where each one stands (fixed spots on what is already there) ----------
   const PENS = () => (root.PFWorld && root.PFWorld.PENS) || {};
   const machKey = () => JSON.stringify([S.works.mach || 0, PW.MACH_PENS.map(k => !!(S.eff && S.eff[k])), PW.MACH_PENS.map(k => { const P = PENS()[k]; return P && P.bld ? [P.bld.x, P.bld.y] : 0; })]);
-  const meadowCentre = () => { const sl = PW.hiveSlots(S.plots, S.eff ? S.eff.regions : []).filter(q => q.at !== 'orchard'); if (sl.length < 6) return null;
+  const meadowCentre = () => { const at = PW.hiveHome(S.plots, S.works.hives), sl = PW.hiveSlots(S.plots, S.eff ? S.eff.regions : []).filter(q => q.at === at); if (sl.length < 6) return null; // xhs 1.3.2: the vat follows the hives
     return { x: Math.round((sl[0].x + sl[1].x) / 2), y: Math.round((sl[0].y + sl[3].y) / 2) }; };
   function machSpots() {
     const m = S.works.mach, out = []; if (!m || !S.eff) return out; const P = PENS();
