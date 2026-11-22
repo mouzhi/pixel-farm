@@ -308,12 +308,13 @@
   // v5.11.0.31 前几天的节奏: a short starter goal chain shown under the HUD until the first chicken. Each step pays a small
   // reward the moment it is done while it is the current goal (so it is paid once, with no save field: a step is a sale or a
   // purchase that only happens once). Never tied to follow / share / tip. Old farms that are past the chain see nothing.
+  // short: the phone line (v5.11.0.34: the full one wrapped to three lines at 390px)
   const STARTER = [
-    { id: 'sell', text: '收获并卖出第一批胡萝卜', reward: 20 },
-    { id: 'field', text: '去商店「地块」开垦新田', shop: 'field', reward: 30 },
-    { id: 'can', text: '去商店「工具」买铜水壶', shop: 'can', reward: 30 },
-    { id: 'coop', text: '去商店「建筑」盖鸡舍', shop: 'coop', reward: 50 },
-    { id: 'chicken', text: '去商店「动物」买第一只鸡', shop: 'chicken', reward: 50 },
+    { id: 'sell', text: '收获并卖出第一批胡萝卜', short: '卖掉胡萝卜', reward: 20 },
+    { id: 'field', text: '去商店「地块」开垦新田', short: '开垦新田', shop: 'field', reward: 30 },
+    { id: 'can', text: '去商店「工具」买铜水壶', short: '买铜水壶', shop: 'can', reward: 30 },
+    { id: 'coop', text: '去商店「建筑」盖鸡舍', short: '盖鸡舍', shop: 'coop', reward: 50 },
+    { id: 'chicken', text: '去商店「动物」买第一只鸡', short: '买第一只鸡', shop: 'chicken', reward: 50 },
   ];
   const starterDone = (st, up, sold) => st.shop ? ((up && up[st.shop]) | 0) > 0 : (sold | 0) > 0;
   // the current step { i, n, step } or null when the chain is done: the step after the furthest one done (a farm that bought

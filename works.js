@@ -144,12 +144,13 @@
   // ---------- 养蜂 ----------
   const HIVE = { max: 6, orchardMax: 2, every: 2, readyCap: 2, extra: 0.35, cost: 800, wood: 20 };
   const ORCHARD_HIVES = [P(-62, -64), P(-50, -64)];
-  // slots: the first 花甸 plot holds six in two rows; the old orchard holds two. A hive keeps its slot ({ at, s }) once set down.
+  // slots: each 花甸 plot holds six in two rows; the old orchard holds two. A hive keeps its slot ({ at, s }) once set down.
   function hiveSlots(plots, regions) {
     const out = [];
     for (const id of ownedSorted(plots, 'meadow')) { const r = PL.plot(id).rect, w = r[2] - r[0], h = r[3] - r[1];
-      for (let i = 0; i < 6; i++) out.push({ at: id, s: i, x: Math.round(r[0] + w * (0.2 + 0.3 * (i % 3))), y: Math.round(r[1] + h * (i < 3 ? 0.35 : 0.68)) });
-      break; }
+      for (let i = 0; i < 6; i++) out.push({ at: id, s: i, x: Math.round(r[0] + w * (0.2 + 0.3 * (i % 3))), y: Math.round(r[1] + h * (i < 3 ? 0.35 : 0.68)) }); }
+    // xhs 1.3.2: every bought 花甸 has six slots (they used to exist on the first one only, so a hive could never leave it);
+    // the farm still keeps HIVE.max hives in all (hiveCap), new ones go to the first free slot in bought order
     if ((regions || []).includes('orchard')) ORCHARD_HIVES.forEach((p, i) => out.push({ at: 'orchard', s: i, x: p.x, y: p.y }));
     return out;
   }
@@ -159,6 +160,11 @@
     return typeof h.x === 'number' && typeof h.y === 'number' ? Object.assign({}, q, { x: h.x, y: h.y }) : q; };
   // the next free slot for a new (or homeless) hive: the meadow first, then the orchard
   const hiveFree = (plots, regions, hives) => hiveSlots(plots, regions).find(q => !(hives || []).some(h => h.at === q.at && h.s === q.s)) || null;
+  // xhs 1.3.2 (挪东西): the free slot hive i takes on 花甸 `to` (its own slot when it is already there), -1: that meadow is full
+  function hiveSlotIn(plots, regions, hives, to, i) { const h = (hives || [])[i]; if (h && h.at === to) return h.s;
+    const q = hiveSlots(plots, regions).find(q => q.at === to && q.at !== 'orchard' && !(hives || []).some((o, j) => j !== i && o && o.at === q.at && o.s === q.s)); return q ? q.s : -1; }
+  // the 花甸 with the most hives (bought order breaks a tie): where the honey tray's vat stands
+  function hiveHome(plots, hives) { let best = null, n = 0; for (const id of ownedSorted(plots, 'meadow')) { const k = (hives || []).filter(h => h && h.at === id).length; if (k > n) { best = id; n = k; } } return best || ownedSorted(plots, 'meadow')[0] || null; }
   // total: six with a 花甸, two in the orchard without one ("每块花甸 4–6 箱，或老果园 2 箱")
   const hiveCap = (plots, regions) => ownedSorted(plots, 'meadow').length ? HIVE.max : (regions || []).includes('orchard') ? HIVE.orchardMax : 0;
   const hiveGate = (plots, regions, have, hives) => { const cap = hiveCap(plots, regions); if (!cap) return '先有花甸（新地选「花甸」）或果园坡';
@@ -298,7 +304,7 @@
   function plotBusy(id, st) {
     if (!st) return null;
     if (!st.worksMove && Object.values(st.works || {}).some(w => w && w.at === id)) return '院子里有加工坊，暂时不能改建'; // v5.10.12: the game moves them (worksMove)
-    if ((st.hives || []).some(h => h && h.at === id)) return '花甸里有蜂箱，暂时不能改建';
+    if ((st.hives || []).some(h => h && h.at === id)) return ownedSorted(st.plots, 'meadow').some(m => m !== id) ? '花甸里有蜂箱，先用「挪东西」把蜂箱挪到另一块花甸' : '花甸里有蜂箱，先把另一块地改成花甸，再用「挪东西」把蜂箱挪过去';
     if (st.penHost === id && st.pens2) {
       if (st.pensMove && otherPasture(st.plots, id)) return null; // v5.11.0.32: the game moves them to another 牧场
       return otherPasture(st.plots, id) ? '草场上有第二套棚舍，先用「挪东西」把它们挪到另一块牧场' : '草场上有第二套棚舍，先把另一块地改成牧场，再把棚舍挪过去';
@@ -331,7 +337,7 @@
   const api = { TILE, SPRINKLER, reachOf, covers, edgeSpots, nextSpot, spotOk, coveredBy, sprinklerGate,
     WORKS, WORK_IDS, PRODUCTS, PRODUCT_IDS, WHEAT_WANT, canDeliver, workStep, YARD_SLOTS, slotPos, workPos, freeSlot, slotIn, evacuate, restock, workGate, hasOrchard,
     POWER, damSites, wheelsOf, powered, wheelGate, HOME_LAMPS, lampSpots, LAMP_R, LAMP_FRUIT,
-    HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveCap, hiveGate, hiveNight,
+    HIVE, ORCHARD_HIVES, hiveSlots, hivePos, hiveFree, hiveSlotIn, hiveHome, hiveCap, hiveGate, hiveNight,
     PEN2, PEN2_IDS, CAP, PEN2_OF, DEFAULT_HOST, pastureHost, penLayout, applyPenLayout, pen2Gate, homeOf, assignPens, animalGate,
     HERD, herdPhase, otherPasture, penMoveOk, plotBusy, empty, valid, ownedSorted,
     MACH, MACH_IDS, MACH_PENS, BIN, BIN_IDS, fitted, fitCount, unfitted, machGate, machLevels, machBuy, machFill, binHas, binRoom, binAdd, binTake, binShip, machValid };

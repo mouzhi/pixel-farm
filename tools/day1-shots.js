@@ -14,7 +14,7 @@ fs.mkdirSync(OUT, { recursive: true });
   const errs = [], fails = [];
   const check = (name, bad, r) => { console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r)); if (bad) fails.push(name + ': ' + bad); };
   const ready = p => p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 30000 });
-  async function page(save) { const ctx = await b.newContext({ viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage();
+  async function page(save, vp) { const ctx = await b.newContext(vp || { viewport: { width: 1280, height: 800 } }); const p = await ctx.newPage();
     p.on('pageerror', e => errs.push(String(e)));
     await p.addInitScript(() => { window.__goal = []; window.addEventListener('pf:farm', e => { if (e.detail.type === 'income' && e.detail.source === 'goal') window.__goal.push(e.detail.goal); }); });
     await p.goto(base + '/index.html?manual&seed=7'); await ready(p);
@@ -62,6 +62,16 @@ fs.mkdirSync(OUT, { recursive: true });
     const a1 = await p.evaluate(st);
     await until(p, () => __farm.S.day === 31, 2000); await p.evaluate(() => __farm.advance(2, 3));
     const r = await p.evaluate(st); check('day 30 chicken: +50 exactly once, nothing more at the rollover', a1.paid.join() === 'chicken' && r.paid.join() === 'chicken' ? '' : 'bad', { a1: a1.paid, r: r.paid, day: r.day });
+    await p.close(); }
+  // 6. v5.11.0.34: on a 390px phone the goal is one row (short text, +reward) at every step, and still opens its shop tab
+  { const p = await page(null, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+    const rows = [];
+    for (const k of [null, 'sell', 'field', 'can', 'coop']) {
+      const r = await p.evaluate(k => { const S = __farm.S; if (k === 'sell') S.totalSold = Math.max(1, S.totalSold | 0); else if (k) S.up[k] = Math.max(1, S.up[k] | 0); S.coins = k === 'can' ? 20 : 66; __farm.advance(0.5, 3); __farm.refreshUI();
+        const g = document.getElementById('goal'), cs = getComputedStyle(g), lh = parseFloat(cs.lineHeight) || 17, inner = g.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+        return { text: g.innerText.replace(/\s+/g, ' ').trim(), oneRow: inner <= lh * 1.3, fits: g.scrollWidth <= g.clientWidth + 1, w: g.clientWidth }; }, k);
+      rows.push(r); if (k === 'field') await p.screenshot({ path: path.join(OUT, 'day1_mobile_390_goal.png') }); }
+    check('390px phone: the goal stays on one row and is not cut at any step', rows.every(r => r.oneRow && r.fits && /目标 ?\d\/5/.test(r.text) && /\+\d+/.test(r.text)) ? '' : 'wraps or cut', rows);
     await p.close(); }
   // 5. old farms: no reward on load
   for (const [f, hidden] of [['save-v11-day4.json', null], ['save-v15-day72-cottage.json', true]]) {
