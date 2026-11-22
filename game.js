@@ -2106,7 +2106,7 @@ function syncPastureProps() { // a building and its trough appear once bought
     o.bld = addProp(pastureModels[k], P.bld.x, P.bld.y, 0, { big: 1 }); o.trough = addProp(pastureModels.trough[0], P.trough.x, P.trough.y, 0); }
   if (S.eff.shed && !shedHay) shedHay = addProp(hayModel, PENS.shed.hay.x, PENS.shed.hay.y, 0.4);
 }
-// v5.11.0.31: the second pens' sprites follow applyPenLayout (first pens stay put)
+// v5.11.0.32: the second pens' sprites follow applyPenLayout (first pens stay put)
 function relocatePen2Props() {
   for (const k of PW.PEN2_IDS) { const P = PENS[k], o = pens[k]; if (!o || !o.bld) continue;
     o.bld.x = P.bld.x; o.bld.y = P.bld.y; if (o.trough) { o.trough.x = P.trough.x; o.trough.y = P.trough.y; } }
@@ -2212,7 +2212,7 @@ function worksVacate(id, mod) {
   if (names.length) log(`改建前家人把加工坊挪走了：${names.join('、')}，原料和成品都在`);
   if (stored.length) log(`${stored.join('、')}先拆下来收进仓库（原料和成品都留着），等有新的工坊院空位，家人会盖回去`);
   if (moves.length) { markNavDirty(); if (WORKS_ON) PWA.sync(true); }
-  // v5.11.0.31: second pens move as a set to another 牧场 (animals, troughs and machines stay on the same pen ids)
+  // v5.11.0.32: second pens move as a set to another 牧场 (animals, troughs and machines stay on the same pen ids)
   if (mod !== 'pasture' && S.works.penHost === id && PW.PEN2_IDS.some(k => S.eff[k])) {
     const to = PW.otherPasture(S.plots, id);
     if (to) { const from = id; movePenHost(to); log(`改建前家人把第二套棚舍从${PL.plot(from).name}搬到了${PL.plot(to).name}，动物、饲槽里的草料和装上的机械都跟着走了`); }
@@ -4192,7 +4192,7 @@ function movables() { const out = [];
   PWA.hiveSpots().forEach((h, i) => { if (h) out.push({ what: 'hive', ref: i, x: h.x, y: h.y, r: 6 }); });
   S.works.sprinklers.forEach((s, i) => out.push({ what: 'spr', ref: i, x: s.x, y: s.y, r: 6 }));
   if (HM) S.home.houses.forEach((h, i) => out.push({ what: 'home', ref: i, x: h.x, y: h.y, r: 12 })); // v5.9.0
-  // v5.11.0.31: each built second pen (building + trough) is a pick target; the first pens stay put
+  // v5.11.0.32: each built second pen (building + trough) is a pick target; the first pens stay put
   if (S.works && S.works.penHost) for (const k of PW.PEN2_IDS) { if (!S.eff[k] || !PENS[k]) continue;
     const P = PENS[k]; out.push({ what: 'pen2', ref: k, x: P.bld.x, y: P.bld.y, r: 16 });
     if (P.trough) out.push({ what: 'pen2', ref: k, x: P.trough.x, y: P.trough.y, r: 8 }); }
@@ -4236,7 +4236,7 @@ function workYardsDraw(ref) {
     ctx.fillStyle = 'rgba(30, 20, 12, 0.78)'; ctx.fillRect(Math.round(m[0] - tw / 2), Math.round(m[1] - 8), Math.round(tw), 16);
     ctx.fillStyle = ok ? '#c8f5b8' : '#ffc0b8'; ctx.fillText(t, Math.round(m[0]), Math.round(m[1])); ctx.restore(); }
 }
-// v5.11.0.31: with the second pens picked in 挪东西, every owned 牧场 is outlined
+// v5.11.0.32: with the second pens picked in 挪东西, every owned 牧场 is outlined
 function pastureYardsDraw() {
   const host = S.works && S.works.penHost;
   for (const id of PW.ownedSorted(S.plots, 'pasture')) { const r = PL.plot(id).rect, ok = id !== host, c = [proj(r[0], r[1]), proj(r[2], r[1]), proj(r[2], r[3]), proj(r[0], r[3])];
@@ -4421,7 +4421,7 @@ function decorDraw() {
   DA.draw(ctx, proj, onScreen, realT, T, dayLight(T), mode, carriers);
   partyFxDraw(dayLight(T)); // v5.11.0.15
   if (mode.pick && mode.pick.what === 'work') workYardsDraw(mode.pick.ref); // v5.10.12: where a workshop may go
-  if (mode.pick && mode.pick.what === 'pen2') pastureYardsDraw(); // v5.11.0.31
+  if (mode.pick && mode.pick.what === 'pen2') pastureYardsDraw(); // v5.11.0.32
   if (TOWN_ON && TA.draw) { const nt = fairNow() ? Math.min(dayLight(T), 0.58) : dayLight(T); TA.draw(ctx, proj, onScreen, realT, T, nt); } // v5.10.11: lantern strings over the streets
 }
 DA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, markNavDirty: () => markNavDirty(),
@@ -5916,7 +5916,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.31';
+const GAME_VERSION = '5.11.0.32';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

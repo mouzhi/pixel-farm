@@ -285,7 +285,7 @@
 
   // ---------- rules that span things ----------
   // a plot that has phase-8 buildings on it cannot be re-zoned (nothing would know where to go): returns why, or null
-  // v5.11.0.31: the second pens move as a set to another owned 牧场 (pensMove), like workshops (worksMove)
+  // v5.11.0.32: the second pens move as a set to another owned 牧场 (pensMove), like workshops (worksMove)
   const otherPasture = (plots, host) => ownedSorted(plots, 'pasture').find(id => id !== host) || null;
   function penMoveOk(plots, host, dest) {
     if (!host) return { ok: false, why: '还没有第二套棚舍' };
@@ -300,7 +300,7 @@
     if (!st.worksMove && Object.values(st.works || {}).some(w => w && w.at === id)) return '院子里有加工坊，暂时不能改建'; // v5.10.12: the game moves them (worksMove)
     if ((st.hives || []).some(h => h && h.at === id)) return '花甸里有蜂箱，暂时不能改建';
     if (st.penHost === id && st.pens2) {
-      if (st.pensMove && otherPasture(st.plots, id)) return null; // v5.11.0.31: the game moves them to another 牧场
+      if (st.pensMove && otherPasture(st.plots, id)) return null; // v5.11.0.32: the game moves them to another 牧场
       return otherPasture(st.plots, id) ? '草场上有第二套棚舍，先用「挪东西」把它们挪到另一块牧场' : '草场上有第二套棚舍，先把另一块地改成牧场，再把棚舍挪过去';
     }
     return null;

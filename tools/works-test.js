@@ -71,7 +71,7 @@ ok('a plot with phase-8 buildings cannot be re-zoned', () => {
   assert(PW.plotBusy('wbank', { works: { mill: { at: 'wbank' } } })); assert(PW.plotBusy('glade', { hives: [{ at: 'glade' }] }));
   assert(PW.plotBusy('alp', { penHost: 'alp', pens2: true })); assert.strictEqual(PW.plotBusy('alp', { penHost: 'alp', pens2: false }), null);
 });
-ok('v5.11.0.31: second pens can leave a pasture when another 牧场 exists (pensMove); otherwise they still block', () => {
+ok('v5.11.0.32: second pens can leave a pasture when another 牧场 exists (pensMove); otherwise they still block', () => {
   const one = { alp: { mod: 'pasture', day: 51 } };
   const two = { alp: { mod: 'pasture', day: 51 }, neslope: { mod: 'pasture', day: 40 } };
   assert.strictEqual(PW.otherPasture(one, 'alp'), null);
