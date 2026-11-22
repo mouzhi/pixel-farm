@@ -16,7 +16,7 @@ const LIST = [
   ['home.cottages.0', '孩子成家的小木屋', 'home'], ['home.frame', '小木屋（施工）', 'frame'],
   ['inn.cabinDay', '农家乐小木屋', 'home'], ['inn.cabin2Day', '二层客栈', 'home2'], ['inn.frame', '小木屋（施工）', 'frame'],
   ['inn.diner0', '农家菜馆', 'public'], ['inn.diner2', '农家菜馆（满级）', 'public'], ['inn.dinerFrame', '菜馆（施工）', 'frame'],
-  ['inn.hutDay', '海边小屋', 'hut'], ['inn.stall', '海鲜摊', 'stall'],
+  ['inn.hutDay', '海边小屋', 'hut'], ['inn.villaDay', '度假小别墅', 'home'], ['inn.stall', '海鲜摊', 'stall'],
   ['town.houses.0', '小镇平房', 'home'], ['town.twoHouse.0', '小镇二层（翻盖）', 'home2'], ['town.two.0', '镇公所地块二层', 'home2'],
   ['town.two.3', '面包房', 'public2'], ['town.two.4', '木工坊', 'public2'], ['town.two.5', '铁匠铺', 'public2'], ['town.two.6', '教室', 'public'],
   ['town.two.7', '书屋', 'public2'], ['town.two.8', '诊所', 'public2'], ['town.kidShops.flower', '孩子的小店', 'home'], ['town.shop', '小镇商店', 'public'],
@@ -27,7 +27,7 @@ const LIST = [
 // door: how tall the door is, in screen px (1 voxel); a grown-up is 24 px with the hat. Read off the model code (v5.11.0.9 values;
 // before: cottage 13, cabin 9, inn 9, restaurant 10, beach hut 8, mill 9, cheese 9)
 const DOOR = {
-  'game.house': 22, 'game.barn': 21, 'home.cottages.0': 22, 'inn.cabinDay': 22, 'inn.cabin2Day': 22, 'inn.diner0': 22, 'inn.diner2': 22, 'inn.hutDay': 19,
+  'game.house': 22, 'game.barn': 21, 'home.cottages.0': 22, 'inn.cabinDay': 22, 'inn.cabin2Day': 22, 'inn.diner0': 22, 'inn.diner2': 22, 'inn.hutDay': 19, 'inn.villaDay': 22,
   'town.houses.0': 22, 'town.twoHouse.0': 22, 'town.two.0': 22, 'town.two.3': 22, 'town.two.4': 22, 'town.two.5': 22, 'town.two.6': 22, 'town.two.7': 22, 'town.two.8': 22,
   'town.kidShops.flower': 22, 'town.shop': 22, 'town.school': 22, 'town.hall': 22, 'works.mill': 19, 'works.cheese': 19,
 };
