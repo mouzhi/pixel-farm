@@ -2118,6 +2118,24 @@ function syncPastureProps() { // a building and its trough appear once bought
     o.bld = addProp(pastureModels[k], P.bld.x, P.bld.y, 0, { big: 1 }); o.trough = addProp(pastureModels.trough[0], P.trough.x, P.trough.y, 0); }
   if (S.eff.shed && !shedHay) shedHay = addProp(hayModel, PENS.shed.hay.x, PENS.shed.hay.y, 0.4);
 }
+// v5.11.0.31: the second pens' sprites follow applyPenLayout (first pens stay put)
+function relocatePen2Props() {
+  for (const k of PW.PEN2_IDS) { const P = PENS[k], o = pens[k]; if (!o || !o.bld) continue;
+    o.bld.x = P.bld.x; o.bld.y = P.bld.y; if (o.trough) { o.trough.x = P.trough.x; o.trough.y = P.trough.y; } }
+}
+function movePenHost(to) {
+  if (!to || to === S.works.penHost) return false;
+  for (const q of S.decor.orders.slice()) if (q.what === 'pen2') dropOrder(q);
+  S.works.penHost = to; PW.applyPenLayout(PENS, to);
+  const sib = {}; for (const a of S.animals) { const k = homeOf(a); if (PW.PEN2_IDS.includes(k)) (sib[k] || (sib[k] = [])).push(a); }
+  for (const k of Object.keys(sib)) { const R = PENS[k] && PENS[k].roam, list = sib[k]; if (!R) continue;
+    const cols = Math.min(list.length, 3), rows = Math.ceil(list.length / cols);
+    list.forEach((a, j) => { const v = AV.get(a.id); if (!v) return;
+      const col = j % cols, row = Math.floor(j / cols);
+      v.x = R[0] + 4 + (col + 0.5) * (R[2] - R[0] - 8) / cols; v.y = R[1] + 4 + (row + 0.5) * (R[3] - R[1] - 8) / rows;
+      v.tx = v.x; v.ty = v.y; v.wait = 0; }); }
+  relocatePen2Props(); if (XP && XP.sync) XP.sync(); markNavDirty(); if (WORKS_ON) PWA.sync(true); return true;
+}
 // v5.3.1 the lumber hut: a plank cabin with a moss-green roof and a log pile, in 林场's empty south strip east of the gate
 function lumberModel() {
   const X0 = 3, X1 = 22, Y0 = 4, Y1 = 15, ZW = 10;
@@ -2206,6 +2224,11 @@ function worksVacate(id, mod) {
   if (names.length) log(`改建前家人把加工坊挪走了：${names.join('、')}，原料和成品都在`);
   if (stored.length) log(`${stored.join('、')}先拆下来收进仓库（原料和成品都留着），等有新的工坊院空位，家人会盖回去`);
   if (moves.length) { markNavDirty(); if (WORKS_ON) PWA.sync(true); }
+  // v5.11.0.31: second pens move as a set to another 牧场 (animals, troughs and machines stay on the same pen ids)
+  if (mod !== 'pasture' && S.works.penHost === id && PW.PEN2_IDS.some(k => S.eff[k])) {
+    const to = PW.otherPasture(S.plots, id);
+    if (to) { const from = id; movePenHost(to); log(`改建前家人把第二套棚舍从${PL.plot(from).name}搬到了${PL.plot(to).name}，动物、饲槽里的草料和装上的机械都跟着走了`); }
+  }
   return moves;
 }
 function worksRestock() { // v5.10.12: stored workshops go back up in a free yard slot
@@ -2215,9 +2238,16 @@ function worksRestock() { // v5.10.12: stored workshops go back up in a free yar
 }
 // what re-zoning a plot does to its workshops (shop text): null when there are none
 function worksVacateNote(id) {
-  if (!S.works || !Object.values(S.works.works).some(w => w && w.at === id)) return null;
-  const moves = PW.evacuate(S.plots, S.works.works, id);
-  return '院子里的加工坊会跟着走：' + moves.map(m => PW.WORKS[m.id].name + (m.to ? '搬到' + PL.plot(m.to).name : '先收进仓库，有空的工坊院再盖回去')).join('；') + '（原料和成品都留着）';
+  const bits = [];
+  if (S.works && Object.values(S.works.works).some(w => w && w.at === id)) {
+    const moves = PW.evacuate(S.plots, S.works.works, id);
+    bits.push('院子里的加工坊会跟着走：' + moves.map(m => PW.WORKS[m.id].name + (m.to ? '搬到' + PL.plot(m.to).name : '先收进仓库，有空的工坊院再盖回去')).join('；') + '（原料和成品都留着）');
+  }
+  if (S.works && S.works.penHost === id && PW.PEN2_IDS.some(k => S.eff[k])) {
+    const to = PW.otherPasture(S.plots, id);
+    if (to) bits.push(`第二套棚舍会搬到${PL.plot(to).name}（动物、饲槽里的草料和装上的机械都跟着走）`);
+  }
+  return bits.length ? bits.join('；') : null;
 }
 function worksBoughtLog(id) {
   if (id === 'sprinkler') log('浇水器买好了，家里人会把它装到田边');
@@ -2432,7 +2462,7 @@ function sprinklerClick(w) {
 }
 let worksSyncT = 0;
 function worksFrame() { if (!WORKS_ON) return; if (realT - worksSyncT > 0.2 || realT < worksSyncT) { worksSyncT = realT; PWA.sync(); } PWA.frame(realT); } // the key check is a few JSON strings: 5 times a second is plenty
-function worksBusy(id) { return PW.plotBusy(id, { worksMove: true, works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }) || (DECOR_ON ? decorBusy(id) : null) || (HM ? homeBusy(id) : null) || (IN ? IN.plotBusy(id, S.plots, S.inn) : null); }
+function worksBusy(id) { return PW.plotBusy(id, { worksMove: true, pensMove: true, plots: S.plots, works: S.works.works, hives: S.works.hives, penHost: S.works.penHost, pens2: PW.PEN2_IDS.some(k => S.eff[k]) }) || (DECOR_ON ? decorBusy(id) : null) || (HM ? homeBusy(id) : null) || (IN ? IN.plotBusy(id, S.plots, S.inn) : null); }
 PWA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, tiles, markNavDirty: () => markNavDirty(), wheelProp: id => XP.wheelProp(id),
   wheelFrames: () => { const md = XP.models(); return md ? [...md.wheelSets[1], ...md.wheelSets[-1]] : []; } }); // v5.11.0.20: both bank sides
 WORKS_ON = true;
@@ -2637,7 +2667,7 @@ function autoSpot(id) {
   autoCache = { key, spot }; return spot;
 }
 // ---- orders and the carrying jobs ----
-const BUILD_LIKE = q => q.what === 'work' || q.what === 'home' || (q.what === 'decor' && (q.id || decorById(q.ref)) === 'party');
+const BUILD_LIKE = q => q.what === 'work' || q.what === 'home' || q.what === 'pen2' || (q.what === 'decor' && (q.id || decorById(q.ref)) === 'party');
 function orderThing(op, what, ref, id, x, y, mine) {
   const D = S.decor; D.orders = D.orders.filter(q => !(op === 'move' && q.op === 'move' && q.what === what && q.ref === ref));
   if (D.orders.length >= DC.ORDERS_MAX) return { ok: false, why: '要搬的东西太多了，先等家人搬完一些' };
@@ -2650,14 +2680,16 @@ function thingNow(q) { // where the thing is now (null: gone)
   if (q.what === 'hive') return PWA.hiveSpots()[q.ref] || null;
   if (q.what === 'spr') return S.works.sprinklers[q.ref] || null;
   if (q.what === 'home') return (HM && S.home.houses[q.ref]) || null;
+  if (q.what === 'pen2') { const P = PENS[q.ref] || (S.works && S.works.penHost && PENS[PW.PEN2_IDS.find(k => S.eff[k])]); return P && P.bld ? P.bld : null; }
   return null; }
-function thingName(q) { if (q.what === 'home') return '新房子'; if (q.what === 'work') return PW.WORKS[q.ref].name; if (q.what === 'hive') return '蜂箱'; if (q.what === 'spr') return '浇水器'; return DC.CATALOG[q.id || decorById(q.ref)].name; }
+function thingName(q) { if (q.what === 'home') return '新房子'; if (q.what === 'work') return PW.WORKS[q.ref].name; if (q.what === 'hive') return '蜂箱'; if (q.what === 'spr') return '浇水器'; if (q.what === 'pen2') return '第二套棚舍'; return DC.CATALOG[q.id || decorById(q.ref)].name; }
 function setCarried(q, on) { if (q.what === 'hive' && S.works.hives[q.ref]) S.works.hives[q.ref]._c = on ? 1 : 0; if (q.what === 'spr' && S.works.sprinklers[q.ref]) { S.works.sprinklers[q.ref]._c = on ? 1 : 0; SPR_COVER = null; } }
 function dropOrder(q) { S.decor.orders = S.decor.orders.filter(o => o !== q); setCarried(q, false); for (const a of actors()) if (a._carry === q.u) a._carry = null; autoCache.key = ''; }
 function settle(q) { // put it down at q.x, q.y (checked again: the ground may have changed since the click)
   const id = q.id || (q.what === 'decor' ? decorById(q.ref) : null), skip = q.op === 'move' ? { what: q.what, ref: q.ref } : null;
   if (q.op === 'store') return storeDone(q, id); // v5.11.0.2
   if (q.what === 'home') return homeMoveDone(q);
+  if (q.what === 'pen2') return pen2MoveDone(q);
   let r = q.what === 'spr' ? sprinklerSpot(q.x, q.y, q.ref) : placeOk(q.x, q.y, q.what, id, skip, q, !q.mine && q.what === 'decor' && SLT && id !== 'party');
   if (!r.ok) { dropOrder(q); log(`${thingName(q)}没法放到那里（${r.why}），留在原处`); return false; }
   const x = q.what === 'spr' ? Math.round(q.x * 10) / 10 : r.x, y = q.what === 'spr' ? Math.round(q.y * 10) / 10 : r.y;
@@ -2687,7 +2719,7 @@ function carryDropTask(q) {
     if (settle(q)) { burst(q.x, q.y, 10, [Wd[3], G[4], '#fff2a8'], 8, 'leaf'); log(`${who}${q.op === 'store' ? '把' + name + '收回了仓库' : place ? '把' + name + '摆好了' : '把' + name + '搬到了新地方'}`); } F._carry = null; } };
 }
 function buildTask(q) { // workshops and the party area are rebuilt where they go (nobody carries a house)
-  return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在搭${thingName(q)}` : `正在把${thingName(q)}挪过去`, to: { x: q.x - 9, y: q.y + 6 }, dur: q.what === 'home' ? HM.HOUSE.build : q.what === 'work' ? 30 : 20, fx: 'wood', pose: 'hoe', done: () => {
+  return { kind: 'carry', key: 'dc:' + q.u, label: q.op === 'place' ? `正在搭${thingName(q)}` : `正在把${thingName(q)}挪过去`, to: { x: q.x - 9, y: q.y + 6 }, dur: q.what === 'home' ? HM.HOUSE.build : (q.what === 'work' || q.what === 'pen2') ? 30 : 20, fx: 'wood', pose: 'hoe', done: () => {
     if (!S.decor.orders.includes(q) || !thingNow(q)) return; const name = thingName(q), place = q.op === 'place', who = F === FARMER ? '' : F.name;
     if (settle(q)) { burst(q.x, q.y, 24, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); log(`${who}${place ? '搭好了' + name : '把' + name + '挪到了新地方'}`); } } };
 }
@@ -4143,6 +4175,10 @@ function movables() { const out = [];
   PWA.hiveSpots().forEach((h, i) => { if (h) out.push({ what: 'hive', ref: i, x: h.x, y: h.y, r: 6 }); });
   S.works.sprinklers.forEach((s, i) => out.push({ what: 'spr', ref: i, x: s.x, y: s.y, r: 6 }));
   if (HM) S.home.houses.forEach((h, i) => out.push({ what: 'home', ref: i, x: h.x, y: h.y, r: 12 })); // v5.9.0
+  // v5.11.0.31: each built second pen (building + trough) is a pick target; the first pens stay put
+  if (S.works && S.works.penHost) for (const k of PW.PEN2_IDS) { if (!S.eff[k] || !PENS[k]) continue;
+    const P = PENS[k]; out.push({ what: 'pen2', ref: k, x: P.bld.x, y: P.bld.y, r: 16 });
+    if (P.trough) out.push({ what: 'pen2', ref: k, x: P.trough.x, y: P.trough.y, r: 8 }); }
   return out; }
 // v5.11.0.2: a touch shell (xhs) can ask for a smallest pick radius in CSS px (TOUCH.pickCss); 0 on the web, so the mouse picks exactly as before
 function pickFloor() { if (!TOUCH.pickCss) return 0; const r = cv.getBoundingClientRect(); return r.width ? TOUCH.pickCss / (RS * r.width / W) : 0; }
@@ -4153,6 +4189,7 @@ function decorHover(w) {
   if (INPUT.mode === 'move') { const m = INPUT.mvPick; if (!m) return { dec: null };
     if (m.what === 'spr') { const r = sprinklerSpot(w.x, w.y, m.ref); return { dec: { box: [w.x - 2, w.y - 2, w.x + 2, w.y + 2], ok: r.ok } }; }
     if (m.what === 'home') { const r = homeMoveOk(w.x, w.y, m.ref); return { dec: { box: r.box, ok: r.ok } }; }
+    if (m.what === 'pen2') { const r = pen2MoveOk(w.x, w.y); return { dec: { box: r.box, ok: r.ok } }; }
     const r = placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); return { dec: { box: r.box, ok: r.ok } }; }
   return null;
 }
@@ -4162,9 +4199,9 @@ function decorClick(w) {
     const o = orderThing('place', 'decor', null, id, r.x, r.y, true); if (!o.ok) return o;
     say(`标记好了，家人会把${DC.CATALOG[id].name}搬过去`); if (invFree(id) <= 0) setMode(null); return { ok: true }; }
   if (INPUT.mode === 'move') {
-    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器或新房子（老房子不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : m.what === 'home' ? '选中了新房子，再点新位置：买下的花甸、农田，或家里已买下的地（绿框，一块地一座）' : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
+    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器、第二套棚舍或新房子（老房子和第一套棚舍不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : m.what === 'home' ? '选中了新房子，再点新位置：买下的花甸、农田，或家里已买下的地（绿框，一块地一座）' : m.what === 'pen2' ? (PW.otherPasture(S.plots, S.works.penHost) ? '选中了第二套棚舍，再点另一块牧场（绿框），四座棚子、动物、饲槽和机械一起走' : '选中了第二套棚舍。还没有另一块牧场：先把另一块地改成牧场，再点那里（绿框）') : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
     const m = INPUT.mvPick; const again = movableAt(w.x, w.y); if (again && again.what === m.what && again.ref === m.ref) { INPUT.mvPick = null; say('取消选择'); return null; }
-    const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : m.what === 'home' ? homeMoveOk(w.x, w.y, m.ref) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
+    const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : m.what === 'home' ? homeMoveOk(w.x, w.y, m.ref) : m.what === 'pen2' ? pen2MoveOk(w.x, w.y) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
     const o = orderThing('move', m.what, m.ref, m.what === 'decor' ? null : null, m.what === 'spr' ? w.x : r.x, m.what === 'spr' ? w.y : r.y, true); if (!o.ok) return o;
     INPUT.mvPick = null; say(`标记好了，家人会把${thingName({ what: m.what, ref: m.ref, id: m.id })}挪过去`); return { ok: true }; }
   return null;
@@ -4181,6 +4218,29 @@ function workYardsDraw(ref) {
     ctx.font = '600 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const tw = ctx.measureText(t).width + 10;
     ctx.fillStyle = 'rgba(30, 20, 12, 0.78)'; ctx.fillRect(Math.round(m[0] - tw / 2), Math.round(m[1] - 8), Math.round(tw), 16);
     ctx.fillStyle = ok ? '#c8f5b8' : '#ffc0b8'; ctx.fillText(t, Math.round(m[0]), Math.round(m[1])); ctx.restore(); }
+}
+// v5.11.0.31: with the second pens picked in 挪东西, every owned 牧场 is outlined
+function pastureYardsDraw() {
+  const host = S.works && S.works.penHost;
+  for (const id of PW.ownedSorted(S.plots, 'pasture')) { const r = PL.plot(id).rect, ok = id !== host, c = [proj(r[0], r[1]), proj(r[2], r[1]), proj(r[2], r[3]), proj(r[0], r[3])];
+    ctx.save(); ctx.beginPath(); c.forEach((p, i) => (i ? ctx.lineTo(p[0], p[1]) : ctx.moveTo(p[0], p[1]))); ctx.closePath();
+    ctx.fillStyle = ok ? 'rgba(120, 220, 120, 0.16)' : 'rgba(230, 80, 70, 0.16)'; ctx.fill();
+    ctx.setLineDash([4, 3]); ctx.lineWidth = 2; ctx.strokeStyle = ok ? 'rgba(150, 240, 140, 0.9)' : 'rgba(240, 110, 100, 0.9)'; ctx.stroke(); ctx.setLineDash([]);
+    const m = proj((r[0] + r[2]) / 2, r[1] + 4), t = `${PL.plot(id).name} · ${id === host ? '现在在这里' : '能放'}`;
+    ctx.font = '600 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; const tw = ctx.measureText(t).width + 10;
+    ctx.fillStyle = 'rgba(30, 20, 12, 0.78)'; ctx.fillRect(Math.round(m[0] - tw / 2), Math.round(m[1] - 8), Math.round(tw), 16);
+    ctx.fillStyle = ok ? '#c8f5b8' : '#ffc0b8'; ctx.fillText(t, Math.round(m[0]), Math.round(m[1])); ctx.restore(); }
+}
+function pen2MoveOk(x, y) {
+  const p = PL.plotAt(x, y), dest = p && p.id, r = PW.penMoveOk(S.plots, S.works && S.works.penHost, dest);
+  const box = dest && PL.plot(dest) ? PL.plot(dest).rect.slice() : [x - 8, y - 8, x + 8, y + 8];
+  return { ok: r.ok, why: r.why, box, x, y, to: r.to };
+}
+function pen2MoveDone(q) {
+  const r = pen2MoveOk(q.x, q.y); if (!r.ok) { dropOrder(q); log(`第二套棚舍没法挪过去（${r.why}），留在原处`); return false; }
+  const from = S.works.penHost; movePenHost(r.to);
+  log(`第二套棚舍从${PL.plot(from).name}搬到了${PL.plot(r.to).name}，动物、饲槽里的草料和装上的机械都跟着走了`);
+  dropOrder(q); return true;
 }
 // ---- v5.11.0.15: what people do at the party. The sim only has them standing at their place (partySpot); all of this is
 // drawn from realT each frame (no state, nothing saved): bites and chewing at the table, a toast now and then, hops on the
@@ -4344,6 +4404,7 @@ function decorDraw() {
   DA.draw(ctx, proj, onScreen, realT, T, dayLight(T), mode, carriers);
   partyFxDraw(dayLight(T)); // v5.11.0.15
   if (mode.pick && mode.pick.what === 'work') workYardsDraw(mode.pick.ref); // v5.10.12: where a workshop may go
+  if (mode.pick && mode.pick.what === 'pen2') pastureYardsDraw(); // v5.11.0.31
   if (TOWN_ON && TA.draw) { const nt = fairNow() ? Math.min(dayLight(T), 0.58) : dayLight(T); TA.draw(ctx, proj, onScreen, realT, T, nt); } // v5.10.11: lantern strings over the streets
 }
 DA.mount({ S, buildModel, gableY, addProp, props, pix, stackCanvas, ASTEP, cam, manual: MANUAL, markNavDirty: () => markNavDirty(),
@@ -5855,7 +5916,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.30';
+const GAME_VERSION = '5.11.0.31';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6127,7 +6188,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), wedCer: () => wedCer(), wedLook: a => wedLook(a), famSheet: (l, c) => famSheet(l, c), wedCouple: () => wedCouple(), weddingTonight: () => wedNow(), homeTick: dm => homeTick(dm), homeMorning: () => homeMorning(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
-Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), demandWant: () => demandWant(), demandPick: bag => demandPick(bag), chooseTask: () => chooseTask(), restOk: k => restOk(k), helpWinNow: T => helpWinNow(T), helpEnd: () => helpEnd(), farmHands: () => farmHands(), demandGrowing: () => demandGrowing(), demandShort: k => demandShort(k), seaQuota: () => seaQuota(), workPending: () => workPending(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
+Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), movePenHost: to => movePenHost(to), pen2MoveOk: (x, y) => pen2MoveOk(x, y), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), demandWant: () => demandWant(), demandPick: bag => demandPick(bag), chooseTask: () => chooseTask(), restOk: k => restOk(k), helpWinNow: T => helpWinNow(T), helpEnd: () => helpEnd(), farmHands: () => farmHands(), demandGrowing: () => demandGrowing(), demandShort: k => demandShort(k), seaQuota: () => seaQuota(), workPending: () => workPending(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.

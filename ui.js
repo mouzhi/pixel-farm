@@ -773,7 +773,7 @@
     if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="把篮子里的一条锦鲤直接放进家门口的池塘。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
     if (gfN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'goldfish' ? ' on' : ''}" data-m="release" data-k="goldfish" title="池塘有空位时，把仓库里的金鱼放进去">放养金鱼 ${gfN}</button>`;
     for (const id of deco) h += `<button class="pbtn${m.mode === 'decor' && m.kind === id ? ' on' : ''}" data-m="decor" data-k="${id}" title="点一块草地（亮绿色就能放），家人会从仓库搬过去（Esc 退出）。不放也没关系，家人会自己找地方摆上">摆${DCm.CATALOG[id].name} ${free(id)}</button>`;
-    if (movN) h += `<button class="pbtn${m.mode === 'move' ? ' on' : ''}" data-m="move" title="先点要挪的东西（装饰、派对区、加工坊、蜂箱、浇水器；老房子不能挪），再点新位置，家人会搬过去（Esc 退出）">挪东西</button>`;
+    if (movN) h += `<button class="pbtn${m.mode === 'move' ? ' on' : ''}" data-m="move" title="先点要挪的东西（装饰、派对区、加工坊、蜂箱、浇水器、第二套棚舍；老房子和第一套棚舍不能挪），再点新位置，家人会搬过去（Esc 退出）">挪东西</button>`;
     if (ordN) h += `<button class="pbtn" data-m="clearmove" title="取消还没搬完的摆放和挪动">要搬的 ${ordN} ✕</button>`;
     const n = S.orders.length; if (n) h += `<button class="pbtn" data-m="clear" title="取消全部砍树、种树和放养指令">指令 ${n} ✕</button>`;
     $('tools').innerHTML = h; $('tools').hidden = !h;
