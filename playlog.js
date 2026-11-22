@@ -654,9 +654,12 @@
     if (handle && handle.files && typeof handle.files === 'object' && typeof handle.values !== 'function') return Object.keys(handle.files);
     const names = [];
     if (handle && typeof handle.values === 'function') {
-      for await (const entry of handle.values()) if (entry && entry.name) names.push(entry.name);
+      // xhs: no `for await` (ES2018); the 小红书 container is checked as ES2017
+      const it = handle.values();
+      for (let r = await it.next(); !r.done; r = await it.next()) { const entry = r.value; if (entry && entry.name) names.push(entry.name); }
     } else if (handle && typeof handle.keys === 'function') {
-      for await (const name of handle.keys()) names.push(name);
+      const it = handle.keys();
+      for (let r = await it.next(); !r.done; r = await it.next()) names.push(r.value);
     }
     return names;
   }
@@ -903,14 +906,10 @@
         if (dirs[name]) { delete dirs[name]; return; }
         const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e;
       },
-      async *values() {
-        for (const name of Object.keys(files)) yield { name, kind: 'file' };
-        for (const name of Object.keys(dirs)) yield { name, kind: 'directory' };
+      values() { // xhs: a plain iterator, not an async generator (ES2017 container); listNames awaits each step
+        return Object.keys(files).map(name => ({ name, kind: 'file' })).concat(Object.keys(dirs).map(name => ({ name, kind: 'directory' })))[Symbol.iterator]();
       },
-      async *keys() {
-        for (const name of Object.keys(files)) yield name;
-        for (const name of Object.keys(dirs)) yield name;
-      },
+      keys() { return Object.keys(files).concat(Object.keys(dirs))[Symbol.iterator](); },
       async getDirectoryHandle(name, o) {
         if (!dirs[name]) {
           if (!(o && o.create)) { const e = new Error('not found: ' + name); e.name = 'NotFoundError'; throw e; }

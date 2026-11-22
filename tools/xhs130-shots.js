@@ -1,8 +1,8 @@
-// 小红书小工具 1.3.0（同步网页版 v5.11.0.16）：手机截图 + 检查，跑在打好的包上（390×844 @3x，真触摸事件）。
+// 小红书小工具 1.3.0（同步网页版 v5.11.0.29）：手机截图 + 检查，跑在打好的包上（390×844 @3x，真触摸事件）。
 //   bash platforms/xhs/pack.sh && node tools/xhs130-shots.js [name-filter]   writes /workspace/pf-shots/xhs130_*.png (PF_SHOTS / PF_TAG)
 // Checks the v5.11 features on the phone layout: 活动倒计时 in the HUD (tap opens the list), the hotbar in the 背包 dock, 相册 as a tab of the
 // diary (no new bottom-bar button; the photo toast opens it), the restaurant panel, the opaque cloud over locked districts, the party spread,
-// the codex still in the trophy sheet, no web 存档 button anywhere, ⚒ toolbox, version 5.11.0.16 / save v15, and the compact save under 64KB.
+// the codex still in the trophy sheet, no web 存档 button anywhere, ⚒ toolbox, version 5.11.0.29 / save v15, and the compact save under 64KB (also on a heavy late-game farm: every plot and shop level, machines, bakery.held).
 // Never loads a real player's save (fixtures only).
 const http = require('http'), fs = require('fs'), path = require('path');
 const { chromium } = require('playwright-core');
@@ -59,7 +59,7 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
   // A. day-72 fixture: home, countdown, hotbar, diary → 相册, photo toast, trophy codex, toolbox, fog
   { const p = await page(FIX);
     await step(p, 'home.png', () => p.evaluate(`(() => { ${H} f.setAngle(0); f.panTo(f.HOUSE.x + 30, f.HOUSE.y + 50); f.render();
-      const snap = f.snapshot(), json = JSON.stringify(f.SAVE.compact ? f.SAVE.compact(snap) : snap);
+      const snap = f.snapshot(), json = JSON.stringify(window.PFSave.compact(snap));
       return { ver: f.version, sv: snap.saveVersion, bytes: new Blob([json]).size, bar: vis('#xhs-bar'), hud: vis('#hud'), cd: vis('#countdown'), cdText: (document.getElementById('countdown') || {}).textContent,
         web: ['navBtns', 'menuBtn', 'albumBtn', 'diaryBtn', 'codexBtn', 'mmJump', 'mapBtn', 'title', 'titleS'].filter(id => vis('#' + id)), saveBtns: saveBtns(), hudIn: inside('#hud') }; })()`),
       r => r.ver !== '5.11.0.29' ? 'game version ' + r.ver : r.sv !== 15 ? 'save v' + r.sv : r.bytes >= 65536 ? 'compact save ' + r.bytes + ' >= 64KB' : !r.bar || !r.hud || !r.hudIn ? 'chrome missing' : r.web.length ? 'web chrome showing: ' + r.web : r.saveBtns.length ? 'a save button: ' + r.saveBtns : null);
@@ -128,6 +128,27 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
         if (first === 'photo') { photo(); ach(); } else { ach(); photo(); } }, first);
       await p.waitForTimeout(500); return p.evaluate(TOASTS); },
       r => !r.photo || !r.msg ? 'both toasts should show ' + JSON.stringify(r) : toastBad(r));
+    await p.context().close(); }
+
+  // C. v5.11.0.29 heavy late game on the phone build: the inn/resort fixture, then every plot, every shop level, the smithy, all five machines
+  // (feeder bits + full bins), bakery.held mid-walk, a full album, and a few more days of play. The compact save (what the cloud gets) must stay < 64KB.
+  { const p = await page(RESORT);
+    await step(p, 'heavy_save.png', () => p.evaluate(`(() => { ${H} const SIM = window.PFSim, AL = window.PFAlbum; S.family.met = 1; S.family.moved = 1; S.family.love = 100;
+      const rich = () => { S.coins = 9e6; f.FARMER.wood = 9000; }; rich(); if (S.town && S.town.hall) { S.town.hall.built = S.town.hall.built || {}; S.town.hall.built.smithy = S.town.hall.built.smithy || S.day; }
+      const pref = ['field', 'workshop', 'dam', 'pasture', 'meadow', 'orchard', 'woodland', 'resort', 'playground', 'bridge', 'road', 'trail'];
+      for (let pass = 0; pass < 3; pass++) {
+        for (const pl of f.PL.PLOTS || []) { if (S.plots && S.plots[pl.id] && S.plots[pl.id].mod) continue; for (const m of pref) if ((pl.mods || []).includes(m)) { rich(); try { if (f.buyPlot(pl.id, m)) break; } catch (e) {} } }
+        for (const it of SIM.SHOP) for (let i = 0; i < 12; i++) { rich(); let ok = false; try { ok = f.buy(it.id); } catch (e) {} if (!ok) break; }
+        f.applyUpgrades && f.applyUpgrades(); }
+      for (let d = 0; d < 3; d++) { const d0 = S.day; rich(); for (let i = 0; i < 4000 && S.day === d0; i++) f.advance(1, 10); }
+      const W = S.works || {}; W.mach = Object.assign({ f: 255, e: 1, m: 1, h: 1 }, W.mach || {}, { eg: 48, mk: 24, hn: 24 });
+      const B = S.town && S.town.hall && S.town.hall.bakery; if (B) B.held = [{ id: 'milk', n: 3 }, { id: 'honey', n: 3 }, { id: 'apple_pie', n: 2 }, { id: 'cheese', n: 2 }];
+      const snap = f.snapshot(); const A = AL.valid(snap.album || []); AL.MOMENTS.forEach((m, i) => AL.add(A, { id: m.id, d: 300 + i, t: 600, x: 100.5, y: 80.25, w: ['farmer', 'partner', 'kid0', 'kid1'] })); snap.album = AL.pack(A);
+      const c = window.PFSave.compact(snap), json = JSON.stringify(c), bytes = new Blob([json]).size, raw = new Blob([JSON.stringify(snap)]).size; // PFSave.compact = what save.js writes (and the cloud gets)
+      const top = Object.keys(c).map(k => [k, new Blob([JSON.stringify(c[k]) || '']).size]).sort((a, b) => b[1] - a[1]).slice(0, 8).map(x => x.join(':')).join(' ');
+      const plots = Object.keys(S.plots || {}).filter(k => S.plots[k] && S.plots[k].mod).length, ups = Object.values(S.up || {}).reduce((a, b) => a + (b | 0), 0);
+      return { bytes, kb: +(bytes / 1024).toFixed(1), headroom: 65536 - bytes, raw, rt: (m => JSON.stringify(window.PFSave.compact(m)).length <= json.length && JSON.stringify(m.works.mach) === JSON.stringify(c.works.mach) && JSON.stringify(m.town.hall.bakery.held) === JSON.stringify(c.town.hall.bakery.held))(window.PFSave.migrate(JSON.parse(json))), sv: snap.saveVersion, day: S.day, plots, ups, tiles: f.tiles ? f.tiles.length : null, mach: JSON.stringify(c.works && c.works.mach), held: JSON.stringify(c.town && c.town.hall && c.town.hall.bakery && c.town.hall.bakery.held), album: A.list.length, top }; })()`),
+      r => r.sv !== 15 ? 'save v' + r.sv : !r.rt ? 'machines / bakery.held lost on reload, or the reloaded save grew' : !r.mach || !/"f":255/.test(r.mach) ? 'machines missing ' + r.mach : !r.held || r.held === 'undefined' ? 'bakery.held missing' : r.bytes >= 65536 ? 'heavy compact save ' + r.bytes + ' >= 64KB' : null);
     await p.context().close(); }
 
   console.log('app', APPV, 'game', VER); console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();
