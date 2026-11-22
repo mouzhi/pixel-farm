@@ -57,13 +57,17 @@ async function test(name, fn) {
       const log = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:playlog'));
       const d1 = log.days.find(d => d.day === 1);
       const d2 = log.days.find(d => d.day === 2);
-      return { day: __farm.S.day, coins: __farm.S.coins, d1, d2, nDays: log.days.length, events: log.events.map(e => e.type) };
+      const goal = __farm.S.events.filter(e => e.day === 1).reduce((a, e) => { const m = /完成目标.*奖励 (\d+) 金/.exec(e.msg); return a + (m ? +m[1] : 0); }, 0); // v5.11.0.31 starter goal rewards (not a playlog income source)
+      return { day: __farm.S.day, coins: __farm.S.coins, d1, d2, goal, nDays: log.days.length, events: log.events.map(e => e.type) };
     });
     assert.ok(r.day >= 2, 'reached day 2, got ' + r.day);
     assert.ok(r.d1, 'day 1 summary exists');
     assert.strictEqual(r.d1.open, false);
     assert.ok(r.d1.income.yard > 0, 'yard income recorded: ' + JSON.stringify(r.d1.income));
-    assert.strictEqual(r.d1.goldEnd, r.d1.goldStart + r.d1.income.yard);
+    // v5.11.0.31: day 1 now also sells its first carrots and buys seeds, and the starter goal pays a reward
+    const sum = o => Object.values(o || {}).reduce((a, b) => a + (+b || 0), 0);
+    assert.strictEqual(r.d1.goldEnd, r.d1.goldStart + sum(r.d1.income) - sum(r.d1.spend) + r.goal, JSON.stringify({ d1: r.d1, goal: r.goal }));
+    assert.ok(r.d1.income.crops > 0, 'the first carrots are sold on day 1');
     assert.ok(r.d1.busyMin + r.d1.idleMin + r.d1.sleepMin > 100, 'time buckets filled');
     assert.ok(r.d1.sleepMin > 0, 'sleep recorded');
     assert.ok(r.d1.idle.fish + r.d1.idle.rest + r.d1.idle.other > 0, 'idle breakdown');
