@@ -12,7 +12,7 @@ function ok(name, fn) { try { fn(); n++; console.log('ok  ' + name); } catch (e)
 ok('old saves still come in as nothing built; inn2 and resort clamp to the documented caps', () => {
   const I = IN.valid(null);
   assert.strictEqual(I.inn2, 0);
-  assert.deepStrictEqual(I.resort, { huts: 0, parasols: 0, stall: 0, pier: 0, deck: 0 });
+  assert.deepStrictEqual(I.resort, { huts: 0, parasols: 0, stall: 0, pier: 0, deck: 0, villas: 0, camp: 0 });
   const v = IN.valid({ inn2: 2, resort: { huts: 99, parasols: -3, stall: true, pier: 'yes', deck: 0 }, guests: [{ id: 'g1', look: 'beachA', n: 2, room: 0, from: 10, until: 12, stay: 'beach' }] });
   assert.strictEqual(v.inn2, 1);
   assert.strictEqual(v.resort.huts, 4);
@@ -26,13 +26,15 @@ ok('old saves still come in as nothing built; inn2 and resort clamp to the docum
   assert.strictEqual(IN.valid({ guests: [{ id: 'g9', look: 'innA', n: 2, room: 0, from: 1, until: 2 }] }).guests.length, 0, 'an inn guest drops when no cabin is up');
 });
 
-ok('prices match the town plan: huts 15,000+200 (max 4), umbrellas 2,000 (max 8), stall 30,000+250, pier 25,000+300, deck 20,000+200, inn 60,000+600', () => {
+ok('prices match the town plan: huts 15,000+200 (max 4), umbrellas 2,000 (max 8), stall 30,000+250, pier 25,000+300, deck 20,000+200, inn 60,000+600, villas 22,000+260 (max 3), camp 12,000+80', () => {
   const I = IN.empty();
   assert.deepStrictEqual([IN.offer(I, 'hut').cost, IN.offer(I, 'hut').wood], [15000, 200]);
   assert.deepStrictEqual([IN.offer(I, 'parasol').cost, IN.offer(I, 'parasol').wood], [2000, 0]);
   assert.deepStrictEqual([IN.offer(I, 'stall').cost, IN.offer(I, 'stall').wood], [30000, 250]);
   assert.deepStrictEqual([IN.offer(I, 'pier').cost, IN.offer(I, 'pier').wood], [25000, 300]);
   assert.deepStrictEqual([IN.offer(I, 'deck').cost, IN.offer(I, 'deck').wood], [20000, 200]);
+  assert.deepStrictEqual([IN.offer(I, 'villa').cost, IN.offer(I, 'villa').wood], [22000, 260]);
+  assert.deepStrictEqual([IN.offer(I, 'camp').cost, IN.offer(I, 'camp').wood], [12000, 80]);
   assert.ok(/先盖至少一间/.test(IN.offer(I, 'inn2').why));
   I.cabins = 1;
   assert.deepStrictEqual([IN.offer(I, 'inn2').cost, IN.offer(I, 'inn2').wood], [60000, 600]);
@@ -197,8 +199,85 @@ ok('autobuy lists never include a resort or inn project (the family only buys fi
   // loaded only to make the contract obvious in this file; SIM is required here.
   const SIM = require('../sim.js');
   const ids = SIM.AUTO_BUY || [];
-  const banned = ['hut', 'parasol', 'stall', 'pier', 'deck', 'inn2', 'cabin', 'diner', 'kitchen', 'inn', 'resort'];
+  const banned = ['hut', 'parasol', 'stall', 'pier', 'deck', 'inn2', 'cabin', 'diner', 'kitchen', 'inn', 'resort', 'villa', 'camp'];
   for (const id of banned) assert.ok(!ids.includes(id), id + ' must stay off autobuy');
+});
+
+ok('villas and the campsite need the same locks as other resort builds, take a day, and host their own guests', () => {
+  const I = IN.empty();
+  const rich = { coast: 1, resort: 'eshore', lv: 3, coins: 1e6, wood: 999 };
+  assert.strictEqual(IN.canStart(I, 'villa', { resort: 'eshore', lv: 3, coins: 1e6, wood: 999 }), '先买下海边');
+  assert.strictEqual(IN.canStart(I, 'camp', { coast: 1, lv: 3, coins: 1e6, wood: 999 }), '先把东南滩改建成度假村');
+  assert.strictEqual(IN.canStart(I, 'villa', rich), null);
+  assert.strictEqual(IN.canStart(I, 'camp', rich), null);
+  IN.start(I, 'villa', 80);
+  assert.strictEqual(IN.finish(I, 80), null);
+  assert.strictEqual(IN.finish(I, 81), 'villa');
+  assert.strictEqual(I.resort.villas, 1);
+  IN.start(I, 'villa', 81); IN.finish(I, 82);
+  IN.start(I, 'villa', 82); IN.finish(I, 83);
+  assert.strictEqual(I.resort.villas, 3);
+  assert.ok(/最多 3/.test(IN.offer(I, 'villa').why));
+  IN.start(I, 'camp', 83);
+  assert.strictEqual(IN.finish(I, 84), 'camp');
+  assert.strictEqual(I.resort.camp, 1);
+  assert.ok(/已经盖好/.test(IN.offer(I, 'camp').why));
+  const villas = IN.planVillaArrivals(I, 120, 5, false);
+  const camp = IN.planCampArrivals(I, 120, 5, false);
+  assert.ok(villas.length >= 1 && villas.every(g => g.stay === 'villa' && IN.BEACH_LOOKS.includes(g.look)));
+  assert.ok(camp.length >= 1 && camp.every(g => g.stay === 'camp'));
+  assert.strictEqual(new Set(villas.map(g => g.room)).size, villas.length);
+  IN.checkIn(I, 120, 5, false);
+  assert.ok(I.guests.some(g => g.stay === 'villa') && I.guests.some(g => g.stay === 'camp'));
+  const nights = 1;
+  I.guests = [
+    { id: 'v1', look: 'beachA', n: 2, room: 0, from: 120, until: 121, at: 12 * 60, stay: 'villa' },
+    { id: 'c1', look: 'beachB', n: 2, room: 0, from: 120, until: 121, at: 12 * 60, stay: 'camp' },
+  ];
+  const out = IN.checkOut(I, 121, () => ({ s: 4, note: '火旁很暖和' }));
+  assert.strictEqual(out.gold, IN.roomFee(nights, 3, 'villa') + IN.roomFee(nights, 3, 'camp'));
+  assert.strictEqual(IN.roomFee(1, 3, 'villa'), Math.round(400 * 1.05));
+  assert.strictEqual(IN.roomFee(1, 3, 'camp'), Math.round(160 * 1.05));
+  assert.ok(IN.roomFee(1, 3, 'villa') > IN.roomFee(1, 3));
+  assert.ok(IN.roomFee(1, 3, 'camp') < IN.roomFee(1, 3));
+});
+
+ok('lot slots sit on 东南滩, stay off each other and off the west and south gates', () => {
+  const L = IN.resortLayout(), p = PL.plot('eshore').rect;
+  assert.strictEqual(L.villas.length, 3);
+  assert.strictEqual(L.tents.length, 3);
+  assert.ok(L.fire && L.lotGate && L.lotJoin && L.beachJoin);
+  const boxes = L.villas.map(c => ({ id: 'v' + c.i, a: [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd] }))
+    .concat(L.tents.map(c => ({ id: 't' + c.i, a: [c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd] })))
+    .concat([{ id: 'fire', a: [L.fire.x - 3, L.fire.y - 3, L.fire.x + 3, L.fire.y + 3] }]);
+  for (const b of boxes) {
+    assert.ok(b.a[0] >= p[0] + 4 && b.a[2] <= p[2] - 4, b.id + ' x in lot');
+    assert.ok(b.a[1] >= p[1] + 4 && b.a[3] <= p[3] - 4, b.id + ' y in lot');
+  }
+  for (let i = 0; i < boxes.length; i++) for (let j = i + 1; j < boxes.length; j++) {
+    const A = boxes[i].a, B = boxes[j].a;
+    const hit = A[0] < B[2] - 1 && B[0] < A[2] - 1 && A[1] < B[3] - 1 && B[1] < A[3] - 1;
+    assert.ok(!hit, 'overlap ' + boxes[i].id + ' / ' + boxes[j].id);
+  }
+  const clear = (x, y, name) => {
+    for (const b of boxes) assert.ok(!(x > b.a[0] - 3 && x < b.a[2] + 3 && y > b.a[1] - 3 && y < b.a[3] + 3), name + ' blocked by ' + b.id);
+  };
+  clear(L.lotGate.x + 6, L.lotGate.y, 'west gate');
+  clear(L.lotJoin.x, L.lotJoin.y - 4, 'south join');
+  assert.deepStrictEqual([L.lotJoin.x, L.lotJoin.y], [PL.RESORT_JOIN.lot.x, PL.RESORT_JOIN.lot.y]);
+  assert.deepStrictEqual([L.beachJoin.x, L.beachJoin.y], [PL.RESORT_JOIN.beach.x, PL.RESORT_JOIN.beach.y]);
+});
+
+ok('old saves without villas or a camp still load; rezoning is blocked once a villa or the camp is up', () => {
+  const v = IN.valid({ resort: { huts: 2 } });
+  assert.strictEqual(v.resort.villas, 0);
+  assert.strictEqual(v.resort.camp, 0);
+  assert.strictEqual(v.resort.huts, 2);
+  const plots = { eshore: { mod: 'resort', day: 80 } };
+  const I = IN.empty(); I.resort.villas = 1;
+  assert.ok(/度假村/.test(IN.plotBusy('eshore', plots, I)));
+  const J = IN.empty(); J.resort.camp = 1;
+  assert.ok(/度假村/.test(IN.plotBusy('eshore', plots, J)));
 });
 
 console.log('\n' + n + ' tests ok');
