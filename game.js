@@ -790,7 +790,8 @@ function navState() {
     houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
     trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : [], DECOR_ON ? DA.blocks() : [], TN ? TN.blocks(!!(S.eff && S.eff.town), !!innPlot()) : [], TN && HL && S.eff && S.eff.town ? HL.blocks(S.town.hall).concat((FV && FV.isDay(S.town.hall, S.day)) ? FV.blocks() : []) : [], TN && CR && S.eff && S.eff.town ? CR.blocks(S.town.lots, S.home && S.home.path, S.day) : [], HOME_ON ? HA.blocks() : [], INN_ON ? IA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops; v5.10.7 inn
-    rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze)
+    rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze),
+    plots: S.plots || {}
   };
 }
 function markNavDirty() { navDirty = true; }
@@ -1677,7 +1678,7 @@ function diaryLook() {
   const item = id => (SIM.CROPS[id] && SIM.CROPS[id].name) || (WD.FRUIT[id] && WD.FRUIT[id].name) || (FS.fishOf(id) && FS.fishOf(id).name) || (FS.ORN_BY[id] && FS.ORN_BY[id].name) ||
     (AN.PRODUCTS[id] && AN.PRODUCTS[id].name) || ({ honey: '蜂蜜', flower: '野花' })[id] || id;
   const buy = id => { if (id === 'goldfish') return '金鱼'; if (id === 'fishfood') return '鱼食'; if (id === 'bugnet') return '捕虫网';
-    if (/^plot:/.test(id)) return '一块新地'; if (/^inn:/.test(id)) return ({ cabin: '民宿小木屋', diner: '农家菜馆', kitchen: '菜馆厨房', inn2: '二层客栈', hut: '沙滩小屋', parasol: '遮阳伞', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' })[id.slice(4)] || '民宿的新设施';
+    if (/^plot:/.test(id)) return '一块新地'; if (/^inn:/.test(id)) return ({ cabin: '民宿小木屋', diner: '农家菜馆', kitchen: '菜馆厨房', inn2: '二层客栈', hut: '沙滩小屋', parasol: '遮阳伞', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台', villa: '度假小别墅', camp: '帐篷露营地' })[id.slice(4)] || '民宿的新设施';
     if (/^hall:/.test(id)) { const p = HL && HL.PROJ && HL.PROJ[id.slice(5)]; return p ? p.name : ''; }
     const it = (SIM.SHOP || []).find(x => x.id === id); return it ? it.name : ''; };
   return { who, item, buy };
@@ -2005,8 +2006,10 @@ const regionProps = {};
 for (const r of WD.REGIONS) { const [x0, y0, x1, y1] = r.rect, list = regionProps[r.id] = [];
   const openings = [r.gate, r.pier].filter(Boolean);
   const nearGate = (x, y) => openings.some(g => Math.hypot(x - g.x, y - g.y) < 12);
-  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); list.push(p); }
-  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); list.push(p); }
+  const join = (r.id === 'coast' && PL && PL.RESORT_JOIN) ? PL.RESORT_JOIN.beach : null;
+  const nearJoin = (x, y) => !!(join && Math.hypot(x - join.x, y - join.y) < 12);
+  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); p.resortJoin = nearJoin(x + 4, y); list.push(p); }
+  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); p.resortJoin = nearJoin(x, y + 4); list.push(p); }
   const sign = { spr: SIGN, x: r.sign.x, y: r.sign.y, region: r.id, sign: 1 }; billboards.push(sign); list.push(sign);
   if (r.barrel) addProp(barrelModel, r.barrel.x, r.barrel.y, 0);
 }
@@ -2023,7 +2026,7 @@ const pierDeck = buildModel(14, 16, 4, Object.assign((x, y, z) => {
 // v5.5.0: the outer ring's props (expansion.js): cliffs, the bridge, wheels, the town, plot fences and signs, the modules
 const XPM = XP.mount({ S, inHomeYard: (x, y) => !!(HA && HA.inYard(x, y)), buildModel, gableY, addProp, addTree, props, billboards, decals, regionProps, models, treeDefs, mulberry32, SIGN, LOCK, SPRITES, pierDeck, barrelModel, crateModel, logsModel,
   stackCanvas, ASTEP, cam, manual: MANUAL, tiles, FARMER, log: m => log(m), popText: (...a) => popText(...a), burst: (...a) => burst(...a), emit: (...a) => emit(...a), applyUpgrades: () => applyUpgrades(), saveNow: () => saveNow(), woodCap: () => woodCap(),
-  plotBusy: id => worksBusy(id), plotVacate: (id, mod) => worksVacate(id, mod), treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, WD, SIM });
+  plotBusy: id => worksBusy(id), plotVacate: (id, mod) => worksVacate(id, mod), treeChanged: t => treeChanged(t), dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck.c.width = o._ck.c.height = 0; TV.delete(id); }, markNavDirty: () => markNavDirty(), buildGroundBase: r => { if (groundReady) buildGroundBase(r); }, syncResortJoin: () => syncResortJoin(), WD, SIM });
 // ---------- the pasture (v4.5): coop, shed, trough, hay; animals are billboards that wander slowly ----------
 function coopModel() { // a small red-roofed hen house with a ramp to its door
   const X0 = 3, X1 = 22, Y0 = 4, Y1 = 17, ZW = 12;
@@ -3694,7 +3697,7 @@ function innView() {
   const I = S.inn || IN.empty(), plot = innPlot(), L = plot ? IN.layout(plot) : null;
   const freed = Object.keys(S.plots || {}).filter(id => S.plots[id].mod === 'inn' && S.plots[id].free).map(id => (PL.plot(id) || {}).name || id); // v5.11.0.5
   const ctx = { plot, lv: townLv(), coins: S.coins, wood: FARMER.wood, coast: !!(S.eff && (S.eff.coast || (S.eff.regions || []).includes('coast'))), resort: IN.resortPlotOf(S.plots) };
-  const offers = ['cabin', 'diner', 'kitchen', 'inn2', 'hut', 'parasol', 'stall', 'pier', 'deck'].map(id => {
+  const offers = ['cabin', 'diner', 'kitchen', 'inn2', 'hut', 'parasol', 'stall', 'pier', 'deck', 'villa', 'camp'].map(id => {
     const o = IN.offer(I, id), why = IN.canStart(I, id, ctx);
     const short = why && ((ctx.coins | 0) < (o.cost | 0) || (ctx.wood | 0) < (o.wood | 0));
     return Object.assign({}, o, { why: why || null, ok: !why, shortGold: Math.max(0, (o.cost | 0) - (ctx.coins | 0)), shortWood: Math.max(0, (o.wood | 0) - (ctx.wood | 0)), short: !!short });
@@ -3714,6 +3717,7 @@ function innView() {
     coast: !!ctx.coast, resort: ctx.resort, resortName: ctx.resort && PL.plot(ctx.resort) ? PL.plot(ctx.resort).name : null,
     huts: (I.resort && I.resort.huts) | 0, parasols: (I.resort && I.resort.parasols) | 0,
     stall: !!(I.resort && I.resort.stall), pier: !!(I.resort && I.resort.pier), deck: !!(I.resort && I.resort.deck),
+    villas: (I.resort && I.resort.villas) | 0, camp: !!(I.resort && I.resort.camp),
     job: I.job, stars, starAvg: (I.stars && I.stars.avg) || 3, starBoost: staffed ? IN.STAR_BOOST : 0, furnish: innFurnished() ? IN.FURNISH : 0,
     guests: IN.staying(I, S.day), people: IN.peopleOf(I, S.day),
     seats: IN.seatsOf(I), dishes: IN.dishSlots(I, staffed),
@@ -3745,15 +3749,25 @@ function innMorning() {
   if (done === 'stall') log('海鲜摊开张了，用家里钓的海鱼做海鱼烤和海鲜汤');
   if (done === 'pier') log('游客栈桥铺好了，客人可以在海上钓鱼，钓到的会放回去');
   if (done === 'deck') log('日落观景台修好了，傍晚可以坐着看海上的落日');
+  if (done === 'villa') log(`度假小别墅盖好了，现在东南滩有 ${S.inn.resort.villas} 栋`);
+  if (done === 'camp') log('帐篷露营地搭好了：三顶帐篷围着篝火，客人可以在这里过夜');
   if (done && INN_ON) { IA.sync(true); markNavDirty(); innRepaint(); }
   const out = IN.checkOut(S.inn, S.day, () => IN.rateStay(innRateCtx()));
   if (out.gold || out.groups.length) innPayRooms(out.gold, out.notes, out.groups);
   if ((S.inn.arrived | 0) !== S.day) {
     const add = IN.checkIn(S.inn, S.day, innStarsNow(), innFest());
     S.inn.arrived = S.day;
-    const innN = add.filter(g => IN.stayOf(g) !== 'beach').length, beachN = add.length - innN;
+    const innN = add.filter(g => IN.stayOf(g) === 'inn').length, beachN = add.filter(g => IN.stayOf(g) === 'beach').length;
+    const villaN = add.filter(g => IN.stayOf(g) === 'villa').length, campN = add.filter(g => IN.stayOf(g) === 'camp').length;
     if (add.length) { diaryNote('guests:' + add.length); albumSnap('inn', null, null, { wait: 150, re: true }); }
-    if (add.length) log(`今天预计来 ${add.length} 组客人` + (beachN && innN ? `（民宿 ${innN} 组，海边 ${beachN} 组）` : (beachN ? '住沙滩小屋' : '住民宿')));
+    if (add.length) {
+      const bits = [];
+      if (innN) bits.push('民宿 ' + innN + ' 组');
+      if (beachN) bits.push('沙滩小屋 ' + beachN + ' 组');
+      if (villaN) bits.push('小别墅 ' + villaN + ' 组');
+      if (campN) bits.push('营地 ' + campN + ' 组');
+      log(`今天预计来 ${add.length} 组客人` + (bits.length > 1 ? '（' + bits.join('，') + '）' : (beachN ? '住沙滩小屋' : villaN ? '住度假小别墅' : campN ? '住帐篷营地' : '住民宿')));
+    }
   }
   S.inn.earn.today = 0;
   if (INN_ON) IA.sync();
@@ -3850,20 +3864,38 @@ function innBeachSpots(s) {
   }
   return out;
 }
-function innDoorOf(g) {
-  if (IN.stayOf(g) === 'beach') {
-    const L = IN.resortLayout(), h = L && L.huts[g.room];
-    return h ? h.door : null;
+function innLotSpots(s) {
+  const L = IN.resortLayout(), out = [], r = S.inn && S.inn.resort;
+  if (!L || !r) return out;
+  if (r.camp && L.fire) {
+    const sit = (L.fire.sit || [L.fire])[(s.room | 0) % Math.max(1, (L.fire.sit || [L.fire]).length)];
+    out.push({ what: 'fire', x: sit.x, y: sit.y, wait: 36, rest: true });
   }
-  const L = innLay(); if (!L) return null;
-  const c = L.cabins[IN.cabinOf(g, S.inn)];
-  return c ? c.door : null;
+  if ((r.villas | 0) > 0 && L.villas && L.villas.length) {
+    const v = L.villas[(s.room | 0) % Math.max(1, r.villas | 0)];
+    if (v) out.push({ what: 'yard', x: v.door.x, y: v.door.y + 4, wait: 22 });
+  }
+  return out;
+}
+function innResortSpots(s) { return innLotSpots(s).concat(innBeachSpots(s)); }
+function innDoorOf(g) {
+  const stay = IN.stayOf(g), L = IN.resortLayout();
+  if (stay === 'beach') { const h = L && L.huts[g.room]; return h ? h.door : null; }
+  if (stay === 'villa') { const v = L && L.villas && L.villas[g.room]; return v ? v.door : null; }
+  if (stay === 'camp') { const c = L && L.tents && L.tents[g.room]; return c ? c.door : null; }
+  const IL = innLay(); if (!IL) return null;
+  const cab = IL.cabins[IN.cabinOf(g, S.inn)];
+  return cab ? cab.door : null;
 }
 function innSpawnGroup(g, atDoor) {
   const door = innDoorOf(g); if (!door) return;
-  const beach = IN.stayOf(g) === 'beach';
-  const e = beach ? (IN.COAST && IN.COAST.gate) || { x: 220, y: 212 } : innEntry();
-  const looks = beach ? IN.BEACH_LOOKS : IN.LOOKS;
+  const stay = IN.stayOf(g);
+  const lot = stay === 'villa' || stay === 'camp';
+  const RL = IN.resortLayout();
+  const e = stay === 'beach' ? ((IN.COAST && IN.COAST.gate) || { x: 220, y: 212 })
+    : lot ? ((RL && RL.lotGate) || { x: 362, y: 150 })
+    : innEntry();
+  const looks = IN.isResortStay && IN.isResortStay(stay) ? IN.BEACH_LOOKS : IN.LOOKS;
   const shown = Math.min(g.n | 0 || 1, Math.max(0, IN.ON_SCREEN - STAYS.filter(s => !s.leaving).length));
   const T = S.t % 1440, night = innBedtime(T);
   for (let i = 0; i < shown; i++) {
@@ -3871,8 +3903,8 @@ function innSpawnGroup(g, atDoor) {
     const dest = { x: door.x + (i - 1) * 3, y: door.y + 2 };
     const from = atDoor ? dest : { x: e.x + i * 3, y: e.y + (i % 2) };
     STAYS.push({
-      id: g.id + '_' + i, gid: g.id, look, room: g.room, n: g.n, lead: i === 0, stay: beach ? 'beach' : 'inn',
-      x: from.x, y: from.y, fx: atDoor ? 0 : (beach ? 0 : -1), fy: atDoor ? 1 : (beach ? 1 : 0),
+      id: g.id + '_' + i, gid: g.id, look, room: g.room, n: g.n, lead: i === 0, stay,
+      x: from.x, y: from.y, fx: atDoor ? 0 : (stay === 'inn' ? -1 : 0), fy: atDoor ? 1 : (stay === 'inn' ? 0 : 1),
       pts: atDoor ? [] : innRoute(from, dest), moving: !atDoor, leaving: false,
       inside: !!(atDoor && night), wait: 0, what: atDoor ? (night ? 'sleep' : 'idle') : 'arrive',
       until: g.until, fromDay: g.from, at: g.at, task: null,
@@ -3881,7 +3913,7 @@ function innSpawnGroup(g, atDoor) {
 }
 function innEnsure() {
   if (!IN || !S.inn) return;
-  if (!innPlot() && !IN.hutsUp(S.inn)) return;
+  if (!innPlot() && !IN.hutsUp(S.inn) && !IN.villasUp(S.inn) && !IN.campUp(S.inn)) return;
   const T = ((S.t % 1440) + 1440) % 1440;
   for (const g of IN.staying(S.inn, S.day)) {
     if (STAYS.some(s => s.gid === g.id)) continue;
@@ -3927,7 +3959,7 @@ function innTick(dm) {
       if (door && Math.hypot(s.x - door.x, s.y - door.y) > 3) { s.pts = innRoute(s, door); s.what = 'sleep'; s.task = null; continue; }
       s.inside = true; s.what = 'sleep'; s.task = null; continue;
     }
-    const spots = s.stay === 'beach' ? innBeachSpots(s) : innSpots(s);
+    const spots = (s.stay === 'beach' || s.stay === 'villa' || s.stay === 'camp') ? innResortSpots(s) : innSpots(s);
     if (!spots.length) continue;
     const pick = spots[(S.day * 7 + (s.room | 0) * 3 + (s.wait | 0) + Math.floor(T / 20)) % spots.length];
     s.what = pick.what; s.wait = pick.wait; s.task = pick.what === 'fish' && pick.hook ? { kind: 'fish', hook: pick.hook } : (pick.rest ? { rest: 1 } : null);
@@ -4681,9 +4713,23 @@ function familyDraw(list, T) { // pushes the family into the depth-sorted list; 
   return out;
 }
 function syncRegionProps() { // open gates and take the signs down for bought regions
+  const resortOn = !!(PL && PL.resortOpen && PL.resortOpen(S.plots));
   for (const id in regionProps) { const open = regionOpen(id);
-    for (const p of regionProps[id]) { const want = !(open && (p.gate || p.sign)), arr = p.sign ? billboards : props, i = arr.indexOf(p);
+    for (const p of regionProps[id]) {
+      const gateOpen = open && (p.gate || p.sign || (p.resortJoin && resortOn && regionOpen('coast') && regionOpen('eshore')));
+      const want = !gateOpen, arr = p.sign ? billboards : props, i = arr.indexOf(p);
       if (want && i < 0) arr.push(p); else if (!want && i >= 0) arr.splice(i, 1); } }
+}
+function syncResortJoin() { // open the beach path, hide trees on it, when 东南滩 is a 度假村
+  syncRegionProps();
+  if (!(PL && PL.resortOpen && PL.resortOpen(S.plots) && PL.RESORT_JOIN)) return;
+  const near = (x, y) => PL.joinDist(x, y) < 10 || PL.nearJoin(x, y, PL.RESORT_JOIN.lot, 12) || PL.nearJoin(x, y, PL.RESORT_JOIN.beach, 12);
+  for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (p.tree && near(p.x, p.y)) props.splice(i, 1); }
+  if (groundReady) {
+    const r = PL.plot('eshore').rect;
+    buildGroundBase([Math.min(r[0], 330) - 6, Math.min(r[1], 190) - 6, Math.max(r[2], 450) + 6, Math.max(r[3], 250) + 6]);
+  }
+  markNavDirty();
 }
 const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111', '♥': '101111111010000' };
 function pixText(s, x, y, col, sc = 1) {
@@ -6097,7 +6143,7 @@ SAVE.notes = boot.notes;
 if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${S.coins} 金`); yardCatchUp('之前买好还没弄完的，家人补上了：'); sprCatchUp('之前买好的浇水器，家人补上了：'); decorCatchUp('之前买好还没摆的，家人补上了：'); pondCatchUp(); } // v5.10.11.1: paid pieces an older version left unbuilt
 else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); albumSnap('open', null, null, { wait: 30, follow: 'farmer' }); } // v5.11.0.11: the album's first photo
 if (WX && WX.ensure) S.weather = WX.ensure(S.weather || WX.emptyWeather(), S.day, (S.createdAt | 0) || 1);
-OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); buildGroundBase(); groundReady = true;
+OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (typeof syncResortJoin === 'function') syncResortJoin(); buildGroundBase(); groundReady = true;
 if (!boot.blocked) saveNow();
 noteLog('boot', logSnap(), { getSave: snapshot });
 if (boot.state) try { albumBackfill(); } catch (e) {} // v5.11.0.11: an old save's story so far, as re-staged frames
@@ -6123,7 +6169,7 @@ Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHo
   reload: () => { SAVE.off = true; location.reload(); }, // used after import / reset so the old state is not saved again on the way out
   reset: () => { SAVE.off = true; PFSave.reset(); location.reload(); },
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
-  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
+  NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, syncResortJoin, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
 Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeMoveTo: (x, y, i) => { const r = homeMoveOk(x, y, i | 0); if (!r.ok) return r; const q = { what: 'home', ref: i | 0, x: r.x, y: r.y, op: 'move' }; return { ok: !!homeMoveDone(q), why: r.why, spot: r.spot, site: r.spot && r.spot.site }; }, homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), dinerReserveNeed: () => dinerReserveNeed(), innServeMeals: () => innServeMeals(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innRepaint: () => innRepaint(), innMigrate: () => innMigrate(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask(), sunsetFade: T => sunsetFade(T), SC, LB, CL, FV, sportsOpenNow: () => sportsOpenNow(), sportsTask: () => sportsTask(), feastTask: () => feastTask(), festNow: () => festNow(), fairNow: () => fairNow(), sleepAt: () => sleepAt(), libraryRead: a => libraryRead(a) }); // v5.9.0 test hooks; v5.10.6–v5.10.11
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),

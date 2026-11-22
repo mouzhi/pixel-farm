@@ -27,7 +27,7 @@
     bridge: { name: '石桥', icon: 'bridge', desc: '修好以后家人、羊群和上学的孩子都从桥上过河', now: '桥修好了' },
     trail: { name: '山道', icon: 'trail', desc: '一条弯弯的上山小路，通向山顶的两块地', now: '路障拆掉，能上山了' },
     inn: { name: '空院子', icon: 'inn', desc: '以前的民宿院。民宿已经搬到镇门口的农家乐区，这块地空出来了，可以免费改建一次', now: '一片空院子' }, // v5.11.0.5: legacy only (no plot offers it any more)
-    resort: { name: '度假村', icon: 'resort', desc: '东南滩改成度假村后，海边能盖沙滩小屋、遮阳伞、海鲜摊、游客栈桥和日落观景台（商店「农家乐」里买，要先买下海边，繁荣度 3）', now: '一条通向沙滩的小路' },
+    resort: { name: '度假村', icon: 'resort', desc: '东南滩改成度假村后，这块地上能盖度假小别墅和帐篷露营地，并且小路通到海边；海边还能盖沙滩小屋、遮阳伞、海鲜摊、游客栈桥和日落观景台（商店「农家乐」里买，要先买下海边，繁荣度 3）', now: '一条通向沙滩的小路，能盖度假小别墅和帐篷营地' },
   };
   const MODULE_IDS = Object.keys(MODULES);
   // v5.11.0.5: modules no plot offers any more but an old save may still hold. validPlots keeps them (it would otherwise turn
@@ -102,7 +102,7 @@
     { id: 'eroad', name: '东大道', terrain: 'special', special: 'road', rect: [362, 40, 448, 92], gate: P(362, 66), sign: P(358, 56), price: 6500, wood: 30,
       mods: ['road'], desc: '通向隔壁镇子的路，能看见镇子的屋顶' },
     { id: 'eshore', name: '东南滩', terrain: 'flat', rect: [362, 112, 440, 200], gate: P(362, 150), sign: P(358, 140), price: 3000,
-      mods: ['field', 'meadow', 'workshop', 'resort'], field: { cols: 6, rows: 4 }, desc: '海边上面的一块向阳平地，也可改建成度假村' },
+      mods: ['field', 'meadow', 'workshop', 'resort'], field: { cols: 6, rows: 4 }, desc: '海边上面的一块向阳平地，改成度假村后小路通到沙滩，能盖小别墅和帐篷营地' },
     { id: 'nwslope', name: '北坡·西', terrain: 'slope', rect: [-130, -150, -30, -112], gate: P(-30, -130), sign: P(-26, -140), price: 2800,
       mods: ['woodland', 'orchard', 'pasture'], desc: '山脚下的坡地' },
     { id: 'neslope', name: '北坡·东', terrain: 'slope', rect: [228, -150, 340, -112], gate: P(240, -112), sign: P(252, -108), price: 3000,
@@ -146,6 +146,22 @@
   // inside a bought road plot the road runs on to the town gate at the map edge
   const TOWN = { gate: P(596, 66), lane: [P(362, 66), P(596, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
   if (WD) for (const k in ROUTES) if (!WD.ROUTES[k]) WD.ROUTES[k] = ROUTES[k];
+
+  // when 东南滩 is zoned 度假村, a south opening and a short sandy path join the lot to the east end of the beach.
+  // The map does not grow. The west gate stays the road in; this is only the beach connection.
+  const RESORT_JOIN = { lot: P(376, 200), beach: P(344, 220), path: [P(376, 200), P(360, 208), P(344, 220), P(332, 236)] };
+  const resortOpen = plots => !!(plots && plots.eshore && plots.eshore.mod === 'resort');
+  const plotOpenings = (p, plots) => {
+    const out = [p.gate];
+    if (p && p.id === 'eshore' && resortOpen(plots)) out.push(RESORT_JOIN.lot);
+    return out;
+  };
+  const nearJoin = (x, y, pt, r) => Math.hypot(x - pt.x, y - pt.y) < (r == null ? 12 : r);
+  const joinDist = (x, y) => {
+    let d = 1e9; const line = RESORT_JOIN.path;
+    for (let i = 0; i < line.length - 1; i++) d = Math.min(d, segDist(x, y, line[i].x, line[i].y, line[i + 1].x, line[i + 1].y));
+    return d;
+  };
 
   // ---------- the grazing meadow behind the sheep fold (a fold upgrade, not a plot) ----------
   // West of 果园坡, between its fence and the river. The orchard's west fence opens beside the fold once it is bought.
@@ -271,7 +287,7 @@
   function navPaint(g, H, opts) {
     const o = opts || {}, open = o.regions || [], m = staticMask(g, H);
     for (let k = 0; k < m.length; k++) if (m[k]) g.cost[k] = H.BLOCKED; // the river, the cliff, and the plateau (only the trail goes up)
-    for (const p of PLOTS) if (!p.special) fenceRect(g, H, p.rect, [p.gate], open.includes(p.id));
+    for (const p of PLOTS) if (!p.special) fenceRect(g, H, p.rect, plotOpenings(p, o.plots), open.includes(p.id));
     if (o.graze && open.includes('orchard')) { const r = GRAZE.rect;
       fenceRect(g, H, [r[0], r[1], r[2] - 0.01, r[3]], [], false);
       H.paintBox(g, r[2] - 3, r[1] + 2, r[2] + 3, r[3] - 2, H.GRASS); // the meadow's own east side is the orchard fence...
@@ -280,15 +296,24 @@
   }
   function navCarve(g, H, opts) {
     const o = opts || {}, open = o.regions || [];
-    for (const p of PLOTS) if (!p.special && open.includes(p.id)) H.carveDisc(g, p.gate.x, p.gate.y, 4.5, H.DIRT);
+    for (const p of PLOTS) if (!p.special && open.includes(p.id)) {
+      for (const gte of plotOpenings(p, o.plots)) H.carveDisc(g, gte.x, gte.y, 4.5, H.DIRT);
+    }
     if (open.includes('bridge')) H.paintBox(g, BRIDGE.x - 3.5, BRIDGE.y0 - 4, BRIDGE.x + 3.5, BRIDGE.y1 + 4, H.DIRT);
     if (open.includes('trail')) for (const line of [TRAIL, TRAIL_TOP, TRAIL_EAST]) for (let i = 0; i < line.length - 1; i++) H.paintSeg(g, line[i].x, line[i].y, line[i + 1].x, line[i + 1].y, 3, H.DIRT);
     if (open.includes('summit') || open.includes('alp')) { /* plateau plots are walkable inside their fence */ }
     for (const id of ['summit', 'alp']) if (open.includes(id)) { const r = plot(id).rect; H.paintBox(g, r[0] + 2, r[1] + 2, r[2] - 2, r[3] - 2, H.GRASS); H.carveDisc(g, plot(id).gate.x, plot(id).gate.y, 4.5, H.DIRT); }
+    // a zoned 度假村 opens the south fence and a short path down to the east end of the beach
+    if (resortOpen(o.plots) && open.includes('eshore') && open.includes('coast')) {
+      const line = RESORT_JOIN.path;
+      for (let i = 0; i < line.length - 1; i++) H.paintSeg(g, line[i].x, line[i].y, line[i + 1].x, line[i + 1].y, 3.2, H.DIRT);
+      H.carveDisc(g, RESORT_JOIN.lot.x, RESORT_JOIN.lot.y, 5, H.DIRT);
+      H.carveDisc(g, RESORT_JOIN.beach.x, RESORT_JOIN.beach.y, 5, H.DIRT);
+    }
   }
 
   const api = { MODULES, MODULE_IDS, TERRAIN, RIVER, RIVER_HW, BANK, BRIDGE, TRAIL, TRAIL_TOP, TRAIL_EAST, TOWN, GRAZE, PLOTS, PLOT_IDS, FIELD_PLOT_IDS, ROUTES, OLD, CLIFF,
     plot, isPlotId, plotAt, terrainAt, clearAt, outer, riverDist, riverHW, riverNear, riverAt, RIVER_LEN, wheelSite, WHEEL_IN, ridgeY, onTrail, polyDist, grazeHours,
-    gateOpen, workers, offer, rezoneOffer, LEGACY_MODS, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve };
+    gateOpen, workers, offer, rezoneOffer, LEGACY_MODS, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve, RESORT_JOIN, resortOpen, plotOpenings, nearJoin, joinDist };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFPlots = api;
 })(typeof window !== 'undefined' ? window : globalThis);
