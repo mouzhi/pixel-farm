@@ -542,3 +542,24 @@ ok('v15 old save gets an empty inn; a filled inn round-trips (append-only, saveV
   assert.deepStrictEqual(again.inn, t2.inn);
 });
 
+ok('v5.11.0.30: home.held is append-only; junk ids drop; empty/missing stays omitted; a second validate does not duplicate', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v15-day72-cottage.json'), 'utf8'));
+  const plain = SAVE.validate(SAVE.migrate(raw));
+  assert.strictEqual(plain.saveVersion, 15);
+  assert.ok(!('held' in plain.home), 'missing held stays omitted');
+
+  const withHeld = Object.assign({}, raw, { home: Object.assign({}, raw.home, { held: [
+    { id: 'sp_kid0', basket: ['honey', 'honey', 'rock'] },
+    { id: 'ghost', basket: ['honey'] },
+    { id: 'sp_kid0', basket: ['honey', 'honey'] },
+    { id: 'sp_kid1', basket: [] },
+    { id: 'partner', basket: ['honey'] }
+  ] }) });
+  const s = SAVE.validate(SAVE.migrate(withHeld));
+  assert.strictEqual(s.saveVersion, 15);
+  assert.deepStrictEqual(s.home.held, [{ id: 'sp_kid0', basket: ['honey', 'honey'] }]);
+  const again = SAVE.validate(JSON.parse(JSON.stringify(s)));
+  assert.deepStrictEqual(again.home.held, s.home.held);
+  const empty = SAVE.validate(SAVE.migrate(Object.assign({}, raw, { home: Object.assign({}, raw.home, { held: [] }) })));
+  assert.ok(!('held' in empty.home), 'empty held stays omitted');
+});
