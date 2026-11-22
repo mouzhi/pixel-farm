@@ -91,6 +91,81 @@ fs.mkdirSync(OUT, { recursive: true });
     return { n, onMain, T: Math.round(S.t % 1440), hands: f.farmHands(), kid: kt && kt.kind, sp: st && st.kind, win: kid._helpWin > 0, mid, has: !!sp }; })()`,
     r => !r.has ? 'no spouse' : !['harvest', 'collect', 'pick', 'water'].includes(r.kid) ? 'kid ' + r.kid : !['harvest', 'collect', 'pick', 'water'].includes(r.sp) ? 'spouse ' + r.sp : r.mid !== 0 ? 'window at noon' : null);
 
+  // 6. v5.11.0.30: a helping spouse's mid-carry honey is kept in home.held across save/reload
+  // (married kids and 阿禾 already save their baskets). Also: two snapshots do not duplicate,
+  // a normal handoff still delivers exactly 2, and a full receiving basket does not lose or duplicate.
+  {
+    const p = await page(married);
+    let r; try {
+      r = await p.evaluate(`(() => { ${helpers}
+        at(6 * 60 + 30); dry();
+        if (!(S.up.hive > 0)) f.buy('hive');
+        const kid = S.members.find(m => m.id === 'kid0'), sp = f.SPOUSES[0], ahe = partner();
+        if (!sp || !kid) return { error: 'no spouse or kid' };
+        const honeyOf = a => (a.crops || []).filter(it => it === 'honey' || (it && it.type === 'honey')).length;
+        const stripH = a => { a.crops = a.crops.filter(it => it !== 'honey' && !(it && it.type === 'honey')); };
+        stripH(F0); stripH(kid); if (ahe) stripH(ahe); stripH(sp);
+        S.works.hives[0].ready = 2;
+        S.works.hives[0].ready -= 2; sp.crops.push('honey', 'honey');
+        sp.home = false; sp._helpWin = f.helpWinNow(S.t % 1440);
+        // normal handoff (in memory, before the save): exactly 2 go to the child's basket
+        const kid0 = honeyOf(kid);
+        as(sp, () => f.helpEnd());
+        const handoff = { kid: honeyOf(kid) - kid0, spouse: honeyOf(sp), hive: S.works.hives[0].ready };
+        // put the 2 jars back on the spouse for the save/reload cases
+        for (let i = kid.crops.length - 1, n = 0; i >= 0 && n < 2; i--) if (kid.crops[i] === 'honey') { kid.crops.splice(i, 1); n++; }
+        sp.crops.push('honey', 'honey'); sp._helpWin = f.helpWinNow(S.t % 1440);
+        const snap1 = f.snapshot(), snap2 = f.snapshot();
+        const held1 = (snap1.home && snap1.home.held) || [];
+        const held2 = (snap2.home && snap2.home.held) || [];
+        const honeyHeld = h => h.reduce((n, row) => n + ((row.basket || []).filter(it => it === 'honey' || (it && it.type === 'honey')).length), 0);
+        // receiver basket full: fill the child, snapshot again (must not dump or duplicate the 2 jars)
+        const cap = 10; while (kid.crops.length < cap) kid.crops.push('carrot');
+        const fullLen = kid.crops.length, snapFull = f.snapshot();
+        localStorage.setItem('mouzhi/pixel-farm:save', JSON.stringify(snapFull));
+        return { ver: f.version, handoff, held1, held2, honey1: honeyHeld(held1), honey2: honeyHeld(held2),
+          sameHeld: JSON.stringify(held1) === JSON.stringify(held2), fullLen, kidHoney: honeyOf(kid),
+          spHoney: honeyOf(sp), hive: S.works.hives[0].ready, spName: sp.name };
+      })()`);
+    } catch (e) { r = { error: String(e).slice(0, 400) }; }
+    const midBad = r && r.error ? r.error
+      : r.ver !== VERSION ? 'ver ' + r.ver
+      : !r.handoff || r.handoff.kid !== 2 || r.handoff.spouse !== 0 || r.handoff.hive !== 0 ? 'handoff ' + JSON.stringify(r.handoff)
+      : r.honey1 !== 2 || r.honey2 !== 2 || !r.sameHeld ? 'double-save ' + JSON.stringify({ honey1: r.honey1, honey2: r.honey2, held1: r.held1, held2: r.held2 })
+      : r.spHoney !== 2 || r.hive !== 0 ? 'pre-reload ' + JSON.stringify(r)
+      : null;
+    if (midBad) { console.log('FAIL', 'spouse_basket_reload.png', midBad, JSON.stringify(r).slice(0, 700)); fails.push('spouse_basket_reload.png: ' + midBad); }
+    else {
+      await p.reload();
+      await p.waitForFunction(() => window.__farm && __farm.spritesReady() && __farm.refreshUI, null, { timeout: 30000 });
+      await p.evaluate(() => { __farm.SAVE.off = true; const o = document.getElementById('offline'); if (o) o.hidden = true; });
+      let after; try { after = await p.evaluate(`(() => { ${helpers}
+        const kid = S.members.find(m => m.id === 'kid0'), sp = f.SPOUSES[0], ahe = partner();
+        const honeyOf = a => (a.crops || []).filter(it => it === 'honey' || (it && it.type === 'honey')).length;
+        const hive = (S.works.hives || []).reduce((n, h) => n + ((h && h.ready) || 0), 0);
+        if (sp) { f.setAngle(0); f.panTo(sp.x, sp.y); f.advance(0.4, 10); }
+        return { ver: f.version, hive, spouse: sp ? honeyOf(sp) : -1, kid: kid ? honeyOf(kid) : -1,
+          partner: ahe ? honeyOf(ahe) : -1, farmer: honeyOf(F0),
+          kidLen: kid ? kid.crops.length : 0, has: !!sp, name: sp && sp.name,
+          basket: sp && sp.crops.slice(), kidBasket: kid && kid.crops.slice() };
+      })()`); } catch (e) { after = { error: String(e).slice(0, 400) }; }
+      const total = after.hive + after.spouse + after.kid + after.partner + after.farmer;
+      const bad = after.error ? after.error
+        : after.ver !== VERSION ? 'ver ' + after.ver
+        : !after.has ? 'no spouse'
+        : after.spouse !== 2 ? 'spouse honey ' + after.spouse
+        : after.kid !== 0 ? 'kid gained honey ' + after.kid
+        : after.hive !== 0 ? 'hive ' + after.hive
+        : total !== 2 ? 'total ' + total
+        : after.kidLen !== 10 ? 'kid basket len ' + after.kidLen
+        : null;
+      await p.waitForTimeout(200); await p.screenshot({ path: path.join(OUT, 'spouse_basket_reload.png') });
+      console.log(bad ? 'FAIL' : 'ok  ', 'spouse_basket_reload.png', JSON.stringify(Object.assign({}, r, { after })).slice(0, 800));
+      if (bad) fails.push('spouse_basket_reload.png: ' + bad);
+    }
+    await p.context().close();
+  }
+
   if (errs.length) fails.push('page errors: ' + errs.slice(0, 3).join(' | '));
   await b.close(); server.close();
   if (fails.length) { console.error('FAILED\n' + fails.join('\n')); process.exit(1); }
