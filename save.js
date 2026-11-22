@@ -218,7 +218,7 @@
       works: PW.valid(s.works, PL.validPlots(s.plots)), // v5.6.0
       decor: DC.valid(s.decor), // v5.7.0
       town: Object.assign(TN.valid(s.town), { hall: HL.valid(s.town && s.town.hall) }), // v5.8.0; v5.10.0: + hall (镇公所: projects, gifts), filled in when missing
-      home: HM.valid(s.home), // v5.9.0
+      home: validHome(s.home), // v5.9.0; v5.11.0.30: append-only home.held (a helping spouse's basket)
       ...(s.homeyard && YD ? { homeyard: YD.valid(s.homeyard) } : {}), // v5.10.3 append-only: the yard, stall and animal-care things set up
       ...(IN ? { inn: IN.valid(s.inn) } : {}), // v5.10.7 append-only: 民宿 + 农家菜馆 (missing = nothing built)
       ...(s.diary && DY ? { diary: DY.valid(s.diary) } : {}), // v5.10.13 append-only: the last 30 days of the family diary
@@ -239,7 +239,27 @@
     if (f.kidGrowth) out.kidGrowth = 1; // v5.4.3: set after the one-time growth floor, so mornings do not re-apply the old table
     return out;
   }
-  // what a family member had on them when the game was saved (they keep working from the house door after loading)
+  // v5.11.0.30: a married child's spouse is rebuilt on load, so their mid-help basket is kept here
+  // (append-only, omitted when empty). Same idea as bakery.held.
+  function validSpouseHeld(list) {
+    if (!Array.isArray(list)) return [];
+    const out = [], seen = new Set();
+    for (const row of list) {
+      if (!row || typeof row.id !== 'string' || !/^sp_kid[01]$/.test(row.id) || seen.has(row.id)) continue;
+      const basket = validBasket(row.basket);
+      if (!basket.length) continue;
+      seen.add(row.id);
+      out.push({ id: row.id, basket });
+    }
+    return out;
+  }
+  function validHome(v) {
+    const out = HM.valid(v);
+    const held = validSpouseHeld(v && v.held);
+    if (held.length) out.held = held;
+    return out;
+  }
+    // what a family member had on them when the game was saved (they keep working from the house door after loading)
   function validMember(m) {
     if (!m || typeof m.id !== 'string' || !/^(partner|kid[01])$/.test(m.id)) return null;
     return { id: m.id, water: int(m.water, 0, 0, 999), bag: seeds(m.bag), gathered: int(m.gathered, 0, 0, 1e6),
