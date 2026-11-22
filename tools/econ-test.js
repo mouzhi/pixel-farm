@@ -121,4 +121,20 @@ ok('v5.11.0.8 review: two 1.5-day records — the first 1.5 days come back 1 h l
   const before = SIM.offlineSettle(1800, avg, win, r.nextPartAt - 1000); assert.strictEqual(before.days, 0, 'nothing just before it');
   const one = SIM.offlineSettle(1800, avg, [{ at: T0 - 2 * H, days: 3 }], T0); assert.strictEqual(one.nextPartAt, one.nextFullAt); assert.strictEqual(one.nextPartDays, 3);
 });
+ok('v5.11.0.31 starter goals: sell → field → can → coop → chicken, small rewards, done once every step is met', () => {
+  const up = SIM.emptyUpgrades();
+  assert.deepStrictEqual(SIM.STARTER.map(s => s.id), ['sell', 'field', 'can', 'coop', 'chicken']);
+  assert(SIM.STARTER.reduce((a, s) => a + s.reward, 0) <= 200, 'the whole chain pays at most 200 gold');
+  assert.strictEqual(SIM.starterGoal(up, 0).i, 0);
+  assert.strictEqual(SIM.starterGoal(up, 5).step.id, 'field');
+  assert.strictEqual(SIM.starterGoal(Object.assign({}, up, { field: 1 }), 5).step.id, 'can');
+  assert.strictEqual(SIM.starterGoal(Object.assign({}, up, { field: 1, can: 1, coop: 1 }), 5).step.id, 'chicken');
+  assert.strictEqual(SIM.starterGoal(Object.assign({}, up, { field: 3, can: 2, coop: 1, chicken: 6 }), 999), null, 'an old farm sees no goal');
+  assert.strictEqual(SIM.starterGoal(Object.assign({}, up, { can: 4, coop: 1, chicken: 2 }), 38), null, 'a day-72 farm that never bought field level 1 is past the chain');
+  assert.strictEqual(SIM.starterGoal(Object.assign({}, up, { coop: 1 }), 5).step.id, 'chicken', 'coop before field / can: next is the chicken');
+  assert.strictEqual(SIM.starterGoal(up, 50, 31), null, 'nothing after day 30');
+  assert.strictEqual(SIM.starterGoal(up, 0, 1).i, 0);
+  for (const st of SIM.STARTER) if (st.shop) assert(SIM.shopItem(st.shop), st.shop + ' is a shop item');
+  assert.strictEqual(SIM.FIRST_RIPEN, 14 * 60);
+});
 console.log(`\n${n} passed`);

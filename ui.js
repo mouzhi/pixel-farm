@@ -589,6 +589,8 @@
     if (d.inn) { const [a, id] = d.inn.split(':'); if (a === 'start') { const r = G.innStart(id); drawShop(true); if (!r.ok) el.classList.add('shake'); } else if (a === 'mode') { const v = G.innView(); G.setInnMenu(v && v.auto ? [] : 'auto'); drawShop(true); } else if (a === 'dish') { const v = G.innView(); const cur = Array.isArray(v.menu) ? v.menu.slice() : v.listed.filter(d => d.can).map(d => d.id); const i = cur.indexOf(id); if (i >= 0) cur.splice(i, 1); else if (cur.length < v.dishes) cur.push(id); G.setInnMenu(cur.length ? cur : 'auto'); drawShop(true); } } // v5.10.7
   });
   $('shopBtn').addEventListener('click', () => toggleShop());
+  if ($('goal')) $('goal').addEventListener('click', () => { const id = $('goal').dataset.shop; if (!id) return; // v5.11.0.31: the starter goal opens its shop tab
+    const t = (SIM.SHOP_TABS || []).find(t => t.ids.includes(id)); toggleShop(true, { tab: t ? t.id : undefined, focus: id }); });
   G.openPlot = id => toggleShop(true, { tab: 'land', plot: id }); // v5.5.0: the plot labels on the map
   G.openHall = () => toggleShop(true, { tab: 'hall' }); // v5.10.0: the notice board in the town
   G.openInn = () => toggleShop(true, { tab: 'inn' }); // v5.10.7
