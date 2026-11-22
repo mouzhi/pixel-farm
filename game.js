@@ -2626,6 +2626,7 @@ function placeOk(x, y, what, id, skip, self, slot) { // self: the order being ca
   if (blk && !DC.keepsPaths(g, blk, entrySpots(), NAV.LAYOUT.DOOR)) return res(false, '放在这里会把路堵上');
   return res(true, null);
 }
+const meadowAt = (x, y) => { const p = PL.plotAt(x, y); return p && S.plots[p.id] && S.plots[p.id].mod === 'meadow' ? p.id : null; }; // xhs 1.3.2
 const workYardAt = (x, y) => { const p = PL.plotAt(x, y); return p && S.plots[p.id] && S.plots[p.id].mod === 'workshop' ? p.id : null; }; // v5.10.12
 // things tied to a plot's use stay inside it: a workshop in its 工坊院, a hive in its 花甸 (or on 果园坡 for the orchard pair)
 function thingZone(what, skip) {
@@ -2634,7 +2635,7 @@ function thingZone(what, skip) {
     return { ok: (x, y) => { const id = workYardAt(x, y); return !!id && (id === w.at || PW.slotIn(S.works.works, id, skip.ref) >= 0); }, why: `${PW.WORKS[skip.ref].name}只能挪到工坊院里（哪一块都行，每块最多 3 座）` }; }
   if (what === 'hive' && skip) { const h = S.works.hives[skip.ref]; if (!h) return null;
     if (h.at === 'orchard') return { ok: (x, y) => WD.areaAt(x, y) === 'orchard', why: '这箱蜂只能在果园坡里挪' };
-    return { ok: inPlot(h.at, 'meadow'), why: '蜂箱只能挪到它所在的花甸里' }; }
+    return { ok: (x, y) => { const id = meadowAt(x, y); return !!id && PW.hiveSlotIn(S.plots, S.eff.regions, S.works.hives, id, skip.ref) >= 0; }, why: `蜂箱只能挪到花甸里（哪一块都行，每块最多 ${PW.HIVE.max} 箱）` }; } // xhs 1.3.2: any 花甸, not only its own
   return null;
 }
 const decorById = u => { const p = S.decor.placed.find(q => q.u === u); return p ? p.id : null; };
@@ -2700,7 +2701,10 @@ function settle(q) { // put it down at q.x, q.y (checked again: the ground may h
     if (to && to !== w.at) { const sl = PW.slotIn(S.works.works, to, q.ref); if (sl < 0) { dropOrder(q); log(`${thingName(q)}没法挪过去（那块工坊院满了），留在原处`); return false; }
       log(`${thingName(q)}从${PL.plot(w.at).name}搬到了${PL.plot(to).name}，里面的原料和成品一起带过去了`); w.at = to; w.slot = sl; }
     w.x = x; w.y = y; }
-  else if (q.what === 'hive') { const h = S.works.hives[q.ref]; h.x = x; h.y = y; }
+  else if (q.what === 'hive') { const h = S.works.hives[q.ref], to = h && h.at !== 'orchard' ? meadowAt(x, y) : null; if (!h) { dropOrder(q); return false; }
+    if (to && to !== h.at) { const sl = PW.hiveSlotIn(S.plots, S.eff.regions, S.works.hives, to, q.ref); if (sl < 0) { dropOrder(q); log(`${thingName(q)}没法挪过去（那块花甸放满了），留在原处`); return false; } // xhs 1.3.2: to another 花甸; its honey and countdown go with it
+      log(`${thingName(q)}从${PL.plot(h.at).name}搬到了${PL.plot(to).name}，里面的蜂蜜一起带过去了`); h.at = to; h.s = sl; }
+    h.x = x; h.y = y; }
   else if (q.what === 'spr') { const s = S.works.sprinklers[q.ref]; s.x = x; s.y = y; SPR_COVER = null; }
   dropOrder(q); markNavDirty(); DA.sync(true); PWA.sync(true); return true;
 }
@@ -4199,7 +4203,7 @@ function decorClick(w) {
     const o = orderThing('place', 'decor', null, id, r.x, r.y, true); if (!o.ok) return o;
     say(`标记好了，家人会把${DC.CATALOG[id].name}搬过去`); if (invFree(id) <= 0) setMode(null); return { ok: true }; }
   if (INPUT.mode === 'move') {
-    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器、第二套棚舍或新房子（老房子和第一套棚舍不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : m.what === 'home' ? '选中了新房子，再点新位置：买下的花甸、农田，或家里已买下的地（绿框，一块地一座）' : m.what === 'pen2' ? (PW.otherPasture(S.plots, S.works.penHost) ? '选中了第二套棚舍，再点另一块牧场（绿框），四座棚子、动物、饲槽和机械一起走' : '选中了第二套棚舍。还没有另一块牧场：先把另一块地改成牧场，再点那里（绿框）') : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
+    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器、第二套棚舍或新房子（老房子和第一套棚舍不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : m.what === 'home' ? '选中了新房子，再点新位置：买下的花甸、农田，或家里已买下的地（绿框，一块地一座）' : m.what === 'pen2' ? (PW.otherPasture(S.plots, S.works.penHost) ? '选中了第二套棚舍，再点另一块牧场（绿框），四座棚子、动物、饲槽和机械一起走' : '选中了第二套棚舍。还没有另一块牧场：先把另一块地改成牧场，再点那里（绿框）') : m.what === 'hive' && S.works.hives[m.ref] && S.works.hives[m.ref].at !== 'orchard' ? '选中了蜂箱，再点新位置：任何一块花甸里的空地都行（绿框），蜂蜜跟着走' : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
     const m = INPUT.mvPick; const again = movableAt(w.x, w.y); if (again && again.what === m.what && again.ref === m.ref) { INPUT.mvPick = null; say('取消选择'); return null; }
     const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : m.what === 'home' ? homeMoveOk(w.x, w.y, m.ref) : m.what === 'pen2' ? pen2MoveOk(w.x, w.y) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
     const o = orderThing('move', m.what, m.ref, m.what === 'decor' ? null : null, m.what === 'spr' ? w.x : r.x, m.what === 'spr' ? w.y : r.y, true); if (!o.ok) return o;

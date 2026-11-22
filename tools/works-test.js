@@ -170,4 +170,20 @@ ok('v5.11.0.26: a full hopper does not request a delivery; carry must cover need
   assert.ok(PW.canDeliver(1, jam.need, jam.inCap, 7), 'one slot left accepts a single fruit');
   assert.ok(!PW.canDeliver(1, jam.need, jam.inCap, 8));
 });
+ok('xhs 1.3.2: every 花甸 has six slots; hives move to another meadow, the cap stays 6, the old plot frees up', () => {
+  const plots = { swbank: { mod: 'meadow', day: 2 }, glade: { mod: 'meadow', day: 5 } };
+  const sl = PW.hiveSlots(plots, []); assert.strictEqual(sl.filter(q => q.at === 'swbank').length, 6); assert.strictEqual(sl.filter(q => q.at === 'glade').length, 6);
+  const hives = []; for (let i = 0; i < 6; i++) { const s = PW.hiveFree(plots, [], hives); hives.push({ at: s.at, s: s.s, cd: 2, ready: i % 3 }); }
+  assert(hives.every(h => h.at === 'swbank'), 'new hives fill the first meadow first'); assert(PW.hiveGate(plots, [], 6, hives), 'still 6 in all');
+  assert.strictEqual(PW.hiveHome(plots, hives), 'swbank');
+  assert(/挪东西/.test(PW.plotBusy('swbank', { plots, hives })), 'busy names the move tool');
+  assert.strictEqual(PW.hiveSlotIn(plots, [], hives, 'swbank', 2), hives[2].s, 'own meadow: own slot');
+  for (let i = 0; i < 6; i++) { const s = PW.hiveSlotIn(plots, [], hives, 'glade', i); assert(s >= 0); hives[i].at = 'glade'; hives[i].s = s; }
+  assert.deepStrictEqual(hives.map(h => h.s).sort(), [0, 1, 2, 3, 4, 5]); assert(hives.every(h => PW.hivePos(h, plots, [])));
+  assert.deepStrictEqual(hives.map(h => h.ready), [0, 1, 2, 0, 1, 2], 'honey goes with them'); assert.strictEqual(PW.hiveHome(plots, hives), 'glade');
+  assert.strictEqual(PW.hiveSlotIn(plots, [], hives.concat({ at: 'swbank', s: 0 }), 'glade', 6), -1, 'a full meadow takes no seventh');
+  assert.strictEqual(PW.plotBusy('swbank', { plots, hives }), null, 'the old meadow can be re-zoned');
+  assert(/另一块地改成花甸/.test(PW.plotBusy('glade', { plots: { glade: plots.glade }, hives })), 'only meadow: say to make another first');
+  const v = PW.valid({ sprinklers: [], works: {}, hives, penHost: null }, plots); assert.deepStrictEqual(v.hives.map(h => [h.at, h.s, h.ready]), hives.map(h => [h.at, h.s, h.ready]), 'save keeps them');
+});
 console.log(`works-test: ${n} ok`);
