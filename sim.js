@@ -329,6 +329,6 @@
   const FIRST_RIPEN = 14 * 60;
   const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC, OFFLINE_FREE_SEC, OFFLINE_FREE_GOLD, SPEED_REFUND, speedRefund,
     CROPS, IDS, SHOP, SHOP_IDS, SHOP_TABS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
-    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, STARTER, STARTER_DAYS, starterGoal, FIRST_RIPEN, gate: null };
+    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, STARTER, STARTER_DAYS, starterDone, starterGoal, FIRST_RIPEN, gate: null };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

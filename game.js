@@ -1706,10 +1706,12 @@ function firstRipen() {
 // the starter goal chain (sim.js STARTER): pays each step's small reward once, when the step moves on. starterIdx is runtime
 // only: null after a load means "take the save's step as the start, pay nothing".
 let starterIdx = null;
-function starterNow() { const g = SIM.starterGoal(S.up, S.totalSold, S.day); return g ? g.i : SIM.STARTER.length; }
+// progress ignores the day cap (a "chain done" past day 30 must not look like four steps just finished); past the cap
+// nothing is paid, and a step that was skipped (not actually done) is never paid
+function starterNow() { const g = SIM.starterGoal(S.up, S.totalSold); return g ? g.i : SIM.STARTER.length; }
 function starterTick() {
-  const i = starterNow(); if (starterIdx === null || i < starterIdx) { starterIdx = i; return; }
-  for (; starterIdx < i; starterIdx++) { const st = SIM.STARTER[starterIdx]; if (!(st.reward > 0)) continue;
+  const i = starterNow(); if (starterIdx === null || i < starterIdx || S.day > SIM.STARTER_DAYS) { starterIdx = i; return; }
+  for (; starterIdx < i; starterIdx++) { const st = SIM.STARTER[starterIdx]; if (!(st.reward > 0) || !SIM.starterDone(st, S.up, S.totalSold)) continue;
     S.coins += st.reward; S.earned += st.reward; emit('income', { gold: st.reward, source: 'goal', goal: st.id });
     log(`完成目标「${st.text}」：奖励 ${st.reward} 金`); say(`目标完成：${st.text}，奖励 ${st.reward} 金` + (starterIdx + 1 < SIM.STARTER.length ? '' : '。新手目标全部完成！'));
     popText(FARMER.x, FARMER.y, 24, '+' + st.reward, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#fff2a8'], 10, 'coin'); }

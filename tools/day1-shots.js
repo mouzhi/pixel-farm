@@ -51,6 +51,18 @@ fs.mkdirSync(OUT, { recursive: true });
     await q.evaluate(() => { __farm.S.coins += 100; __farm.buy('can'); __farm.advance(2, 3); }); const e2 = await q.evaluate(st);
     check('after the reload the next step still pays once', e2.paid.join() === 'can' ? '' : 'bad', e2);
     await p.close(); await q.close(); }
+  // 4b. review fix: day 30 → 31 with one crop sold and no goal bought pays nothing at the rollover; a chicken bought on day 30 pays 50 once
+  { const p = await page(null);
+    await p.evaluate(() => { const S = __farm.S; S.totalSold = 1; S.day = 30; __farm.advance(1, 3); });
+    await until(p, () => __farm.S.day === 31, 2000); await p.evaluate(() => __farm.advance(2, 3));
+    const r = await p.evaluate(st); check('day 30 → 31 rollover: no goal reward', r.day === 31 && r.paid.length === 0 && !r.goal ? '' : 'paid at rollover', r);
+    await p.close(); }
+  { const p = await page(null);
+    await p.evaluate(() => { const S = __farm.S; S.totalSold = 1; S.day = 30; S.up.coop = 1; __farm.advance(1, 3); S.coins += 1000; __farm.buy('chicken'); __farm.advance(2, 3); });
+    const a1 = await p.evaluate(st);
+    await until(p, () => __farm.S.day === 31, 2000); await p.evaluate(() => __farm.advance(2, 3));
+    const r = await p.evaluate(st); check('day 30 chicken: +50 exactly once, nothing more at the rollover', a1.paid.join() === 'chicken' && r.paid.join() === 'chicken' ? '' : 'bad', { a1: a1.paid, r: r.paid, day: r.day });
+    await p.close(); }
   // 5. old farms: no reward on load
   for (const [f, hidden] of [['save-v11-day4.json', null], ['save-v15-day72-cottage.json', true]]) {
     const p = await page(readSave(path.join(__dirname, 'fixtures', f))); await p.evaluate(() => __farm.advance(60, 3)); const r = await p.evaluate(st);

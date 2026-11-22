@@ -353,13 +353,13 @@ async function test(name, fn) {
   await test('pets: cats and dogs roam, follow, nap, can be petted; cats bring seeds; they come back after reload', async ctx => {
     const p = await open(ctx);
     const r = await p.evaluate(() => { const S = __farm.S, f = __farm; S.coins = 2000; for (const id of ['cat', 'cat', 'dog']) f.buy(id);
-      const seeds0 = (S.store.carrot || 0) + (S.store.strawberry || 0) + (S.store.watermelon || 0); f.advance(240, 5); const F = f.F, dog = f.PV.get('dog0'), cat = f.PV.get('cat0');
-      const dogNear = Math.hypot(dog.x - F.x, dog.y - F.y), coats = f.PETS_LIVE.map(p => p.coat);
+      const seeds0 = (S.store.carrot || 0) + (S.store.strawberry || 0) + (S.store.watermelon || 0); let near = 0; for (let i = 0; i < 48; i++) { f.advance(5, 5); const F = f.F, dog = f.PV.get('dog0'); if (Math.hypot(dog.x - F.x, dog.y - F.y) < 40) near++; } // v5.11.0.31: a share of the day, not one instant (the farmer's day-1 route moved with the first-afternoon harvest)
+      const dogNear = near / 48, coats = f.PETS_LIVE.map(p => p.coat);
       f.advance(1440, 10); const seeds1 = (S.store.carrot || 0) + (S.store.strawberry || 0) + (S.store.watermelon || 0);
       const night = S.events.some(e => /猫咪在门口放了/.test(e.msg)) && seeds1 >= seeds0 + 2;
       f.advance(120, 5); const pt = f.PV.get('cat1'); const said = f.patPet(f.PETS_LIVE[1]);
       return { n: f.PETS_LIVE.length, coats, dogNear, night, said, walk: S.eff.walk, patted: S.events.some(e => /摸了摸/.test(e.msg)) }; });
-    assert.strictEqual(r.n, 3); assert.deepStrictEqual(r.coats, ['ginger', 'black', 'shiba']); assert(r.dogNear < 40, 'dog stays near the farmer: ' + r.dogNear);
+    assert.strictEqual(r.n, 3); assert.deepStrictEqual(r.coats, ['ginger', 'black', 'shiba']); assert(r.dogNear >= 0.25, 'dog stays near the farmer (share of the day within 40): ' + r.dogNear);
     assert(r.night, 'cats left seeds'); assert.strictEqual(r.said, '黑猫'); assert.strictEqual(r.walk, 1.03); assert(r.patted, 'farmer pats them');
     await p.evaluate(() => __farm.saveNow()); await p.reload(); await p.waitForFunction(() => window.__farm && __farm.SAVE);
     assert.strictEqual(await p.evaluate(() => { __farm.advance(10, 5); return __farm.PETS_LIVE.length; }), 3);
