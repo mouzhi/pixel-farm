@@ -986,7 +986,7 @@ function seaHold(a) { // index flags: sea fish that wait in the basket for the s
   a.crops.forEach((it, i) => { if (n > 0 && typeof it === 'string' && IN.isSeaFish(it)) { keep[i] = true; n--; } });
   return keep;
 }
-function helpEnd() { // the window is over: workshop goods go to the farmer; a spouse (not saved) hands the rest to the married child's basket
+function helpEnd() { // the window is over: workshop goods go to the farmer; a spouse hands the rest to the married child's basket
   F._helpWin = 0; if (!F.crops.length) return;
   { const keep = worksKeep(F), give = F.crops.filter((_, i) => keep[i]); // what a workshop waits for (the mill's wheat) goes to the farmer, who delivers it
     if (give.length) { const left = F.crops.filter((_, i) => !keep[i]); F.crops.length = 0; F.crops.push(...left); FARMER.crops.push(...give); } }
@@ -3261,7 +3261,7 @@ const homeRngS = mulberry32(0x40E5A11); // its own stream (the farm's RNG stays 
 const hr = () => homeRngS();
 const homeDayRng = salt => mulberry32((Math.imul(S.day, 0x9E3779B1) ^ salt ^ 0x11E) >>> 0); // one roll per day and purpose (the same after a reload)
 const HT = [];      // the little farms' tiles: drawn with the main field, grown overnight here, never on the main board
-const SPOUSES = []; // the married children's partners: they live in the new house and only work there
+const SPOUSES = []; // the married children's partners: they live in the new house and only work there (baskets: home.held)
 const kidName = id => { const k = S.family.kids.find(q => q.id === id); return k ? k.name : '孩子'; };
 const memberOf = id => S.members.find(m => m.id === id) || null;
 const homeOfActor = a => { if (!a || !S.home) return null; const id = a._spouse || a.id; return id && HM.isMarried(S.home, id) ? HM.houseOf(S.home, id) : null; };
@@ -3280,8 +3280,13 @@ function homeTilesSync() { // runtime tile views of every built house (state liv
     else { const L = HM.layout(h); h._tiles.forEach((t, i) => { t.x = L.tiles[i].x; t.y = L.tiles[i].y; t.hi = hi; }); }
     if (h.built) HT.push(...h._tiles); });
 }
-const homeSave = () => HM.valid({ houses: S.home.houses.map(h => Object.assign({}, h, { _tiles: undefined, tiles: h._tiles ? h._tiles.map(t => ({ t: t.tilled ? 1 : 0, w: t.watered ? 1 : 0, c: t.crop ? { type: t.crop.type, age: t.crop.age, stage: t.crop.stage, rot: t.crop.rot } : null })) : h.tiles })),
-  rel: S.home.rel, nb: S.home.nb, wed: S.home.wed, help: S.home.help, teen: S.home.teen, earn: S.home.earn, path: S.home.path, wage: S.home.wage });
+function homeSave() { // v5.11.0.30: a helping spouse's basket is append-only home.held (omitted when empty)
+  const h = HM.valid({ houses: S.home.houses.map(h => Object.assign({}, h, { _tiles: undefined, tiles: h._tiles ? h._tiles.map(t => ({ t: t.tilled ? 1 : 0, w: t.watered ? 1 : 0, c: t.crop ? { type: t.crop.type, age: t.crop.age, stage: t.crop.stage, rot: t.crop.rot } : null })) : h.tiles })),
+    rel: S.home.rel, nb: S.home.nb, wed: S.home.wed, help: S.home.help, teen: S.home.teen, earn: S.home.earn, path: S.home.path, wage: S.home.wage });
+  const held = SPOUSES.map(sp => sp.crops.length ? { id: sp.id, basket: sp.crops.slice() } : null).filter(Boolean);
+  if (held.length) h.held = held;
+  return h;
+}
 const homeFeet = () => S.home.houses.map(h => HM.layout(h).foot);
 // ---- where a new house can go: any free 花甸 / 农田 plot, clear of what already stands there ----
 function homeAvoid(skip) { const out = []; // skip: the house being moved (its own yard and itself are not in the way)
@@ -4047,7 +4052,7 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
   if (F.idleCount % 3 === 0) { const tile = h._tiles && h._tiles[Math.floor(hr() * h._tiles.length)]; if (tile) return { kind: 'idle', label: '在自家小田边转转', to: { x: tile.x + (hr() - 0.5) * 6, y: tile.y + 6 }, dur: 10 }; }
   return { kind: 'idle', label: '坐在新房子门口歇一会儿', to: { x: L.bench.x + (sp ? 2 : -2), y: L.bench.y + 1 }, dur: 20, rest: true };
 }
-// ---- the spouses: actors of their own (not family members, not saved: rebuilt from S.home.wed) ----
+// ---- the spouses: actors of their own (not family members; rebuilt from S.home.wed, baskets in home.held) ----
 function makeSpouse(kid, w) { const i = HM.mateIndex(w.mate), h = S.home.houses[w.house], d = h ? HM.layout(h).door : DOOR;
   return Object.assign(makeMember({ id: 'sp_' + kid, name: HM.mateName(w.mate), role: 'teen' }), { _spouse: kid, look: TN.MATES[i].look, x: d.x, y: d.y, home: true, sleeping: false }); }
 function spouseSync() {
@@ -4100,9 +4105,12 @@ function homeDraw(list) {
       list.push({ spr: (v.flip ? sp.l : sp.r)[d > 0.3 ? Math.floor(v.step / 6) % 2 : 2], x: v.x, y: v.y, w: 1 }); } });
 }
 function homeRestore(s) {
+  const held = (s.home && s.home.held) || [];
   S.home = HM.valid(s.home); for (const h of S.home.houses) h._tiles = null; homeTilesSync(); SPOUSES.length = 0; spouseSync(); HENS_VIEW.length = 0; homeGateKey = '';
   for (const k of HM.KID_IDS) { const h = HM.isMarried(S.home, k) ? HM.houseOf(S.home, k) : null, m = memberOf(k); if (h && m) { const d = HM.layout(h).door; m.x = d.x; m.y = d.y; } }
   const night = FARMER.sleeping; for (const sp of SPOUSES) { sp.sleeping = night; sp.home = true; }
+  // v5.11.0.30: put mid-help cargo back (HM.valid drops held; live state lives on the spouse)
+  for (const row of held) { const sp = SPOUSES.find(q => q.id === row.id); if (sp && row.basket && row.basket.length) { sp.crops.length = 0; sp.crops.push(...row.basket); } }
   homePartyNoted = 0; homeFriendDay = 0; if (HOME_ON) HA.sync(true);
 }
 // the panel lines: who each child is close to, and the neighbours the family knows
@@ -5847,7 +5855,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.29';
+const GAME_VERSION = '5.11.0.30';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6109,7 +6117,7 @@ Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeO
   TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), wedCer: () => wedCer(), wedLook: a => wedLook(a), famSheet: (l, c) => famSheet(l, c), wedCouple: () => wedCouple(), weddingTonight: () => wedNow(), homeTick: dm => homeTick(dm), homeMorning: () => homeMorning(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
-Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), demandWant: () => demandWant(), demandPick: bag => demandPick(bag), chooseTask: () => chooseTask(), restOk: k => restOk(k), helpWinNow: T => helpWinNow(T), farmHands: () => farmHands(), demandGrowing: () => demandGrowing(), demandShort: k => demandShort(k), seaQuota: () => seaQuota(), workPending: () => workPending(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
+Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), demandWant: () => demandWant(), demandPick: bag => demandPick(bag), chooseTask: () => chooseTask(), restOk: k => restOk(k), helpWinNow: T => helpWinNow(T), helpEnd: () => helpEnd(), farmHands: () => farmHands(), demandGrowing: () => demandGrowing(), demandShort: k => demandShort(k), seaQuota: () => seaQuota(), workPending: () => workPending(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
 // ---------- minimap (HTML canvas beside the game; never part of the pixel-exact picture) ----------
 // The ground canvas is already a top-down map of the world, so the minimap is that, shrunk, plus trees, locks, fields, the
 // farmer and the part of the world on screen. Click it to look somewhere else.
