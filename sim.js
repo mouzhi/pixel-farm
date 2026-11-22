@@ -305,8 +305,30 @@
     if (!o.ok || coins < o.cost * AUTO_MULT || coins - o.cost < keep) return { id: null, why: 'purse', next: next.id, cost: o.cost, keep };
     return { id: next.id, cost: o.cost, keep };
   }
+  // v5.11.0.31 前几天的节奏: a short starter goal chain shown under the HUD until the first chicken. Each step pays a small
+  // reward the moment it is done while it is the current goal (so it is paid once, with no save field: a step is a sale or a
+  // purchase that only happens once). Never tied to follow / share / tip. Old farms that are past the chain see nothing.
+  const STARTER = [
+    { id: 'sell', text: '收获并卖出第一批胡萝卜', reward: 20 },
+    { id: 'field', text: '去商店「地块」开垦新田', shop: 'field', reward: 30 },
+    { id: 'can', text: '去商店「工具」买铜水壶', shop: 'can', reward: 30 },
+    { id: 'coop', text: '去商店「建筑」盖鸡舍', shop: 'coop', reward: 50 },
+    { id: 'chicken', text: '去商店「动物」买第一只鸡', shop: 'chicken', reward: 50 },
+  ];
+  const starterDone = (st, up, sold) => st.shop ? ((up && up[st.shop]) | 0) > 0 : (sold | 0) > 0;
+  // the current step { i, n, step } or null when the chain is done: the step after the furthest one done (a farm that bought
+  // its coop before the copper can is not sent back for the can; many real farms never bought the first field level), and
+  // nothing past STARTER_DAYS (an old farm that never kept chickens is not handed a new goal)
+  const STARTER_DAYS = 30;
+  function starterGoal(up, sold, day) {
+    if (day > STARTER_DAYS) return null;
+    let i = 0; STARTER.forEach((st, k) => { if (starterDone(st, up, sold)) i = k + 1; });
+    return i >= STARTER.length ? null : { i, n: STARTER.length, step: STARTER[i] };
+  }
+  // FIRST_RIPEN: on day 1 only, crops that were watered by 14:00 grow one extra day, so the first carrots are sold the same afternoon
+  const FIRST_RIPEN = 14 * 60;
   const api = { MIN_PER_SEC, SLEEP_MULT, WAKE, BEDTIME, DAY_REAL_SEC, WATER_MAX0, BASKET, OFFLINE_RATE, OFFLINE_CAP_DAYS, OFFLINE_MIN_SEC, OFFLINE_FREE_SEC, OFFLINE_FREE_GOLD, SPEED_REFUND, speedRefund,
     CROPS, IDS, SHOP, SHOP_IDS, SHOP_TABS, emptyUpgrades, shopItem, effects, offer, START_COLS, START_ROWS, HOME_COLS, HOME_ROWS, isOpen, homeOpenCount, fieldLevelForOpen, startOpen, emptySeeds, startPrices,
-    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, gate: null };
+    ripe, stageOf, priceOf, netPerDay, pickFromBag, harvestSeeds, planSeeds, surplusSeeds, driftPrices, offlineSettle, offlineWindow, OFFLINE_WIN_MS, OFFLINE_WIN_MAX, AUTO_BUY, AUTO_MULT, AUTO_FLOOR, autoNext, autoPick, STARTER, STARTER_DAYS, starterDone, starterGoal, FIRST_RIPEN, gate: null };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSim = api;
 })(typeof window !== 'undefined' ? window : globalThis);

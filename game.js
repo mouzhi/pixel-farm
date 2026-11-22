@@ -1696,10 +1696,33 @@ function driftProducts(prices) { // own stream, so the crops' prices and the far
   for (const k of AN.PRODUCT_IDS) { const m = prices[k] || 1; out[k] = Math.round(Math.min(1.2, Math.max(0.8, m + 0.3 * (1 - m) + (r() * 2 - 1) * 0.05)) * 1000) / 1000; }
   return out;
 }
+// v5.11.0.31 前几天的节奏: on a new farm's first day the carrots watered by 14:00 grow one extra day, so the first harvest
+// and the first sale happen that afternoon instead of the next morning (no save field: it only ever runs on day 1, at the
+// moment 14:00 passes; a reload later that day does not run it again).
+function firstRipen() {
+  const justRipe = [];
+  for (const t of tiles) if (t.open && t.crop && t.watered && SU.canGrow(t.crop, SIM.ripe)) { t.crop.age++; const st = SIM.stageOf(t.crop); if (st === 3 && t.crop.stage !== 3) { justRipe.push(t); burst(t.x, t.y, 6, ['#fff2a8', '#ffffff'], 6, 'spark'); } t.crop.stage = st; }
+  if (justRipe.length) { groundDirty = true; log(`头一茬胡萝卜长得快，下午就熟了 ${justRipe.length} 棵`); say(`头一茬胡萝卜下午就熟了：收了拿去卖吧`); }
+}
+// the starter goal chain (sim.js STARTER): pays each step's small reward once, when the step moves on. starterIdx is runtime
+// only: null after a load means "take the save's step as the start, pay nothing".
+let starterIdx = null;
+// progress ignores the day cap (a "chain done" past day 30 must not look like four steps just finished); past the cap
+// nothing is paid, and a step that was skipped (not actually done) is never paid
+function starterNow() { const g = SIM.starterGoal(S.up, S.totalSold); return g ? g.i : SIM.STARTER.length; }
+function starterTick() {
+  const i = starterNow(); if (starterIdx === null || i < starterIdx || S.day > SIM.STARTER_DAYS) { starterIdx = i; return; }
+  for (; starterIdx < i; starterIdx++) { const st = SIM.STARTER[starterIdx]; if (!(st.reward > 0) || !SIM.starterDone(st, S.up, S.totalSold)) continue;
+    S.coins += st.reward; S.earned += st.reward; emit('income', { gold: st.reward, source: 'goal', goal: st.id });
+    log(`完成目标「${st.text}」：奖励 ${st.reward} 金`); say(`目标完成：${st.text}，奖励 ${st.reward} 金` + (starterIdx + 1 < SIM.STARTER.length ? '' : '。新手目标全部完成！'));
+    popText(FARMER.x, FARMER.y, 24, '+' + st.reward, '#ffd76a'); burst(FARMER.x, FARMER.y, 10, ['#ffd76a', '#fff2a8'], 10, 'coin'); }
+}
 function stepSim(dm) {
   stepAnimals(dm);
   const prevDay = Math.floor((S.t - WAKE) / 1440);
   S.t += dm;
+  if (S.day === 1 && (S.t - dm) % 1440 < SIM.FIRST_RIPEN && S.t % 1440 >= SIM.FIRST_RIPEN) firstRipen(); // v5.11.0.31
+  starterTick(); // v5.11.0.31
   if (Math.floor((S.t - WAKE) / 1440) !== prevDay) { // reached 6:00: everyone gets up
     for (const a of actors()) if (a.sleeping) { a.sleeping = false; a.home = true; }
     overnight(); log(S.members.length ? '一家人起床啦，开始干活' : '起床啦，开始干活');
@@ -5533,12 +5556,23 @@ function updateFx(dt) {
     if (c.forge && Math.random() < dt * 3) particles.push({ x: SM.LOT.x, y: SM.LOT.y + 3, z: 3, vx: (Math.random() - 0.5) * 4, vy: (Math.random() - 0.5) * 2, vz: 6 + Math.random() * 4, c: vpick([Ac[2], Ac[1], Rf[2]]), life: 0.8, kind: 'spark' }); }
 }
 let hudPrices = '';
+let goalKey = '';
+function starterHud() { // v5.11.0.31: 「目标 2/5：…」 under the HUD until the first chicken; a shop step opens that shop tab
+  const el = document.getElementById('goal'); if (!el) return;
+  const g = SIM.starterGoal(S.up, S.totalSold, S.day); let html = '';
+  if (g) { const st = g.step, o = st.shop ? SIM.offer(S.up, S.coins, st.shop, FARMER.wood) : null;
+    const need = o && !o.maxed ? (o.ok ? `（${o.cost} 金，够了！）` : o.locked ? '' : `（${o.cost} 金，还差 ${o.short}）`) : '';
+    html = `<b>目标 ${g.i + 1}/${g.n}</b> ${st.text}${need}<span class="rw">奖励 ${st.reward} 金</span>`; }
+  if (html === goalKey) return; goalKey = html;
+  el.hidden = !g; el.innerHTML = html; el.dataset.shop = g && g.step.shop ? g.step.shop : ''; el.classList.toggle('go', !!(g && g.step.shop));
+}
 function hud() {
   const T = S.t % 1440, hh = T / 60;
   const tod = hh < 5 ? '深夜' : hh < 8 ? '清晨' : hh < 11 ? '上午' : hh < 13 ? '中午' : hh < 17 ? '下午' : hh < 19.5 ? '傍晚' : '夜晚';
   document.getElementById('day').textContent = `第 ${S.day} 天 · ${tod}`;
   document.getElementById('clock').textContent = fmtT(S.t);
   document.getElementById('act').textContent = '当前：' + S.label;
+  starterHud(); // v5.11.0.31
   document.getElementById('coins').textContent = S.coins;
   const woodEl = document.getElementById('wood'); if (woodEl) woodEl.textContent = FARMER.wood;
   document.getElementById('seeds').textContent = seedCount(S.store);
@@ -5916,7 +5950,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.32';
+const GAME_VERSION = '5.11.0.33';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -5999,6 +6033,7 @@ function snapshot() {
   };
 }
 function restore(s) { // s has been migrated and validated by PFSave
+  starterIdx = null; // v5.11.0.31: a loaded farm starts the goal chain where it is, with nothing paid
   fogReset(); // v5.11.0.6: a loaded save shows its districts as they are, no fade
   RNG.a = s.rng | 0; S.day = s.clock.day; S.t = s.clock.t; S.coins = s.coins; S.createdAt = s.createdAt;
   Object.assign(S, { totalSold: s.stats.totalSold, cleared: s.stats.cleared, earned: s.stats.earned, soldToday: s.stats.soldToday, todayEarn: s.stats.todayEarn, dayEarn: s.stats.dayEarn.slice() });
