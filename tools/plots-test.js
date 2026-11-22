@@ -9,8 +9,8 @@ const ov = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 const MOVED = { moved: 12 }, SINGLE = { moved: 0 };
 const allOpen = () => SIM.SHOP.filter(s => s.region).map(s => s.id);
 
-ok('map: 112x74 tiles (v5.8.0: +24 east for the town); old coordinates unchanged, the ring only adds bounds', () => {
-  const w = WD.WORLD; assert.strictEqual((w.x1 - w.x0) / 8 + 'x' + (w.y1 - w.y0) / 8, '112x74');
+ok('map: 158x74 tiles (v5.8.0: +24 east for the town; v5.11.0: +46 more); old coordinates unchanged, the ring only adds bounds', () => {
+  const w = WD.WORLD; assert.strictEqual((w.x1 - w.x0) / 8 + 'x' + (w.y1 - w.y0) / 8, '158x74');
   assert(w.x0 < PL.OLD.x0 && w.y0 < PL.OLD.y0 && w.x1 > PL.OLD.x1 && w.y1 > PL.OLD.y1);
   assert.deepStrictEqual(WD.HOME, { x0: 0, y0: 0, x1: 192, y1: 128 });
   assert.strictEqual(WD.REGIONS.length, 6); assert.deepStrictEqual(WD.region('forest').rect, WD.region('forest').rect);
@@ -31,7 +31,9 @@ ok('layout: plots inside the world, apart from each other, the farm, the old reg
   assert.strictEqual(PL.PLOTS.length, 16);
   const area = r => (r[2] - r[0]) * (r[3] - r[1]), small = Math.min(...WD.REGIONS.map(q => area(q.rect)));
   assert(PL.PLOTS.every(p => area(p.rect) < 7800), 'small and medium: none as big as the old regions'); assert(PL.PLOTS.filter(p => area(p.rect) <= small * 0.75).length >= 8, 'at least half are small');
-  for (const id of ['field', 'pasture', 'orchard', 'meadow', 'woodland', 'workshop', 'dam', 'road', 'playground', 'inn', 'resort']) assert(PL.PLOTS.some(p => p.mods.includes(id)), 'some plot offers ' + id);
+  for (const id of ['field', 'pasture', 'orchard', 'meadow', 'woodland', 'workshop', 'dam', 'road', 'playground', 'resort']) assert(PL.PLOTS.some(p => p.mods.includes(id)), 'some plot offers ' + id);
+  assert(!PL.PLOTS.some(p => p.mods.includes('inn')), 'v5.11.0.5: no plot offers 民宿院 any more (the 农家乐区 is its own ground)');
+  assert.deepStrictEqual(PL.LEGACY_MODS, ['inn']);
   assert.deepStrictEqual(PL.PLOTS.find(p => p.id === 'play').mods, ['playground', 'meadow']);
 });
 ok('routes: every plot gate is on a dirt road from the farm', () => {

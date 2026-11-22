@@ -9,22 +9,21 @@
   const EVERY = 28, GIFT = 400;
   const FEAST = { from: 18 * 60, to: 22 * 60 };
   const FAIR = { from: 19 * 60, to: 22 * 60 };
-  // east of the fountain, south of the main street, clear of the market stalls and L11
-  const TABLE = P(520, 112);
-  const SEATS = [
-    P(508, 117), P(516, 117), P(524, 117), P(532, 117),
-    P(508, 107), P(516, 107), P(524, 107), P(532, 107),
-  ];
-  // wooden posts that hold the lantern strings over the paved main street and the plaza
-  const POSTS = [
-    P(452, 66), P(484, 66), P(516, 66), P(548, 66), P(580, 66), P(612, 66),
-    P(510, 88), P(538, 88), P(508, 106), P(532, 106),
-  ];
-  const STRINGS = [
-    [POSTS[0], POSTS[1]], [POSTS[1], POSTS[2]], [POSTS[2], POSTS[3]], [POSTS[3], POSTS[4]], [POSTS[4], POSTS[5]],
-    [POSTS[2], POSTS[6]], [POSTS[6], POSTS[7]], [POSTS[7], POSTS[3]],
-    [POSTS[6], POSTS[8]], [POSTS[8], POSTS[9]], [POSTS[7], POSTS[9]],
-  ];
+  // v5.11.0: 节庆广场 (town.js SQUARE [706, 86, 820, 172]) is the feast's own square: a 78-unit long table of three
+  // sections in the middle, 10 seats on each side, a ring of lantern posts round the square and strings along the main street
+  const SQUARE = [706, 86, 820, 172];
+  const TABLE = P(763, 130);
+  const SECTIONS = [P(737, 130), P(763, 130), P(789, 130)]; // three 26-unit table sections (art in town-art.js)
+  const SEATS = [];
+  for (const y of [124, 136]) for (let i = 0; i < 10; i++) SEATS.push(P(730 + i * 7.4, y));
+  // wooden posts that hold the lantern strings: along the main street, then round the square
+  const STREET_POSTS = [610, 650, 690, 730, 770, 810, 850, 890, 930, 970].map(x => P(x, 61));
+  const RING = [P(709, 89), P(744, 89), P(782, 89), P(817, 89), P(817, 129), P(817, 169), P(782, 169), P(744, 169), P(709, 169), P(709, 129)];
+  const POSTS = STREET_POSTS.concat(RING);
+  const STRINGS = [];
+  for (let i = 0; i < STREET_POSTS.length - 1; i++) STRINGS.push([STREET_POSTS[i], STREET_POSTS[i + 1]]);
+  for (let i = 0; i < RING.length; i++) STRINGS.push([RING[i], RING[(i + 1) % RING.length]]);
+  STRINGS.push([RING[1], RING[7]], [RING[2], RING[6]], [STREET_POSTS[3], RING[1]], [STREET_POSTS[5], RING[2]]); // over the table, and from the street
   const ready = H => {
     const CL = root.PFClinic || (typeof require === 'function' && typeof document === 'undefined' ? require('./clinic.js') : null);
     return !!(CL && CL.paved(H));
@@ -67,16 +66,14 @@
   function lights() {
     const out = [];
     for (const p of POSTS) out.push({ x: p.x, y: p.y, z: 14, r: 26, s: 0.95 });
-    out.push({ x: TABLE.x, y: TABLE.y, z: 10, r: 28, s: 0.9 });
-    out.push({ x: 524, y: 98, z: 8, r: 24, s: 0.8 }); // the fountain
-    // the market stalls stay warm during the fair
-    out.push({ x: 500, y: 86, z: 10, r: 18, s: 0.75 }, { x: 498, y: 106, z: 10, r: 18, s: 0.75 },
-      { x: 500, y: 124, z: 10, r: 18, s: 0.75 }, { x: 549, y: 108, z: 10, r: 18, s: 0.75 },
-      { x: 514, y: 130, z: 10, r: 18, s: 0.75 }, { x: 576, y: 96, z: 10, r: 18, s: 0.75 });
+    for (const t of SECTIONS) out.push({ x: t.x, y: t.y, z: 10, r: 28, s: 0.9 });
+    out.push({ x: 650, y: 120, z: 8, r: 26, s: 0.8 }); // the fountain (town.js PLAZA)
+    // the market stalls stay warm during the fair (market.js STALLS)
+    for (const [x, y] of [[632, 100], [668, 100], [622, 122], [678, 122], [636, 142], [664, 142]]) out.push({ x, y, z: 10, r: 18, s: 0.75 });
     return out;
   }
-  const blocks = () => [[TABLE.x - 10, TABLE.y - 5, TABLE.x + 10, TABLE.y + 5]];
-  const api = { EVERY, GIFT, FEAST, FAIR, TABLE, SEATS, POSTS, STRINGS, ready, readyDay, hasShops, isDay, nextDay,
+  const blocks = () => [[TABLE.x - 39, TABLE.y - 3, TABLE.x + 39, TABLE.y + 3]];
+  const api = { EVERY, GIFT, FEAST, FAIR, SQUARE, TABLE, SECTIONS, SEATS, POSTS, RING, STREET_POSTS, STRINGS, ready, readyDay, hasShops, isDay, nextDay,
     hasLantern, feastOpen, fairOpen, bedtime, seatAt, grant, lights, blocks, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFFestival = api;
 })(typeof window !== 'undefined' ? window : globalThis);

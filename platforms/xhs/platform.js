@@ -6,6 +6,14 @@
  */
 (function (root) {
   'use strict';
+  // 1.3.0 · Chrome 61 / Android 8.1: Array.prototype.flatMap is Chrome 69+ (ui.js codex focus uses it).
+  if (typeof Array.prototype.flatMap !== 'function') {
+    Object.defineProperty(Array.prototype, 'flatMap', { configurable: true, writable: true, value: function (fn, self) {
+      var out = [];
+      for (var i = 0; i < this.length; i++) { var v = fn.call(self, this[i], i, this); if (Array.isArray(v)) out.push.apply(out, v); else out.push(v); }
+      return out;
+    } });
+  }
   // Chrome 61 / Android 8.1: Object.fromEntries is ES2019 (Chrome 73+).
   if (typeof Object.fromEntries !== 'function') {
     Object.fromEntries = function (iter) {
@@ -398,7 +406,7 @@
     if (!syncStore) return Promise.resolve();
     var dump;
     try { dump = syncStore._dump(); } catch (e) { return Promise.resolve(); }
-    var keys = Object.keys(dump).sort(function (a, b) {
+    var keys = Object.keys(dump).filter(function (k) { return k.indexOf(ALBUM_PREFIX) !== 0; }).sort(function (a, b) {
       var ab = /:bak$/.test(a), bb = /:bak$/.test(b);
       if (ab !== bb) return ab ? -1 : 1;
       return a < b ? -1 : a > b ? 1 : 0;
@@ -440,6 +448,27 @@
     if (flushTimer) clearTimeout(flushTimer);
     flushTimer = setTimeout(function () { flushNow({ cloud: false, fromTimer: true }); }, 400);
   }
+
+  // 1.3.0（网页版 v5.11.0.11 相册）：每张照片的小图（PNG data URL）按农场存一个 key。只进容器 Storage（官方 §3.6：
+  // 正常业务统一读写容器存储），不写 localStorage，也不进云存档；不随存档的批量同步每次重写，只在拍下 / 补拍时写这一条。
+  // 容器 Storage 不可用（网页预览）时才退回 localStorage。读：启动时 loadXhsSeed 已把所有 key 读进内存。
+  var ALBUM_PREFIX = 'mouzhi/pixel-farm:album:';
+  var albumStore = {
+    getItem: function (k) {
+      try { var d = syncStore && syncStore._dump && syncStore._dump(); if (d && d[k] != null) return d[k]; } catch (e) {}
+      if (!isXhs) { try { return root.localStorage ? root.localStorage.getItem(k) : null; } catch (e) { return null; } }
+      return null;
+    },
+    setItem: function (k, v) {
+      k = String(k); v = String(v);
+      if (k.indexOf(ALBUM_PREFIX) !== 0) throw new Error('album store: ' + k);
+      if (!isXhs) { root.localStorage.setItem(k, v); return; }
+      var data = JSON.stringify(v);
+      if (utf8Bytes(data) > KEY_MAX) throw new Error('相册小图超过 1MB');
+      try { var d = syncStore && syncStore._dump && syncStore._dump(); if (d) d[k] = v; } catch (e) {}
+      callMini('setStorage', { key: k, data: data }).then(null, function () { onStoreError('相册照片没存上'); });
+    }
+  };
 
   function wrapStore(store) {
     return {
@@ -789,6 +818,7 @@
     isXhs: isXhs,
     ready: ready,
     store: function () { return syncStore; },
+    albumStore: function () { return albumStore; },
     shareNote: shareNote,
     postNoteAvailable: postNoteAvailable,
     writeTempFile: writeTempFile,

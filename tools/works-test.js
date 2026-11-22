@@ -118,4 +118,42 @@ ok('v5.10.12: evacuate moves workshops to another yard, else stores them (at nul
   const v = PW.valid({ works: { mill: { at: 'sbank', slot: 2, inp: 3, left: 10, ready: 2 }, jam: { at: null, slot: 0, inp: 1, ready: 1 } } }, plots2);
   assert.strictEqual(v.works.jam.at, null); assert.strictEqual(v.works.jam.inp, 1); assert.strictEqual(v.works.jam.ready, 1); assert.strictEqual(v.works.mill.ready, 2);
 });
+ok('v5.11.0.29 machines: gates, feeder set, levels, never autobought', () => {
+  const ctx = { wheel: 0, smithy: false, built: ['coop', 'sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'], coop2: true, shed2: true, hives: 6, meadow: true };
+  assert(/水车/.test(PW.machGate('feeder', {}, ctx)) && /铁匠铺/.test(PW.machGate('feeder', {}, ctx)));
+  assert(/铁匠铺/.test(PW.machGate('feeder', {}, Object.assign({}, ctx, { wheel: 1 }))));
+  const ok2 = Object.assign({}, ctx, { wheel: 1, smithy: true }); assert.strictEqual(PW.machGate('feeder', {}, ok2), null); assert.strictEqual(PW.machGate('feedset', {}, ok2), null);
+  assert.strictEqual(PW.machGate('chute', {}, Object.assign({}, ok2, { coop2: false })), '先盖第二鸡舍');
+  assert.strictEqual(PW.machGate('milker', {}, Object.assign({}, ok2, { shed2: false })), '先盖第二牛棚');
+  assert(/6 个蜂箱/.test(PW.machGate('tray', {}, Object.assign({}, ok2, { hives: 4 }))));
+  const m = {}; assert.deepStrictEqual(PW.machBuy(m, 'feeder', ok2.built), ['coop']); assert.strictEqual(PW.fitCount(m), 1);
+  assert.deepStrictEqual(PW.machBuy(m, 'feedset', ok2.built), ['sty', 'fold', 'shed', 'coop2', 'sty2', 'fold2', 'shed2']); assert.strictEqual(m.f, 255);
+  assert(/都装上了/.test(PW.machGate('feeder', m, ok2))); assert.deepStrictEqual(PW.machLevels(m, ok2.built), { feeder: 8, feedset: 1, chute: 0, milker: 0, tray: 0 });
+  const m2 = { f: 1 }; assert(/单个装更划算/.test(PW.machGate('feedset', m2, Object.assign({}, ok2, { built: ['coop', 'sty', 'fold', 'shed'] }))));
+  for (const id of PW.MACH_IDS) { assert(SIM.shopItem(id) && SIM.shopItem(id).mach, id); assert(!SIM.AUTO_BUY.includes(id), id + ' must never be autobought'); assert(SIM.SHOP_TABS.find(t => t.id === 'works').ids.includes(id)); assert(!(id in SIM.emptyUpgrades()), id + ' is not an upgrade'); }
+  assert.deepStrictEqual(['feeder', 'feedset', 'chute', 'milker', 'tray'].map(id => SIM.shopItem(id).levels[0].cost), [2500, 12000, 5000, 6000, 1500]); assert.strictEqual(SIM.shopItem('feeder').levels[0].wood, 30);
+});
+ok('v5.11.0.29 machines: fitted troughs fill from the hay, the bin caps / ships / saves as small ints', () => {
+  const troughs = { coop: { feed: 1, water: 0 }, sty: { feed: 0, water: 0 } }, m = { f: 1 };
+  assert.strictEqual(PW.machFill(m, troughs, k => (k === 'coop' ? 6 : 4), 50), 5); assert.deepStrictEqual(troughs.coop, { feed: 6, water: 1 }); assert.deepStrictEqual(troughs.sty, { feed: 0, water: 0 }, 'an unfitted pen is left alone');
+  assert.strictEqual(PW.machFill({ f: 3 }, troughs, k => (k === 'coop' ? 6 : 4), 2), 2, 'never more hay than the storehouse has');
+  const b = {}; assert.strictEqual(PW.binAdd(b, 'egg', 60), PW.BIN.egg.cap); assert.strictEqual(PW.binRoom(b, 'egg'), 0);
+  assert.strictEqual(PW.binAdd(b, 'milk', 5), 5); assert.strictEqual(PW.binTake(b, 'milk', 9), 5); PW.binAdd(b, 'honey', 10);
+  assert.deepStrictEqual(PW.binShip(b), { egg: PW.BIN.egg.cap - PW.BIN.egg.keep, honey: 10 - PW.BIN.honey.keep }); assert.strictEqual(PW.binHas(b, 'egg'), PW.BIN.egg.keep);
+  assert.deepStrictEqual(PW.machValid({ f: 999, e: 1, m: 0, h: true, eg: 8.4, mk: -3, hn: 99, junk: 1 }), { f: 255, e: 1, h: 1, eg: 8, hn: PW.BIN.honey.cap });
+  assert.strictEqual(PW.machValid({}), null); assert.strictEqual(PW.machValid(null), null);
+  const v = PW.valid({ sprinklers: [], works: {}, hives: [], penHost: null, mach: { f: 3, eg: 4 } }, {}); assert.deepStrictEqual(v.mach, { f: 3, eg: 4 });
+  assert(!('mach' in PW.valid({ sprinklers: [], works: {}, hives: [] }, {})), 'no field until something is bought');
+  assert(JSON.stringify(v.mach).length < 40, 'one small field');
+});
+ok('v5.11.0.26: a full hopper does not request a delivery; carry must cover need or remaining room', () => {
+  const jam = PW.WORKS.jam;
+  assert.strictEqual(jam.inCap, 8); assert.strictEqual(jam.need, 2);
+  assert.ok(!PW.canDeliver(40, jam.need, jam.inCap, jam.inCap), 'full 8/8 must not post');
+  assert.ok(!PW.canDeliver(0, jam.need, jam.inCap, 0), 'empty hands must not post');
+  assert.ok(!PW.canDeliver(1, jam.need, jam.inCap, 0), 'one fruit is below need 2');
+  assert.ok(PW.canDeliver(2, jam.need, jam.inCap, 0));
+  assert.ok(PW.canDeliver(1, jam.need, jam.inCap, 7), 'one slot left accepts a single fruit');
+  assert.ok(!PW.canDeliver(1, jam.need, jam.inCap, 8));
+});
 console.log(`works-test: ${n} ok`);

@@ -98,8 +98,8 @@
     return { weather: w, rains };
   }
 
-  // ---- cheap visuals (browser). Rain is a handful of short streaks; puddles are a fixed list along the paths. ----
-  const V = { streaks: [], ripples: [], puddles: [], wet: 0, rain: 0, t: 0, pondT: 0 };
+  // ---- cheap visuals (browser). Rain is pooled world-space drops (v5.11.0.4); puddles are a fixed list along the paths. ----
+  const V = { streaks: [], ripples: [], puddles: [], wet: 0, rain: 0, t: 0, pondT: 0, acc: 0 };
 
   function makePuddles(pathSegs, rng) {
     const out = [], segs = pathSegs || [];
@@ -123,6 +123,59 @@
   }
   function ensureVisual(pathSegs) { if (!V.puddles.length) V.puddles = makePuddles(pathSegs); }
 
+  // ---- v5.11.0.4 细雨: world-space drops. Each drop has a ground target, falls a short way (a thin slanted 1-px streak, low alpha,
+  // bluish grey), then lands: on ground a 3-frame pixel splash plus a small wet spot that fades in ~1.5 s; on water a hit that the
+  // pond / sea / river paint with the existing ripple shape (game.js). Everything lives in fixed pools: no allocation while it rains.
+  const RAIN = {
+    RATE: 104,            // drops per second on the 426 x 266 framebuffer (scaled by screen area), ~28 in the air (the old rain had 44 streaks)
+    FALL_MIN: 0.22, FALL_MAX: 0.34, // seconds a drop is visible
+    H_MIN: 14, H_MAX: 24, // screen px above its target where a drop first shows
+    SLANT: 0.3,          // screen px sideways per px of fall (the old streaks used 0.28)
+    LEN_MIN: 4, LEN_MAX: 6,
+    SPLASH: 0.06,        // seconds per splash frame (3 frames)
+    WET_MIN: 1.1, WET_MAX: 1.9,
+    RIPPLE: 1.0,         // seconds: the pond ripple's 5 frames x 0.2 s
+    MAX_DROPS: 48, MAX_SPLASH: 40, MAX_WET: 160, MAX_HITS: 28,
+  };
+  function pool(n, mk) { const a = new Array(n); for (let i = 0; i < n; i++) a[i] = mk(); return { a, n: 0 }; }
+  const P = {
+    drops: pool(RAIN.MAX_DROPS, () => ({ x: 0, y: 0, t: 0, dur: 0, h: 0, len: 0, water: 0, fmax: 4, a: 0 })),
+    splash: pool(RAIN.MAX_SPLASH, () => ({ x: 0, y: 0, age: 0 })),
+    wet: pool(RAIN.MAX_WET, () => ({ x: 0, y: 0, age: 0, life: 0, w: 1 })),
+    hits: pool(RAIN.MAX_HITS, () => ({ x: 0, y: 0, age: 0, fmax: 4, river: 0 })),
+  };
+  const take = q => (q.n < q.a.length ? q.a[q.n++] : null);
+  const drop = (q, i) => { const o = q.a[i]; q.n--; q.a[i] = q.a[q.n]; q.a[q.n] = o; }; // swap-remove, the object stays in the pool
+  function clearRain() { P.drops.n = P.splash.n = P.wet.n = P.hits.n = 0; V.acc = 0; }
+  function land(d) {
+    if (d.water) { const h = take(P.hits); if (h) { h.x = d.x; h.y = d.y; h.age = 0; h.fmax = d.fmax; h.river = d.water === 2 ? 1 : 0; } return; }
+    const s = take(P.splash); if (s) { s.x = d.x; s.y = d.y; s.age = 0; }
+    const w = take(P.wet); if (w) { w.x = d.x; w.y = d.y; w.age = 0; w.life = RAIN.WET_MIN + Math.random() * (RAIN.WET_MAX - RAIN.WET_MIN); w.w = Math.random() < 0.4 ? 2 : 1; }
+  }
+  // st.pick(): a world target { x, y, water: 0 | 1 (pond / sea) | 2 (river), fmax } under the screen, or null (a roof, off the map)
+  function tickRain(dt, st, raining) {
+    for (let i = P.drops.n - 1; i >= 0; i--) { const d = P.drops.a[i]; d.t += dt; if (d.t >= d.dur) { land(d); drop(P.drops, i); } }
+    for (let i = P.splash.n - 1; i >= 0; i--) { const s = P.splash.a[i]; s.age += dt; if (s.age >= RAIN.SPLASH * 3) drop(P.splash, i); }
+    for (let i = P.wet.n - 1; i >= 0; i--) { const w = P.wet.a[i]; w.age += dt; if (w.age >= w.life) drop(P.wet, i); }
+    for (let i = P.hits.n - 1; i >= 0; i--) { const h = P.hits.a[i]; h.age += dt; if (h.age >= RAIN.RIPPLE) drop(P.hits, i); }
+    if (!raining || typeof st.pick !== 'function') { V.acc = 0; return; }
+    const area = ((st.W || 426) * (st.H || 266)) / (426 * 266);
+    V.acc += dt * RAIN.RATE * area * V.rain;
+    let tries = 0;
+    while (V.acc >= 1 && tries++ < 64) {
+      V.acc -= 1;
+      if (P.drops.n >= RAIN.MAX_DROPS) { V.acc = 0; break; }
+      const q = st.pick(); if (!q) continue;
+      const d = take(P.drops);
+      d.x = q.x; d.y = q.y; d.water = q.water | 0; d.fmax = q.fmax == null ? 4 : q.fmax; d.t = 0;
+      d.dur = RAIN.FALL_MIN + Math.random() * (RAIN.FALL_MAX - RAIN.FALL_MIN);
+      d.h = RAIN.H_MIN + Math.random() * (RAIN.H_MAX - RAIN.H_MIN);
+      d.len = RAIN.LEN_MIN + ((Math.random() * (RAIN.LEN_MAX - RAIN.LEN_MIN + 1)) | 0);
+      d.a = Math.min(1, 0.78 + Math.random() * 0.25); // v5.11.0.4 review: +25% (0.62-0.82 read too faint in shots)
+    }
+    if (V.acc > 4) V.acc = 4;
+  }
+
   function tickVisual(dt, st) {
     st = st || {};
     V.t += dt;
@@ -130,15 +183,51 @@
     V.rain += ((raining ? 1 : 0) - V.rain) * Math.min(1, dt * 2.5);
     const target = st.wetness != null ? st.wetness : (raining ? 1 : 0);
     V.wet += (target - V.wet) * Math.min(1, dt * 1.6);
-    const W = st.W || 640, H = st.H || 360;
-    const want = (raining || V.rain > 0.05) ? 44 : 0;
-    while (V.streaks.length < want) V.streaks.push({ x: Math.random() * W, y: Math.random() * H - 20, len: 7 + Math.random() * 9, spd: 280 + Math.random() * 160, a: 0.32 + Math.random() * 0.22 });
-    if (V.streaks.length > want) V.streaks.length = want;
-    for (const s of V.streaks) {
-      s.y += s.spd * dt; s.x += s.spd * 0.28 * dt;
-      if (s.y > H + 8 || s.x > W + 8) { s.y = -12; s.x = Math.random() * W; s.len = 7 + Math.random() * 9; }
-    }
+    tickRain(dt, st, raining || V.rain > 0.05);
   }
+  // the falling streak of one drop (drawn from the depth-sorted object list, so roofs and trees in front cover it)
+  const DROP_COL = '#aec2d3';
+  function drawDrop(ctx, d, proj) {
+    const q = proj(d.x, d.y), z = d.h * (1 - d.t / d.dur);
+    const hx = q[0] + z * RAIN.SLANT, hy = q[1] - z; // the head: up and to the right of the target, moving down-left
+    ctx.globalAlpha = d.a * Math.min(1, V.rain * 1.4);
+    ctx.fillStyle = DROP_COL;
+    ctx.beginPath(); // 1-px wide, one row per pixel so the slant reads as a thin line; one fill per drop
+    for (let k = 0; k < d.len; k++) { if (z + k < 1) continue; ctx.rect(Math.round(hx + k * RAIN.SLANT), Math.round(hy - k), 1, 1); }
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+  function eachDrop(fn) { for (let i = 0; i < P.drops.n; i++) fn(P.drops.a[i]); }
+  // splashes and wet spots lie on the ground: drawn after the soil, before the objects (which cover them)
+  // batched: wet spots in 4 alpha steps and splash frames in 2, one path + one fill each (not a fillRect per pixel)
+  const WET_STEPS = 4;
+  function drawRainGround(ctx, proj, W, H) {
+    if (!P.splash.n && !P.wet.n) return 0;
+    ctx.save();
+    ctx.fillStyle = '#1f2836';
+    for (let k = 1; k <= WET_STEPS; k++) {
+      ctx.beginPath(); let any = 0;
+      for (let i = 0; i < P.wet.n; i++) { const w = P.wet.a[i], u = w.age / w.life, a = u < 0.08 ? u / 0.08 : 1 - (u - 0.08) / 0.92;
+        if (Math.min(WET_STEPS, Math.ceil(a * WET_STEPS)) !== k) continue;
+        const q = proj(w.x, w.y), x = Math.round(q[0]), y = Math.round(q[1]); if (x < -4 || y < -4 || x > W + 4 || y > H + 4) continue;
+        ctx.rect(x - 1, y, w.w > 1 ? 3 : 2, 1); if (w.w > 1) ctx.rect(x, y - 1, 1, 1); any = 1; }
+      if (any) { ctx.globalAlpha = 0.5 * k / WET_STEPS; ctx.fill(); }
+    }
+    ctx.fillStyle = '#cfdce6';
+    for (let late = 0; late < 2; late++) {
+      ctx.beginPath(); let any = 0;
+      for (let i = 0; i < P.splash.n; i++) { const s = P.splash.a[i], f = Math.min(2, Math.floor(s.age / RAIN.SPLASH)); if ((f === 2) !== !!late) continue;
+        const q = proj(s.x, s.y), x = Math.round(q[0]), y = Math.round(q[1]); if (x < -4 || y < -4 || x > W + 4 || y > H + 4) continue;
+        if (f === 0) ctx.rect(x, y - 1, 1, 1);
+        else if (f === 1) { ctx.rect(x - 1, y - 1, 1, 1); ctx.rect(x + 1, y - 2, 1, 1); }
+        else { ctx.rect(x - 2, y, 1, 1); ctx.rect(x + 2, y - 1, 1, 1); } any = 1; }
+      if (any) { ctx.globalAlpha = late ? 0.5 : 0.8; ctx.fill(); }
+    }
+    ctx.restore();
+    return P.splash.n + P.wet.n;
+  }
+  function rainHits() { return P.hits; } // { a, n }: game.js turns each into the pond's own ripple (age 0..1 s)
+  function rainStats() { return { drops: P.drops.n, splashes: P.splash.n, wet: P.wet.n, hits: P.hits.n, caps: { drops: RAIN.MAX_DROPS, splash: RAIN.MAX_SPLASH, wet: RAIN.MAX_WET, hits: RAIN.MAX_HITS } }; }
 
   function drawSky(ctx, W, H) {
     const a = V.rain * 0.18 + V.wet * 0.05;
@@ -227,26 +316,16 @@
   }
   // Pond already paints its own ripples; rain just densifies those in game.js. Keep a stub so older hooks stay safe.
   function drawRipples(ctx, proj, RS) { return 0; }
-  function drawRain(ctx, W, H) {
-    if (!V.streaks.length || V.rain < 0.04) return 0;
-    ctx.save();
-    ctx.fillStyle = '#e8f4fa';
-    for (const s of V.streaks) {
-      ctx.globalAlpha = s.a * V.rain;
-      const dy = Math.round(s.len);
-      ctx.fillRect(Math.round(s.x), Math.round(s.y), 1, dy);
-      ctx.fillRect(Math.round(s.x - 1), Math.round(s.y + 2), 1, Math.max(1, dy - 2));
-    }
-    ctx.restore();
-    return V.streaks.length;
-  }
-  function resetVisual() { V.streaks.length = 0; V.ripples.length = 0; V.puddles.length = 0; V.wet = 0; V.rain = 0; V.t = 0; V.pondT = 0; }
+  // v5.11.0.4: the old screen-wide streaks are gone (drops are drawn in the world); kept as a no-op for older hooks
+  function drawRain() { return 0; }
+  function resetVisual() { clearRain(); V.streaks.length = 0; V.ripples.length = 0; V.puddles.length = 0; V.wet = 0; V.rain = 0; V.t = 0; V.pondT = 0; }
 
   const api = {
     GAP_MIN, GAP_MAX, DUR_MIN, DUR_MAX, SEASON_LEN, WET_DECAY,
     emptyWeather, validWeather, ensure, beginDay, advanceDays,
     isRainDay, isRaining, rainWindow, wetness, isSummer, forceRain, simulate,
     tickVisual, drawSky, drawWet, drawRipples, drawRain, makePuddles, resetVisual, _visual: V,
+    RAIN, drawDrop, eachDrop, drawRainGround, rainHits, rainStats, clearRain,
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   if (root) root.PFWeather = api;

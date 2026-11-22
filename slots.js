@@ -54,9 +54,10 @@
   function relayoutOrder(placed) { return placed.slice().sort((a, b) => ORDER.indexOf(group(a.id)) - ORDER.indexOf(group(b.id)) || a.u - b.u); }
   // ---------- the town's main street (gifts; hall.js) ----------
   const TOWN = {
-    lamp: [P(470, 57), P(516, 76), P(560, 56), P(612, 76), P(492, 76), P(584, 57), P(538, 76), P(632, 57)],
-    pot: [P(512, 43), P(524, 43), P(496, 56), P(604, 56), P(548, 76), P(574, 76)],
-    nook: [P(480, 76), P(504, 76), P(530, 77), P(596, 77), P(622, 76), P(612, 92), P(586, 120), P(624, 52), P(466, 46)],
+    // v5.11.0: the town moved east and grew (town.js); the same number of spots per kind, so no gift is ever dropped
+    lamp: [P(660, 59), P(733, 59), P(806, 59), P(851, 74), P(640, 168), P(890, 168), P(851, -8), P(976, -8)],
+    pot: [P(634, 49), P(684, 49), P(718, 49), P(758, 47), P(828, 49), P(862, 95)],
+    nook: [P(700, 80), P(826, 80), P(689, 166), P(830, 166), P(890, 80), P(976, 80), P(613, 100), P(613, 150), P(950, 168)],
   };
   const townGroup = id => { const g = group(id); return g === 'lamp' || g === 'pot' ? g : 'nook'; };
   // where each gift stands: the n-th lamp on the n-th lamp spot, and so on (null: no room left for it)

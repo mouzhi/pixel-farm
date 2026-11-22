@@ -79,6 +79,7 @@ html.xhs-mobile #storeBtn,
 html.xhs-mobile #codexBtn,
 html.xhs-mobile #diaryBtn,
 html.xhs-mobile #mapBtn,
+html.xhs-mobile #mmJump,
 html.xhs-mobile #speed { display: none !important; }
 
 html.xhs-mobile #day, html.xhs-mobile #clock { font-size: 12px; }
@@ -730,3 +731,54 @@ html.xhs-mobile #diary .page { background: repeating-linear-gradient(#f6e7c4 0 2
 html.xhs-mobile #diary .days { gap: 6px; }
 html.xhs-mobile #diary .days .pbtn { min-height: 36px; padding: 2px 8px; font-size: 13px; }
 html.xhs-mobile #diary .note { font-size: 12px; }
+
+/* v5.11.x port: the web's right dock (nav buttons, minimap, 家/农家乐/小镇/海边 jump row) is all hidden or moved on the phone;
+   collapse the empty grid cell so it does not sit as an invisible box under the host's top-right buttons */
+html.xhs-mobile #rightDock { width: 0; min-width: 0; overflow: visible; }
+
+/* ---------- 触屏工具模式（touch.js）：⚒ 工具箱、准星、底部操作条、挪东西浮动按钮 ---------- */
+html.pf-touch #tools { display: none !important; }
+#pt-box[hidden], #pt-sheet[hidden], #pt-ret[hidden], #pt-bar[hidden], #pt-float[hidden] { display: none !important; }
+#pt-box { position: fixed; right: max(12px, var(--xhs-safe-right, 0px)); z-index: 26; width: 56px; height: 56px; padding: 0; border-radius: 50%;
+  border: 3px solid #5b3a1e; background: #f3d9a4; box-shadow: 0 3px 0 #5b3a1e, 0 4px 10px rgba(0,0,0,.35); color: #4a2e14; font-size: 28px; line-height: 50px; text-align: center; }
+#pt-box.on { background: #ffe9b0; transform: translateY(2px); box-shadow: 0 1px 0 #5b3a1e; }
+#pt-sheet { position: fixed; left: 8px; right: 8px; z-index: 27; background: #fbecc8; border: 3px solid #5b3a1e; border-radius: 14px; padding: 10px 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,.4); color: #4a2e14; }
+#pt-sheet h4 { margin: 0 2px 8px; font: 700 15px sans-serif; display: flex; align-items: center; gap: 8px; }
+#pt-sheet h4 small { margin-left: auto; font: 400 12px sans-serif; color: #8a5a2c; }
+#pt-sheet h4 .back { width: 32px; height: 32px; border-radius: 8px; border: 2px solid #8a5a2c; background: #fff6df; font: 700 18px sans-serif; color: #4a2e14; padding: 0; }
+#pt-sheet .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#pt-sheet .grid button { height: 76px; border-radius: 10px; border: 2px solid #8a5a2c; background: #fff6df; color: #4a2e14; font: 600 13px sans-serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 2px; overflow: hidden; }
+#pt-sheet .grid button .i { font-size: 26px; line-height: 30px; } #pt-sheet .grid button .nm { white-space: nowrap; } #pt-sheet .grid button .c { font-size: 11px; color: #8a5a2c; }
+#pt-sheet .grid button.full { opacity: .5; }
+#pt-sheet .row2 { margin-top: 10px; display: flex; gap: 8px; }
+#pt-sheet .row2 button { flex: 1; height: 44px; border-radius: 10px; border: 2px solid #8a5a2c; background: #fff6df; color: #6b3a1a; font: 600 14px sans-serif; }
+#pt-sheet .row2 button.warn { background: #d9483b; border-color: #7a2018; color: #fff; }
+#pt-sheet .cf { font: 600 14px/1.5 sans-serif; padding: 4px 4px 2px; }
+#pt-ret { position: fixed; z-index: 24; width: 56px; height: 56px; margin: -28px 0 0 -28px; pointer-events: none; }
+#pt-ret:before, #pt-ret:after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1.5px rgba(40,25,10,.85); }
+#pt-ret:before { left: 27px; top: 0; width: 2px; height: 56px; } #pt-ret:after { top: 27px; left: 0; height: 2px; width: 56px; }
+#pt-ret i { position: absolute; left: 17px; top: 17px; width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; box-sizing: border-box; box-shadow: 0 0 0 1.5px rgba(40,25,10,.85); }
+#pt-ret.ok i { border-color: #8cf07a; } #pt-ret.bad i { border-color: #ff7b6b; }
+#pt-bar { position: fixed; left: max(8px, var(--xhs-safe-left, 0px)); right: max(8px, var(--xhs-safe-right, 0px)); bottom: calc(var(--xhs-bottom-clear, 8px) + 2px); z-index: 26;
+  background: rgba(40,26,14,.94); border: 2px solid #c79a5a; border-radius: 14px; padding: 8px; display: flex; align-items: center; gap: 8px; color: #fff3d6; }
+#pt-bar .t { flex: 1; min-width: 0; font: 600 13px/1.35 sans-serif; } #pt-bar .t b { color: #ffd76a; display: block; font-size: 14px; } #pt-bar .t .why { color: #ffb0a4; }
+#pt-bar button { width: 56px; height: 56px; border-radius: 12px; font: 700 24px sans-serif; border: 2px solid #000; flex: none; padding: 0; }
+#pt-bar .x { background: #e8d6b8; color: #6b3a1a; } #pt-bar .ok { background: #7ccf5a; color: #fff; } #pt-bar .ok[disabled] { background: #6a6a5a; color: #bbb; }
+#pt-float { position: fixed; z-index: 25; display: flex; gap: 6px; transform: translate(-50%, -100%); }
+#pt-float button { white-space: nowrap; min-width: 56px; height: 44px; padding: 0 12px; border-radius: 22px; border: 2px solid #5b3a1e; background: #fff6df; font: 700 14px sans-serif; color: #4a2e14; box-shadow: 0 2px 0 #5b3a1e; }
+#pt-float button.p { background: #7ccf5a; color: #fff; }
+html.pf-touch.pt-mode #xhs-bar, html.pf-touch.pt-mode #xhs-toast { visibility: hidden; }
+
+/* 1.3.0：主线 v5.11.0.7 物品栏（xhs 用 full 样式：54px 格子带名字）。手机一行放不下 9 格，横向滑会藏住后几格，
+   改成折行居中，所有格子都看得见、都在屏幕里。 */
+html.xhs-mobile #xhs-inv-dock #inv { flex-wrap: wrap; justify-content: center; overflow: visible; touch-action: manipulation; row-gap: 4px; }
+html.xhs-mobile #diary { box-sizing: border-box; }
+/* 相册新照片的小提示：放在 HUD 下面，不压住天数和金币 */
+html.xhs-mobile #albumToast { top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 116px)) !important; }
+#pt-sheet .row2.go { align-items: center; }
+#pt-sheet .row2.go span { font: 700 13px sans-serif; color: #8a5a2c; flex: none; }
+#pt-sheet .row2.go button { font-size: 13px; padding: 0 2px; white-space: nowrap; }
+#pt-sheet .row2.go button.locked { color: #8a7a6a; background: #efe6d2; }
+/* Chrome 61 没有 aspect-ratio：相册里还没拍好的格子（灰底 / 锁着的 ???）给一个固定高度，不塌成 0 */
+html.xhs-mobile .alb .grid .pol span.pic, html.xhs-mobile .alb .grid .pol i.pic { min-height: 96px; }

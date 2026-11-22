@@ -154,7 +154,7 @@ KC = {'A': '#1c1626', 'E': '#8a5530', 'G': '#5e3524', 'C': '#ecc27c', 'B': '#d39
 for d in KHAIR:
     for r in list(KHAIR[d].values()) + list(KPACK[d].values()): assert len(r) == 28, (d, r, len(r))
 
-def school(put, f, d, dx, dy, occ):
+def school(put, f, d, dx, dy, occ, pack=True):
     """hat off, hair on, backpack on (children only; the face and body keep the colours already put)"""
     ox, oy = dx - 0, dy - 4
     last = max(KHAIR[d])
@@ -166,14 +166,114 @@ def school(put, f, d, dx, dy, occ):
     for y, r in KHAIR[d].items():
         for x, ch in enumerate(r):
             if ch != '.' and (x + ox, y + oy) not in occ: put(x + ox, y + oy, rgba(KC[ch]))
-    for fy, r in KPACK[d].items():
+    for fy, r in (KPACK[d].items() if pack else ()):
         y = fy - CUT if fy < 24 else fy
         for x, ch in enumerate(r):
             if ch != '.': put(x + ox, y + oy, rgba(KC[ch]))
 
+
+# v5.11.0.18 婚礼: the couple's wedding clothes (only on the wedding evening; game.js picks the sheet). Both start from the
+# school head (no straw hat, a brown mop of hair) on a grown-up body.
+#   bride: a cream-white gown (bodice, a pink sash, an A-line skirt to the ground that sways when she walks), a veil that falls
+#          behind her head and shoulders with a little flower crown, and a small bouquet held in front (front / side views)
+#   groom: a white shirt, a grey waistcoat and trousers, black shoes, a dark bow tie and a pink boutonniere
+# Palette colours only (cream #f6ecd0 / pale stone #cfd0c6 read as white next to the grass).
+WED_LOOKS = {
+    'bride': {'#a8432e': '#f6ecd0', '#7a2c24': '#cfd0c6', '#4fa3cf': '#f6ecd0', '#2f6ea0': '#f6ecd0', '#1f3d68': '#cfd0c6', '#3e3f4c': '#9a9ea0',
+              '#c47a52': '#f2c29a', '#ecc27c': '#f6ecd0', '#d3984c': '#cfd0c6', '#b47a3e': '#cfd0c6', '#5e3524': '#9a9ea0', '#8a5530': '#cfd0c6'},
+    'groom': {'#a8432e': '#3e3f4c', '#7a2c24': '#3a2b38', '#4fa3cf': '#f6ecd0', '#2f6ea0': '#f6ecd0', '#1f3d68': '#cfd0c6', '#3e3f4c': '#3e3f4c',
+              '#5e3524': '#1c1626', '#8a5530': '#3a2b38', '#c47a52': '#f2c29a'},
+}
+WC = {'A': '#1c1626', 'W': '#f6ecd0', 'S': '#cfd0c6', 'D': '#9a9ea0', 'P': '#e57fa0', 'R': '#a8432e', 'G': '#358a3c', 'Y': '#f2cf55', 'V': '#cfd0c6'}
+
+def wedding(put, get, f, d, dx, dy, occ, look, fr, row):
+    """after school(): the gown / the suit on the frame (put: write a pixel, get: read the frame being written)"""
+    body = [(x, y) for (x, y) in f if dy + 13 <= y <= dy + 16]
+    cx = round(sum(x for x, _ in body) / max(1, len(body))) if body else 14 + dx
+    face = 1 if d == 'side' else 0
+    walk = row.startswith('walk')
+    if look == 'groom':
+        white, shade = rgba('#f6ecd0'), rgba('#cfd0c6')
+        for (x, y) in list(f):
+            if (x, y) in occ or y < dy + 13: continue
+            v = get(x, y)
+            if (y >= dy + 19 or (d == 'back' and y > dy + 13)) and v[:3] in (white[:3], shade[:3]): put(x, y, rgba('#3e3f4c' if v[:3] == white[:3] else '#3a2b38'))  # trousers
+            elif y < dy + 18 and v[:3] in (rgba('#f2c29a')[:3], rgba('#ecc27c')[:3], rgba('#d3984c')[:3]) and abs(x - cx) >= 4: put(x, y, rgba('#3e3f4c'))  # jacket sleeves (hands stay)
+        if d == 'front':  # bow tie at the collar, a boutonniere on his left (screen right) chest
+            for x in (cx - 1, cx, cx + 1): put(x, dy + 13, rgba(WC['A']))
+            put(cx + 3, dy + 14, rgba(WC['P'])); put(cx + 3, dy + 15, rgba(WC['G']))
+        elif d == 'side':
+            put(cx + 2, dy + 13, rgba(WC['A'])); put(cx + 1, dy + 14, rgba(WC['P']))
+        return
+    # ---- bride ----
+    ys = dy + 17 if d != 'side' else dy + 17          # the waist: the skirt starts here and reaches the ground (row 27)
+    sway = (1 if fr % 2 else -1) if walk else 0
+    back = -1 if d == 'side' else 0                     # in profile the train trails behind (to the left: side frames face right)
+    for y in range(ys, FH):
+        t = (y - ys) / max(1, FH - 1 - ys)
+        hw = 4 + t * 4.2
+        c0 = cx + back * round(t * 2) + (round(sway * t) if y >= FH - 3 else 0)
+        x0, x1 = int(round(c0 - hw)), int(round(c0 + hw))
+        for x in range(x0, x1 + 1):
+            if (x, y) in occ: continue
+            if x in (x0, x1) or y == FH - 1: col = WC['A']
+            elif y == FH - 2: col = WC['S'] if (x + fr) % 2 else WC['W']     # the lace hem
+            elif x >= x1 - 1: col = WC['S']                                  # the shaded side
+            elif y > ys + 1 and (x - x0) % 4 == 2: col = WC['S']             # soft folds
+            else: col = WC['W']
+            put(x, y, rgba(col))
+    if d != 'back':                                     # the pink sash round the waist
+        for x in range(cx - 3, cx + 4):
+            if get(x, ys) and get(x, ys)[3] and (x, ys) not in occ and get(x, ys)[:3] != rgba(WC['A'])[:3]: put(x, ys, rgba(WC['P']))
+    # the veil: behind her (only on empty pixels) in front / profile, over her back in the back view; a flower crown on top
+    top = dy + 3
+    vl = lambda x, y, edge: rgba(WC['S'] if edge else WC['W'])
+    for y in range(top, dy + 18):
+        t = (y - top) / 14
+        if d == 'front':      # behind her head, falling past her shoulders a little wider at the bottom
+            a, b = cx - 7 - round(t * 1.6), cx + 7 + round(t * 1.6)
+            if y == top: a, b = cx - 4, cx + 4
+            for x in range(a, b + 1):
+                if not get(x, y)[3]: put(x, y, vl(x, y, x in (a, b)))
+        elif d == 'side':     # streaming back from the crown
+            a, b = cx - 6 - round(t * 3), cx + 1
+            if y == top: a = cx - 3
+            for x in range(a, b + 1):
+                if not get(x, y)[3]: put(x, y, vl(x, y, x == a))
+        elif y >= dy + 6:     # over the back of her head and down her back, the hair showing above it
+            a, b = cx - 4 - round(t * 1.5), cx + 4 + round(t * 1.5)
+            for x in range(a, b + 1):
+                if (x, y) not in occ: put(x, y, vl(x, y, x in (a, b) or (x - cx) % 3 == 0 and y > dy + 9))
+    # soft outline round the veil where it meets the grass
+    snap = {}
+    for y in range(top - 1, dy + 19):
+        for x in range(FW):
+            snap[(x, y)] = get(x, y)
+    for (x, y), v in snap.items():
+        if v[3]: continue
+        for q in ((x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)):
+            w = snap.get(q)
+            if w and w[3] and w[:3] in (rgba(WC['W'])[:3], rgba(WC['V'])[:3]) and q[1] < dy + 18: put(x, y, rgba(WC['D'])); break
+    crown = {'front': [(-3, 'P'), (-2, 'Y'), (-1, 'P'), (0, 'W'), (1, 'P'), (2, 'Y'), (3, 'P')], 'side': [(-3, 'P'), (-2, 'Y'), (-1, 'P'), (0, 'W'), (1, 'P')],
+             'back': [(-3, 'P'), (-1, 'P'), (1, 'P'), (3, 'P')]}[d]
+    for ox, ch in crown: put(cx + ox, dy + 3, rgba(WC[ch]))
+    # the bouquet, held at the waist
+    if d != 'back':
+        bx = cx + (3 if d == 'side' else 0); by = ys - 2
+        for oy, r in enumerate(['.APA.', 'APWPA', 'AYPYA', '.AGA.']):
+            for ox, ch in enumerate(r):
+                if ch != '.': put(bx + ox - 2, by + oy, rgba(WC[ch]))
+
 def build(look):
+    wed = look in WED_LOOKS
     base = look.replace('_school', '')
-    out = SHEET.copy(); px = out.load(); m = LOOKS[base]
+    out = SHEET.copy(); px = out.load(); m = WED_LOOKS[look] if wed else LOOKS[base]
+    if wed:  # the keeper rows are never drawn with these sheets
+        for row in ROWS:
+            if row in FARMER_ROWS: continue
+            ri = ROWS.index(row)
+            for y in range(FH):
+                for x in range(SHEET.width): px[x, ri * FH + y] = (0, 0, 0, 0)
     for row in FARMER_ROWS:
         ri = ROWS.index(row); d = DIR.get(row, 'side')
         for fr in range(FRAMES.get(row, 4)):
@@ -187,10 +287,14 @@ def build(look):
             for (x, y), v in f.items():
                 h = hexc(v); head = not body((x, y))
                 if look == 'partner' and head: continue
-                if look.endswith('_school') and head and (y - dy) < 3: continue  # the hat's crown (its band rows go below)  # her own head goes in below
+                if (look.endswith('_school') or wed) and head and (y - dy) < 3: continue  # the hat's crown (its band rows go below)  # her own head goes in below
                 if head and look != 'partner' and (y - dy) >= HAT_ROWS: put(x, y, v); continue  # face and hair: untouched
                 put(x, y, rgba(m[h]) if h in m else v)
             if look.endswith('_school'): school(put, f, d, dx, dy, occ)
+            if wed:
+                school(put, f, d, dx, dy, occ, pack=False)
+                get = lambda x, y: px[fr * FW + x, ri * FH + y] if 0 <= x < FW and 0 <= y < FH else (0, 0, 0, 0)
+                wedding(put, get, f, d, dx, dy, occ, look, fr, row)
             if look == 'partner':
                 for ty, r in enumerate(AHE[d]):
                     for tx, ch in enumerate(r):
@@ -201,7 +305,7 @@ def build(look):
     return out
 
 def main():
-    sheets = {k: build(k) for k in list(LOOKS) + ['kid0_school', 'kid1_school']}
+    sheets = {k: build(k) for k in list(LOOKS) + ['kid0_school', 'kid1_school'] + list(WED_LOOKS)}
     js = ['// v5.3 family sheets (阿禾 with her own head, children recoloured body-only), built by tools/build_family.py from assets/sprites.js. Do not edit by hand.',
           'window.PF_FAMILY_SPRITES = {']
     for k, im in sheets.items():
