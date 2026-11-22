@@ -130,15 +130,19 @@
   }
 
   // the same segments pathDist measures, rasterised one bounding box at a time (v5.5.0: the bigger map made the full scan slow)
-  function dirtSegs(openRegions) {
+  function dirtSegs(openRegions, plots) {
     const out = LAYOUT.PATH_SEGS.slice();
     if (WD) for (const k in WD.ROUTES) { const r = WD.ROUTES[k]; for (let i = 0; i < r.length - 1; i++) out.push([r[i].x, r[i].y, r[i + 1].x, r[i + 1].y]); }
     const lanes = LAYOUT.LANES; for (const k in lanes) { if (openRegions && !openRegions.includes(k)) continue; for (const s of lanes[k]) out.push(s); }
+    if (PL && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN && (!openRegions || (openRegions.includes('eshore') && openRegions.includes('coast')))) {
+      const line = PL.RESORT_JOIN.path;
+      for (let i = 0; i < line.length - 1; i++) out.push([line[i].x, line[i].y, line[i + 1].x, line[i + 1].y]);
+    }
     return out;
   }
-  function paintDirt(g, openRegions) {
+  function paintDirt(g, openRegions, plots) {
     const R = 5;
-    for (const s of dirtSegs(openRegions)) {
+    for (const s of dirtSegs(openRegions, plots)) {
       const [i0, j0] = cellOf(g, Math.min(s[0], s[2]) - R, Math.min(s[1], s[3]) - R), [i1, j1] = cellOf(g, Math.max(s[0], s[2]) + R, Math.max(s[1], s[3]) + R);
       for (let j = Math.max(0, j0); j <= Math.min(g.h - 1, j1); j++) for (let i = Math.max(0, i0); i <= Math.min(g.w - 1, i1); i++) {
         const k = idx(g, i, j); if (g.cost[k] === BLOCKED || g.cost[k] === DIRT) continue;
@@ -156,12 +160,14 @@
     carveDisc(g, LAYOUT.DOOR.x, 50, 7, DIRT); // the path gap in the north fence
   }
 
-  function regionFences(g, openRegions) {
+  function regionFences(g, openRegions, plots) {
     if (!WD) return;
     const open = openRegions || [];
     for (const r of WD.REGIONS) {
       const [x0, y0, x1, y1] = r.rect, opened = open.includes(r.id);
       const openings = [r.gate, r.pier].filter(Boolean);
+      // a 度假村 on 东南滩 also opens the east fence of the beach
+      if (r.id === 'coast' && PL && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN) openings.push(PL.RESORT_JOIN.beach);
       const nearGate = (x, y) => openings.some(p => Math.hypot(x - p.x, y - p.y) < 12);
       for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) if (!(opened && nearGate(x + 4, y))) paintSeg(g, x, y, x + 8, y, FENCE_HW, BLOCKED);
       for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) if (!(opened && nearGate(x, y + 4))) paintSeg(g, x, y, x, y + 8, FENCE_HW, BLOCKED);
@@ -230,6 +236,9 @@
       const open = (opts && opts.regions) || [];
       const coast = WD.region('coast');
       if (coast && open.includes('coast') && coast.fish) spots.push(coast.fish.stand, coast.gate, coast.pier);
+      if (PL && PL.resortOpen && PL.resortOpen(opts && opts.plots) && open.includes('eshore') && open.includes('coast') && PL.RESORT_JOIN) {
+        spots.push(PL.RESORT_JOIN.lot, PL.RESORT_JOIN.beach);
+      }
       for (const r of WD.REGIONS) {
         if (open.includes(r.id)) spots.push(r.gate);
         if (r.barrel && open.includes(r.id)) spots.push({ x: r.barrel.x, y: r.barrel.y + 8 });
@@ -246,11 +255,11 @@
     paintWater(g);
     paintBuildings(g, o);
     homeFences(g);
-    regionFences(g, o.regions || []);
+    regionFences(g, o.regions || [], o.plots);
     penFences(g, o);
     if (PL) PL.navPaint(g, HELP, o);
     paintTreesAndRocks(g, o);
-    paintDirt(g, o.regions || []);
+    paintDirt(g, o.regions || [], o.plots);
     carveEntries(g, o);
     if (PL) PL.navCarve(g, HELP, o);
     g.opts = o;

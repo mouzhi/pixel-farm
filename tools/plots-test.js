@@ -143,6 +143,21 @@ ok('path: locked plots are fenced, bought ones open at the gate', () => {
   const c = PL.plot('eshore'), mid = { x: (c.rect[0] + c.rect[2]) / 2, y: (c.rect[1] + c.rect[3]) / 2 }, from = { x: 340, y: 150 };
   assert(!NAV.route(nav({}), from, mid).reached); assert(NAV.route(nav({ eshore: 1 }), from, mid).reached);
 });
+ok('path: a 度假村 on 东南滩 opens a short walk from the lot to the beach; other modules keep the south fence shut', () => {
+  const from = { x: 400, y: 150 }, beach = { x: 332, y: 236 };
+  const regions = allOpen().concat(['eshore', 'coast']);
+  const field = NAV.build({ trees: [], regions, pens: {}, fence: false, houseTier: 0, graze: false, plots: { eshore: { mod: 'field', day: 1 } } });
+  const around = NAV.route(field, from, beach);
+  assert(around.reached, 'field: can still go out the west gate and around');
+  assert(around.length > 200, 'field: the south fence forces the long way ' + around.length);
+  const zoned = NAV.build({ trees: [], regions, pens: {}, fence: false, houseTier: 0, graze: false, plots: { eshore: { mod: 'resort', day: 1 } } });
+  const r = NAV.route(zoned, from, beach);
+  assert(r.reached, 'resort: walk from the lot to the beach');
+  assert(r.length < 160, 'resort: the new south opening is the short way ' + r.length);
+  assert.strictEqual(NAV.blockedAlong(zoned, r.points).length, 0);
+  const hop = NAV.route(zoned, { x: 376, y: 188 }, { x: 360, y: 208 });
+  assert(hop.reached && hop.length < 50, 'short hop through the join ' + hop.length);
+});
 ok('playground: kids who are not working can play on the slide, sandbox and swing', () => {
   const KIDS = require('../kids.js'), spots = PL.playSpots({ play: { mod: 'playground', day: 1 } });
   assert.deepStrictEqual(spots.map(s => s.kind).sort(), ['sandbox', 'slide', 'swing']);
