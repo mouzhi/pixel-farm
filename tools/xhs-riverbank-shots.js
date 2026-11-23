@@ -25,7 +25,7 @@ const HELPERS = `const f=__farm,S=f.S,R=PFTouch.RET();
   const errs = [], fails = [];
   async function page(seed) { const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true,
       userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 discover/9.53.3 XHS' });
-    const p = await ctx.newPage(); p.on('pageerror', e => errs.push(String(e))); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
+    const p = await ctx.newPage(); p.on('response',r=>{if(r.status()>=400)console.log('HTTP',r.status(),r.url());}); p.on('pageerror', e => errs.push(String(e))); p.on('console', m => { if (m.type() === 'error') errs.push(m.text()); });
     await p.addInitScript(MOCK(seed || {})); await p.goto(base + '/index.html');
     await p.waitForFunction(() => window.__farm && __farm.spritesReady() && document.getElementById('xhs-bar') && window.PFTouch, null, { timeout: 30000 });
     await p.waitForTimeout(800);
@@ -41,11 +41,12 @@ const HELPERS = `const f=__farm,S=f.S,R=PFTouch.RET();
 
 
   const dragAim=async(p,pos)=>{for(let n=0;n<22;n++){
-    const a=await p.evaluate(q=>{const c=__farm.toClient(q.x,q.y),r=PFTouch.RET();return{dx:r.x-c.x,dy:r.y-c.y};},pos);
+    const a=await p.evaluate(q=>{const c=__farm.toClient(q.x,q.y),r=PFTouch.RET();return{dx:r.x-c.x,dy:r.y-c.y,x:c.x,y:c.y};},pos);
     if(Math.hypot(a.dx,a.dy)<1)return;
+    if(Math.hypot(a.dx,a.dy)<12){await touch(p,[[a.x,a.y]]);continue;}
     const k=Math.min(1,105/Math.max(Math.abs(a.dx),Math.abs(a.dy))),x=195,y=610;
     await touch(p,[[x,y],[x+a.dx*k/2,y+a.dy*k/2],[x+a.dx*k,y+a.dy*k]]); }
-    throw new Error('drag could not bring target under reticle '+JSON.stringify(pos)); };
+    throw new Error('drag could not bring target under reticle '+JSON.stringify({pos,state:await p.evaluate(q=>({cam:__farm.cam,target:__farm.toClient(q.x,q.y),ret:PFTouch.RET(),state:PFTouch.state(),mode:__farm.input.mode,pick:__farm.input.mvPick}),pos)})); };
   const tool=async(p,text)=>{await p.waitForTimeout(700);await p.locator('#pt-box').tap();await p.waitForTimeout(150);const i=await p.evaluate(t=>[...document.querySelectorAll('#pt-sheet .grid button')].findIndex(b=>b.textContent.includes(t)),text);if(i<0){await p.screenshot({path:OUT+'/missing-tool.png'});throw new Error('missing tool '+text+' '+await p.locator('#pt-sheet').innerText()+' tools='+await p.locator('#tools').innerText());}await tapEl(p,`#pt-sheet .grid button:nth-child(${i+1})`);};
   let treeSave;
   { const p=await page();await p.evaluate(`(()=>{${HELPERS}setup();f.buyPlot('seacross','dam');f.FARMER.saplings.apple=3;quiet();f.refreshUI();})()`);
