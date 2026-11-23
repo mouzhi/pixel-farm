@@ -24,10 +24,32 @@
       if (jx < 0.5 || jy < 0.5) return [St[2], 'dirt']; const k = hash(fx, fy, 17); return [k > 0.5 ? St[3] : (k > 0.2 ? Wd[5] : Wd[4]), 'dirt']; }
     const SC = root.PFSchool, yard = (SC && SC.built(H)) ? SC.YARD : TN.SCHOOLYARD;
     if (TN.inRect(x, y, yard)) {
-      if (SC && SC.built(H) && SC.onTrack(x, y)) { const k = hash(Math.floor(x), Math.floor(y), 11); return [k > 0.55 ? St[1] : Wd[2], 'dirt']; }
+      if (SC && SC.built(H)) { const o = playground(SC, x, y); if (o) return o; }
       const k = hash(Math.floor(x), Math.floor(y), 9); return [k > 0.8 ? Wd[3] : Wd[4], 'dirt']; }
     const k = hash(Math.floor(x / 5), Math.floor(y / 5), 3); return [k > 0.82 ? G[3] : G[2], 'grass'];
   }
+
+  // v5.12.0 操场重做: a red two-lane track with cream lines, a mown infield with a halfway line, centre circle and goal boxes,
+  // a half court round the hoop, worn ground under the toys. Lines sit on whole world units so the lanes never blur into each other.
+  function playground(SC, x, y) {
+    const T = SC.TRACK, L = SC.LANES || [-3, 0, 3], LINE = Ac[0];
+    const C = SC.COURT; if (C && TN.inRect(x, y, C)) { const e = x < C[0] + 0.6 || x > C[2] - 0.6 || y < C[1] + 0.6 || y > C[3] - 0.6;
+      const cx = (C[0] + C[2]) / 2, key = Math.abs(x - cx) <= 4 && y <= C[1] + 9, keyE = key && (Math.abs(Math.abs(x - cx) - 4) < 0.5 || Math.abs(y - (C[1] + 9)) < 0.5);
+      const arc = Math.abs(Math.hypot(x - cx, (y - C[1] - 2) * 1.0) - 12) < 0.45 && y > C[1] + 2;
+      if (e || keyE || arc) return [LINE, 'dirt']; return [key ? Rf[3] : ((Math.floor(x) + Math.floor(y)) % 7 === 0 ? St[2] : St[3]), 'dirt']; }
+    const o = SC.trackOff(x, y);
+    if (o >= L[0] - 0.5 && o <= L[2] + 0.5) {
+      for (const l of L) if (Math.abs(o - l) < 0.42) return [LINE, 'dirt'];
+      if (y > T.cy && Math.abs(x - T.cx) < 0.5) return [LINE, 'dirt'];                              // the start / finish line
+      const k = hash(Math.floor(x * 2), Math.floor(y * 2), 13); return [k > 0.86 ? Rf[1] : Rf[2], 'dirt']; }
+    if (o < L[0] - 0.5) { const dx = x - T.cx, dy = y - T.cy;
+      if (Math.abs(dx) < 0.4 || Math.abs(Math.hypot(dx, dy * 1.4) - 5) < 0.42) return [LINE, 'dirt'];  // halfway line, centre circle
+      for (const s of [-1, 1]) { const gx = T.cx + s * 30, bx = (x - gx) * s; if (bx >= -0.4 && bx <= 6 && Math.abs(dy) <= 6 && (Math.abs(bx - 6) < 0.42 || Math.abs(Math.abs(dy) - 6) < 0.42)) return [LINE, 'dirt']; }
+      return [(Math.floor((x - T.cx + 200) / 5) & 1) ? G[3] : G[2], 'grass']; }                    // mown stripes
+    for (const q of (SC.PLAY || [])) if (q.k !== 'goal' && q.k !== 'stand' && Math.hypot((x - q.x) / 1.3, y - q.y) < 9) { const k = hash(Math.floor(x), Math.floor(y), 19); return [k > 0.7 ? Wd[5] : Wd[4], 'dirt']; }
+    return null;
+  }
+  const cross = (x, y) => !!(root.PFTownLife && S && S.eff && S.eff.town && root.PFTownLife.crossAt(x, y)); // 斑马线 on 主街 (game.js paints the avenue)
 
   // ---------- models (voxel = 1 screen px; 2 voxels per world unit) ----------
   function makeModels(x) {
@@ -114,9 +136,82 @@
       if (z >= 16 && z <= 22 && y === 2 && x >= 3 && x <= 5) return z === 19 ? Ac[0] : Rf[2];
       return null; });
     const yardPost = B(4, 4, 14, (x, y, z) => (x >= 1 && x <= 2 && y >= 1 && y <= 2 && z <= 13) ? (z === 13 ? Rf[2] : Wd[2]) : null);
+    // ---------- v5.12.0 小镇美术升级: street dressing (town-life.js slots) and the new playground (school.js PLAY) ----------
+    // planter: a long wooden box with a shrub and a row of flowers (Witchbrook-style window boxes, but standing on the pavement)
+    const planter = B(14, 6, 10, (x, y, z) => {
+      if (z <= 3) { if (x === 0 || x === 13 || y === 0 || y === 5) return z === 3 ? Wd[4] : ((x + z) % 4 === 0 ? Wd[1] : Wd[2]); return z === 3 ? Wd[1] : null; }
+      if (x < 1 || x > 12 || y < 1 || y > 4) return null;
+      const bush = Math.hypot((x - 4) / 3.2, (y - 2.5) / 2, (z - 6) / 3.4); if (bush < 1) return bush > 0.7 && (x + y + z) % 3 === 0 ? G[4] : (z >= 8 ? G[3] : G[2]);
+      if (x >= 8 && z <= 6) { const k = (x * 7 + y * 3) % 5; return z === 6 ? (k === 0 ? Ac[3] : k === 2 ? Ac[1] : k === 4 ? Ac[0] : null) : (z === 4 ? G[2] : (k & 1 ? G[3] : null)); }
+      return null; });
+    // aframe: a sandwich board facing the street; the face says what it is (chalk on slate, or painted wood)
+    const AFACE = { school: [G[0], Ac[0]], sale: [Ink[1], Ac[1]], market: [Wd[4], Rf[2]] };
+    const aframe = face => B(9, 6, 14, (x, y, z) => {
+      const lean = Math.floor(z / 5); if (z > 12) return null;
+      if (y === 4 - lean || y === 1 + lean) { if (x === 0 || x === 8 || z === 12 || z <= 1) return Wd[2];
+        if (y === 4 - lean) { if (z === 11) return Wd[3]; const line = (z === 9 || z === 7 || z === 5) && x >= 2 && x <= 6 && ((x + z) % 3 !== 0); return line ? face[1] : face[0]; }
+        return Wd[1]; }
+      return null; });
+    // blade: a post with an arm and a hanging signboard (both faces painted), a small lantern on top for the evening
+    const EMB = { book: [Wt[2], Ac[0]], shop: [Ac[1], Wd[2]], flower: [Ac[3], G[3]], clinic: [Ac[0], Rf[2]], bread: [Wd[4], Wd[2]], saw: [St[3], Wd[2]], anvil: [Ink[0], St[2]], school: [G[0], Ac[0]] };
+    const blade = sign => B(12, 4, 30, (x, y, z) => { const e = EMB[sign] || EMB.shop;
+      if (x <= 1 && y >= 1 && y <= 2 && z <= 25) return z === 25 ? Wd[1] : Wd[2];                          // the post
+      if (z === 24 && y >= 1 && y <= 2 && x >= 2 && x <= 11) return Wd[1];                                   // the arm
+      if (z >= 26 && z <= 28 && x <= 1 && y >= 1 && y <= 2) return z === 28 ? Wd[1] : Ac[1];               // the lantern
+      if ((x === 4 || x === 10) && y === 1 && z >= 21 && z <= 23) return St[1];                             // the chains
+      if (y >= 1 && y <= 2 && x >= 3 && x <= 11 && z >= 12 && z <= 20) {                                     // the board
+        if (x === 3 || x === 11 || z === 12 || z === 20) return Wd[1];
+        const c = Math.hypot(x - 7, (z - 16) * 1.1); if (sign === 'clinic') return (x === 7 || z === 16) && c < 3.2 ? e[1] : e[0];
+        return c < 2.6 ? e[0] : (c < 3.4 ? e[1] : Wd[4]); }
+      return null; });
+    const barrel = B(6, 6, 9, (x, y, z) => { const c = Math.hypot(x - 2.5, y - 2.5); if (c > 2.9 - (z === 0 || z === 8 ? 0.4 : 0)) return null;
+      if (z === 8) return c < 1.6 ? Wd[1] : Wd[2]; return (z === 2 || z === 6) ? St[1] : ((x + y) % 3 === 0 ? Wd[2] : Wd[3]); });
+    // awning: a striped canvas over a shop front, sloping out to the street with a scalloped edge (rot π: faces north)
+    const ACOL = [[Rf[2], Ac[0]], [G[2], Ac[0]], [Wt[2], Ac[0]]];
+    const awning = (w, c) => B(w * 2, 8, 32, (x, y, z) => { const col = ACOL[c % ACOL.length], zt = 31 - Math.round(y * 0.8);
+      if (z === zt) return ((x >> 1) & 1) ? col[0] : col[1];
+      if (y === 7 && z === zt - 1 && ((x >> 1) & 1)) return col[0];                                         // the scalloped edge
+      if ((x === 0 || x === w * 2 - 1) && y === 7 && z < zt && z >= zt - 3) return Wd[1];                    // the little brackets
+      return null; });
+    // cafe: a round table, two stools and a parasol (the square's café corners)
+    const cafe = B(18, 18, 24, (x, y, z) => { const c = Math.hypot(x + 0.5 - 9, y + 0.5 - 9);
+      if (z >= 18 && z <= 21 && c < 9 - (z - 18) * 2.6) return (Math.floor(Math.atan2(y - 9, x - 9) / (Math.PI / 4)) & 1) ? Ac[0] : G[3];
+      if (c < 0.9 && z <= 18) return z === 18 ? Wd[1] : St[1];
+      if (z === 7 && c < 3.4) return c > 2.6 ? Wd[2] : Wd[4];                                                // the table top
+      if (z >= 5 && z <= 6 && c < 3) return null;
+      for (const [sx, sy] of [[3, 9], [15, 9]]) { const d = Math.hypot(x - sx, y - sy); if (d < 1.6 && z <= 4) return z === 4 ? Rf[3] : (d < 0.8 ? Wd[1] : null); }
+      return null; });
+    // the playground: football goals with nets, a basketball hoop, short stands in team colours, a tall flagpole
+    const goal = B(8, 18, 12, (x, y, z) => { const post = (y === 0 || y === 17) && x === 7 && z <= 11, bar = z === 11 && x === 7;
+      if (post || bar) return Ac[0];
+      if ((y === 0 || y === 17) && z === 11 - Math.round((7 - x) * 1.2) && x < 7) return St[3];             // the side frames
+      if (x === 0 && z <= 3 && (y + z) % 2 === 0) return St[3];                                             // the net at the back
+      if (z > 3 && z < 11 && x === Math.round((z - 3) * 0.85) && (y + z) % 2 === 0) return St[3];           // the sloping net
+      return null; });
+    const hoop = B(10, 8, 36, (x, y, z) => {
+      if (x >= 4 && x <= 5 && y >= 0 && y <= 1 && z <= 30) return z % 6 === 0 ? St[1] : St[2];               // the pole
+      if (y === 2 && x >= 0 && x <= 9 && z >= 26 && z <= 33) { if (x === 0 || x === 9 || z === 26 || z === 33) return St[1];
+        return (x >= 3 && x <= 6 && z >= 27 && z <= 30 && (x === 3 || x === 6 || z === 30)) ? Rf[2] : Ac[0]; }  // the backboard
+      if (z === 27 && Math.hypot(x - 4.5, y - 4.5) < 2.2 && Math.hypot(x - 4.5, y - 4.5) > 1.2) return Ac[2]; // the rim
+      if (z >= 23 && z <= 26 && Math.hypot(x - 4.5, y - 4.5) < 2 && Math.hypot(x - 4.5, y - 4.5) > 1.2 && (x + z) % 2 === 0) return Ac[0]; // the net
+      return null; });
+    const stand = B(56, 12, 13, (x, y, z) => { const row = y >= 8 ? 0 : y >= 4 ? 1 : 2, top = 3 + row * 4;
+      if (z > top) return null; if (x === 0 || x === 55) return z === top ? Wd[1] : St[1];
+      if (z === top) return (Math.floor(x / 7) & 1) ? (row === 1 ? Wt[3] : Rf[2]) : Ac[0];                    // the painted seats
+      return (y === 11 || y === 7 || y === 3) ? (z % 2 ? St[2] : St[1]) : St[1]; });
+    const flagHigh = B(8, 6, 52, (x, y, z) => {
+      if (x === 2 && y === 2 && z <= 49) return z === 49 ? Ac[1] : (z <= 1 ? St[1] : St[3]);
+      if (z >= 38 && z <= 47 && y === 2 && x >= 3 && x <= 7) { const star = Math.hypot(x - 4.5, z - 44) < 1.3; return star ? Ac[1] : (z >= 38 && z <= 39 ? Rf[1] : Rf[2]); }
+      if (z <= 1 && x >= 0 && x <= 4 && y >= 0 && y <= 4) return St[2];
+      return null; });
     // v5.11.0: the buildings themselves come from town-bldg.js (the new scale: doors as tall as a grown-up, 24 voxels a storey)
     const NB = root.PFTownBldg.make(x);
-    return Object.assign(NB, { fountain, gateOpen, flowers, board, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, yardFlag, yardPost, lantern });
+    const xm = x.xpModels && x.xpModels(); // the farm's 乐园 toys, reused on the school's playground
+    const aframes = Object.fromEntries(Object.keys(AFACE).map(k => [k, aframe(AFACE[k])])), blades = Object.fromEntries(Object.keys(EMB).map(k => [k, blade(k)]));
+    const awnings = [0, 1, 2].map(c => awning(14, c));
+    const play = { goal, hoop, stand, slide: xm && xm.slide, swing: xm && xm.swing, sandbox: xm && xm.sandbox };
+    return Object.assign(NB, { fountain, gateOpen, flowers, board, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, yardFlag, yardPost, lantern,
+      planter, aframes, blades, barrel, awnings, cafe, play, flagHigh });
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -185,14 +280,19 @@
       if (built && l.id === 'woodshop' && MD.timber) { const WS = root.PFWoodshop; own.hall.push(X.addProp(MD.timber, (WS && WS.PILE.x) || (l.door.x - 7), (WS && WS.PILE.y) || (l.door.y + 1), 0, { xp: 1, town: 'timber' })); }
       if (built && l.id === 'smithy' && MD.anvil) { const SM = root.PFSmithy; own.hall.push(X.addProp(MD.anvil, (SM && SM.ANVIL.x) || (l.door.x - 6), (SM && SM.ANVIL.y) || (l.door.y + 1), 0, { xp: 1, town: 'anvil' })); }
       if (built && l.id === 'library' && MD.orderBoard) { const LB = root.PFLibrary; own.hall.push(X.addProp(MD.orderBoard, (LB && LB.BOARD.x) || (l.door.x - 8), (LB && LB.BOARD.y) || (l.door.y + 1), 0, { xp: 1, town: 'libboard' })); } }
-    const SC = root.PFSchool; // v5.10.9: playground posts and the flag; extra flags on sports day
+    const SC = root.PFSchool; // v5.10.9: the flag; extra flags on sports day. v5.12.0 操场重做: goals, hoop, stands, toys, a tall flagpole
     if (SC && H.built.school) {
-      if (MD.yardFlag) own.hall.push(X.addProp(MD.yardFlag, SC.FLAG.x, SC.FLAG.y, 0, { xp: 1, town: 'flag' }));
-      if (MD.yardPost) { const T = SC.TRACK; for (const [dx, dy] of [[T.rx, 0], [-T.rx, 0], [0, T.ry], [0, -T.ry]]) own.hall.push(X.addProp(MD.yardPost, T.cx + dx, T.cy + dy, 0, { xp: 1, town: 'post' })); }
+      own.hall.push(X.addProp(MD.flagHigh || MD.yardFlag, SC.FLAG.x, SC.FLAG.y, 0, { xp: 1, town: 'flag' }));
+      const PM = MD.play || {}; let stand = false;
+      for (const q of (SC.PLAY || [])) { const m = PM[q.k]; if (!m) continue; if (q.k === 'stand') stand = true; own.hall.push(X.addProp(m, q.x, q.y, q.rot || 0, { xp: 1, town: 'play:' + q.k })); }
       const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
-      if (DM && DM.bench) for (const b of SC.BENCHES) own.hall.push(X.addProp(DM.bench, b.x, b.y, 0, { xp: 1, town: 'yardbench' }));
-      if (sports && MD.yardFlag) { own.hall.push(X.addProp(MD.yardFlag, SC.TRACK.cx - 6, SC.TRACK.cy - SC.TRACK.ry, 0, { xp: 1, town: 'flag' })); own.hall.push(X.addProp(MD.yardFlag, SC.TRACK.cx + 6, SC.TRACK.cy - SC.TRACK.ry, 0, { xp: 1, town: 'flag' })); }
+      if (!stand && DM && DM.bench) for (const b of SC.BENCHES) own.hall.push(X.addProp(DM.bench, b.x, b.y, 0, { xp: 1, town: 'yardbench' }));
+      const T = SC.TRACK, top = T.cy - T.ry - ((SC.LANES && SC.LANES[2]) || 0) - 2; // sports-day flags just outside the outer lane
+      if (sports && MD.yardFlag) { own.hall.push(X.addProp(MD.yardFlag, T.cx - 6, top, 0, { xp: 1, town: 'flag' })); own.hall.push(X.addProp(MD.yardFlag, T.cx + 6, top, 0, { xp: 1, town: 'flag' })); }
     }
+    const TL = root.PFTownLife; // v5.12.0 小镇美术升级: planters, sandwich boards, hanging signs, barrels, awnings and café tables in fixed slots
+    if (TL) for (const d of TL.dressFor(H.built)) { const m = d.k === 'aframe' ? MD.aframes && MD.aframes[d.sign] : d.k === 'blade' ? MD.blades && MD.blades[d.sign] : d.k === 'awning' ? MD.awnings && MD.awnings[d.c | 0] : MD[d.k];
+      if (!m) continue; const host = d.k === 'awning' && HL.LOTS.find(l => l.id === d.need); own.hall.push(X.addProp(m, d.x, d.y, host ? host.rot : 0, { xp: 1, town: 'dress:' + d.k })); }
     const MKS = root.PFMarket; // v5.10.3: the market stalls (bare frames while 阿松 is putting them up)
     if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
@@ -211,6 +311,7 @@
   function lights(hz, T) { if (!(S && S.eff && S.eff.town)) return; for (const l of TN.lightsAt(T)) hz(l.x, l.y, l.z, l.r, l.s);
     if (HL && S.town && S.town.hall) for (const l of HL.lightsAt(S.town.hall, T, root.PFDecor && root.PFDecor.CATALOG)) hz(l.x, l.y, l.z, l.r, l.s); // v5.10.0: the new houses' windows, the gift lamps
     if (root.PFCareers && S.town && S.town.lots) for (const l of root.PFCareers.lightsAt(S.town.lots, S.home && S.home.path, T, S.day)) hz(l.x, l.y, l.z, l.r, l.s); // v5.10.6: the child's shop window at dusk
+    if (root.PFTownLife && S.town && S.town.hall) for (const l of root.PFTownLife.signLights(S.town.hall.built, T)) hz(l.x, l.y, l.z, l.r, l.s); // v5.12.0: the hanging signs' lanterns
     const FS = root.PFFestival; // v5.10.11: warm lanterns over the paved streets and the plaza
     if (FS && S.town && S.town.hall && FS.fairOpen(S.town.hall, S.day, T)) for (const l of FS.lights()) hz(l.x, l.y, l.z, l.r, l.s); }
   function festString(ctx, proj, a, b, za, zb, n, lit, realT, ph) {
@@ -237,6 +338,6 @@
     if (H.built && H.built.smithy) { const SM = root.PFSmithy, l = (SM && SM.LOT) || (HL && HL.LOT.smithy); if (l) out.push(Object.assign(chimneyOf(l, 30.5, 10.5, 72, 40, 40), { forge: 1 })); }
     return out;
   }
-  const api = { ground, mount, sync, lights, draw, smoke, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
+  const api = { ground, cross, mount, sync, lights, draw, smoke, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
   root.PFTownArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);

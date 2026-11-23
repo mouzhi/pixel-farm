@@ -466,7 +466,7 @@ async function testAsync(name, fn) { await fn(); n++; }
       save: Object.assign({ saveVersion: 15, gameVersion: '5.11.0.16', createdAt: 1_000_000, savedAt: savedAt || (day * 1000), clock: { day, t: day === 12 ? 800 : 360 }, coins }, extra) };
   }
   function browserDay(day, coins) {
-    return { saveVersion: 15, gameVersion: '5.11.0.39', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
+    return { saveVersion: 15, gameVersion: '5.12.0', createdAt: 1_000_000, savedAt: day * 100 + 50, clock: { day, t: day === 12 ? 800 : 360 }, coins };
   }
   function seedFolder(dir, day, coins) {
     dir.files['pixel-farm-save.json'] = { text: JSON.stringify(wrapDay(day, coins), null, 2) + '\n' };
@@ -696,10 +696,10 @@ async function testAsync(name, fn) { await fn(); n++; }
     LOG.reset(s);
     const createdAt = 1_000_000, day = 8, t = 800, coins = 400, savedAt = 12_000;
     const folder = {
-      meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T02:02:00.000Z', gameVersion: '5.11.0.39', saveVersion: 15 },
-      save: { saveVersion: 15, gameVersion: '5.11.0.39', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-field' }, basket: { egg: 3 } }
+      meta: { kind: 'pixel-farm-save', exportedAt: '2026-11-21T02:02:00.000Z', gameVersion: '5.12.0', saveVersion: 15 },
+      save: { saveVersion: 15, gameVersion: '5.12.0', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-field' }, basket: { egg: 3 } }
     };
-    const browser = { saveVersion: 15, gameVersion: '5.11.0.39', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-shore' }, basket: { egg: 0 } };
+    const browser = { saveVersion: 15, gameVersion: '5.12.0', createdAt, savedAt, clock: { day, t }, coins, home: { house: 'east-shore' }, basket: { egg: 0 } };
     LOG.boot(snap({ day, coins }), { store: s, getSave: () => browser });
     await LOG.hydrateDir();
     const dir = LOG.memoryDir({ name: 'pixelfarm', permission: 'granted' });

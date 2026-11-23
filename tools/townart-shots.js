@@ -32,26 +32,35 @@ fs.mkdirSync(OUT, { recursive: true });
     day(30); Object.assign(S.family, { kids: [{ id: 'kid0', name: '小豆', born: 15 }, { id: 'kid1', name: '小米', born: 16 }] }); f.syncFamily(); dry();`;
   // the whole town: the hall's projects one a day (school expansion included, so the playground is there)
   const town = `openTown(); at(9 * 60); for (const id of ['L5', 'L8', 'L11', 'market', 'bakery', 'woodshop', 'smithy', 'school', 'library']) { f.FARMER.wood = 900; const r = f.hallStart(id); if (!r.ok) return { error: id + ' ' + (r.why || r.err || JSON.stringify(r)) }; nextMorning(); at(9 * 60); } f.FARMER.wood = 900;`;
-  const shot = async (name, fn, check, o = {}) => { if (only && !name.includes(only)) return;
-    const p = await page(o.save, o.w || 1280, o.h || 800); let r; try { r = await p.evaluate(fn); } catch (e) { r = { error: String(e).slice(0, 300) }; }
-    await p.waitForTimeout(400); await p.screenshot({ path: path.join(OUT, PREFIX + name) });
-    const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
-  const facts = `({ v: f.version, life: window.PFTownArt && PFTownArt.life ? PFTownArt.life().length : null, street: window.PFTownArt && PFTownArt.state ? PFTownArt.state().street : null, t: S.t % 1440, day: S.day })`;
-
-  // 1. the main street by day (desktop + phone)
-  for (const [tag, w, h] of [['street.png', 1280, 800], ['street_phone.png', 390, 844]])
-    await shot(tag, `(() => { ${setup} ${town} at(11 * 60); dry(); f.advance(3, 10); look(${w < 500 ? 760 : 740}, 70, 0); hide(); return ${facts}; })()`, null, { w, h });
-  // 2. the east half (houses, shop, clinic lane)
-  await shot('east.png', `(() => { ${setup} ${town} at(15 * 60); dry(); f.advance(3, 10); look(880, 40, 0); hide(); return ${facts}; })()`);
-  // 3. the playground behind the school (desktop + phone)
-  for (const [tag, w, h] of [['playground.png', 1280, 800], ['playground_phone.png', 390, 844]])
-    await shot(tag, `(() => { ${setup} ${town} at(16 * 60); dry(); f.advance(3, 10); look(662, -40, 0); hide(); return ${facts}; })()`, null, { w, h });
-  // 4. the plaza / market / feast square
-  await shot('plaza.png', `(() => { ${setup} ${town} at(10 * 60); dry(); f.advance(3, 10); look(700, 120, 0); hide(); return ${facts}; })()`);
-  // 5. night on the main street: lamps and windows, with frame times (still / panning)
-  for (const [tag, w, h] of [['night.png', 1280, 800], ['night_phone.png', 390, 844]])
-    await shot(tag, `(() => { ${setup} ${town} at(20 * 60 + 30); dry(); f.advance(2, 10); look(740, 70, 0);
-      const still = time(40), pan = time(40, i => f.panTo(740 + (i % 2 ? 1.3 : -1.3), 70)); f.panTo(740, 70); f.render(); hide();
-      return Object.assign(${facts}, { stillMs: still, panMs: pan }); })()`, r => r.stillMs > 15 ? 'night frame ' + r.stillMs + ' ms' : null, { w, h });
-
+  // one page per screen size: the town is built once, then each scene is framed and shot in turn
+  const run = async (tag, w, h, scenes) => { if (only && !scenes.some(sc => sc[0].includes(only))) return;
+    const p = await page(null, w, h); let r0; try { r0 = await p.evaluate(`(() => { ${setup} ${town} return { ok: 1 }; })()`); } catch (e) { r0 = { error: String(e).slice(0, 300) }; }
+    if (r0 && r0.error) { fails.push(tag + ': ' + r0.error); console.log('FAIL', tag, r0.error); await p.context().close(); return; }
+    for (const [name, fn, check] of scenes) { if (only && !name.includes(only)) continue; let r;
+      try { r = await p.evaluate(`(() => { ${helpers} ${fn} })()`); } catch (e) { r = { error: String(e).slice(0, 300) }; }
+      await p.waitForTimeout(300); await p.screenshot({ path: path.join(OUT, PREFIX + name) });
+      const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); }
+    await p.context().close(); };
+  const facts = `({ v: f.version, life: f.townLife ? f.townLife().length : null, want: f.lifeWant ? f.lifeWant() : null, dress: f.props.filter(q => /^dress:/.test(q.town || '')).length, play: f.props.filter(q => /^play:/.test(q.town || '')).length, t: Math.round(S.t % 1440), day: S.day, lv: f.townLv() })`;
+  const NEW = VERSION !== '5.11.0.39'; // the same script takes the 'before' pictures on the old main
+  const dayCheck = r => !NEW ? null : r.v !== '5.12.0' ? 'ver ' + r.v : r.dress < 24 ? 'dressing ' + r.dress : r.play < 6 ? 'playground ' + r.play : r.want < 4 ? 'walkers wanted ' + r.want : r.life < r.want - 1 ? 'walkers ' + r.life + '/' + r.want : null;
+  const scenes = phone => [
+    [`street${phone}.png`, `at(11 * 60); dry(); f.advance(4, 10); look(${phone ? 760 : 740}, 66, 0); hide(); return ${facts};`, dayCheck],
+    [`east${phone}.png`, `at(15 * 60); dry(); f.advance(3, 10); look(880, 40, 0); hide(); return ${facts};`, dayCheck],
+    [`playground${phone}.png`, `at(16 * 60); dry(); f.advance(3, 10); look(662, -44, 0); hide(); return ${facts};`, dayCheck],
+    [`works${phone}.png`, `at(10 * 60); dry(); f.advance(3, 10); look(668, 168, 0); hide(); return ${facts};`, dayCheck],
+    [`square${phone}.png`, `at(10 * 60 + 30); dry(); f.advance(3, 10); look(763, 128, 0); hide(); return ${facts};`, dayCheck],
+    // night on the main street: lamps, windows and the signs' lanterns, with frame times (camera still / panning)
+    [`night${phone}.png`, `at(19 * 60 + 40); dry(); f.advance(2, 10); look(760, 66, 0);
+      const still = time(40), pan = time(40, i => f.panTo(760 + (i % 2 ? 1.3 : -1.3), 66)); f.panTo(760, 66); f.render(); hide();
+      return Object.assign(${facts}, { stillMs: still, panMs: pan });`, r => (!phone && r.stillMs > 15) ? 'night frame ' + r.stillMs + ' ms' : null],
+  ];
+  await run('desktop', 1280, 800, scenes(''));
+  await run('phone', 390, 844, scenes('_phone'));
+  // an old save (the day-72 fixture: town not bought yet) loads clean on the new version; the street wakes up once the town is bought
+  if (!only || 'fixture'.includes(only)) { const file = path.join(__dirname, 'fixtures', 'save-v15-day72-cottage.json');
+    if (fs.existsSync(file)) { const save = readSave(file), p = await page(save); let r;
+      try { r = await p.evaluate(`(() => { ${helpers} const s = f.snapshot(); f.advance(2, 10); return { day: s.clock.day, sv: s.saveVersion, v: f.version, town: !!(S.eff && S.eff.town), life: f.townLife().length }; })()`); } catch (e) { r = { error: String(e).slice(0, 300) }; }
+      const bad = r.error || (r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : NEW && r.v !== '5.12.0' ? 'ver ' + r.v : (!r.town && r.life) ? 'walkers in a shut town' : null);
+      console.log(bad ? 'FAIL' : 'ok  ', 'fixture day72', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close(); } }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();
