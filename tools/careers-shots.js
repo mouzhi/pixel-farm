@@ -57,8 +57,8 @@ fs.mkdirSync(OUT, { recursive: true });
       : !/成家以后做什么/.test(r.title || '') ? 'title ' + r.title
       : !r.wed || r.wed.mate !== 'm1' ? 'no wedding'
       : r.lv < 3 ? 'lv ' + r.lv
-      : !r.opts.some(s => s.startsWith('farm:')) || !r.opts.includes('work:bakery*') || !r.opts.some(s => s.startsWith('shop:flower')) ? 'opts ' + JSON.stringify(r.opts)
-      : ['farm:', 'work:bakery*', 'work:fish:', 'work:art:', 'shop:flower'].some(k => { const s = r.opts.find(x => x.startsWith(k.replace('*','')) || x === k); return !s || s.endsWith('!'); }) ? 'a core option locked ' + JSON.stringify(r.opts)
+      : !r.opts.some(s => s.startsWith('farm:')) || !r.opts.includes('work:bakery:*') || !r.opts.some(s => s.startsWith('shop::flower')) ? 'opts ' + JSON.stringify(r.opts)
+      : ['farm:', 'work:bakery*', 'work:fish:', 'work:art:', 'shop::flower'].some(k => { const s = r.opts.find(x => x.startsWith(k.replace('*','')) || x === k); return !s || s.endsWith('!'); }) ? 'a core option locked ' + JSON.stringify(r.opts)
       : !r.opts.some(s => s.startsWith('inn')) ? 'missing inn option ' + JSON.stringify(r.opts)
       : !r.opts.some(s => s.startsWith('work:school')) || !r.opts.some(s => s.startsWith('work:clinic')) || !r.opts.some(s => s.startsWith('work:library')) ? 'missing new jobs ' + JSON.stringify(r.opts)
       : !r.v || r.v.fee !== 0 ? 'fee ' + JSON.stringify(r.v)
