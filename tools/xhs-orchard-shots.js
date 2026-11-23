@@ -41,6 +41,14 @@ const HELPERS = `const f=__farm,S=f.S,R=PFTouch.RET();
     console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); return r; };
 
 
+  const dragAim=async(p,pos,tol)=>{for(let n=0;n<22;n++){
+    const a=await p.evaluate(q=>{const c=__farm.toClient(q.x,q.y),r=PFTouch.RET();return{dx:r.x-c.x,dy:r.y-c.y,x:c.x,y:c.y};},pos);
+    if(Math.hypot(a.dx,a.dy)<(tol||1))return;
+    if(Math.hypot(a.dx,a.dy)<12){await touch(p,[[a.x,a.y]]);continue;}
+    const k=Math.min(1,105/Math.max(Math.abs(a.dx),Math.abs(a.dy))),x=195,y=610;
+    await touch(p,[[x,y],[x+a.dx*k/2,y+a.dy*k/2],[x+a.dx*k,y+a.dy*k]]); }
+    throw new Error('drag could not bring target under reticle '+JSON.stringify({pos,state:await p.evaluate(q=>({cam:__farm.cam,target:__farm.toClient(q.x,q.y),ret:PFTouch.RET(),state:PFTouch.state(),mode:__farm.input.mode,pick:__farm.input.mvPick}),pos)})); };
+  const tool=async(p,text)=>{await p.waitForTimeout(700);await p.locator('#pt-box').tap();await p.waitForTimeout(150);const i=await p.evaluate(t=>[...document.querySelectorAll('#pt-sheet .grid button')].findIndex(b=>b.textContent.includes(t)),text);if(i<0){await p.screenshot({path:OUT+'/missing-tool.png'});throw new Error('missing tool '+text+' '+await p.locator('#pt-sheet').innerText()+' tools='+await p.locator('#tools').innerText());}await tapEl(p,`#pt-sheet .grid button:nth-child(${i+1})`);};
   const ORCH = { x: -95, y: -42 }; // 果园坡 centre
   const young = `S.trees.filter(t=>t.stage==='sapling'&&t.kind!=='wild'&&t.x>-150&&t.x<-40&&t.y>-100&&t.y<16)`;
   let save;
@@ -67,5 +75,29 @@ const HELPERS = `const f=__farm,S=f.S,R=PFTouch.RET();
       return{young:${young}.length,sap:Object.assign({},f.FARMER.saplings),sv:f.snapshot().saveVersion,bytes:new Blob([JSON.stringify(PFSave.compact(f.snapshot()))]).size};})()`),
       r => r.young < 3 || r.sap.apple || r.sv !== 15 || r.bytes >= 65536 ? 'orchard lost after reload' : null);
     await q.context().close(); }
+  // v5.11.0.35 砍果树 on the phone: ⚒ → 砍树 → aim at an apple tree → ✔ asks to confirm → ✔ again marks it → the family fells it,
+  // 1 apple sapling lands in the storehouse with the log line.
+  { const p = await page();
+    await p.evaluate(`(()=>{${HELPERS}setup();S.t=Math.floor(S.t/1440)*1440+7*60;f.FARMER.saplings.apple=0;f.FARMER.saplings.orange=0;PFPlatform.setFollow(false);
+      const t=S.trees.find(q=>q.id==='a2');center(t.x,t.y);quiet();f.refreshUI();})()`);
+    const tree = await p.evaluate(() => { const t = __farm.S.trees.find(q => q.id === 'a2'); return { x: t.x, y: t.y }; });
+    await tool(p, '砍树'); await dragAim(p, tree, 6); await p.waitForTimeout(200);
+    await tapEl(p, '#pt-bar .ok'); await p.waitForTimeout(250);
+    await step(p, 'chop_confirm.png', () => p.evaluate(() => { const S = __farm.S, say = document.getElementById('say'); return { say: say && !say.hidden ? say.innerText : '', queued: S.orders.some(o => o.type === 'chop' && o.id === 'a2'), hint: (document.getElementById('pt-bar') || {}).innerText || '' }; }),
+      r => !/再点一次确认/.test(r.say) || r.queued ? 'no confirmation before marking a fruit tree' : null);
+    await tapEl(p, '#pt-bar .ok'); await p.waitForTimeout(250);
+    await step(p, 'chop_marked.png', () => p.evaluate(() => { const S = __farm.S, say = document.getElementById('say'); return { say: say && !say.hidden ? say.innerText : '', queued: S.orders.some(o => o.type === 'chop' && o.id === 'a2'), hint: (document.getElementById('pt-bar') || {}).innerText || '' }; }),
+      r => !r.queued || /再点一次确认/.test(r.hint) ? 'fruit tree not marked / stale confirmation' : null);
+    await p.evaluate(() => __farm.setMode(null)); await p.waitForTimeout(200);
+    await p.evaluate(`(()=>{${HELPERS}const t=S.trees.find(q=>q.id==='a2');for(let i=0;i<3000&&S.trees.includes(t);i++)f.advance(1,3);quiet();})()`);
+    await step(p, 'chop_log.png', () => p.evaluate(`(()=>{${HELPERS}PFPlatform.setFollow(false);center(-104,-40);f.render();const say=document.getElementById('say');
+      return{gone:!S.trees.some(q=>q.id==='a2'),toast:say&&!say.hidden?say.innerText:'',log:S.log.find(m=>/砍倒一棵苹果树/.test(m))||''};})()`),
+      r => !r.gone || !/砍倒一棵苹果树/.test(r.log) ? 'no chop log' : null);
+    await p.evaluate(() => { const e = document.getElementById('say'); if (e) e.hidden = true; });
+    await tapEl(p, '#xhs-btn-store'); await p.waitForTimeout(400);
+    await p.evaluate(() => { for (const e of document.querySelectorAll('body *')) if (!e.closest('#store') && e.children.length === 0 && /^\d\d:\d\d 砍倒一棵|^砍倒一棵/.test(e.textContent || '')) { const box = e.closest('[id]') || e; box.style.visibility = 'hidden'; window.__hid = box.id || box.className; } });
+    await step(p, 'chop_sapling.png', () => p.evaluate(`(()=>{${HELPERS}const st=document.getElementById('store');return{gone:!S.trees.some(q=>q.id==='a2'),sap:f.FARMER.saplings.apple,store:st&&!st.hidden?/苹果树苗/.test(st.innerText):false,log:S.log.find(m=>/砍倒一棵苹果树/.test(m))||''};})()`),
+      r => !r.gone || r.sap !== 1 || !r.store || !r.log ? 'no sapling after the fruit chop' : null);
+    await p.context().close(); }
   server.close(); await b.close(); if (errs.length) fails.push(errs.join('\n')); if (fails.length) { console.error(fails.join('\n')); process.exit(1); } console.log('xhs-orchard-shots passed', VERSION);
 })().catch(e => { console.error(e); process.exit(1); });
