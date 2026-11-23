@@ -254,7 +254,7 @@
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
-    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置；家人按标记种果树，不会自动选址。伐木小屋只用未标记的树苗补种林场野树` });
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置（先种）；没标记的会由家人自己种进空着的果园。果园种满后，伐木小屋才用剩下的树苗补种林场野树` });
     if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) add({ id: 'hay', ico: pic(ICONS.hay), name: '干草', n: S.hay, dim: !S.hay, tip: `仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）` });
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
       add({ id: 'animals', ico: pic(ICONS.chicken), name: mood, n: S.animals.length, tip: `${S.animals.map(a => `${PFAnimals.KINDS[a.kind].name} ${a.h}（${PFAnimals.mood(a.h)}）`).join('，')}。喂饱、加水、摸一摸会更开心；开心（80 以上）多产一份，闷闷不乐（30 以下）不产。` }); }

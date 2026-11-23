@@ -17,7 +17,7 @@
   const MODULES = {
     field: { name: '农田', icon: 'field', desc: '新的耕地，家人会来开垦、播种、浇水', now: '24 格新田，带水桶' },
     pasture: { name: '牧场', icon: 'pasture', desc: '围栏草场，能盖第二套鸡舍、猪圈、羊圈、牛棚（商店「建筑」里买）', now: '先围好草场和小水槽' },
-    orchard: { name: '果园', icon: 'orchard', desc: '能移植仓库里的果树苗（用「种树」工具点这块地）', now: '空出成排的移植位' },
+    orchard: { name: '果园', icon: 'orchard', desc: '仓库里有果树苗时，家人会自己来种（也能用「种树」工具指定位置）', now: '空出成排的移植位' },
     meadow: { name: '花甸', icon: 'flower', desc: '一片野花，能放 6 个蜂箱（商店「工坊」里买），以后还能摆装饰', now: '开满野花' },
     woodland: { name: '林地', icon: 'forest', desc: '种上一片会再生的树，砍了会长回来', now: '一片会长回来的树（最多 10 棵）' },
     workshop: { name: '工坊院', icon: 'workshop', desc: '平整的空院子，能盖三座加工坊：磨坊、果酱铺、奶酪坊（商店「工坊」里买）。加工坊能用「挪东西」挪到别的工坊院；改建这块地时加工坊会搬走或先收进仓库', now: '先铺好院子' },
