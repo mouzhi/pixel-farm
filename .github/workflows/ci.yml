@@ -144,7 +144,7 @@ jobs:
             # v5.11.0.28: + workprio-test (~40s locally; workshop-shots alone is a light leg)
             # v5.11.0.29 自动化机械: + mach-shots (feeder/chute/milker/tray checks; workshop+mach was 6m53s on run 44927967839)
             # v5.11.0.31: + shedmove-shots (second pens move / rezone; keep this leg under 22m)
-            scripts: workshop-shots.js workprio-test.js mach-shots.js shedmove-shots.js beehive-shots.js
+            scripts: workshop-shots.js workprio-test.js mach-shots.js shedmove-shots.js beehive-shots.js riverbank-test.js
           - group: festival
             # v5.11.0.31 前几天的节奏: + day1-pacing (~10s, fresh farm days 1-7 milestones) and day1-shots (~35s locally)
             scripts: festival-shots.js day1-pacing.js day1-shots.js

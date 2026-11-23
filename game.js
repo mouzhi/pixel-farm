@@ -1039,8 +1039,8 @@ function board() {
   const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
   if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.28: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
-  const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0);
-  if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
+  const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0 && plantAccess(o.x, o.y));
+  if (plant.length) { const o = rngNear(plant); if (o) post('transplant', CHOP_ORDER_BASE + travel(F, o) / 8, o, () => transplantTask(o), undefined, undefined, true); }
   // v5.4.0: sprinkle fish food, release an ornamental fish the player flagged, pick up a truffle a dog found
   if (S.fishFood > 0 && S.pondFed !== S.day && T < 18 * 60) post('feedpond', 28, FS.POND_SPOT.stand, feedPondTask);
   const rel = S.orders.filter(o => o.type === 'release');
@@ -1253,7 +1253,7 @@ function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 a
     groundDirty = true;
   } };
 }
-const treeReachable = t => { const a = WD.areaAt(t.x, t.y); return a === 'home' || S.eff.regions.includes(a); };
+const treeReachable = t => ownGround(t.x, t.y); // v5.11.0.34: bought plot fruit belongs to the farm too
 const treeStand = t => ({ x: t.x - 8, y: t.y + 2 });
 function pickTask(t) {
   const fr = WD.FRUIT[t.kind];
@@ -1295,6 +1295,7 @@ function chopDrop(t, y) {
 function transplantTask(o) {
   return { label: `正在移植${WD.FRUIT[o.kind].name}树苗`, to: { x: o.x - 7, y: o.y + 1 }, tile: o, dur: 12, fx: 'dirt', pose: 'hoe', done: () => {
     if (FARMER.saplings[o.kind] <= 0 || !S.orders.includes(o)) return;
+    const sp = plantSpot(o.x, o.y, o); if (!sp.ok) { S.orders = S.orders.filter(q => q !== o); log(`树苗没有种下（${sp.why}），已留在仓库`); return; }
     S.orders = S.orders.filter(q => q !== o); FARMER.saplings[o.kind]--;
     const t = { id: 'p' + S.day + '_' + Math.floor(S.t % 1440) + '_' + S.trees.length, x: o.x, y: o.y, kind: o.kind, v: S.trees.length % 3, stage: 'sapling', age: 0, ripe: 0, cd: 0 };
     S.trees.push(t); treeChanged(t); burst(o.x, o.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop');
@@ -1314,8 +1315,9 @@ function postAutoChop(post, marked) {
   const t = rngNear(free); if (t) post('chop', WA.autoBase(SIM.SHOP, S.up), t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
 }
 function woodNight() {
-  const re = WA.replant(S.trees, FARMER.saplings, S.eff); for (const t of re) treeChanged(t);
-  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵树苗补种了林场`);
+  const reserved = {}; for (const o of S.orders) if (o.type === 'plant') reserved[o.kind] = (reserved[o.kind] || 0) + 1;
+  const re = WA.replant(S.trees, FARMER.saplings, S.eff, reserved); for (const t of re) treeChanged(t);
+  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵空闲树苗补种了林场野树（已标记要种的果树苗不会使用）`);
 }
 function offlineWood(r) {
   const forestN = S.trees.filter(t => t.kind === 'wild' && WD.regrows(t)).length;
@@ -5622,7 +5624,13 @@ const PAN_KEYS = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0], W: [0, -1], A: 
 const keyPan = new Set();
 const typing = e => e.target && /^(TEXTAREA|INPUT|BUTTON)$/.test(e.target.tagName); // the save menu has text boxes
 const INPUT = { mode: null, kind: 'apple', hover: null };
-function clampCam() { cam.x = clamp(cam.x, WORLD.x0 + 70, WORLD.x1 - 70); cam.y = clamp(cam.y, WORLD.y0 + 40, WORLD.y1 - 30); }
+function clampCam() {
+  // Tool targets must be able to pass under the fixed reticle, even at the world edge (the southern lots reach y=380).
+  // Only the camera's editing margin changes; ownership, placement and the map bounds are unchanged.
+  const pad = INPUT.mode ? Math.hypot(W / 2, H / 2 + 44) / (K * RS) : 0;
+  cam.x = clamp(cam.x, WORLD.x0 + (pad ? -pad : 70), WORLD.x1 + (pad ? pad : -70));
+  cam.y = clamp(cam.y, WORLD.y0 + (pad ? -pad : 40), WORLD.y1 + (pad ? pad : -30));
+}
 function panScreen(dx, dy) { // move the picture by (dx, dy) framebuffer pixels
   const rx = dx / RS, ry = dy / (K * RS); cam.x -= rx * CA + ry * SA; cam.y -= -rx * SA + ry * CA; clampCam(); }
 function panTo(x, y) { cam.x = x; cam.y = y; clampCam(); }
@@ -5632,23 +5640,27 @@ function treeAtScreen(px, py) { let best = null, bd = 1e9;
   for (const t of S.trees) { if (t.stage !== 'tree' || t.kind !== 'wild') continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60;
     if (Math.abs(px - sx) > 16 || py > sy + 6 || py < sy - h) continue; const d = Math.abs(px - sx) + Math.abs(py - (sy - h * 0.45)) * 0.5; if (d < bd) { bd = d; best = t; } }
   return best; }
-function plantSpot(x, y) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
-  const a = WD.areaAt(x, y);
-  if (!(a === 'home' || S.eff.regions.includes(a))) return { ok: false, why: '这里还没解锁' };
+function plantSpot(x, y, self) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
+  if (!ownGround(x, y)) return { ok: false, why: '这里还没解锁' };
   if (groundAt(x, y)[1] !== 'grass') return { ok: false, why: '只能种在草地上' };
   if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && Math.abs(t.x - x) < 9 && Math.abs(t.y - y) < 9)) return { ok: false, why: '不能种在田里' };
   if (yard.some(c => Math.hypot(c.x - x, c.y - y) < 7)) return { ok: false, why: '这里有杂物，等农夫收拾完再种' };
   if ([[HOUSE, 28], [BARN, 28], [STALL, 22], [WELL, 12]].some(([b, d]) => Math.hypot(b.x - x, b.y - y) < d)) return { ok: false, why: '离房子太近' };
   if (AN.PEN_IDS.some(k => (!PENS[k].second || S.eff[k]) && Math.hypot(PENS[k].bld.x - x, PENS[k].bld.y - y) < 20 || Math.hypot(PENS[k].trough.x - x, PENS[k].trough.y - y) < 10)) return { ok: false, why: '这里留给动物的棚子' }; // kept free even before it is built
   if (props.some(p => !p.region && Math.hypot(p.x - x, p.y - y) < (p.tree ? 11 : 8)) || S.trees.some(t => Math.hypot(t.x - x, t.y - y) < 11) ||
-      S.orders.some(o => o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
+      S.orders.some(o => o !== self && o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
+  if (!plantAccess(x, y)) return { ok: false, why: '家人走不到这里，先留出通路（河对岸要修好石桥）' };
   return { ok: true };
+}
+function plantAccess(x, y) {
+  const to = { x: x - 7, y: y + 1 }, r = pathTo(NAV.LAYOUT.DOOR, to), end = r.points[r.points.length - 1];
+  return !!end && Math.hypot(end.x - to.x, end.y - to.y) <= 6 && !r.fallback;
 }
 // v5.9.1: is there any grass left for a sapling? Scanned at most once per day or when trees / orders / regions change; stops at the first spot
 const PLANT_FULL = '没有能种树的空草地了：树之间要隔开一点，田里、路上、房子和棚子旁边都不能种。砍掉几棵野树或买下新的地块就有地方了';
 let plantRoomC = { key: '', ok: true };
 function plantRoom() {
-  const key = [S.day, S.trees.length, S.orders.length, S.eff.regions.length, tiles.length].join(',');
+  const key = [S.day, navVer, S.trees.length, S.orders.length, S.eff.regions.join(','), JSON.stringify(S.plots), tiles.length].join(',');
   if (key === plantRoomC.key) return plantRoomC.ok;
   let ok = false;
   for (let y = WORLD.y0 + 6; y < WORLD.y1 && !ok; y += 6) for (let x = WORLD.x0 + 6; x < WORLD.x1; x += 6) if (plantSpot(x, y).ok) { ok = true; break; }
