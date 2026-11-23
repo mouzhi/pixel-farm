@@ -418,6 +418,12 @@
     if (shopFocus) { const el = shop.querySelector('[data-item="' + shopFocus + '"]'); if (el) el.scrollIntoView({ block: 'nearest' }); shopFocus = ''; }
   }
   // v5.10.0 镇公所的告示板: prosperity, the building projects (one at a time, done the next morning), gifts to the town
+  function innEarnLine(v) { // v5.11.0.39: rooms/meals are lifetime totals, not today's takings
+    const rooms = (v.earn && v.earn.rooms) | 0, meals = (v.earn && v.earn.meals) | 0;
+    const dv = G.diaryView && G.diaryView();
+    const today = (dv && dv.today && dv.resort) ? (dv.resort.day.total | 0) : ((v.earn && v.earn.today) | 0);
+    return `开业以来：房费 ${rooms} 金、菜钱 ${meals} 金；今天 ${today} 金`;
+  }
   function innHtml() { // v5.10.7 农家乐 shop tab; v5.10.8 adds the two-storey inn and the beach resort
     const v = G.innView && G.innView(); if (!v) return '';
     const stars = Math.max(1, Math.min(5, Math.round(v.stars || 3)));
@@ -430,7 +436,7 @@
     h += `<div class="more">现在 ${v.cabins} / 4 间小木屋${v.inn2 ? '（每间可住两组）' : ''}，星级 ${starTxt}（${(v.stars || 3).toFixed ? (Math.round(v.stars * 10) / 10) : v.stars}）` +
       (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +
       (v.guests && v.guests.length ? `，今天住着 ${v.guests.length} 组共 ${v.people} 人` : '，今天还没有客人') +
-      `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
+      `。${innEarnLine(v)}</div>`;
     const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台', villa: '度假小别墅', camp: '帐篷露营地' };
     if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
     const label = o => o.name || jobName[o.id] || '农家乐项目'; // v5.11.0.5: never a raw id (the kitchen card showed "kitchen")
@@ -1026,7 +1032,7 @@
     if (loveTip._html !== html) { loveTip.innerHTML = html; loveTip._html = html; } // v5.11.0.10: only when it changed, so a click on 换个活法 is not cut by a redraw
     placeLoveTip();
   }
-  const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) drawLoveTip(); };
+  const toggleLoveTip = v => { if (!loveTip) return; loveTip.hidden = v === undefined ? !loveTip.hidden : !v; if (!loveTip.hidden) { if (G.markSeenLove) G.markSeenLove(); drawLoveTip(); } };
   if (loveHud) loveHud.addEventListener('click', e => { e.stopPropagation(); toggleLoveTip(); });
   addEventListener('pointerdown', e => { if (!loveTip || loveTip.hidden) return; if (loveTip.contains(e.target) || (loveHud && loveHud.contains(e.target))) return; toggleLoveTip(false); });
   setInterval(() => { inv(); tools(); if (!shop.hidden) drawShop(); if (!store.hidden) drawStore(); if (codexEl && !codexEl.hidden) drawCodex(); if (loveTip && !loveTip.hidden) drawLoveTip(); const a = document.getElementById('ago'); if (a) a.textContent = ago(G.SAVE.at); const sa = document.getElementById('syncAgo'); if (sa && L) sa.textContent = agoSync(L.status().lastSyncAt); hintSync(); }, 250); inv();

@@ -19,6 +19,12 @@
   #diary .days .pbtn{padding:1px 6px;font-size:11px;min-width:0}
   #diary .note{font-size:11px;color:#7a5a34;margin-top:6px}
   #diary .photos{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px}#diary .photos .ph{font-size:12px;padding:1px 8px;background:#fff6dc}
+  #diary .ledger{margin:6px 0 2px;border:1px solid #c9a46a;background:#fff8e6;padding:3px 8px 5px}
+  #diary .ledger .lh{font-size:12px;font-weight:700;color:#7a3e1c;line-height:18px}
+  #diary .ledger .row{display:flex;justify-content:space-between;gap:8px;font-size:12px;line-height:18px}
+  #diary .ledger .row span:last-child{font-variant-numeric:tabular-nums;white-space:nowrap}
+  #diary .ledger .row.tot{font-weight:700;border-top:1px solid #e2c995;margin-top:2px;padding-top:2px;color:#7a3e1c}
+  #diary .ledger .life{font-size:11px;color:#7a5a34;line-height:16px;margin-top:1px}
   @media (max-width:720px){#diary{position:fixed;left:12px;right:12px;top:72px;width:auto;max-height:calc(100vh - 120px);z-index:6}}`;
   document.head.appendChild(css);
   let el = $('diary'); if (!el) { el = document.createElement('div'); el.id = 'diary'; el.className = 'panel'; el.hidden = true; ($('rightDock') || document.body).appendChild(el); }
@@ -31,6 +37,18 @@
       `<button class="pbtn nav" data-day="${next}"${next ? '' : ' disabled'} title="后一天">▶</button></div>`;
     h += v.lines.map(l => `<p>${esc(l)}</p>`).join('');
     if (v.photos && v.photos.length) h += `<div class="photos">${v.photos.map(p => `<button class="pbtn ph" data-photo="${esc(p.id)}" title="在相册里看这张照片">📷 ${esc(p.title)}</button>`).join('')}</div>`; // v5.11.0.11
+    if (v.resort && (v.resort.day.total || v.resort.week.total || (v.resort.life && (v.resort.life.rooms || v.resort.life.meals)))) {
+      const r = v.resort, gold = n => n.toLocaleString('zh-CN') + ' 金';
+      h += '<div class="ledger"><div class="lh">农家乐账单</div>';
+      for (const row of r.day.rows) h += `<div class="row"><span>${esc(row.name)}</span><span>${gold(row.gold)}</span></div>`;
+      h += `<div class="row tot"><span>${v.today ? '今日合计' : '这天合计'}</span><span>${gold(r.day.total)}</span></div>`;
+      if (r.week.total && r.week.total !== r.day.total) h += `<div class="row"><span>近${r.week.days}天</span><span>${gold(r.week.total)}</span></div>`;
+      if (r.life && (r.life.rooms || r.life.meals)) {
+        const bits = []; if (r.life.rooms) bits.push('房费 ' + gold(r.life.rooms)); if (r.life.meals) bits.push('菜钱 ' + gold(r.life.meals));
+        h += `<div class="life">开业以来 ${esc(bits.join(' · '))}</div>`;
+      }
+      h += '</div>';
+    }
     h += '</div>';
     const recent = v.days.slice(-7);
     h += `<div class="days">${recent.map(n => `<button class="pbtn${n === v.day ? ' on' : ''}" data-day="${n}">${n === G.S.day ? '今天' : '第' + n + '天'}</button>`).join('')}</div>`;

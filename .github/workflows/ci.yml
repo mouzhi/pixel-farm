@@ -64,6 +64,7 @@ jobs:
           node tools/econ-test.js
           node tools/townscale-test.js
           node tools/diary-test.js
+          node tools/diary-resort-test.js
           node tools/album-test.js
           node tools/save-compact-test.js
           node tools/fog-test.js
