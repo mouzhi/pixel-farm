@@ -254,7 +254,7 @@
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
-    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置；家人按标记种果树，不会自动选址。伐木小屋只用未标记的树苗补种林场野树` });
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置（先种）；没标记的会由家人自己种进空着的果园。果园种满后，伐木小屋才用剩下的树苗补种林场野树` });
     if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) add({ id: 'hay', ico: pic(ICONS.hay), name: '干草', n: S.hay, dim: !S.hay, tip: `仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）` });
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
       add({ id: 'animals', ico: pic(ICONS.chicken), name: mood, n: S.animals.length, tip: `${S.animals.map(a => `${PFAnimals.KINDS[a.kind].name} ${a.h}（${PFAnimals.mood(a.h)}）`).join('，')}。喂饱、加水、摸一摸会更开心；开心（80 以上）多产一份，闷闷不乐（30 以下）不产。` }); }
@@ -641,7 +641,7 @@
     h += storeCard({ id: 'fishfood', kind: 'item', name: '鱼食', n: data.fishFood.n }, `<div class="d">家里有鱼食时，空闲的家人会自己去池塘撒一把，那天稀有鱼更容易上钩（${data.fishFood.unit} 金一包）</div>`);
     for (const r of (data.ornament || [])) h += storeCard(r, '<div class="d">用右下角的放养按钮，放到家门口池塘里看着玩，不再卖掉</div>');
     if (data.pondFish) h += storeCard({ id: 'koi', kind: 'item', name: '池塘里的观赏鱼', n: data.pondFish }, '<div class="d">在家门口的池塘里游，只是给人看</div>');
-    for (const r of data.saplings) h += storeCard(r, '<div class="d">用右下角的种树按钮指定位置</div>');
+    for (const r of data.saplings) h += storeCard(r, '<div class="d">家人会自己种进空着的果园；想种在别处，用「种树」指定位置</div>');
     h += '</div>';
     store.innerHTML = h;
   }
@@ -757,7 +757,7 @@
     const key = [chop, F.saplings.apple, F.saplings.orange, (F.saplings.apple || F.saplings.orange) && G.plantRoom ? G.plantRoom() : 1, koiN, gfN, m.mode, m.kind, S.orders.length, sprN, deco.map(id => id + free(id)).join(';'), movN, ordN].join(',');
     if (key === toolKey) return; toolKey = key;
     let h = '';
-    if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树标记要砍，再点一次取消（Esc 退出）。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
+    if (chop) h += `<button class="pbtn${m.mode === 'chop' ? ' on' : ''}" data-m="chop" title="点家门口或已买区域里的野树或果树标记要砍，再点一次取消（Esc 退出）。果树要点两次确认，砍下必得 1 棵树苗，可以移植。只有林场的树会长回来，别处砍掉就没了（会得到树苗）">砍树</button>`;
     const room = !(F.saplings.apple || F.saplings.orange) || !G.plantRoom || G.plantRoom(); // v5.9.1: say so when there is no grass left for a sapling
     for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) h += `<button class="pbtn${m.mode === 'plant' && m.kind === k ? ' on' : ''}${room ? '' : ' full'}" data-m="plant" data-k="${k}" title="${room ? '点一块空草地，农夫会去种（Esc 退出）' : G.PLANT_FULL}">种${PFWorld.FRUIT[k].name} ${F.saplings[k]}${room ? '' : '（没地方了）'}</button>`;
     if (koiN) h += `<button class="pbtn${m.mode === 'release' && m.kind === 'koi' ? ' on' : ''}" data-m="release" data-k="koi" title="把篮子里的一条锦鲤直接放进家门口的池塘。放进去就不再卖掉。海鱼不能放进淡水池塘">放养锦鲤 ${koiN}</button>`;
