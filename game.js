@@ -3375,30 +3375,36 @@ function sportsCrowd(dm) {
 }
 // ---- v5.12.0 路人: townsfolk and day visitors strolling between the shops, the squares and the street ends (never saved) ----
 const TLW = window.PFTownLife, TLF = [], lifeR = mulberry32(0x7A11FE); // their own random stream: the farm's stays where it was
-let lifeSpawn = 0, lifeN = 0;
+let lifeSpawn = 0, lifeN = 0, LIFE_ON = true;
+const LIFE_NODES = TLW ? TLW.STOPS.concat(TLW.EDGES) : [], LIFE_EDGE0 = TLW ? TLW.STOPS.length : 0, lifeRoutes = new Map(); // node -> node routes, kept per nav version
 function lifeWant() {
-  const H = S.town && S.town.hall; if (!TLW || !HL || !H || !townOpen()) return 0;
+  const H = S.town && S.town.hall; if (!LIFE_ON || !TLW || !HL || !H || !townOpen()) return 0;
   return TLW.lifeCount({ T: S.t % 1440, lv: townLv(), market: marketDay(), fest: !!(FV && FV.isDay(H, S.day)), rain: !!(WX && WX.isRaining && WX.isRaining(S.weather, S.day, S.t)) });
 }
-function lifeGo(g, to) { g.pts = routeVia(g, to).concat([{ x: to.x, y: to.y }]); g.moving = true; }
-function lifeStop(g) { let s; for (let k = 0; k < 4; k++) { s = TLW.STOPS[(lifeR() * TLW.STOPS.length) | 0]; if (s !== g.stop) break; } g.stop = s; return { x: s.x + (lifeR() - 0.5) * 4, y: s.y + (lifeR() - 0.5) * 2 }; }
+function lifeGo(g, to) { // walk from the node they are at to node `to` (routes between the fixed nodes are cached: A* once per pair and nav version)
+  ensureNav(); const key = g.at + '>' + to + '@' + navVer; let r = lifeRoutes.get(key);
+  if (!r) { if (lifeRoutes.size > 600) lifeRoutes.clear(); const A = LIFE_NODES[g.at]; r = routeVia({ x: A.x, y: A.y }, LIFE_NODES[to]); lifeRoutes.set(key, r); }
+  const B = LIFE_NODES[to], end = to < LIFE_EDGE0 ? { x: B.x + (lifeR() - 0.5) * 4, y: B.y + (lifeR() - 0.5) * 2 } : { x: B.x, y: B.y };
+  g.pts = r.concat([end]); g.moving = true; g.at = to; g.stop = to < LIFE_EDGE0 ? B : null; }
+const lifePick = g => { let i = 0; for (let k = 0; k < 4; k++) { i = (lifeR() * LIFE_EDGE0) | 0; if (i !== g.at) break; } return i; };
+const lifeEdge = () => LIFE_EDGE0 + ((lifeR() * TLW.EDGES.length) | 0);
 function townLife(dm) {
   const want = lifeWant(); if (!want && !TLF.length) return;
-  if (!want) { for (const g of TLF) if (!g.leaving) { g.leaving = true; lifeGo(g, TLW.EDGES[(lifeR() * TLW.EDGES.length) | 0]); } }
-  else if (!TLF.length) { for (let i = 0; i < want; i++) { const s = TLW.STOPS[(lifeR() * TLW.STOPS.length) | 0]; // the page opens on a street that is already busy
-    TLF.push({ id: 'life' + (lifeN++), look: TLW.LOOKS[lifeN % TLW.LOOKS.length], x: s.x + (lifeR() - 0.5) * 4, y: s.y + (lifeR() - 0.5) * 2, fx: 0, fy: s.fy || 1, pts: [], moving: false, wait: lifeR() * 20, left: 1 + ((lifeR() * 3) | 0), stop: s }); } }
+  if (!want) { for (const g of TLF) if (!g.leaving) { g.leaving = true; lifeGo(g, lifeEdge()); } }
+  else if (!TLF.length) { for (let i = 0; i < want; i++) { const at = (lifeR() * LIFE_EDGE0) | 0, s = LIFE_NODES[at]; // the page opens on a street that is already busy
+    TLF.push({ id: 'life' + (lifeN++), look: TLW.LOOKS[lifeN % TLW.LOOKS.length], x: s.x + (lifeR() - 0.5) * 4, y: s.y + (lifeR() - 0.5) * 2, fx: 0, fy: s.fy || 1, pts: [], moving: false, wait: lifeR() * 20, left: 1 + ((lifeR() * 3) | 0), at, stop: s }); } }
   else { const here = TLF.filter(g => !g.leaving).length;
-    if (here < want && (lifeSpawn -= dm) <= 0) { lifeSpawn = 4 + lifeR() * 6; const e = TLW.EDGES[(lifeR() * TLW.EDGES.length) | 0];
-      const g = { id: 'life' + (lifeN++), look: TLW.LOOKS[lifeN % TLW.LOOKS.length], x: e.x, y: e.y, fx: 0, fy: 1, pts: [], moving: false, wait: 0, left: 2 + ((lifeR() * 3) | 0), stop: null };
-      TLF.push(g); lifeGo(g, lifeStop(g)); }
-    if (here > want) { const g = TLF.find(q => !q.leaving); if (g) { g.leaving = true; lifeGo(g, TLW.EDGES[(lifeR() * TLW.EDGES.length) | 0]); } } }
+    if (here < want && (lifeSpawn -= dm) <= 0) { lifeSpawn = 4 + lifeR() * 6; const at = lifeEdge(), e = LIFE_NODES[at];
+      const g = { id: 'life' + (lifeN++), look: TLW.LOOKS[lifeN % TLW.LOOKS.length], x: e.x, y: e.y, fx: 0, fy: 1, pts: [], moving: false, wait: 0, left: 2 + ((lifeR() * 3) | 0), at, stop: null };
+      TLF.push(g); lifeGo(g, lifePick(g)); }
+    if (here > want) { const g = TLF.find(q => !q.leaving); if (g) { g.leaving = true; lifeGo(g, lifeEdge()); } } }
   for (let i = TLF.length - 1; i >= 0; i--) { const g = TLF[i];
     if (g.pts.length) { guestStep(g, dm); continue; } g.moving = false;
     if (g.leaving) { TLF.splice(i, 1); continue; }
     if (g.stop) { g.fx = 0; g.fy = g.stop.fy || 1; }
     if ((g.wait -= dm) > 0) continue;
-    if (--g.left < 0) { g.leaving = true; lifeGo(g, TLW.EDGES[(lifeR() * TLW.EDGES.length) | 0]); continue; }
-    lifeGo(g, lifeStop(g)); g.wait = 6 + lifeR() * 20; }
+    if (--g.left < 0) { g.leaving = true; lifeGo(g, lifeEdge()); continue; }
+    lifeGo(g, lifePick(g)); g.wait = 6 + lifeR() * 20; }
 }
 function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); townLife(dm); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
 function townDraw(list) {
@@ -6357,7 +6363,7 @@ Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i)
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
-  TN, TA, townOpen, VISITORS, NEIGH, townLife: () => TLF.map(g => ({ id: g.id, look: g.look, x: +g.x.toFixed(1), y: +g.y.toFixed(1), moving: !!g.moving, leaving: !!g.leaving, stop: g.stop && g.stop.why })), lifeWant: () => lifeWant(), // v5.12.0 路人
+  TN, TA, townOpen, VISITORS, NEIGH, townLife: () => TLF.map(g => ({ id: g.id, look: g.look, x: +g.x.toFixed(1), y: +g.y.toFixed(1), moving: !!g.moving, leaving: !!g.leaving, stop: g.stop && g.stop.why, at: g.at })), lifeWant: () => lifeWant(), lifeOn: v => { LIFE_ON = !!v; if (!v) TLF.length = 0; }, lifeRoutes: () => lifeRoutes.size, // v5.12.0 路人
   priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), wedCer: () => wedCer(), wedLook: a => wedLook(a), famSheet: (l, c) => famSheet(l, c), wedCouple: () => wedCouple(), weddingTonight: () => wedNow(), homeTick: dm => homeTick(dm), homeMorning: () => homeMorning(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks

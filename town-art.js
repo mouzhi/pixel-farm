@@ -6,7 +6,7 @@
   const TN = root.PFTown, PL = root.PFPlots, HL = root.PFHall; // HL: v5.10.0 镇公所 and the new houses
   const PAL = root.PF_PALETTE, R = PAL.ramps, Wd = R.wood, St = R.stone, Wt = R.water, Rf = R.roof, Ac = R.accent, Ink = R.ink, G = R.green;
   let X = null, S = null, MD = null, lastKey = '', mounted = false;
-  const own = { gate: [], always: [], cleared: [], hall: [] };
+  const own = { gate: [], always: [], cleared: [], hall: [], dress: [] }; // v5.12.0: dress = the street dressing (its own list, so `hall` still counts the lots)
   const hash = (a, b, c) => { let n = a * 374761393 + b * 668265263 + c * 1442695; n = (n ^ (n >> 13)) * 1274126177; return ((n ^ (n >> 16)) >>> 0) / 4294967296; };
 
   // ---------- ground (called for every ground pixel inside the strip; null: not ours) ----------
@@ -267,7 +267,7 @@
     const sports = !!(root.PFSchool && H && root.PFSchool.isDay(H, S.day));
     const fest = !!(root.PFFestival && H && root.PFFestival.isDay(H, S.day));
     const k = open && H ? JSON.stringify([H.built, H.job, H.gifts, lots, path, sports ? 1 : 0, fest ? 1 : 0]) : ''; if (!force && k === hallKey) return; hallKey = k;
-    for (const q of own.hall) removeFrom(q); own.hall.length = 0; if (!k) return;
+    for (const q of own.hall.concat(own.dress)) removeFrom(q); own.hall.length = 0; own.dress.length = 0; if (!k) return;
     const CL = root.PFClinic; // v5.10.10: original houses swap to a two-storey (or scaffolding) when rebuilt
     if (CL) for (const b of TN.BUILDINGS) if (b.kind === 'house') {
       const prop = own.always.find(q => q.town === b.id); if (!prop) continue;
@@ -292,7 +292,7 @@
     }
     const TL = root.PFTownLife; // v5.12.0 小镇美术升级: planters, sandwich boards, hanging signs, barrels, awnings and café tables in fixed slots
     if (TL) for (const d of TL.dressFor(H.built)) { const m = d.k === 'aframe' ? MD.aframes && MD.aframes[d.sign] : d.k === 'blade' ? MD.blades && MD.blades[d.sign] : d.k === 'awning' ? MD.awnings && MD.awnings[d.c | 0] : MD[d.k];
-      if (!m) continue; const host = d.k === 'awning' && HL.LOTS.find(l => l.id === d.need); own.hall.push(X.addProp(m, d.x, d.y, host ? host.rot : 0, { xp: 1, town: 'dress:' + d.k })); }
+      if (!m) continue; const host = d.k === 'awning' && HL.LOTS.find(l => l.id === d.need); own.dress.push(X.addProp(m, d.x, d.y, host ? host.rot : 0, { xp: 1, town: 'dress:' + d.k })); }
     const MKS = root.PFMarket; // v5.10.3: the market stalls (bare frames while 阿松 is putting them up)
     if (MKS && (H.built.market || (H.job && H.job.id === 'market'))) MKS.STALLS.forEach((st, i) => { const m = H.built.market ? MD.stalls[i] : MD.stallFrame; if (m) own.hall.push(X.addProp(m, st.x, st.y, st.rot, { xp: 1, town: 'stall' })); });
     const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models();
@@ -338,6 +338,6 @@
     if (H.built && H.built.smithy) { const SM = root.PFSmithy, l = (SM && SM.LOT) || (HL && HL.LOT.smithy); if (l) out.push(Object.assign(chimneyOf(l, 30.5, 10.5, 72, 40, 40), { forge: 1 })); }
     return out;
   }
-  const api = { ground, cross, mount, sync, lights, draw, smoke, models: () => MD, state: () => ({ hall: own.hall.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
+  const api = { ground, cross, mount, sync, lights, draw, smoke, models: () => MD, state: () => ({ hall: own.hall.length, dress: own.dress.length, hallKey, closed: !!own.closed, gate: own.gate.length, cleared: own.cleared.length, inProps: own.closed ? X.props.includes(own.closed) : null, key: lastKey }) };
   root.PFTownArt = api;
 })(typeof window !== 'undefined' ? window : globalThis);
