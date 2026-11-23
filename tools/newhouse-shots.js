@@ -1,4 +1,4 @@
-// v5.11.0.38: 新房入伙 was left as a later-phase stub, so a married child already living in a
+// v5.11.0.39: 新房入伙 was left as a later-phase stub, so a married child already living in a
 // new house never unlocked it. This loads the day-72 cottage fixture (kid0 moved in on day 71,
 // achievement missing), shows the locked card, then runs the same save through PFSave.migrate
 // (the load path) and shows it lit on the move-in day. Synthetic fixture only; no player saves.
