@@ -146,7 +146,7 @@ jobs:
             # v5.11.0.29 自动化机械: + mach-shots (feeder/chute/milker/tray checks; workshop+mach was 6m53s on run 44927967839)
             # xhs 1.3.1: + shedmove-shots (second pens move / rezone; keep this leg under 22m)
             # v5.11.0.34: + beehive-shots (~50s locally; workshop was 13m on run 45038948300)
-            scripts: workshop-shots.js workprio-test.js mach-shots.js shedmove-shots.js beehive-shots.js
+            scripts: workshop-shots.js workprio-test.js mach-shots.js shedmove-shots.js beehive-shots.js riverbank-test.js
           - group: festival
             # v5.11.0.31 前几天的节奏: + day1-pacing (~10s, fresh farm days 1-7 milestones) and day1-shots (~35s locally)
             scripts: festival-shots.js day1-pacing.js day1-shots.js
@@ -157,7 +157,7 @@ jobs:
           - group: xhs-touch
             # xhs 1.3.1: + xhs-shedmove-shots (packaged touch path: toolbox → 挪东西 → second shed → other pasture → reload)
             # xhs 1.3.2: + xhs-beehive-shots (hives to another 花甸 by touch, honey/tray kept, reload, old lot -> 动力坝; ~35s locally)
-            scripts: xhs-touch-shots.js xhs-shedmove-shots.js xhs-beehive-shots.js
+            scripts: xhs-touch-shots.js xhs-shedmove-shots.js xhs-beehive-shots.js xhs-riverbank-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
