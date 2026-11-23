@@ -157,7 +157,7 @@ jobs:
           - group: xhs-touch
             # xhs 1.3.1: + xhs-shedmove-shots (packaged touch path: toolbox → 挪东西 → second shed → other pasture → reload)
             # xhs 1.3.2: + xhs-beehive-shots (hives to another 花甸 by touch, honey/tray kept, reload, old lot -> 动力坝; ~35s locally)
-            scripts: xhs-touch-shots.js xhs-shedmove-shots.js xhs-beehive-shots.js xhs-riverbank-shots.js
+            scripts: xhs-touch-shots.js xhs-shedmove-shots.js xhs-beehive-shots.js xhs-riverbank-shots.js xhs-orchard-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
