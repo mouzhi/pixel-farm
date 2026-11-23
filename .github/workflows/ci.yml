@@ -153,8 +153,9 @@ jobs:
             # v5.11.0.31 前几天的节奏: + day1-pacing (~10s, fresh farm days 1-7 milestones) and day1-shots (~35s locally)
             scripts: festival-shots.js day1-pacing.js day1-shots.js
           # v5.12.0 小镇美术升级: its own leg (street / playground / square / night, desktop + phone, ~3m locally)
+          # v5.12.1 宅园·度假村北: + homestead-shots (locked/bought/old houses/move/shop, desktop + phone; light leg)
           - group: townart
-            scripts: townart-shots.js
+            scripts: townart-shots.js homestead-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

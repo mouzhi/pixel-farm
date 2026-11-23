@@ -168,6 +168,8 @@
       const openings = [r.gate, r.pier].filter(Boolean);
       // a 度假村 on 东南滩 also opens the east fence of the beach
       if (r.id === 'coast' && PL && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN) openings.push(PL.RESORT_JOIN.beach);
+      // v5.12.1: 宅园's south path opens the north fence of 海边
+      if (r.id === 'coast' && PL && PL.homesteadOpen && PL.homesteadOpen(plots) && PL.HOME_JOIN) openings.push(PL.HOME_JOIN.beach);
       // the guest pier mouth: the south fence would otherwise run across the boards
       let guestMouth = null;
       if (r.id === 'coast' && opts && opts.guestPier) {
@@ -256,6 +258,10 @@
       }
       if (PL && PL.resortOpen && PL.resortOpen(opts && opts.plots) && open.includes('eshore') && open.includes('coast') && PL.RESORT_JOIN) {
         spots.push(PL.RESORT_JOIN.lot, PL.RESORT_JOIN.beach);
+      }
+      if (PL && PL.homesteadOpen && PL.homesteadOpen(opts && opts.plots) && open.includes('nhome') && PL.HOME_JOIN) {
+        spots.push(PL.HOME_JOIN.lot, PL.plot('nhome').gate);
+        if (open.includes('coast')) spots.push(PL.HOME_JOIN.beach);
       }
       for (const r of WD.REGIONS) {
         if (open.includes(r.id)) spots.push(r.gate);

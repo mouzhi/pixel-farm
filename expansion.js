@@ -59,12 +59,16 @@
       if (y < ry + 3) return [G[1], 'grass'];                                         // the cliff's shadowed foot
     }
     if (inRect(x, y, PL.GRAZE.rect) && !(x > -151)) return grazeGround(x, y);
-    const p = (x < -24 || x > 352 || y > 136 || y < -110) ? fastPlot(x, y) : null;
+    const p = (x < -24 || x > 200 || y > 116 || y < -110) ? fastPlot(x, y) : null; // v5.12.1: include 宅园 (220..340, 124..200)
     if (p) return plotGround(p, x, y, plots);
     if (x > 440 && y > 40 && y < 92) return [Math.abs(y - 66) < 5 ? Wd[4] : G[2], Math.abs(y - 66) < 5 ? 'dirt' : 'grass']; // beyond the town gate
     // the short sandy path from 东南滩's south gate down to the east end of the beach
     if (plots && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN && PL.joinDist(x, y) < 3.4) {
       return [vnoise(x / 5, y / 5, 61) > 0.55 ? Wd[4] : Wd[5], 'sand'];
+    }
+    // v5.12.1: the short dirt path from 宅园's south gate down to 海边
+    if (plots && PL.homesteadOpen && PL.homesteadOpen(plots) && PL.joinDist && PL.joinDist(x, y, 'home') < 3.4) {
+      return [vnoise(x / 5, y / 5, 53) > 0.55 ? Wd[3] : Wd[4], 'dirt'];
     }
     return null;
   }
@@ -89,6 +93,12 @@
     if (mod === 'inn') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const w = vnoise(x / 4, y / 4, 51); return [w > 0.78 ? Wd[3] : w < 0.12 ? St[2] : Wd[4], 'dirt']; }
     if (mod === 'resort') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const path = Math.abs((x - x0) / Math.max(1, x1 - x0) - (y - y0) / Math.max(1, y1 - y0)); const w = vnoise(x / 5, y / 5, 61); const join = PL.RESORT_JOIN && PL.RESORT_JOIN.lot; const toGate = join && (Math.abs(x - join.x) < 3.4 && y > join.y - 44); const mid = Math.abs(y - 150) < 3.0 && x < 392; if (path < 0.12 || (x - x0) + (y1 - y) < 28 || toGate || mid) return [w > 0.55 ? Wd[4] : Wd[5], 'sand']; return [w > 0.7 ? Wd[4] : G[3], w > 0.7 ? 'sand' : 'grass']; }
     if (mod === 'trail') return null;
+    if (mod === 'homestead') {
+      if (PL.homeLaneDist && PL.homeLaneDist(x, y) < 3.2) return [vnoise(x / 5, y / 5, 53) > 0.55 ? Wd[3] : Wd[4], 'dirt'];
+      const pads = PL.HOME_PADS || [];
+      for (const pad of pads) { if (Math.abs(x - pad.x) < 12 && Math.abs(y - pad.y) < 8.5) return [vnoise(x / 3, y / 3, 57) > 0.65 ? St[3] : St[2], 'dirt']; }
+      return [v > 0.7 ? G[4] : G[3], 'grass'];
+    }
     return [G[3], 'grass'];
   }
   function playSand(p, x, y) { const [x0, y0, x1, y1] = p.rect, cx = (x0 + x1) / 2, cy = (y0 + y1) / 2;
@@ -158,8 +168,16 @@
       if (y <= 1 && z < 9 && x > 1 && x < 20) return z % 3 === 0 ? Wd[2] : Wd[3]; return null; });
     const trough = B(14, 6, 5, (x, y, z) => { if (x === 0 || x === 13 || y === 0 || y === 5 || z === 0) return Wd[2]; return z === 3 ? Wt[3] : null; });
     const board = B(14, 3, 14, (x, y, z) => ((x === 2 || x === 11) && z < 8) ? Wd[2] : (z >= 7 && z <= 13 && y === 1) ? (z === 7 || z === 13 || x === 0 || x === 13 ? Wd[2] : Wd[4]) : null);
+    // v5.12.1: a low stone foundation under each 宅园 pad, and a wooden nameplate by the east gate
+    const homePad = B(40, 28, 3, (x, y, z) => { const e = x <= 1 || x >= 38 || y <= 1 || y >= 26;
+      if (z === 0) return e ? St[1] : St[2]; if (z === 1) return e ? St[2] : (hash(x, y, 3) > 0.55 ? St[3] : St[2]); if (z === 2 && e) return St[3]; return null; });
+    const homePlate = B(18, 4, 16, (x, y, z) => {
+      if (z <= 1 && x >= 0 && x <= 17) return (x + z) % 3 ? St[2] : St[1];
+      if ((x <= 1 || x >= 16) && z < 8) return Wd[2];
+      if (z >= 8 && z <= 15 && y >= 1 && y <= 2) return (z === 8 || z === 15 || x === 0 || x === 17) ? Wd[2] : Wd[4];
+      return null; });
     MD = { ledges: [ledge(3), ledge(11), ledge(29)], boulders: [boulder(5), boulder(17)], abut, rail, barrier, wheelSets: { 1: wheelSet(1), '-1': wheelSet(-1) }, // v5.6.0: a repaired wheel turns (v5.11.0.20: one set per bank side)
-      cottages: [cottage(Rf[2]), cottage(Rf[3]), cottage(St[1])], townGate, slide, sandbox, swing, shelter, trough, board };
+      cottages: [cottage(Rf[2]), cottage(Rf[3]), cottage(St[1])], townGate, slide, sandbox, swing, shelter, trough, board, homePad, homePlate };
     return MD;
   }
 
@@ -185,10 +203,10 @@
     // fences and a sign for every plot that has a fence; registered with the regions so their gates and signs follow the shop
     for (const p of PL.PLOTS) { const list = x.regionProps[p.id] = [];
       if (!p.special) { const [x0, y0, x1, y1] = p.rect, nearGate = (gx, gy) => Math.hypot(gx - p.gate.x, gy - p.gate.y) < 12;
-        const join = (p.id === 'eshore' && PL.RESORT_JOIN) ? PL.RESORT_JOIN.lot : null;
+        const join = (p.id === 'eshore' && PL.RESORT_JOIN) ? PL.RESORT_JOIN.lot : (p.id === 'nhome' && PL.HOME_JOIN) ? PL.HOME_JOIN.lot : null;
         const nearJoin = (gx, gy) => !!(join && Math.hypot(gx - join.x, gy - join.y) < 12);
-        for (let fx = x0; fx < x1; fx += 8) for (const fy of [y0, y1]) { if (PL.riverDist(fx + 4, fy) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx + 4, fy, 0, { region: p.id }); q.gate = nearGate(fx + 4, fy); q.resortJoin = nearJoin(fx + 4, fy); list.push(q); }
-        for (let fy = y0; fy < y1; fy += 8) for (const fx of [x0, x1]) { if (PL.riverDist(fx, fy + 4) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx, fy + 4, Math.PI / 2, { region: p.id }); q.gate = nearGate(fx, fy + 4); q.resortJoin = nearJoin(fx, fy + 4); list.push(q); } }
+        for (let fx = x0; fx < x1; fx += 8) for (const fy of [y0, y1]) { if (PL.riverDist(fx + 4, fy) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx + 4, fy, 0, { region: p.id }); q.gate = nearGate(fx + 4, fy); if (p.id === 'nhome') q.homeJoin = nearJoin(fx + 4, fy); else q.resortJoin = nearJoin(fx + 4, fy); list.push(q); }
+        for (let fy = y0; fy < y1; fy += 8) for (const fx of [x0, x1]) { if (PL.riverDist(fx, fy + 4) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx, fy + 4, Math.PI / 2, { region: p.id }); q.gate = nearGate(fx, fy + 4); if (p.id === 'nhome') q.homeJoin = nearJoin(fx, fy + 4); else q.resortJoin = nearJoin(fx, fy + 4); list.push(q); } }
       if (p.special === 'trail') { const q = add(md.barrier, p.gate.x, p.gate.y, 0.5, { region: p.id }); q.gate = true; list.push(q); }
       const sign = { spr: x.SIGN, x: p.sign.x, y: p.sign.y, region: p.id, sign: 1 }; x.billboards.push(sign); list.push(sign); }
     // the grazing meadow's sign (taken down once the fold has its meadow)
@@ -230,6 +248,11 @@
     if (mod === 'road') { add(MD.board, x0 + 10, 56, 0); }
     if (mod === 'dam' && p.wheel) { const w = PL.wheelSite(p), fr = MD.wheelSets[w.side]; // v5.11.0.20: in the river, turning with the current
       o.wheel = add(fr[0], w.x + w.nx * 3, w.y + w.ny * 3, w.rot, { big: 1, frames: fr, site: w }); }
+    if (mod === 'homestead') {
+      const pads = PL.HOME_PADS || [];
+      for (const pad of pads) add(MD.homePad, pad.x, pad.y, pad.m ? Math.PI : 0);
+      add(MD.homePlate, p.gate.x - 10, p.gate.y - 6, 0); // nameplate just inside the east gate
+    }
     if (mod === 'woodland') syncWoodland(p.id, true);
     if (mod === 'playground') for (const s of PL.playSpots({ [p.id]: { mod } }).filter(s => s.plot === p.id)) {
       if (s.kind === 'slide') add(MD.slide, s.x, s.y, 0); if (s.kind === 'sandbox') add(MD.sandbox, s.x, s.y, 0); if (s.kind === 'swing') add(MD.swing, s.x, s.y, 0); }
@@ -295,7 +318,7 @@
     if (o.mod === 'road' && !(S.eff && S.eff.town)) X.log('大道修通到了镇口（东边那条土路）；镇门还关着，孩子上过一天学后，可以在商店「地块」里开镇门'); // v5.10.11.1: say where the road is and what is next
     X.popText(X.FARMER.x, X.FARMER.y, 22, '-' + o.cost, '#ffd76a'); X.burst(p.sign.x, p.sign.y, 14, ['#ffd76a', '#fff2a8', '#ffffff'], 14, 'spark');
     X.emit('purchase', { item: 'plot:' + id, mod: o.mod, gold: o.cost, wood: o.wood, who: 'player' });
-    X.applyUpgrades(); if (id === 'eshore' && o.mod === 'resort' && X.syncResortJoin) X.syncResortJoin(); X.saveNow(); return Object.assign({}, o, { ok: true });
+    X.applyUpgrades(); if (((id === 'eshore' && o.mod === 'resort') || (id === 'nhome' && o.mod === 'homestead')) && X.syncResortJoin) X.syncResortJoin(); X.saveNow(); return Object.assign({}, o, { ok: true });
   }
   function rezonePlot(id, mod) {
     const o = PL.rezoneOffer(S.plots, id, mod, S.coins, X.FARMER.wood); if (!o) return { ok: false, reason: 'unknown' }; if (!o.ok) return o;
@@ -324,6 +347,7 @@
     const r = [1e9, 1e9, -1e9, -1e9];
     for (const id of diff) { const p = PL.plot(id); let q = p.rect; if (p.special === 'trail') q = [170, -200, 240, -100];
       if (id === 'eshore') q = [Math.min(q[0], 330), Math.min(q[1], 190), Math.max(q[2], 450), Math.max(q[3], 250)]; // the beach join
+      if (id === 'nhome') q = [Math.min(q[0], 220), Math.min(q[1], 124), Math.max(q[2], 352), Math.max(q[3], 216)]; // the south path to 海边
       r[0] = Math.min(r[0], q[0] - 10); r[1] = Math.min(r[1], q[1] - 10); r[2] = Math.max(r[2], q[2] + 10); r[3] = Math.max(r[3], q[3] + 10); }
     return r;
   }

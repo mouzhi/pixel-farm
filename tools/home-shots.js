@@ -44,7 +44,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const r = f.buy('cottage'); const h = house(); at(8 * 60); until(() => [f.FARMER, ...S.members].some(a => a.task && a.task.kind === 'homebuild' && Math.hypot(a.x - h.x, a.y - h.y) < 16), 900);
     const builder = [f.FARMER, ...S.members].find(a => a.task && a.task.kind === 'homebuild'); f.advance(4, 10); look(h.x + 4, h.y + 2, 0.9);
     return { g0, g1, ok: r.ok, site: h && h.site, at: h && [h.x, h.y, h.m], built: h && h.built, builder: builder && builder.name, coins: S.coins, frame: f.HA.state().props }; })()`,
-    r => r.g0 !== '先在外圈买一块平地，选成「花甸」或「农田」，新房子盖在那里' ? 'gate before a site: ' + r.g0 : r.g1 !== null ? 'gate with a site: ' + r.g1 : !r.ok ? 'not bought' : r.site !== 'glade' ? 'site ' + r.site : r.built ? 'built at once' : !r.builder ? 'nobody building' : !r.done ? 'never finished' : r.child ? 'a child built it' : null,
+    r => r.g0 !== '先买下「宅园·度假村北」，或在外圈买一块平地选成「花甸」或「农田」，新房子盖在那里' ? 'gate before a site: ' + r.g0 : r.g1 !== null ? 'gate with a site: ' + r.g1 : !r.ok ? 'not bought' : r.site !== 'glade' ? 'site ' + r.site : r.built ? 'built at once' : !r.builder ? 'nobody building' : !r.done ? 'never finished' : r.child ? 'a child built it' : null,
     `const h = S.home.houses[0], kids = new Set(); for (let i = 0; i < 900 && !h.built; i++) { f.advance(1, 10); for (const m of S.members) if (m.role === 'child' && m.task && m.task.kind === 'homebuild') kids.add(m.id); }
      return { done: h.built, child: kids.size, tiles: f.HT.length, log: S.events.map(e => e.msg).filter(l => /新房子/.test(l)).slice(0, 3) };`);
   // 2. closeness: school days and a classmate visit add up slowly; the heart panel lists each child's classmates and the neighbours

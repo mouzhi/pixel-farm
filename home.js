@@ -1,7 +1,7 @@
 // 像素农场 · 第 11 阶段（v5.9.0）：好感、成家分户与新房子（纯数据和纯函数；浏览器里是 window.PFHome，Node 里可以 require 做单元测试）
 // Children slowly get close to their classmates (school days, a classmate coming home, parties); the family gets to know the
 // town's neighbours (the teacher, the shopkeeper, the party guests). Nobody gives gifts or picks anything: it only grows.
-// A grown child who is close to someone, once a new house stands on a bought 花甸 / 农田 plot (or, once moved, on a bought first-ring field such as 东田), marries on a fine evening and
+// A grown child who is close to someone, once a new house stands on a bought 花甸 / 农田 plot, a 宅园 pad (v5.12.1), or (once moved) a bought first-ring field such as 东田, marries on a fine evening and
 // moves out. The couple farms the six tiles and keeps the two hens beside their house by themselves, and now and then the
 // child comes back for an hour to help on the main farm (at most twice a day). Art: home-art.js; wiring: game.js.
 'use strict';
@@ -63,8 +63,10 @@
   const nbName = id => ((NEIGHBOURS.find(n => n.id === id) || hallNb().find(n => n.id === id)) || { name: id }).name;
 
   // ---------- the new house ----------
-  // the shop sells up to two (one for each child); the second costs a little more ("按人口再加一档")
-  const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }], hw: 10, hd: 7, build: 40 }; // walls 20 x 14 (2.5 x 1.75 tiles)
+  // the shop still sells up to two (one for each child); the second costs a little more ("按人口再加一档").
+  // v5.12.1: a save can hold up to 6 houses (the two gen-2 cottages plus 4 pads on 宅园·度假村北). The shop does not
+  // sell the extra four yet (that waits on the third generation); moving and loading already allow them.
+  const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }], max: 6, hw: 10, hd: 7, build: 40 }; // walls 20 x 14 (2.5 x 1.75 tiles)
   // the layout round the anchor (the house's centre, door to the south): the house, six tiles to one side (mirror: the other),
   // a little hen house on the far side of the house, a bench by the door. World units, 8 = one farm tile.
   const TILE_AT = [[17, -4], [25, -4], [33, -4], [17, 4], [25, 4], [33, 4]]; // v5.9.x: one unit further out for the bigger house
@@ -85,11 +87,17 @@
   // a house site: an outer 花甸 / 农田 plot, or the original farm / a bought first-ring region (林场, 东田, …)
   const HOME_FIELD = { c0: 9, r0: 7, cols: 6, rows: 4 }; // = game.js FIELD
   const isRegionId = id => !!(WD.REGION_IDS && WD.REGION_IDS.includes(id));
-  const isHomeSite = id => id === 'home' || isRegionId(id) || PL.isPlotId(id);
+  const isPadId = id => !!(PL.isPadId && PL.isPadId(id));
+  const padPlot = id => (PL.padPlot && PL.padPlot(id)) || id;
+  const isHomeSite = id => id === 'home' || isRegionId(id) || isPadId(id) || (PL.isPlotId(id) && id !== (PL.HOMESTEAD && PL.HOMESTEAD.plot));
   function siteOf(id) {
     if (id === 'home') {
       const H = WD.HOME, L = NAV.LAYOUT || {};
       return { id: 'home', name: '家里', kind: 'home', rect: [H.x0, H.y0, H.x1, H.y1], gate: L.DOOR, barrel: L.WELL, field: HOME_FIELD };
+    }
+    if (isPadId(id)) {
+      const pad = PL.padOf(id), p = PL.plot('nhome'); if (!pad || !p) return null;
+      return { id: pad.id, name: p.name + '（' + pad.name + '）', kind: 'pad', rect: p.rect, gate: p.gate, pad, plot: 'nhome' };
     }
     const p = PL.plot(id); if (p) return { id: p.id, name: p.name, kind: 'plot', rect: p.rect, gate: p.gate, barrel: p.barrel, field: p.field, wheel: p.wheel };
     const r = WD.region && WD.region(id);
@@ -97,15 +105,28 @@
   }
   const siteName = id => { const s = siteOf(id); return s ? s.name : '这块地'; };
   const siteRect = id => { const s = siteOf(id); return s ? s.rect : null; };
+  function nearestPad(x, y) {
+    const pads = PL.HOME_PADS || []; let best = null, bd = 1e9;
+    for (const pad of pads) { const d = Math.hypot(pad.x - x, pad.y - y); if (d < bd) { bd = d; best = pad; } }
+    return best;
+  }
   function siteAt(x, y) {
     const H = WD.HOME; if (H && WD.inRect(x, y, [H.x0, H.y0, H.x1, H.y1])) return 'home';
-    const p = PL.plotAt(x, y); if (p) return p.id;
+    const p = PL.plotAt(x, y);
+    if (p && p.id === 'nhome') { const pad = nearestPad(x, y); return pad ? pad.id : p.id; }
+    if (p) return p.id;
     if (WD.REGIONS) for (const r of WD.REGIONS) if (WD.inRect(x, y, r.rect)) return r.id;
     return null;
   }
-  const siteOwned = (id, plots, regions) => id === 'home' || (isRegionId(id) ? (regions || []).includes(id) : !!(plots && plots[id]));
+  const siteOwned = (id, plots, regions) => {
+    if (id === 'home') return true;
+    if (isRegionId(id)) return (regions || []).includes(id);
+    const pid = padPlot(id);
+    return !!(plots && plots[pid]);
+  };
   function siteAllowsHouse(id, plots) {
     if (id === 'home' || isRegionId(id)) return true;
+    if (isPadId(id)) { const q = plots && plots.nhome; return !!(q && q.mod === 'homestead'); }
     const p = PL.plot(id), q = plots && plots[id];
     return !!(p && q && !p.special && PL.HOMESTEAD.mods.includes(q.mod) && PL.HOMESTEAD.terrains.includes(p.terrain));
   }
@@ -143,7 +164,7 @@
     const w = wetAt(x, y); if (w === 'water') return '这里是水，不能放房子'; if (w === 'river') return '这里是河，不能放房子';
     const p = PL.plotAt(x, y); if (p && p.special === 'road') return '这里是路，不能放房子';
     if (NAV.pathDist && NAV.pathDist(x, y, null) < 6) return '这里是路，不能放房子';
-    return '新房子只能挪到买下的花甸、农田，或家里已买下的地里（一块地一座）';
+    return '新房子只能挪到买下的花甸、农田、宅园房基，或家里已买下的地里（一块地一座，宅园可以放 4 座）';
   }
   function blockWhy(x, y, id, mod, avoid) {
     const foot = layout({ x, y, m: 0 }).foot, field = fieldBox(id, mod), s = siteOf(id);
@@ -163,6 +184,13 @@
   // where a house can go in site `id` (a plot bought as `mod`, or a first-ring region / 家里): inside the fence,
   // clear of its gate, its 农田 block, its water barrel and anything in `avoid` (boxes). Nearest the middle first.
   function spotsIn(id, mod, avoid) {
+    if (isPadId(id)) {
+      const pad = PL.padOf(id); if (!pad) return [];
+      const L = layout(pad), f = L.foot;
+      if ((avoid || []).some(b => boxHit(f, b, 1))) return [];
+      if (wetAt(pad.x, pad.y)) return [];
+      return [{ x: pad.x, y: pad.y, m: pad.m, d: 0 }];
+    }
     const s = siteOf(id); if (!s || !s.rect) return [];
     const [X0, Y0, X1, Y1] = s.rect, out = [], cx = (X0 + X1) / 2, cy = (Y0 + Y1) / 2;
     const field = fieldBox(id, mod), extra = staticBlocks(id);
@@ -190,13 +218,13 @@
     if (!id) return res(false, outsideWhy(x, y));
     if (!siteOwned(id, ctx.plots, ctx.regions)) return res(false, `还没买下${siteName(id)}，不能在这里放房子`);
     if (!siteAllowsHouse(id, ctx.plots)) {
-      const p = PL.plot(id), q = ctx.plots && ctx.plots[id];
+      const pid = padPlot(id), p = PL.plot(pid), q = ctx.plots && ctx.plots[pid];
       if (p && p.special === 'road') return res(false, '这里是路，不能放房子');
-      if (p && q && q.mod && PL.MODULES[q.mod]) return res(false, `${siteName(id)}现在是${PL.MODULES[q.mod].name}，新房子要花甸或农田`);
-      return res(false, '新房子只能挪到买下的花甸、农田，或家里已买下的地里（一块地一座）');
+      if (p && q && q.mod && PL.MODULES[q.mod]) return res(false, `${siteName(id)}现在是${PL.MODULES[q.mod].name}，新房子要花甸、农田或宅园的房基`);
+      return res(false, '新房子只能挪到买下的花甸、农田、宅园房基，或家里已买下的地里（一块地一座，宅园可以放 4 座）');
     }
-    if ((ctx.houses || []).some(q => q.site === id)) return res(false, `${siteName(id)}已经有一座新房子了（一块地一座）`);
-    const s0 = siteOf(id), mod = (ctx.plots && ctx.plots[id] && ctx.plots[id].mod) || (s0 && s0.field ? 'field' : 'meadow');
+    if ((ctx.houses || []).some(q => q.site === id)) return res(false, `${siteName(id)}已经有一座新房子了（${isPadId(id) ? '这个房基' : '一块地'}一座）`);
+    const s0 = siteOf(id), pid = padPlot(id), mod = (ctx.plots && ctx.plots[pid] && ctx.plots[pid].mod) || (s0 && s0.field ? 'field' : 'meadow');
     const avoid = ctx.avoid || [];
     let best = null, bd = 16;
     for (const s of spotsIn(id, mod, avoid)) { const d = Math.hypot(s.x - x, s.y - y) + s.m * 0.01; if (d < bd) { bd = d; best = s; } }
@@ -205,14 +233,14 @@
   }
   // plots that can take a house now: bought 花甸 / 农田 on flat ground (phase 7 hook) without a house already
   const freeSites = (plots, houses) => PL.homesteadSites(plots).filter(id => !(houses || []).some(h => h.site === id))
-    .sort((a, b) => PL.PLOT_IDS.indexOf(a) - PL.PLOT_IDS.indexOf(b));
-  const SITE_HINT = '先在外圈买一块平地，选成「花甸」或「农田」，新房子盖在那里';
-  // shop gate: have = houses already bought
+    .sort((a, b) => (isPadId(b) - isPadId(a)) || PL.PLOT_IDS.indexOf(padPlot(a)) - PL.PLOT_IDS.indexOf(padPlot(b)) || String(a).localeCompare(b));
+  const SITE_HINT = '先买下「宅园·度假村北」，或在外圈买一块平地选成「花甸」或「农田」，新房子盖在那里';
+  // shop gate: have = houses already bought (the shop still sells two)
   function houseGate(ctx) {
     if (!(ctx.moved > 0)) return '阿禾搬来以后才盖新房子';
     if ((ctx.have | 0) >= HOUSE.levels.length) return null;
     if (!(ctx.sites | 0)) return SITE_HINT;
-    if (!(ctx.room | 0)) return '花甸 / 农田里放不下新房子了（要一块空一点的地）';
+    if (!(ctx.room | 0)) return '花甸、农田或宅园里放不下新房子了（要一块空一点的地，或一个空房基）';
     return null;
   }
 
@@ -267,7 +295,7 @@
     const o = obj(v), out = empty();
     const sites = new Set();
     out.houses = (Array.isArray(o.houses) ? o.houses : []).filter(h => h && isHomeSite(h.site) && typeof h.x === 'number' && typeof h.y === 'number')
-      .filter(h => !sites.has(h.site) && sites.add(h.site)).slice(0, HOUSE.levels.length).map(h => {
+      .filter(h => !sites.has(h.site) && sites.add(h.site)).slice(0, HOUSE.max).map(h => {
         const r = siteRect(h.site);
         const tiles = (Array.isArray(h.tiles) ? h.tiles : []).slice(0, HS.tiles).map(validTile); while (tiles.length < HS.tiles) tiles.push(emptyTile());
         return { site: h.site, x: num(h.x, (r[0] + r[2]) / 2, r[0], r[2]), y: num(h.y, (r[1] + r[3]) / 2, r[1], r[3]), m: h.m ? 1 : 0, d: int(h.d, 1, 1, 1e6), built: int(h.built, 0, 0, 1e6),
@@ -311,6 +339,6 @@
   const api = { HS, REL, NB, LEVELS, levelOf, MATE_IDS, NB_IDS, KID_IDS, PREF, schoolDay, visit, best, taken, mateIndex, mateName, nbName, clampAdd,
     HOUSE, TILE_AT, GARDEN, HENS, layout, boxHit, inBox, spotsIn, freeSites, SITE_HINT, houseGate, WED, WED_LOOK, wedLooks, wedReady, isMarried, houseOf, TEEN, teenVisit,
     HELP, helpNow, empty, emptyTile, valid, kidRel, nbRel, kidNote,
-    HOME_FIELD, isHomeSite, isRegionId, siteOf, siteName, siteRect, siteAt, siteOwned, siteAllowsHouse, fieldBox, staticBlocks, moveOk };
+    HOME_FIELD, isHomeSite, isRegionId, isPadId, padPlot, siteOf, siteName, siteRect, siteAt, siteOwned, siteAllowsHouse, fieldBox, staticBlocks, moveOk };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHome = api;
 })(typeof window !== 'undefined' ? window : globalThis);
