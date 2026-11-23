@@ -63,7 +63,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const tip = document.getElementById('loveTip');
     const btn = tip && tip.querySelector('[data-cr="kid0"]');
     return { ver: f.version, tip: !!(tip && !tip.hidden), btn: !!(btn), txt: tip ? tip.innerText.replace(/\\s+/g, ' ').slice(0, 240) : '', w: innerWidth }; })()`,
-    r => r.ver !== '5.11.0.36' ? 'ver ' + r.ver
+    r => r.ver !== '5.11.0.38' ? 'ver ' + r.ver
       : r.w < 360 || r.w > 440 ? 'not phone width ' + r.w
       : !r.tip || !r.btn ? 'no family 换个活法'
       : !/换个活法/.test(r.txt || '') ? 'copy ' + r.txt
@@ -79,7 +79,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const titles = [...(box ? box.querySelectorAll('.copt b') : [])].map(el => el.textContent);
     return { ver: f.version, hidden: !box || box.hidden, title: box && box.querySelector('h3') && box.querySelector('h3').textContent,
       sub: box && box.querySelector('.csub') && box.querySelector('.csub').textContent, opts, titles, w: innerWidth, h: box && box.getBoundingClientRect().height }; })()`,
-    r => r.ver !== '5.11.0.36' ? 'ver ' + r.ver
+    r => r.ver !== '5.11.0.38' ? 'ver ' + r.ver
       : r.hidden ? 'modal hidden'
       : !/换个活法/.test(r.title || '') ? 'title ' + r.title
       : !r.opts.some(s => s.startsWith('farm:')) || !r.opts.some(s => s.startsWith('work:school')) || !r.opts.some(s => s.startsWith('work:fish')) || !r.opts.some(s => s.startsWith('work:art')) || !r.opts.some(s => s.startsWith('work:clinic')) || !r.opts.some(s => s.startsWith('work:library')) ? 'opts ' + JSON.stringify(r.opts)
@@ -97,7 +97,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const on = box && box.querySelector('.copt.on b') && box.querySelector('.copt.on b').textContent;
     return { ver: f.version, on, hasList: !!(list), school: !!(school && !school.disabled),
       titles: [...(box ? box.querySelectorAll('.copt b') : [])].map(el => el.textContent) }; })()`,
-    r => r.ver !== '5.11.0.36' ? 'ver ' + r.ver
+    r => r.ver !== '5.11.0.38' ? 'ver ' + r.ver
       : !r.school ? 'school job missing or locked'
       : r.on !== '去学校当老师' ? 'selected ' + r.on
       : null);
@@ -113,7 +113,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return { pick, path: S.home.path.kid0, ver: f.version,
       k: k && { x: Math.round(k.x), y: Math.round(k.y), task: k.task && (k.task.label || k.task.kind) } }; })()`,
     r => !r.pick || !r.pick.ok ? 'pick ' + JSON.stringify(r.pick)
-      : r.ver !== '5.11.0.36' ? 'ver ' + r.ver
+      : r.ver !== '5.11.0.38' ? 'ver ' + r.ver
       : !r.path || r.path.at !== 'school' ? 'path ' + JSON.stringify(r.path)
       : !r.k || Math.hypot(r.k.x - 698, r.k.y - 48) > 40 ? 'not at school ' + JSON.stringify(r.k)
       : null);
@@ -129,7 +129,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return { pick, path: S.home.path.kid0, ver: f.version,
       k: k && { x: Math.round(k.x), y: Math.round(k.y), task: k.task && (k.task.label || k.task.kind) } }; })()`,
     r => !r.pick || !r.pick.ok ? 'pick ' + JSON.stringify(r.pick)
-      : r.ver !== '5.11.0.36' ? 'ver ' + r.ver
+      : r.ver !== '5.11.0.38' ? 'ver ' + r.ver
       : !r.path || r.path.at !== 'fish' ? 'path ' + JSON.stringify(r.path)
       : !r.k || Math.hypot(r.k.x - 54, r.k.y - 94) > 24 ? 'not at the pond ' + JSON.stringify(r.k)
       : null);
@@ -145,7 +145,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return { pick, path: S.home.path.kid0, ver: f.version,
       k: k && { x: Math.round(k.x), y: Math.round(k.y), task: k.task && (k.task.label || k.task.kind) } }; })()`,
     r => !r.pick || !r.pick.ok ? 'pick ' + JSON.stringify(r.pick)
-      : r.ver !== '5.11.0.36' ? 'ver ' + r.ver
+      : r.ver !== '5.11.0.38' ? 'ver ' + r.ver
       : !r.path || r.path.at !== 'art' ? 'path ' + JSON.stringify(r.path)
       : !r.k || Math.hypot(r.k.x - 666, r.k.y - 134) > 40 ? 'not at the plaza ' + JSON.stringify(r.k)
       : null);
