@@ -1321,7 +1321,7 @@ function orchardSpots() {
   const key = [S.day, navVer, navDirty, S.trees.length, JSON.stringify(S.orders), S.eff.regions.join(','), JSON.stringify(S.plots), tiles.length].join(',');
   if (key === orchC.key) return orchC.spots;
   const spots = [];
-  for (const [x0, y0, x1, y1] of orchardRects()) for (let y = y0 + 10; y <= y1 - 8; y += ORCH_STEP) for (let x = x0 + 12; x <= x1 - 10; x += ORCH_STEP) {
+  for (const [x0, y0, x1, y1] of orchardRects()) for (let y = y0 + 12; y <= y1 - 14; y += ORCH_STEP) for (let x = x0 + 14; x <= x1 - 14; x += ORCH_STEP) {
     if (orchardSpotOk(x, y)) spots.push({ x, y, key: 'orch:' + x + ',' + y }); }
   orchC = { key, spots }; return spots;
 }

@@ -641,7 +641,7 @@
     h += storeCard({ id: 'fishfood', kind: 'item', name: '鱼食', n: data.fishFood.n }, `<div class="d">家里有鱼食时，空闲的家人会自己去池塘撒一把，那天稀有鱼更容易上钩（${data.fishFood.unit} 金一包）</div>`);
     for (const r of (data.ornament || [])) h += storeCard(r, '<div class="d">用右下角的放养按钮，放到家门口池塘里看着玩，不再卖掉</div>');
     if (data.pondFish) h += storeCard({ id: 'koi', kind: 'item', name: '池塘里的观赏鱼', n: data.pondFish }, '<div class="d">在家门口的池塘里游，只是给人看</div>');
-    for (const r of data.saplings) h += storeCard(r, '<div class="d">用右下角的种树按钮指定位置</div>');
+    for (const r of data.saplings) h += storeCard(r, '<div class="d">家人会自己种进空着的果园；想种在别处，用「种树」指定位置</div>');
     h += '</div>';
     store.innerHTML = h;
   }
