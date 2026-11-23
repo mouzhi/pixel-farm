@@ -791,7 +791,8 @@ function navState() {
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
     trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : [], DECOR_ON ? DA.blocks() : [], TN ? TN.blocks(!!(S.eff && S.eff.town), !!innPlot()) : [], TN && HL && S.eff && S.eff.town ? HL.blocks(S.town.hall).concat((FV && FV.isDay(S.town.hall, S.day)) ? FV.blocks() : []) : [], TN && CR && S.eff && S.eff.town ? CR.blocks(S.town.lots, S.home && S.home.path, S.day) : [], HOME_ON ? HA.blocks() : [], INN_ON ? IA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops; v5.10.7 inn
     rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze),
-    plots: S.plots || {}
+    plots: S.plots || {},
+    guestPier: (IN && S.inn && IN.pierUp(S.inn) && IN.resortLayout) ? IN.resortLayout().pier : null
   };
 }
 function markNavDirty() { navDirty = true; }
@@ -2088,8 +2089,10 @@ for (const r of WD.REGIONS) { const [x0, y0, x1, y1] = r.rect, list = regionProp
   const nearGate = (x, y) => openings.some(g => Math.hypot(x - g.x, y - g.y) < 12);
   const join = (r.id === 'coast' && PL && PL.RESORT_JOIN) ? PL.RESORT_JOIN.beach : null;
   const nearJoin = (x, y) => !!(join && Math.hypot(x - join.x, y - join.y) < 12);
-  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); p.resortJoin = nearJoin(x + 4, y); list.push(p); }
-  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); p.resortJoin = nearJoin(x, y + 4); list.push(p); }
+  const guestMouth = (r.id === 'coast' && IN && IN.guestPierMouth) ? IN.guestPierMouth() : (r.id === 'coast' && IN && IN.resortLayout) ? IN.resortLayout().pier.mouth : null;
+  const nearGuestPier = (x, y) => !!(guestMouth && Math.hypot(x - guestMouth.x, y - guestMouth.y) < 16);
+  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); p.resortJoin = nearJoin(x + 4, y); p.guestPier = nearGuestPier(x + 4, y); list.push(p); }
+  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); p.resortJoin = nearJoin(x, y + 4); p.guestPier = nearGuestPier(x, y + 4); list.push(p); }
   const sign = { spr: SIGN, x: r.sign.x, y: r.sign.y, region: r.id, sign: 1 }; billboards.push(sign); list.push(sign);
   if (r.barrel) addProp(barrelModel, r.barrel.x, r.barrel.y, 0);
 }
@@ -2885,13 +2888,16 @@ function partySpot(a, key) { // a: the actor or guest; their place for this hour
 const partyDur = T => Math.max(3, Math.min(30, (wedCer() ? DC.wedPhaseEnd(T) : DC.phaseEnd(T)) - T, DC.PARTY.to - T)); // v5.11.0.21: the ceremony's beats too
 function partyIndex(a) { return a === FARMER ? 0 : 1 + Math.max(0, S.members.indexOf(a)); }
 function sunsetTask() { // v5.10.8: once the deck is up, the family sits and watches the sea 17:00–19:00
+  // v5.11.0.37: each person gets a distinct walkable place (deck, both piers, the waterline), so they
+  // do not stack on the four bench tiles or walk back and forth at an unreachable / shared target.
   if (!IN || !S.inn || !IN.deckUp(S.inn) || !IN.isSunset(S.t) || F.away || F.sleeping) return null;
   const T = ((S.t % 1440) + 1440) % 1440;
   if (partyTonight() && DC.partyOn(T)) return null;
-  const L = IN.resortLayout(); if (!L || !L.deck || !L.deck.sit.length) return null;
+  const spots = IN.sunsetSpots(S.inn); if (!spots.length) return null;
   const i = Math.max(0, actors().indexOf(F));
-  const seat = L.deck.sit[(i + (S.day | 0)) % L.deck.sit.length];
-  return { kind: 'sunset', label: '去观景台看落日', to: { x: seat.x + (i % 2 ? 0.6 : -0.6), y: seat.y }, dur: Math.max(8, Math.min(22, IN.SUNSET.to - T)), rest: true };
+  const seat = spots[i % spots.length];
+  const label = (seat.kind === 'guest-pier' || seat.kind === 'fish-pier') ? '去栈桥看落日' : seat.kind === 'beach' ? '去海边看落日' : '去观景台看落日';
+  return { kind: 'sunset', label, to: { x: seat.x, y: seat.y }, dur: Math.max(8, Math.min(22, IN.SUNSET.to - T)), rest: true, seat: seat.kind };
 }
 function partyTask() { // chooseTask asks first: on a party evening everyone who is around comes over
   const T = S.t % 1440, early = T < DC.PARTY.from && DC.wedOn(T) && (wedCouple() || []).includes(F.id); // v5.11.0.21: the couple go over first, to wait at the end of the aisle
@@ -3774,7 +3780,7 @@ function innBuy(id) {
   if (INN_ON) IA.sync(true); markNavDirty(); if (typeof saveNow === 'function') saveNow();
   return { ok: true, cost: o.cost, wood: o.wood };
 }
-function innRepaint() { if (IN && IN.AGRI && groundReady) buildGroundBase([IN.AGRI[0] - 4, IN.AGRI[1] - 4, IN.AGRI[2] + 4, IN.AGRI[3] + 4]); } // v5.11.0.5: the garden and tables appear with the restaurant
+function innRepaint() { if (typeof syncRegionProps === 'function') syncRegionProps(); markNavDirty(); if (IN && IN.AGRI && groundReady) buildGroundBase([IN.AGRI[0] - 4, IN.AGRI[1] - 4, IN.AGRI[2] + 4, IN.AGRI[3] + 4]); } // v5.11.0.5: the garden and tables appear with the restaurant; v5.11.0.37 also opens the guest-pier fence
 // v5.11.0.5: an old save's lodging on a zoned 民宿院 plot now stands in the 农家乐区 (counts kept); the plot is an empty yard, rezoned once for free
 function innMigrate() {
   if (!IN || !IN.migrate || !S.inn || !S.plots) return null;
@@ -3850,7 +3856,7 @@ function innMorning() {
   if (done === 'deck') log('日落观景台修好了，傍晚可以坐着看海上的落日');
   if (done === 'villa') log(`度假小别墅盖好了，现在东南滩有 ${S.inn.resort.villas} 栋`);
   if (done === 'camp') log('帐篷露营地搭好了：三顶帐篷围着篝火，客人可以在这里过夜');
-  if (done && INN_ON) { IA.sync(true); markNavDirty(); innRepaint(); }
+  if (done && INN_ON) { IA.sync(true); if (typeof syncRegionProps === 'function') syncRegionProps(); markNavDirty(); innRepaint(); }
   const out = IN.checkOut(S.inn, S.day, () => IN.rateStay(innRateCtx()));
   if (out.gold || out.groups.length) innPayRooms(out.gold, out.notes, out.groups);
   if ((S.inn.arrived | 0) !== S.day) {
@@ -3942,7 +3948,7 @@ function innSpots(s) {
     const r = PL.plot(pid).rect; out.push({ what: 'play', x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2, wait: 28 });
   }
   if (S.inn && S.inn.resort && S.inn.resort.deck && IN.isSunset(S.t)) {
-    const RL = IN.resortLayout(), seat = RL && RL.deck.sit[(s.room | 0) % RL.deck.sit.length];
+    const seat = IN.sunsetSeat(S.inn, 100 + (s.room | 0));
     if (seat) out.push({ what: 'sunset', x: seat.x, y: seat.y, wait: 50, rest: true });
   }
   return out;
@@ -3958,7 +3964,7 @@ function innBeachSpots(s) {
   if (r.pier) out.push({ what: 'fish', x: L.pier.stand.x, y: L.pier.stand.y, wait: 48, hook: L.pier.hook });
   if (r.stall) out.push({ what: 'eat', x: L.stall.stand.x, y: L.stall.stand.y, wait: 32, rest: true });
   if (r.deck && IN.isSunset(S.t)) {
-    const seat = L.deck.sit[(s.room | 0) % L.deck.sit.length];
+    const seat = IN.sunsetSeat(S.inn, 200 + (s.room | 0));
     if (seat) out.push({ what: 'sunset', x: seat.x, y: seat.y, wait: 50, rest: true });
   }
   return out;
@@ -4813,9 +4819,10 @@ function familyDraw(list, T) { // pushes the family into the depth-sorted list; 
 }
 function syncRegionProps() { // open gates and take the signs down for bought regions
   const resortOn = !!(PL && PL.resortOpen && PL.resortOpen(S.plots));
+  const pierOn = !!(IN && S.inn && IN.pierUp(S.inn));
   for (const id in regionProps) { const open = regionOpen(id);
     for (const p of regionProps[id]) {
-      const gateOpen = open && (p.gate || p.sign || (p.resortJoin && resortOn && regionOpen('coast') && regionOpen('eshore')));
+      const gateOpen = open && (p.gate || p.sign || (p.resortJoin && resortOn && regionOpen('coast') && regionOpen('eshore')) || (p.guestPier && pierOn));
       const want = !gateOpen, arr = p.sign ? billboards : props, i = arr.indexOf(p);
       if (want && i < 0) arr.push(p); else if (!want && i >= 0) arr.splice(i, 1); } }
 }
@@ -6042,7 +6049,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.36';
+const GAME_VERSION = '5.11.0.37';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6298,7 +6305,7 @@ Object.assign(window.__farm, { orchardSpots: () => orchardSpots(), woodNight: ()
   importState: s => { SAVE.off = true; const r = PFSave.write(s); if (r.ok) location.reload(); else SAVE.off = false; return r; },
   NAV, pathTo, routeVia, travel, ensureNav, markNavDirty, syncResortJoin, actorRoutes, PL, XP, plotOffer: (id, mod) => PL.offer(S.plots, id, mod, S.coins, FARMER.wood, S.family), buyPlot: (id, mod) => XP.buyPlot(id, mod), rezonePlot: (id, mod) => XP.rezonePlot(id, mod), rezoneOffer: (id, mod) => PL.rezoneOffer(S.plots, id, mod, S.coins, FARMER.wood), groundAt: (x, y) => groundAt(x, y), stackStats: () => ({ n: STK.size, px: stkPx }),
   setPathDebug: routes => { dbgRoutes = routes || []; }, pathGrid: () => ensureNav() });
-Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeMoveTo: (x, y, i) => { const r = homeMoveOk(x, y, i | 0); if (!r.ok) return r; const q = { what: 'home', ref: i | 0, x: r.x, y: r.y, op: 'move' }; return { ok: !!homeMoveDone(q), why: r.why, spot: r.spot, site: r.spot && r.spot.site }; }, homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), dinerReserveNeed: () => dinerReserveNeed(), innServeMeals: () => innServeMeals(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innRepaint: () => innRepaint(), innMigrate: () => innMigrate(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask(), sunsetFade: T => sunsetFade(T), SC, LB, CL, FV, sportsOpenNow: () => sportsOpenNow(), sportsTask: () => sportsTask(), feastTask: () => feastTask(), festNow: () => festNow(), fairNow: () => fairNow(), sleepAt: () => sleepAt(), libraryRead: a => libraryRead(a) }); // v5.9.0 test hooks; v5.10.6–v5.10.11
+Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i) => homeMoveOk(x, y, i), homeMoveTo: (x, y, i) => { const r = homeMoveOk(x, y, i | 0); if (!r.ok) return r; const q = { what: 'home', ref: i | 0, x: r.x, y: r.y, op: 'move' }; return { ok: !!homeMoveDone(q), why: r.why, spot: r.spot, site: r.spot && r.spot.site }; }, homeStatus: () => homeStatus(), homeSpot: () => homeSpot(), homeGate: h => homeGate(h), homeMorning: () => homeMorning(), homeMoveIn: (k, n) => homeMoveIn(k, n), homeNight: () => homeNight(), homeTeenVisit: T => homeTeenVisit(T), weddingTonight: () => weddingTonight(), homeTilesSync: () => homeTilesSync(), homeSave: () => homeSave(), memberOf: id => memberOf(id), CR, careerPick: (k, way, at, kind) => careerPick(k, way, at, kind), careerChange: (k, way, at, kind) => careerChange(k, way, at, kind), careerView: (k, mode) => careerView(k, mode), careerOffer: k => careerOffer(k), careerEnsure: k => careerEnsure(k), careerPrompt: () => careerPrompt, careerDefault: k => careerDefault(k), workWalk: a => workWalk(a), townLv: () => townLv(), IN, IA, STAYS, innView: () => innView(), innStart: id => innBuy(id), innBuy: id => innBuy(id), setInnMenu: v => innSetMenu(v), innMorning: () => innMorning(), innTick: dm => innTick(dm), innCounts: () => innCounts(), dinerReserveNeed: () => dinerReserveNeed(), innServeMeals: () => innServeMeals(), innLayout: () => innLay(), innResortLayout: () => IN && IN.resortLayout(), innPlot: () => innPlot(), innRepaint: () => innRepaint(), innMigrate: () => innMigrate(), innFest: () => innFest(), innStaffed: () => innStaffedNow(), innStars: () => innStarsNow(), sunsetTask: () => sunsetTask(), sunsetFade: T => sunsetFade(T), sunsetSpots: () => (IN && S.inn && IN.sunsetSpots) ? IN.sunsetSpots(S.inn) : [], syncRegionProps: () => syncRegionProps(), SC, LB, CL, FV, sportsOpenNow: () => sportsOpenNow(), sportsTask: () => sportsTask(), feastTask: () => feastTask(), festNow: () => festNow(), fairNow: () => fairNow(), sleepAt: () => sleepAt(), libraryRead: a => libraryRead(a) }); // v5.9.0 test hooks; v5.10.6–v5.10.11
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1

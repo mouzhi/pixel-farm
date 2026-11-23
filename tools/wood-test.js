@@ -41,7 +41,7 @@ assert.strictEqual(WA.offline(3, E, 17, 0, 400), Math.floor(14 * 8 / 5 * 3 * 0.5
 assert.strictEqual(WA.offline(3, H, 17, 390, 400), 10);
 assert.strictEqual(WA.offline(3, eff({ axe: 1 }), 17, 0, 400), 0);
 console.log('wood-test: ok');
-// v5.11.0.36: the hut may use spare saplings for wild trees, never the ones promised to fruit-tree placement orders.
+// v5.11.0.37: the hut may use spare saplings for wild trees, never the ones promised to fruit-tree placement orders.
 { const t = { x: 100, y: -70, kind: 'wild', stage: 'stump', age: 0 }, sap = { apple: 2, orange: 1 };
   const keep = { apple: 2, orange: 1 }; assert.strictEqual(WA.replant([t], sap, H, keep).length, 0); assert.deepStrictEqual(sap, keep);
   sap.apple++; assert.strictEqual(WA.replant([t], sap, H, keep).length, 1); assert.deepStrictEqual(sap, keep); }

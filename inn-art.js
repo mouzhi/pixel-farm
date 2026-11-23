@@ -473,7 +473,8 @@
     if (RL && r) {
       for (let i = 0; i < (r.huts | 0); i++) { const c = RL.huts[i]; if (c) out.push([c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1]); }
       if (r.stall) out.push([RL.stall.x - RL.stall.hw, RL.stall.y - RL.stall.hd, RL.stall.x + RL.stall.hw, RL.stall.y + RL.stall.hd - 1]);
-      if (r.deck) out.push([RL.deck.x - RL.deck.hw, RL.deck.y - RL.deck.hd, RL.deck.x + RL.deck.hw, RL.deck.y + RL.deck.hd - 1]);
+      // v5.11.0.37: the sunset deck is an open platform (rail at the back, benches facing the sea).
+      // Blocking it made every sit tile unreachable, so the family walked to the edge and back.
       for (let i = 0; i < (r.villas | 0); i++) { const c = RL.villas && RL.villas[i]; if (c) out.push([c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1]); }
       if (r.camp) {
         if (RL.fire) out.push([RL.fire.x - 3, RL.fire.y - 3, RL.fire.x + 3, RL.fire.y + 3]);
