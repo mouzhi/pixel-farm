@@ -718,13 +718,14 @@
     }
   }
   function checkOut(I, day, rate) {
-    const gone = leaving(I, day); if (!gone.length) return { groups: [], gold: 0, notes: [] };
+    const gone = leaving(I, day); if (!gone.length) return { groups: [], gold: 0, notes: [], by: {} };
     const stars = (I.stars && I.stars.avg) || 3;
-    let gold = 0; const notes = [];
+    let gold = 0; const notes = []; const by = {};
     for (const g of gone) {
       const nights = Math.max(STAY.min, (g.until | 0) - (g.from | 0));
-      const pay = roomFee(nights, stars, stayOf(g));
-      gold += pay; I.earn.rooms = (I.earn.rooms | 0) + pay;
+      const stay = stayOf(g);
+      const pay = roomFee(nights, stars, stay);
+      gold += pay; I.earn.rooms = (I.earn.rooms | 0) + pay; by[stay] = (by[stay] | 0) + pay;
       const rated = rate ? rate(g, nights) : { s: 3, note: '' };
       const rec = { day: day | 0, s: int(rated.s, 1, 5) || 3, note: String(rated.note || '').slice(0, NOTE_MAX) };
       pushStar(I, rec);
@@ -732,7 +733,7 @@
     }
     I.stars.avg = avgOf(I.stars.last);
     I.guests = (I.guests || []).filter(g => (g.until | 0) > (day | 0));
-    return { groups: gone, gold, notes };
+    return { groups: gone, gold, notes, by };
   }
 
   // ---------- menu / meals ----------

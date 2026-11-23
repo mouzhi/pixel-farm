@@ -163,7 +163,9 @@
   }
   function validSettings(st) {
     // v5.10.2: one game speed for everyone; `speed` stays in the save as 1 for older readers. speedRefund: gold given back for a bought 2x / 4x (once)
-    const layout = int(st.decorLayout, 0, 0, 9); return { speed: 1, speedRefund: int(st.speedRefund, 0, 0, 1e6), autoBuy: st.autoBuy === true, autoDay: int(st.autoDay, 0, 0, 1e6), autoN: int(st.autoN, 0, 0, 1e6), ...(layout ? { decorLayout: layout } : {}) }; // v5.10.3/4: decorLayout (1 = first tidy-up, 2 = wider lamps)
+    const layout = int(st.decorLayout, 0, 0, 9);
+    return { speed: 1, speedRefund: int(st.speedRefund, 0, 0, 1e6), autoBuy: st.autoBuy === true, autoDay: int(st.autoDay, 0, 0, 1e6), autoN: int(st.autoN, 0, 0, 1e6),
+      ...(layout ? { decorLayout: layout } : {}), ...(st.seenLove ? { seenLove: 1 } : {}) }; // v5.10.3/4 decorLayout; v5.11.0.39 seenLove (opened the family panel)
   }
   function validOfflineWin(w) { // [{ at: ms, days: 0..3 }], at most 12; the 24-hour cut happens in sim.js at settlement time
     return (Array.isArray(w) ? w : []).map(obj).filter(x => typeof x.at === 'number' && isFinite(x.at) && x.at > 0)
