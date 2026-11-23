@@ -3,6 +3,7 @@
 const assert = require('assert');
 const NAV = require('../path.js');
 const WD = require('../world.js');
+const IN = require('../inn.js');
 
 let n = 0;
 function test(name, fn) { fn(); n++; }
@@ -175,6 +176,50 @@ test('the coast fishing stand is reachable along the pier once the beach is open
   assert.strictEqual(sea, 'water');
   const [i, j] = NAV.cellOf(g, 300, 280);
   assert.ok(!NAV.walkable(g, i, j), 'open sea is blocked');
+});
+
+test('the guest pier mouth stays fenced until the pier is built, then the stand is reachable and the sea beside it stays blocked', () => {
+  const L = IN.resortLayout(), mouth = L.pier.mouth, stand = L.pier.stand;
+  const plots = { eshore: { mod: 'resort', day: 1 } };
+  const closed = farm({ regions: ['south', 'coast'], plots });
+  const [fi, fj] = NAV.cellOf(closed, mouth.x, mouth.y);
+  assert.ok(!NAV.walkable(closed, fi, fj), 'south fence still crosses the unbuilt guest pier');
+  const [si0, sj0] = NAV.cellOf(closed, stand.x, stand.y);
+  assert.ok(!NAV.walkable(closed, si0, sj0), 'guest pier boards over the sea are not walkable until built');
+  const blocked = NAV.route(closed, WD.region('coast').gate, stand);
+  assert.ok(!blocked.reached, 'the guest pier stand is not reached while the fence is shut');
+
+  const open = farm({ regions: ['south', 'coast'], plots, guestPier: L.pier });
+  mustReach(open, WD.region('coast').gate, mouth, 'coast gate → guest pier mouth');
+  mustReach(open, WD.region('coast').gate, stand, 'coast gate → guest pier stand');
+  mustReach(open, WD.region('coast').gate, WD.region('coast').fish.stand, 'fishing pier still open');
+  const [si, sj] = NAV.cellOf(open, 300, 280);
+  assert.ok(!NAV.walkable(open, si, sj), 'open sea beside the piers stays blocked');
+  // a south-fence post well away from both pier mouths stays solid
+  const [ei, ej] = NAV.cellOf(open, 344, 256);
+  assert.ok(!NAV.walkable(open, ei, ej), 'south fence east of the guest pier stays shut');
+});
+
+test('sunset standing spots are distinct, spaced, and reachable once the guest pier and deck are up', () => {
+  const I = IN.empty(); I.resort.deck = 1; I.resort.pier = 1;
+  const spots = IN.sunsetSpots(I);
+  assert.ok(spots.length >= 16, 'enough spots for a large family, got ' + spots.length);
+  const kinds = new Set(spots.map(s => s.kind));
+  assert.ok(kinds.has('deck') && kinds.has('fish-pier') && kinds.has('guest-pier') && kinds.has('beach'), [...kinds].join(','));
+  for (let i = 0; i < spots.length; i++) for (let j = i + 1; j < spots.length; j++) {
+    const d = Math.hypot(spots[i].x - spots[j].x, spots[i].y - spots[j].y);
+    assert.ok(d >= 3.5, 'spots too close ' + JSON.stringify(spots[i]) + ' / ' + JSON.stringify(spots[j]));
+  }
+  const seats = [];
+  for (let i = 0; i < 12; i++) {
+    const s = IN.sunsetSeat(I, i);
+    assert.ok(s, 'seat ' + i);
+    assert.ok(!seats.some(q => q.x === s.x && q.y === s.y), 'duplicate seat ' + i + ' ' + JSON.stringify(s));
+    seats.push(s);
+  }
+  const g = farm({ regions: ['south', 'coast'], plots: { eshore: { mod: 'resort', day: 1 } }, guestPier: IN.resortLayout().pier });
+  const gate = WD.region('coast').gate;
+  for (const s of spots) mustReach(g, gate, s, 'sunset ' + s.kind + ' ' + s.x + ',' + s.y);
 });
 
 test('path cache returns the same waypoints and clears on demand', () => {

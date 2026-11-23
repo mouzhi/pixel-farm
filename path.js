@@ -160,7 +160,7 @@
     carveDisc(g, LAYOUT.DOOR.x, 50, 7, DIRT); // the path gap in the north fence
   }
 
-  function regionFences(g, openRegions, plots) {
+  function regionFences(g, openRegions, plots, opts) {
     if (!WD) return;
     const open = openRegions || [];
     for (const r of WD.REGIONS) {
@@ -168,7 +168,14 @@
       const openings = [r.gate, r.pier].filter(Boolean);
       // a 度假村 on 东南滩 also opens the east fence of the beach
       if (r.id === 'coast' && PL && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN) openings.push(PL.RESORT_JOIN.beach);
-      const nearGate = (x, y) => openings.some(p => Math.hypot(x - p.x, y - p.y) < 12);
+      // the guest pier mouth: the south fence would otherwise run across the boards
+      let guestMouth = null;
+      if (r.id === 'coast' && opts && opts.guestPier) {
+        const gp = opts.guestPier;
+        guestMouth = gp.mouth || { x: gp.x, y: r.rect[3] };
+        openings.push(guestMouth);
+      }
+      const nearGate = (x, y) => openings.some(p => Math.hypot(x - p.x, y - p.y) < (p === guestMouth ? 16 : 12));
       for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) if (!(opened && nearGate(x + 4, y))) paintSeg(g, x, y, x + 8, y, FENCE_HW, BLOCKED);
       for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) if (!(opened && nearGate(x, y + 4))) paintSeg(g, x, y, x, y + 8, FENCE_HW, BLOCKED);
     }
@@ -211,12 +218,19 @@
       const [x, y] = worldOf(g, i, j);
       if (WD.seaAt(x, y) === 'water') g.cost[idx(g, i, j)] = BLOCKED;
     }
-    // the pier is walkable even though it sits over the sea (coast fishing stand is at the end)
+    // piers are walkable even though they sit over the sea (the fishing stand is at the end)
     const coast = WD.region('coast');
     if (coast && coast.pier && coast.fish) {
       const px = coast.pier.x, y0 = coast.pier.y - 2, y1 = coast.fish.stand.y + 4;
       paintBox(g, px - 5, y0, px + 5, y1, DIRT);
     }
+  }
+  function paintGuestPier(g, opts) {
+    const gp = opts && opts.guestPier; if (!gp) return;
+    const px = gp.x, hw = (gp.hw || 4) + 1;
+    const y0 = (gp.from && gp.from.y != null ? gp.from.y : gp.y) - 2;
+    const y1 = (gp.stand && gp.stand.y != null ? gp.stand.y : gp.y) + 4;
+    paintBox(g, px - hw, y0, px + hw, y1, DIRT);
   }
 
   function paintTreesAndRocks(g, opts) {
@@ -236,6 +250,10 @@
       const open = (opts && opts.regions) || [];
       const coast = WD.region('coast');
       if (coast && open.includes('coast') && coast.fish) spots.push(coast.fish.stand, coast.gate, coast.pier);
+      if (open.includes('coast') && opts && opts.guestPier) {
+        const gp = opts.guestPier;
+        spots.push(gp.stand || gp, gp.mouth || { x: gp.x, y: gp.from ? gp.from.y : gp.y }, { x: gp.x, y: (gp.from && gp.from.y) || gp.y });
+      }
       if (PL && PL.resortOpen && PL.resortOpen(opts && opts.plots) && open.includes('eshore') && open.includes('coast') && PL.RESORT_JOIN) {
         spots.push(PL.RESORT_JOIN.lot, PL.RESORT_JOIN.beach);
       }
@@ -253,9 +271,10 @@
   function build(opts) {
     const o = opts || {}, g = makeGrid(o.world || (WD && WD.WORLD));
     paintWater(g);
+    paintGuestPier(g, o);
     paintBuildings(g, o);
     homeFences(g);
-    regionFences(g, o.regions || [], o.plots);
+    regionFences(g, o.regions || [], o.plots, o);
     penFences(g, o);
     if (PL) PL.navPaint(g, HELP, o);
     paintTreesAndRocks(g, o);

@@ -275,7 +275,7 @@
       P(218, 246), P(240, 246), P(262, 246), P(304, 246),
     ].map((p, i) => ({ i, x: p.x, y: p.y }));
     const stall = { x: 328, y: 242, hw: 6, hd: 4, door: P(328, 246), stand: P(324, 246) };
-    const pier = { x: 318, y: 262, hw: 4, hd: 14, stand: P(318, 270), hook: P(318, 278), from: P(318, 250) };
+    const pier = { x: 318, y: 262, hw: 4, hd: 14, stand: P(318, 270), hook: P(318, 278), from: P(318, 242), mouth: P(318, COAST.rect[3]) };
     const deck = { x: 210, y: 250, hw: 8, hd: 5, sit: [P(206, 250), P(210, 250), P(214, 250), P(218, 250)] };
     const path = [COAST.gate, P(250, 228), P(272, 236), COAST.pier];
     // tidy fixed slots on 东南滩 itself (the lot was empty after zoning). Villas along the north and east,
@@ -299,6 +299,63 @@
       villas, tents, fire, lotPath, lotGate, join, beachJoin: join.beach, lotJoin: join.lot };
   }
   const isSunset = t => { const T = ((t % 1440) + 1440) % 1440; return T >= SUNSET.from && T < SUNSET.to; };
+
+  // Distinct standing places for watching the sunset: the deck (open toward the sea), both piers,
+  // and the waterline. Kept far enough apart that a full family plus guests do not stack or fight
+  // over one tile. Spots on a pier are only listed once that pier is walkable (the fishing pier
+  // always is; the guest pier once it is built).
+  const fishPierMouth = () => P(COAST.pier.x, COAST.rect[3]);
+  const guestPierMouth = () => { const L = resortLayout(); return L.pier.mouth || P(L.pier.x, COAST.rect[3]); };
+  function sunsetSpots(I) {
+    const L = resortLayout(), out = [];
+    const add = (x, y, kind) => {
+      if (out.some(s => Math.hypot(s.x - x, s.y - y) < 3.6)) return;
+      out.push({ x, y, kind });
+    };
+    if (deckUp(I) && L.deck) {
+      for (const s of L.deck.sit) add(s.x, s.y, 'deck');
+    }
+    const fp = COAST.pier, fs = COAST.fish && COAST.fish.stand;
+    if (fp) {
+      add(fp.x, fp.y + 2, 'fish-pier');
+      add(fp.x - 3, fp.y + 6, 'fish-pier');
+      add(fp.x + 3, fp.y + 6, 'fish-pier');
+      if (fs) {
+        add(fp.x, fs.y, 'fish-pier');
+        add(fp.x - 3, fs.y - 2, 'fish-pier');
+        add(fp.x + 3, fs.y - 2, 'fish-pier');
+      }
+    }
+    if (pierUp(I) && L.pier) {
+      const p = L.pier, mouthY = (p.mouth && p.mouth.y) || COAST.rect[3];
+      add(p.x, mouthY + 2, 'guest-pier');
+      add(p.x - 3, p.stand.y - 8, 'guest-pier');
+      add(p.x + 3, p.stand.y - 8, 'guest-pier');
+      add(p.x, p.stand.y, 'guest-pier');
+      add(p.x - 3, p.stand.y - 2, 'guest-pier');
+      add(p.x + 3, p.stand.y - 2, 'guest-pier');
+    }
+    // the sand just north of the water (the shore is uneven, and a small bay sits near x 250).
+    // these tiles stay walkable on the nav grid and clear of huts (y 228) and the stall (328, 242).
+    const beach = [[226, 250], [234, 250], [238, 246], [262, 250], [270, 250], [290, 250], [298, 250], [310, 250], [326, 246], [338, 246]];
+    for (const [x, y] of beach) add(x, y, 'beach');
+    const groups = { deck: [], 'fish-pier': [], 'guest-pier': [], beach: [] };
+    for (const s of out) (groups[s.kind] || (groups[s.kind] = [])).push(s);
+    const mixed = [];
+    for (let i = 0, more = true; more; i++) {
+      more = false;
+      for (const k of ['deck', 'fish-pier', 'guest-pier', 'beach']) {
+        if (i < groups[k].length) { mixed.push(groups[k][i]); more = true; }
+      }
+    }
+    return mixed;
+  }
+  function sunsetSeat(I, i) {
+    const spots = sunsetSpots(I);
+    if (!spots.length) return null;
+    return spots[((i | 0) % spots.length + spots.length) % spots.length];
+  }
+
 
   // ---------- save (append-only; missing = nothing built) ----------
   const emptyResort = () => ({ huts: 0, parasols: 0, stall: 0, pier: 0, deck: 0, villas: 0, camp: 0 });
@@ -917,7 +974,7 @@
     STAY, GROUP, ARRIVE, LEAVE_MORNING, ON_SCREEN, STAR_BOOST, FURNISH, BOOK_MAX, STARS_MAX, NOTE_MAX, LOOKS, BEACH_LOOKS,
     UNIT, ITEM_NAME, itemName, DISHES, DISH, STALL_DISHES, GARDEN_DISH, unitOf, dishBase, dishPay, canMake, pullDish, isSeaFish, seaCount, pullSea,
     starCoef, roomFee, roomBase, groupsWanted, effectiveStars,
-    innPlotOf, resortPlotOf, plotOk, layout, SITE, AGRI, siteOf, anyInn, agriLayout, migrate, resortLayout, isSunset,
+    innPlotOf, resortPlotOf, plotOk, layout, SITE, AGRI, siteOf, anyInn, agriLayout, migrate, resortLayout, isSunset, sunsetSpots, sunsetSeat, fishPierMouth, guestPierMouth,
     empty, emptyDiner, emptyStars, emptyEarn, emptyResort, valid, validMenu, avgOf,
     cabinsUp, dinerUp, kitchenLv, seatsOf, dishSlots, unlocked, gardenYield, kitchenCap, stockWithGarden, cabinCost, offer, canStart, start, finish, plotBusy,
     innRoomsOf, hutsUp, parasolsUp, stallUp, pierUp, deckUp, villasUp, campUp, tentsUp, capOf, stayOf, isResortStay, cabinOf,
