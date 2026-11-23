@@ -2,15 +2,22 @@
 // On the wedding morning the player picks one path (or the child's default is used): stay and farm, take a job in town,
 // open a shop on an empty lot (L2 / L3), or (v5.10.7) run the family's 民宿 / 菜馆. After that it runs itself. A later change is 2,000 gold, next morning; closing a
 // shop refunds half the fit-out. Children already married before this version default to farming, and their first change is free.
+// v5.11.0.36: 换个活法 can pick a specific job or shop kind, and can be used again after a 5-day cooldown (append-only `path.chg`).
+// New work paths use buildings that already exist: school teacher, clinic, library, fisher (the home pond), artist/traveler (the town square).
 // Save stays at v15: append-only `home.path`, `home.wage`, and `town.lots`. Missing fields mean「留家种地」and no lots.
 (function (root) {
   'use strict';
   const P = (x, y) => ({ x, y });
   const WAYS = ['farm', 'work', 'shop', 'inn'];
   const JOBS = [
-    { at: 'bakery', nb: 'n3', name: '面包房', perk: '订单每天多 1 个' },
-    { at: 'wood', nb: 'n2', name: '木工坊', perk: '木材换家具快一倍' },
-    { at: 'smith', nb: 'n8', name: '铁匠铺', perk: '升级打九折' },
+    { at: 'bakery', nb: 'n3', name: '面包房', perk: '订单每天多 1 个', title: '去面包房帮工', going: '去面包房上班', doing: '在面包房帮工' },
+    { at: 'wood', nb: 'n2', name: '木工坊', perk: '木材换家具快一倍', title: '去木工坊帮工', going: '去木工坊上班', doing: '在木工坊帮工' },
+    { at: 'smith', nb: 'n8', name: '铁匠铺', perk: '升级打九折', title: '去铁匠铺帮工', going: '去铁匠铺上班', doing: '在铁匠铺帮工' },
+    { at: 'school', nb: 'n1', name: '学校', perk: '上学日好感再多涨一点', title: '去学校当老师', going: '去学校上课', doing: '在学校当老师' },
+    { at: 'clinic', nb: 'n10', name: '诊所', perk: '动物心情下限再高一些，体检更开心', title: '去诊所帮工', going: '去诊所上班', doing: '在诊所帮苏大夫' },
+    { at: 'library', nb: 'n9', name: '书屋', perk: '放学看书多涨 1 点好感，图鉴提示多一条', title: '去书屋管书', going: '去书屋上班', doing: '在书屋整理书架' },
+    { at: 'fish', nb: null, name: '池塘', perk: '每天下班带回一条鱼；篮子满了就按市价卖掉', title: '去池塘当渔夫', going: '去池塘捕鱼', doing: '在池塘边捕鱼' },
+    { at: 'art', nb: null, name: '广场', perk: '农家乐星级 +0.15；每 5 个工作日卖掉一幅写生', title: '去镇上写生旅行', going: '去镇上写生', doing: '在广场写生' },
   ];
   const JOB = Object.fromEntries(JOBS.map(j => [j.at, j]));
   // 朵朵 → flower, 阿团 → sweet, 石头 → tackle
@@ -22,7 +29,7 @@
   const KIND_OF_MATE = { m1: 'flower', m0: 'sweet', m2: 'tackle' };
   const SHOP = { cost: 15000, wood: 150, lv: 3, wait: 1, refund: 0.5, over: 0.30, take: 10 };
   const MARKET_BONUS = 0.15; // 「比集市多卖 30%」is 30% over the regular market price (15% over the stall)
-  const CHANGE = { cost: 2000 };
+  const CHANGE = { cost: 2000, cool: 5 }; // v5.11.0.36: 5 days between paid/free changes; first wedding pick has no chg yet
   const WAGE = 300;
   const WORK = { leave: 8 * 60, start: 9 * 60, end: 16 * 60, homeBy: 17 * 60 };
   const SHOP_HOURS = { from: 9 * 60, to: 17 * 60 };
@@ -47,8 +54,27 @@
   const kindOf = id => KINDS[id] || null;
   const jobOf = at => JOB[at] || null;
   const shopName = (name, kind) => `${name}的${(KINDS[kind] || { name: '小店' }).name}`;
-  const jobBuilt = (hall, at) => !!(hall && hall.built && hall.built[at === 'wood' ? 'woodshop' : at === 'smith' ? 'smithy' : 'bakery']);
+  function jobBuilt(hall, at) {
+    if (at === 'fish' || at === 'art') return true; // the home pond is always there; art needs the town gate (checked in canTake)
+    const key = at === 'wood' ? 'woodshop' : at === 'smith' ? 'smithy' : at;
+    return !!(hall && hall.built && hall.built[key]);
+  }
   const anyJob = hall => JOBS.some(j => jobBuilt(hall, j.at));
+  const sameChoice = (a, b) => !!(a && b && a.way === b.way && (a.at || null) === (b.at || null) && (a.kind || null) === (b.kind || null));
+  function pathLine(p, name) {
+    if (!p) return '留家种地';
+    if (p.way === 'work') {
+      const j = JOB[p.at];
+      return (j && (j.doing || ('在' + j.name + '帮工'))) || '在镇上上班';
+    }
+    if (p.way === 'shop') return name && p.kind ? ('开着' + shopName(name, p.kind)) : '在镇上开店';
+    if (p.way === 'inn') return '经营民宿 / 菜馆';
+    return '留家种地';
+  }
+  const coolLeft = (p, day) => {
+    const chg = p && p.chg | 0; if (!chg) return 0;
+    return Math.max(0, chg + CHANGE.cool - (day | 0));
+  };
   const prosperity = hall => {
     const HL = (typeof require === 'function' && typeof document === 'undefined') ? require('./hall.js') : root.PFHall;
     return HL && HL.prosperity ? HL.prosperity(hall) : 1;
@@ -71,11 +97,12 @@
   const townLv = (hall, lots, path, day) => prosperity(hall) + lvBonus(lots, path, day);
 
   // ---------- path records ----------
-  // { way, at, kind, day, ready, pending, free }
+  // { way, at, kind, day, ready, pending, free, chg }
   // pending: { way, at, kind, day } to apply next morning. free: 1 = first 换个活法 is free (already married before v5.10.6).
+  // chg: day of the last 换个活法 (append-only; missing means no cooldown).
   function cleanPath(v, kid) {
     const o = obj(v); const way = WAYS.includes(o.way) ? o.way : 'farm';
-    const out = { way, at: null, kind: null, day: int(o.day, 1, 1e6) || 0, ready: 0, pending: null, free: o.free ? 1 : 0 };
+    const out = { way, at: null, kind: null, day: int(o.day, 1, 1e6) || 0, ready: 0, pending: null, free: o.free ? 1 : 0, chg: int(o.chg, 0, 1e6) };
     if (way === 'work' && JOB[o.at]) out.at = o.at;
     if (way === 'shop') {
       out.at = LOT[o.at] ? o.at : null;
@@ -113,7 +140,7 @@
   // a married child with no record is farming, and their first change is free
   function pathOf(st, kid) {
     const p = st && st.path && st.path[kid];
-    if (!p) return { way: 'farm', at: null, kind: null, day: 0, ready: 0, pending: null, free: 1, implied: 1 };
+    if (!p) return { way: 'farm', at: null, kind: null, day: 0, ready: 0, pending: null, free: 1, chg: 0, implied: 1 };
     return p;
   }
   const isAway = (st, kid, day) => { const p = pathOf(st, kid); return p.way === 'work' || p.way === 'inn' || shopReady(p, day == null ? 1e9 : day) || (p.way === 'shop' && !shopReady(p, day == null ? 0 : day) && p.at); };
@@ -148,10 +175,16 @@
     if (!WAYS.includes(way)) return '没有这条路';
     if (way === 'farm') return null;
     if (way === 'work') {
-      if (!anyJob(ctx && ctx.hall)) return '先盖好面包房、木工坊或铁匠铺，再去镇上上班';
       const at = choice.at || (bestJob(ctx) && bestJob(ctx).at);
-      if (!at || !JOB[at]) return '先盖好面包房、木工坊或铁匠铺，再去镇上上班';
-      if (!jobBuilt(ctx && ctx.hall, at)) return JOB[at].name + '还没盖好';
+      if (!at || !JOB[at]) return '先选一份工作';
+      if (at === 'art' && !(ctx && ctx.town)) return '先打开镇门，再去广场写生';
+      if (at === 'fish') return null;
+      if (!jobBuilt(ctx && ctx.hall, at)) {
+        if (at === 'school') return '先把学校扩建好，再去当老师';
+        if (at === 'clinic') return '先盖好诊所，再去帮苏大夫';
+        if (at === 'library') return '先盖好书屋，再去管书';
+        return JOB[at].name + '还没盖好';
+      }
       return null;
     }
     if (way === 'inn') {
@@ -195,10 +228,10 @@
   function optionView(way, ctx, st, kid, selected) {
     if (way === 'farm') return { way: 'farm', at: null, kind: null, title: '留家种地', desc: '照看小田和鸡，偶尔回主农场帮忙', cost: 0, wood: 0, ok: true, why: null, selected: !!selected };
     if (way === 'work') {
-      const job = bestJob(ctx), at = job && job.at, why = canTake(st, kid, { way: 'work', at }, ctx);
+      const at = (ctx && ctx.at) || (bestJob(ctx) && bestJob(ctx).at), why = canTake(st, kid, { way: 'work', at }, ctx);
       const j = at && JOB[at];
-      return { way: 'work', at: at || null, kind: null, title: '去镇上上班',
-        desc: j ? `去${j.name}帮工，每天工钱 ${WAGE} 金；${j.perk}` : '在面包房、木工坊或铁匠铺帮工，每天工钱 300 金',
+      return { way: 'work', at: at || null, kind: null, title: (j && j.title) || '去镇上上班',
+        desc: j ? `每天工钱 ${WAGE} 金；${j.perk}` : '在镇上帮工，每天工钱 300 金',
         cost: 0, wood: 0, ok: !why, why, selected: !!selected };
     }
     if (way === 'inn') {
@@ -213,17 +246,35 @@
       desc: k ? `开「${(ctx && ctx.kidName) || '孩子'}的${k.name}」，从仓库拿货，比集市多卖 30%` : '在空地块上开一家挂着孩子名字的店',
       cost: SHOP.cost, wood: SHOP.wood, ok: !why, why, selected: !!selected };
   }
+  function jobOption(st, kid, ctx, at, selected) {
+    const j = JOB[at], why = canTake(st, kid, { way: 'work', at }, ctx);
+    return { way: 'work', at, kind: null, title: (j && j.title) || '去镇上上班',
+      desc: j ? `每天工钱 ${WAGE} 金；${j.perk}` : '在镇上帮工，每天工钱 300 金',
+      cost: 0, wood: 0, ok: !why, why, selected: !!selected };
+  }
+  function shopOption(st, kid, ctx, kind, selected) {
+    const k = KINDS[kind], why = canTake(st, kid, { way: 'shop', kind }, ctx);
+    const name = (ctx && ctx.kidName) || '孩子';
+    return { way: 'shop', at: null, kind, title: k ? ('开' + k.name) : '在镇上开店',
+      desc: k ? `开「${name}的${k.name}」，从仓库拿货，比集市多卖 30%` : '在空地块上开一家挂着孩子名字的店',
+      cost: SHOP.cost, wood: SHOP.wood, ok: !why, why, selected: !!selected };
+  }
   function options(st, kid, ctx) {
     const pref = prefer(st, kid, ctx);
-    return WAYS.map(w => optionView(w, ctx, st, kid, pref.way === w));
+    const out = [optionView('farm', ctx, st, kid, pref.way === 'farm')];
+    for (const j of JOBS) out.push(jobOption(st, kid, ctx, j.at, pref.way === 'work' && pref.at === j.at));
+    for (const id of Object.keys(KINDS)) out.push(shopOption(st, kid, ctx, id, pref.way === 'shop' && (pref.kind || kindOfMate(ctx && ctx.mate)) === id));
+    out.push(optionView('inn', ctx, st, kid, pref.way === 'inn'));
+    return out;
   }
 
   // ---------- take a path / change later ----------
   function writePath(st, kid, rec) {
     st.path = st.path || {};
     const cur = st.path[kid] || {};
-    st.path[kid] = Object.assign({ free: 0, pending: null }, rec);
+    st.path[kid] = Object.assign({ free: 0, pending: null, chg: 0 }, rec);
     if (cur.free && rec.free == null) st.path[kid].free = cur.free;
+    if (cur.chg && rec.chg == null) st.path[kid].chg = cur.chg;
     return st.path[kid];
   }
   // apply now (the wedding morning, or a pending change). pays the shop fit-out, assigns a lot, refunds a closed shop.
@@ -264,6 +315,8 @@
     if (cur.pending) return { ok: false, why: '已经约好明天换了' };
     const filled = fillChoice(choice, ctx, st, kid);
     if (filled.way === cur.way && filled.at === cur.at && (filled.kind || null) === (cur.kind || null)) return { ok: false, why: '已经是这条路了' };
+    const left = coolLeft(cur, day);
+    if (left) return { ok: false, why: `再过 ${left} 天才能再换（刚换过，要隔 ${CHANGE.cool} 天）` };
     const fee = cur.free || cur.implied ? 0 : CHANGE.cost;
     if (fee && (ctx.coins | 0) < fee) return { ok: false, why: '金币不够（换个活法要 2,000 金）' };
     const paid = Object.assign({}, ctx, { coins: (ctx.coins | 0) - fee });
@@ -281,7 +334,7 @@
     const p = pathOf(st, kid); if (!p.pending) return null;
     const choice = p.pending; p.pending = null;
     const r = take(st, lots, kid, choice, ctx, day);
-    if (st.path && st.path[kid]) st.path[kid].free = 0;
+    if (st.path && st.path[kid]) { st.path[kid].free = 0; st.path[kid].chg = day | 0; }
     return r;
   }
 
@@ -327,16 +380,43 @@
   const extraOrders = st => (workerAt(st, 'bakery') ? 1 : 0);
   const craftTimes = st => (workerAt(st, 'wood') ? 2 : 1);
   const smithOff = st => (workerAt(st, 'smith') ? 0.1 : 0);
+  const schoolFavor = st => (workerAt(st, 'school') ? 1 : 0); // added to 上学日 favorMul (2 → 3)
+  const clinicFloor = st => (workerAt(st, 'clinic') ? 10 : 0);
+  const clinicCheck = st => (workerAt(st, 'clinic') ? 5 : 0);
+  const libraryFavor = st => (workerAt(st, 'library') ? 1 : 0);
+  const libraryHints = st => (workerAt(st, 'library') ? 1 : 0);
+  const artStars = st => (workerAt(st, 'art') ? 0.15 : 0);
+  const ART_SKETCH = { every: 5, gold: 120 };
+  const FISH_CATCH = { id: 'crucian', name: '鲫鱼' };
+  function sketchDue(st, kid, day) {
+    const p = pathOf(st, kid);
+    if (p.way !== 'work' || p.at !== 'art' || !(day | 0) || !(p.day | 0)) return false;
+    const n = (day | 0) - (p.day | 0);
+    return n > 0 && n % ART_SKETCH.every === 0;
+  }
 
   // ---------- hours / places ----------
   const workHours = T => { const t = ((T % 1440) + 1440) % 1440; return t >= WORK.start && t < WORK.end; };
   const shopHours = T => { const t = ((T % 1440) + 1440) % 1440; return t >= SHOP_HOURS.from && t < SHOP_HOURS.to; };
   const shouldLeave = T => { const t = ((T % 1440) + 1440) % 1440; return t >= WORK.leave && t < WORK.homeBy; };
+  function loadMod(name, glob) {
+    if (typeof require === 'function' && typeof document === 'undefined') return require('./' + name);
+    return root[glob];
+  }
   function standOf(at) {
-    const BK = root.PFBakery, WS = root.PFWoodshop, SM = root.PFSmithy;
+    const BK = loadMod('bakery.js', 'PFBakery'), WS = loadMod('woodshop.js', 'PFWoodshop'), SM = loadMod('smithy.js', 'PFSmithy');
+    const SC = loadMod('school.js', 'PFSchool'), CL = loadMod('clinic.js', 'PFClinic'), LB = loadMod('library.js', 'PFLibrary');
+    const FS = loadMod('fish.js', 'PFFish'), TN = loadMod('town.js', 'PFTown');
     if (at === 'bakery') return (BK && BK.STAND) || P(631, 179);
     if (at === 'wood') return (WS && WS.STAND) || P(682, 200);
     if (at === 'smith') return (SM && SM.STAND) || P(721, 199);
+    if (at === 'school') return (SC && SC.LOT && SC.LOT.door) ? P(SC.LOT.door.x + 6, SC.LOT.door.y + 2) : P(698, 48);
+    if (at === 'clinic') return (CL && CL.STAND) || P(876, 96);
+    if (at === 'library') return (LB && LB.STAND) || P(731, 47);
+    if (at === 'fish') return (FS && FS.POND_SPOT && FS.POND_SPOT.stand) || P(54, 94);
+    if (at === 'art') {
+      const pl = TN && TN.PLAZA; return pl ? P(pl.x + 16, pl.y + 14) : P(666, 134);
+    }
     const l = LOT[at]; return l ? P(l.door.x, l.door.y + (l.rot === Math.PI ? -1 : 1)) : null;
   }
   const doorOf = at => { const l = LOT[at]; return l ? l.door : standOf(at); };
@@ -363,12 +443,12 @@
 
   const api = {
     WAYS, JOBS, JOB, KINDS, KIND_OF_MATE, SHOP, MARKET_BONUS, CHANGE, WAGE, WORK, SHOP_HOURS, HELP_P, YIELD, KID_IDS, LOTS, LOT, STREETS,
-    kindOfMate, kindOf, jobOf, shopName, jobBuilt, anyJob, townLv, lvBonus,
+    kindOfMate, kindOf, jobOf, shopName, jobBuilt, anyJob, sameChoice, pathLine, coolLeft, townLv, lvBonus,
     lotIds, kidLot, freeLots, assignLot, releaseLot, shopReady,
     empty, valid, validLots, cleanPath, pathOf, isAway, awayForFarm, yieldMul, helpDayP, earnOf,
-    bestJob, prefer, canTake, fillChoice, options, take, planChange, applyPending,
+    bestJob, prefer, canTake, fillChoice, options, jobOption, shopOption, take, planChange, applyPending,
     worksToday, shopsToday, innsToday, innStaffed, payWage, goodsOf, matches, marketPrice, shopPrice, sell, payShop,
-    workerAt, extraOrders, craftTimes, smithOff,
+    workerAt, extraOrders, craftTimes, smithOff, schoolFavor, clinicFloor, clinicCheck, libraryFavor, libraryHints, artStars, sketchDue, ART_SKETCH, FISH_CATCH,
     workHours, shopHours, shouldLeave, standOf, doorOf, blocks, lightsAt,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFCareers = api;

@@ -42,13 +42,29 @@ ok('seeding an old save keeps unseen cells empty and does not drop catch or rare
   assert(!seeded.achievements.some(u => u.id === 'ornamental'));
 });
 
-ok('achievements are listed; later-phase ones stay locked until those features exist', () => {
+ok('achievements are listed; no later-phase stubs remain', () => {
   assert.strictEqual(CX.ACHIEVEMENTS.length, 21);
-  const later = CX.ACHIEVEMENTS.filter(a => a.later).map(a => a.id);
-  assert.deepStrictEqual(later.sort(), ['newhouse']);
+  assert.deepStrictEqual(CX.ACHIEVEMENTS.filter(a => a.later).map(a => a.id), []);
   const due = CX.dueAchievements({ day: 40, coins: 10000, upgrades: {}, family: {}, achievements: [], streaks: CX.emptyStreaks() });
-  assert(!due.some(u => later.includes(u.id)));
+  assert(!due.some(u => u.id === 'newhouse'));
   assert(due.some(u => u.id === 'gold1000'));
+});
+
+ok('新房入伙 lights when a married kid has moved into a new house, not before', () => {
+  assert.strictEqual(CX.movedInDay(null), 0);
+  assert.strictEqual(CX.movedInDay({ houses: [{ built: 60, kid: 'kid0' }], wed: {} }), 0);
+  assert.strictEqual(CX.movedInDay({ wed: { kid0: { mate: 'm1', day: 71, moved: 0, house: 0 } } }), 0, 'wedding tonight, not yet moved');
+  assert.strictEqual(CX.movedInDay({ wed: { kid0: { mate: 'm1', day: 71, moved: 71, house: 0 }, kid1: { mate: 'm2', day: 80, moved: 80, house: 1 } } }), 71);
+  assert(!CX.dueAchievements({ day: 80, achievements: [] }).some(u => u.id === 'newhouse'));
+  assert(!CX.dueAchievements({ day: 80, movedIn: 0, achievements: [] }).some(u => u.id === 'newhouse'));
+  const live = CX.dueAchievements({ day: 71, married: true, achievements: [] });
+  assert(live.some(u => u.id === 'newhouse' && u.day === 71), 'move-in this evening');
+  const already = CX.dueAchievements({ day: 80, movedIn: 71, achievements: [] });
+  assert(already.some(u => u.id === 'newhouse' && u.day === 80), 'next check uses today; load path keeps the real move-in day');
+  assert(!CX.dueAchievements({ day: 80, movedIn: 71, achievements: [{ id: 'newhouse', day: 71 }] }).some(u => u.id === 'newhouse'));
+  const inferred = CX.inferAchievements({ clock: { day: 80 }, home: { wed: { kid0: { mate: 'm1', day: 71, moved: 71, house: 0 } } } }, CX.emptyCodex());
+  assert.deepStrictEqual(inferred.filter(u => u.id === 'newhouse'), [{ id: 'newhouse', day: 71 }]);
+  assert(!CX.inferAchievements({ clock: { day: 80 }, home: { wed: { kid0: { mate: 'm1', day: 71, moved: 0, house: 0 } } } }, CX.emptyCodex()).some(u => u.id === 'newhouse'));
 });
 
 ok('shop-idle and happy-animal streaks, and a shop visit resets the idle count the next morning', () => {

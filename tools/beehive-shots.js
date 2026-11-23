@@ -1,4 +1,4 @@
-// v5.11.0.34: hives move to another 花甸 with 挪东西, so the old meadow can be re-zoned (player report from xhs:
+// v5.11.0.37: hives move to another 花甸 with 挪东西, so the old meadow can be re-zoned (player report from xhs:
 // 「蜂箱只能在放的那块花甸里用，挪不走，原来那块地就没法改用途」).
 //   node tools/beehive-shots.js [name-filter]   writes /workspace/pf-shots/beehive_*.png (PF_SHOTS to change). Synthetic farm only.
 const http = require('http'), fs = require('fs'), path = require('path');
