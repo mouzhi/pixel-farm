@@ -18,7 +18,7 @@
 
   var ICON = { chop: '🪓', apple: '🍎', orange: '🍊', release: '🐟', decor: '🪑', move: '✋', sprinkler: '💧' };
   var HINT = {
-    chop: '把准星对准一棵野树，点 ✔ 标记要砍；对准已标记的再点一次是取消。也可以直接点树',
+    chop: '准星对准野树或果树，点 ✔ 标记要砍（果树要点两次确认，砍下必得树苗）；对准已标记的再点一次是取消。也可以直接点树',
     plant: '拖动地图，让准星落在空草地上，圈变绿就点 ✔',
     release: '把准星对准家门口的池塘，点 ✔ 放进去',
     decor: '拖动地图找位置，框变绿就点 ✔ 放这里',
@@ -122,7 +122,7 @@
   var why = '', whyT = 0, fingers = 0, follow0 = null, lastMode = null, stage = null; // stage: 挪东西 'menu' | 'moving'
   root.addEventListener('pf:say', function (e) {
     if (!G.input || !G.input.mode) return; var s = String(e.detail || '');
-    if (/^(选中|标记|取消|游进|已经)/.test(s)) return; // 成功的回话不占操作条
+    if (/^(选中|标记|取消|游进|已经)/.test(s)) { why = ''; clearTimeout(whyT); return; } // 成功的回话不占操作条，也清掉上一条提示（比如砍果树的确认）
     why = s; clearTimeout(whyT); whyT = setTimeout(function () { why = ''; }, 2400); haptic('bad');
   });
   root.addEventListener('touchstart', function (e) { fingers = e.touches.length; }, true);
