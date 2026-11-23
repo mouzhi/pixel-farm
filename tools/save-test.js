@@ -563,3 +563,25 @@ ok('v5.11.0.30: home.held is append-only; junk ids drop; empty/missing stays omi
   const empty = SAVE.validate(SAVE.migrate(Object.assign({}, raw, { home: Object.assign({}, raw.home, { held: [] }) })));
   assert.ok(!('held' in empty.home), 'empty held stays omitted');
 });
+
+ok('v15: already-moved-in married kids light 新房入伙 on load, keeping the move-in day', () => {
+  const raw = JSON.parse(fs.readFileSync(path.join(FIX, 'save-v15-day72-cottage.json'), 'utf8'));
+  assert(!(raw.achievements || []).some(u => u.id === 'newhouse'), 'fixture still has the locked stub state');
+  assert.strictEqual(raw.home.wed.kid0.moved, 71);
+  const s = SAVE.migrate(JSON.parse(JSON.stringify(raw)));
+  assert.strictEqual(s.saveVersion, 15);
+  const u = s.achievements.find(x => x.id === 'newhouse');
+  assert(u, 'load backfills 新房入伙');
+  assert.strictEqual(u.day, 71, 'uses the first move-in day, not today');
+  const again = SAVE.migrate(JSON.parse(JSON.stringify(s)));
+  assert.deepStrictEqual(again.achievements.filter(x => x.id === 'newhouse'), [{ id: 'newhouse', day: 71 }]);
+  const booked = JSON.parse(JSON.stringify(raw));
+  booked.achievements = (booked.achievements || []).concat([{ id: 'newhouse', day: 71 }]);
+  const kept = SAVE.migrate(booked);
+  assert.deepStrictEqual(kept.achievements.filter(x => x.id === 'newhouse'), [{ id: 'newhouse', day: 71 }]);
+  const pending = JSON.parse(JSON.stringify(raw));
+  pending.home.wed.kid0.moved = 0;
+  pending.home.houses[0].kid = null;
+  const locked = SAVE.migrate(pending);
+  assert(!locked.achievements.some(x => x.id === 'newhouse'), 'a wedding that has not moved in stays locked');
+});

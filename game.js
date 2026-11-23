@@ -6049,7 +6049,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.37';
+const GAME_VERSION = '5.11.0.38';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6068,6 +6068,7 @@ function progressCtx(extra) {
     caughtSword: BOOK.has(S.codex, BOOK.keyFish('sword')),
     sawRain: !!(S.weather && S.weather.lastDay),
     sprinklerPlaced: S.works.sprinklers.length > 0, litLamp: !!S.decor.moon, partyHeld: S.decor.party.last > 0, // v5.7.0
+    movedIn: BOOK.movedInDay ? BOOK.movedInDay(S.home) : 0, // v5.11.0.38: 新房入伙 from an already-moved-in couple
     // a kid who is in (or already past) the school stage has been to school: old saves light it too
     wentSchool: !!(S.family && (S.family.kids || []).some(k => ['school', 'helper', 'teen'].includes(FAM.kidStage(k, S.day)))),
     caughtBug: !!(BOOK.has && BOOK.keyBug && Object.keys((S.codex && S.codex.entries) || {}).some(k => k.indexOf('bug:') === 0)),
