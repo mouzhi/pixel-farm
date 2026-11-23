@@ -10,7 +10,7 @@
   const INS = (typeof require === 'function' && typeof document === 'undefined') ? require('./insects.js') : root.PFInsects;
 
   const REGIONS7 = ['forest', 'east', 'orchard', 'south', 'pasture', 'coast']; // plus the home yard: seven buyable areas on the current map
-  // later-phase achievements stay listed so the names are already in the panel; they cannot be earned until those features exist
+  // later-phase achievements (`.later`) stay listed so the names are already in the panel; they cannot be earned until those features exist. 新房入伙 left later:1 after the house/wedding shipped in v5.9.0, so it could never light.
   const ACHIEVEMENTS = [
     { id: 'gold1000', name: '这也太会过日子了', hint: '手里第一次攒到 1,000 金' },
     { id: 'rarefind', name: '我直接好家伙', hint: '第一次收获巨大作物，或拿到金蛋 / 白松露' },
@@ -27,7 +27,7 @@
     { id: 'dogjob', name: '旺旺队出动', hint: '狗第一次没有跟着农夫，自己去办成一件小事' },
     { id: 'herding', name: '专业对口', hint: '第一次看见边境牧羊犬把羊赶到草地上' },
     { id: 'party', name: '我家大门常打开', hint: '第一次办成一场派对，家里或镇上来了客人' },
-    { id: 'newhouse', name: '新房入伙', hint: '孩子成家，搬进新盖的房子', later: 1 },
+    { id: 'newhouse', name: '新房入伙', hint: '孩子成家，搬进新盖的房子' }, // v5.11.0.38: was later:1 after the house shipped
     { id: 'happypets', name: '精神状态良好', hint: '所有动物心情连续 5 天不低于 80' },
     { id: 'richday', name: '芜湖起飞', hint: '单日收入第一次超过 2,000 金' },
     { id: 'firstrain', name: '这场雨我允许了', hint: '第一次遇上小雨' },
@@ -210,6 +210,17 @@
   }
   const allRegions = up => regionsBought(up) >= REGIONS7.length;
 
+  // first day a married child moved into a built new house (0 = not yet). Uses home.wed[].moved; same fact as the album.
+  function movedInDay(home) {
+    if (!home || !home.wed) return 0;
+    const days = [];
+    for (const k of Object.keys(home.wed)) {
+      const w = home.wed[k];
+      if (w && (w.moved | 0) > 0) days.push(w.moved | 0);
+    }
+    return days.length ? Math.min.apply(null, days) : 0;
+  }
+
   function inferAchievements(s, codex) {
     const out = [], day = (s && s.clock && s.clock.day) || 0;
     const mark = (id, d) => { if (!out.some(u => u.id === id)) out.push({ id, day: d | 0 }); };
@@ -232,6 +243,8 @@
     if (s && s.works && Array.isArray(s.works.sprinklers) && s.works.sprinklers.length) mark('sprinkler', 0); // v5.7.0
     if (s && s.decor && s.decor.moon) mark('nightlight', 0);
     if (s && s.decor && s.decor.party && s.decor.party.last) mark('party', s.decor.party.last | 0);
+    const moved = movedInDay(s && s.home);
+    if (moved) mark('newhouse', moved); // v5.11.0.38: a save that already moved in lights 新房入伙 on load
     void peak;
     return out;
   }
@@ -293,6 +306,7 @@
     want('nightlight', !!ctx.litLamp);
     want('herding', !!ctx.herded);
     want('party', !!ctx.partyHeld); // v5.5.0: the school stage exists since v5.4.3
+    want('newhouse', !!ctx.married || (ctx.movedIn | 0) > 0); // v5.11.0.38: wedding move-in, or already living there
     return due;
   }
 
@@ -335,7 +349,7 @@
     keyFish, keyRare, keyGlow, keyGiant, keyDecor, keyBug, keyMach, MACH_ITEMS, itemKey,
     emptyCodex, emptyList, emptyStreaks, record, has, entryOf, catalog, groups, rarityOf,
     validEntry, validCodex, validUnlocks, validStreaks, validPondFish, validOrnament,
-    seedFromSave, inferAchievements, inferMilestones, regionsBought, allRegions,
+    seedFromSave, inferAchievements, inferMilestones, movedInDay, regionsBought, allRegions,
     tickStreaks, noteShopOpen, dueAchievements, dueMilestones, unlock, dayLabel,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFCodex = api;

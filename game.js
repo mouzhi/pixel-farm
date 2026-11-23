@@ -6032,6 +6032,7 @@ function progressCtx(extra) {
     caughtSword: BOOK.has(S.codex, BOOK.keyFish('sword')),
     sawRain: !!(S.weather && S.weather.lastDay),
     sprinklerPlaced: S.works.sprinklers.length > 0, litLamp: !!S.decor.moon, partyHeld: S.decor.party.last > 0, // v5.7.0
+    movedIn: BOOK.movedInDay ? BOOK.movedInDay(S.home) : 0, // v5.11.0.38 / xhs 1.3.2: 新房入伙 from an already-moved-in couple
     // a kid who is in (or already past) the school stage has been to school: old saves light it too
     wentSchool: !!(S.family && (S.family.kids || []).some(k => ['school', 'helper', 'teen'].includes(FAM.kidStage(k, S.day)))),
     caughtBug: !!(BOOK.has && BOOK.keyBug && Object.keys((S.codex && S.codex.entries) || {}).some(k => k.indexOf('bug:') === 0)),
