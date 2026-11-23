@@ -1041,6 +1041,7 @@ function board() {
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0 && plantAccess(o.x, o.y));
   if (plant.length) { const o = rngNear(plant); if (o) post('transplant', CHOP_ORDER_BASE + travel(F, o) / 8, o, () => transplantTask(o), undefined, undefined, true); }
+  orchardBoard(post, T); // v5.11.0.35: spare saplings go into empty orchard ground by themselves (a low errand; the player's marks above win)
   // v5.4.0: sprinkle fish food, release an ornamental fish the player flagged, pick up a truffle a dog found
   if (S.fishFood > 0 && S.pondFed !== S.day && T < 18 * 60) post('feedpond', 28, FS.POND_SPOT.stand, feedPondTask);
   const rel = S.orders.filter(o => o.type === 'release');
@@ -1153,8 +1154,9 @@ function chooseTask() {
   const taken = CLAIM = claimsFor(F); CROWD = crowdFor(F); const jobs = board();
   for (const j of jobs) { if (F.role && !FAM.canDo(F.role, j.kind)) continue; if ((j.key && taken.has(j.key)) || taken.has('kind:' + j.kind)) continue;
     if (F._helpWin && !HELP_KINDS.includes(j.kind)) continue; // v5.11.0.28: the married ones come over for the harvest and the collecting
+    if (j.kind === 'orchardplant' && best && best.kind !== 'orchardplant') continue; // idle fallback: never displace an eligible real chore
     const aff = FAM.affinity(me, F.role, j.area, others); // v5.11.0.28: a player's order (or a demand seed) is everyone's job: no -HELP
-    const s = j.base - travel(F, j.at) / 8 + (j.order && aff < 0 ? 0 : aff) - crowd(j.at) / 4; if (s > bs) { bs = s; best = j; } }
+    const s = j.base - travel(F, j.at) / 8 + (j.order && aff < 0 ? 0 : aff) - crowd(j.at) / 4; if (s > bs || (best && best.kind === 'orchardplant' && j.kind !== 'orchardplant')) { bs = s; best = j; } }
   CLAIM = new Set(); CROWD = [];
   if (!best && F._helpWin) { F._helpOff = F._helpWin; helpEnd(); return F._spouse ? spouseTask() : homeChoose() || null; } // v5.11.0.28: nothing left to help with
   if (best) { F.idleCount = 0; const k = best.make(); k.kind = best.kind; return k; }
@@ -1302,6 +1304,47 @@ function transplantTask(o) {
     log(`种下一棵${WD.FRUIT[o.kind].name}树苗，浇了第一次水（${WD.SAPLING_DAYS} 天后结果）`);
   } };
 }
+// ---- v5.11.0.35 果园自动种树: spare fruit saplings (more than the player's own plant marks need) go into empty orchard ground ----
+// Orchard ground: 果园坡 once bought and every plot made into a 果园, a 16-unit grid between the plot's tree rows; a spot must pass
+// plantSpot (owned grass, clear of fields, buildings, other trees and marks, a real walk from the door) and sit clear of decor,
+// workshops and houses. A low errand: the player's marks (CHOP_ORDER_BASE) and every chore that earns or feeds come first.
+// The spot and the sapling are checked again when the sapling leaves the storehouse; nothing is consumed if either is gone.
+const ORCH_STEP = 16, ORCH_BASE = 32;
+const plantReserved = () => { const r = {}; for (const o of S.orders) if (o.type === 'plant') r[o.kind] = (r[o.kind] || 0) + 1; return r; };
+function orchardRects() { const out = [];
+  if (S.eff.regions.includes('orchard')) out.push(WD.region('orchard').rect);
+  for (const id of Object.keys(S.plots || {})) { const p = S.plots[id].mod === 'orchard' && PL.plot(id); if (p) out.push(p.rect); }
+  return out; }
+const inOrchard = (x, y) => orchardRects().some(r => x > r[0] && x < r[2] && y > r[1] && y < r[3]);
+let orchC = { key: '', spots: [] };
+function orchardSpots() {
+  const key = [S.day, navVer, navDirty, S.trees.length, JSON.stringify(S.orders), S.eff.regions.join(','), JSON.stringify(S.plots), tiles.length].join(',');
+  if (key === orchC.key) return orchC.spots;
+  const spots = [];
+  for (const [x0, y0, x1, y1] of orchardRects()) for (let y = y0 + 10; y <= y1 - 8; y += ORCH_STEP) for (let x = x0 + 12; x <= x1 - 10; x += ORCH_STEP) {
+    if (orchardSpotOk(x, y)) spots.push({ x, y, key: 'orch:' + x + ',' + y }); }
+  orchC = { key, spots }; return spots;
+}
+function orchardSpotOk(x, y) { return inOrchard(x, y) && !(navState().blocks || []).some(b => x > b[0] - 6 && x < b[2] + 6 && y > b[1] - 6 && y < b[3] + 6) && plantSpot(x, y).ok; }
+function orchardSpare() { const r = plantReserved(); // saplings neither marked by the player nor already on the way to an orchard
+  for (const a of actors()) if (a !== F && a.task && a.task.kind === 'orchardplant' && a.task.fruit) r[a.task.fruit] = (r[a.task.fruit] || 0) + 1;
+  return WD.FRUIT_IDS.map(k => ({ k, n: (FARMER.saplings[k] || 0) - (r[k] || 0) })).filter(q => q.n > 0).sort((a, b) => b.n - a.n); }
+function orchardBoard(post, T) {
+  if (T >= 18 * 60) return; const spare = orchardSpare(); if (!spare.length) return;
+  const spots = orchardSpots().filter(s => !CLAIM.has(s.key)); if (!spots.length) return;
+  const s = rngNear(spots); if (s) post('orchardplant', ORCH_BASE, { x: s.x - 7, y: s.y + 1 }, () => orchardTask(s, spare[0].k), s.key, 'orchard');
+}
+function orchardTask(s, k) { const name = WD.FRUIT[k].name;
+  return { label: `自己去果园种${name}树苗`, to: { x: s.x - 7, y: s.y + 1 }, key: s.key, fruit: k, dur: 12, fx: 'dirt', pose: 'hoe', done: () => {
+    if ((FARMER.saplings[k] || 0) - (plantReserved()[k] || 0) <= 0) return; // the player marked it for somewhere else meanwhile
+    const sp = orchardSpotOk(s.x, s.y) ? { ok: true } : { ok: false, why: '果园的地形、通路或用途变了' };
+    if (!sp.ok) { log(`果园这个位置种不了（${sp.why}），${name}树苗还在仓库`); return; }
+    FARMER.saplings[k]--;
+    const t = { id: 'o' + S.day + '_' + Math.floor(S.t % 1440) + '_' + S.trees.length, x: s.x, y: s.y, kind: k, v: S.trees.length % 3, stage: 'sapling', age: 0, ripe: 0, cd: 0 };
+    S.trees.push(t); treeChanged(t); burst(s.x, s.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop');
+    log(`用仓库里的${name}树苗在果园种了一棵（${WD.SAPLING_DAYS} 天后结果）`);
+  } };
+}
 // ---- v5.3.1 wood automation (rules and numbers in wood.js) ----
 // While the storehouse holds less than the next wood purchase needs, a free hand walks to 林场 and fells a grown tree by
 // themselves (kind 'chop'; v5.3.2: only the person whose area is the wood, the farmer, gets this job). Only 林场's regrowing trees, never fruit
@@ -1315,9 +1358,11 @@ function postAutoChop(post, marked) {
   const t = rngNear(free); if (t) post('chop', WA.autoBase(SIM.SHOP, S.up), t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
 }
 function woodNight() {
-  const reserved = {}; for (const o of S.orders) if (o.type === 'plant') reserved[o.kind] = (reserved[o.kind] || 0) + 1;
+  const reserved = plantReserved();
+  if (S.eff.lumber) { let room = orchardSpots().length; // v5.11.0.35: the orchards come first; the hut takes only what they have no room for
+    for (const k of WD.FRUIT_IDS) { const n = Math.max(0, Math.min(room, (FARMER.saplings[k] || 0) - (reserved[k] || 0))); reserved[k] = (reserved[k] || 0) + n; room -= n; } }
   const re = WA.replant(S.trees, FARMER.saplings, S.eff, reserved); for (const t of re) treeChanged(t);
-  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵空闲树苗补种了林场野树（已标记要种的果树苗不会使用）`);
+  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵空闲树苗补种了林场野树（已标记要种的、果园还种得下的果树苗不会使用）`);
 }
 function offlineWood(r) {
   const forestN = S.trees.filter(t => t.kind === 'wild' && WD.regrows(t)).length;
@@ -5967,7 +6012,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.34';
+const GAME_VERSION = '5.11.0.35';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6209,7 +6254,7 @@ document.addEventListener('visibilitychange', () => {
 addEventListener('pagehide', () => { noteLog('endSession', logSnap()); saveNow(); noteLog('syncNow', 'pagehide'); });
 Object.assign(window.__farm, { ALB, albumSnap: (id, x, y, o) => albumSnap(id, x, y, o), albumView: () => albumView(), albumRestage: id => albumRestage(id), albumBackfill: () => albumBackfill(), albumFacts: () => albumFacts(), albumPlace: at => albumPlace(at), albumShot: (x, y, st) => albumShot(x, y, st), albumQueue: () => albumQ.length, albumPending: () => albumQ.map(q => [q.e.id, q.at]), albumMs: () => albumMs }); // v5.11.0.11
 Object.assign(window.__farm, { snapshot: () => snapshot(), YD, yardTodo: () => yardTodo(), yardWalk: (x, y) => yardWalk(x, y), yardNight: () => yardNight(), clothesOut: () => clothesOut(), petBed: (d, k) => petBed(d, k), yardSetup: id => { const q = yardSetupTask(id); q.done(); }, priceMult: () => YD.stallMult(S.homeyard.put) });
-Object.assign(window.__farm, { offBack: r => offBack(r), slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryPull: need => bakeryPull(need), bakeryHeldReturn: need => bakeryHeldReturn(need), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
+Object.assign(window.__farm, { orchardSpots: () => orchardSpots(), woodNight: () => woodNight(), chooseTask: () => chooseTask(), offBack: r => offBack(r), slotHomes: () => slotHomes(), pathD: (x, y) => pathD(x, y), groundAt: (x, y) => groundAt(x, y), SLT, slotWhy: id => SLT.spotsFor(id, slotHomes()).map(s => [s.x, s.y, ownGround(s.x, s.y) ? placeOk(s.x, s.y, "decor", id, null, null, true).why : "not owned"]), decorRelayout: () => decorRelayout(), MK, marketView: () => marketView(), setMarketPick: (on, k) => setMarketPick(on, k), marketDay: () => marketDay(), marketCrowd: () => MKT.slice(), marketList: a => (marketH() ? marketList(a || FARMER) : []), BK, bakeryView: () => bakeryView(), setBakeryPick: (on, id) => setBakeryPick(on, id), bakeryCounts: () => bakeryCounts(), bakeryPull: need => bakeryPull(need), bakeryHeldReturn: need => bakeryHeldReturn(need), bakeryDeliver: () => bakeryTask(), applyUpgrades: () => applyUpgrades(), TA, WS, SM, woodshopView: () => woodshopView(), setWoodshopAuto: on => setWoodshopAuto(on), smithyView: () => smithyView(), smithyBuy: id => smithyBuy(id), autoBuyAtStall, setAutoBuy, clockText, HL, hallView: () => (HL && TN ? hallView() : null), hallStart: id => hallStart(id), hallGive: (id, u) => hallGive(id, u), hallTick: () => hallTick(), shopDepth, shopAfford, REVEAL_MAX, litBuilds: () => litBuilds, surpriseNote: (ev, x, y) => surpriseNote(ev, x, y), plantRoom, PLANT_FULL, plantSpot: (x, y) => plantSpot(x, y), woodAuto: () => ({ on: WA.canAuto(S.eff), target: woodTarget() }), waterTask: t => waterTask(t), shopOpen, SHOP_OPEN, SHOP_CLOSE, sellTask: () => sellTask(), FAM, FARMER, giftAtStall, syncFamily, familyMorning, popCap, woodCap, houseProp, penFence, famSheet, claimsFor, actors, PENS, PETS_LIVE, PV, petAtScreen, patPet, petArt: (k, coat) => petSprite({ kind: k, coat }).r[0], petFrames: p => petSprite(p), SAVE, snapshot, yard, AV, PASTURE, animalArt: k => ANIMAL_SPR[k].r[0], WORLD, panTo, setMode, orderChop, orderPlant, orderRelease, plantSpot, inHomePond, ornamentHeld, input: INPUT,
   BOOK, noteProgress, noteShopOpened, planDogDay, placePondFish, pondRoom: () => pondRoom(), pondCatchUp: () => pondCatchUp(), DY, diaryView: d => diaryView(d), diaryMorning: () => diaryMorning(), KIDS: window.PFKids, kidPickTask, kidPickPlay, DOOR, WX, INS,
   noteBugCatch, forceRain: (start, dur) => { if (!WX) return null; S.weather = WX.forceRain(S.weather, S.day, start != null ? start : Math.floor(S.t % 1440), dur); applyRainMorning(true); if (window.PFAudio && PFAudio.rain) PFAudio.rain(true); return S.weather; },
   forceCatch: (kind) => { if (!INS) return null; const ev = INS.forceCatch(kind || 'white', S.day, FARMER.x + 8, FARMER.y); if (ev && BOOK) { BOOK.record(S.codex, ev.key, S.day); noteProgress({ caughtBug: true }); log(`${ev.name}被捉进图鉴，看了一眼就放走了`); } return ev; },  treeScreen: id => { const t = S.trees.find(q => q.id === id); if (!t) return null; setCam(); const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id); return { x: sx, y: sy - (o && o.tree ? o.tree.h * 0.45 : 6) }; },

@@ -64,7 +64,7 @@
   // one in an area somebody else owns -HELP (still well above fishing or resting, so nobody idles while there is work),
   // anything else 0. On his own the farmer is unaffected.
   const AREA_OF = { harvest: 'field', water: 'field', plant: 'field', fetch: 'field', buy: 'field', weed: 'field', clear: 'field', till: 'field',
-    chop: 'wood', transplant: 'wood', feed: 'animal', trough: 'animal', collect: 'animal', pet: 'animal', hay: 'animal', petpet: 'pets', pick: 'orchard', tidy: 'yard', feedpond: 'yard', release: 'yard' };
+    chop: 'wood', transplant: 'wood', orchardplant: 'orchard', feed: 'animal', trough: 'animal', collect: 'animal', pet: 'animal', hay: 'animal', petpet: 'pets', pick: 'orchard', tidy: 'yard', feedpond: 'yard', release: 'yard' };
   const AREAS = { farmer: ['field', 'wood'], partner: ['animal', 'coop', 'orchard'],
     kid0: { child: ['yard', 'pets'], teen: ['field', 'yard', 'pets'] }, kid1: { child: ['coop', 'pets'], teen: ['animal', 'coop', 'orchard'] } };
   const OWN = 15, HELP = 18;
