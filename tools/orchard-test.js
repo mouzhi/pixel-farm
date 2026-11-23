@@ -1,5 +1,6 @@
 // v5.11.0.35: synthetic regressions for 果园自动种树 (no player saves).
 // node tools/orchard-test.js: spare saplings go into empty orchard ground by themselves (果园坡 and a plot made into a 果园),
+// v5.11.0.35 also: fruit trees can be chopped (two taps), always leave 1 sapling, the slot is refilled; a later mark wins.
 // the player's marks still come first and keep their sapling, a real chore beats the orchard errand, the spot is checked
 // again before the sapling leaves the storehouse, the lumber hut only gets what the orchards have no room for, and reload.
 const http = require('http'), fs = require('fs'), path = require('path');
@@ -83,6 +84,40 @@ const server = http.createServer((req, res) => { const p = path.join(ROOT, decod
       S.eff.regions = S.eff.regions.filter(id => id !== 'orchard'); f.markNavDirty(); const room2 = f.orchardSpots().length; f.woodNight(); const after = f.FARMER.saplings.apple;
       return { room, keep, room2, after }; })()`);
     check('lumber hut uses only saplings the orchards have no room for', r, !r.room || r.keep !== 2 || r.room2 || r.after !== 0 ? 'hut took orchard saplings' : null); await p.context().close(); }
+
+  // 6. v5.11.0.35 砍果树: a fruit tree asks twice, always drops 1 sapling of its kind (+ a little wood), leaves no stump;
+  //    the empty orchard spot is then refilled by the family with that spare sapling.
+  { const p = await page(); const r = await p.evaluate(`(() => { ${H} setup(); f.FARMER.saplings.apple = 0; f.FARMER.saplings.orange = 0;
+      const out = [];
+      for (const [id, kind] of [['a0', 'apple'], ['a1', 'apple']]) { const t = S.trees.find(q => q.id === id); t.kind = id === 'a1' ? 'orange' : 'apple'; f.markNavDirty();
+        const k = t.kind, first = f.orderChop(id), queued1 = S.orders.some(o => o.type === 'chop' && o.id === id), second = f.orderChop(id);
+        const sap0 = f.FARMER.saplings[k], wood0 = f.FARMER.wood; let sapAt = null, woodAt = null;
+        for (let i = 0; i < 3000 && S.trees.includes(t); i++) f.advance(1, 3);
+        sapAt = f.FARMER.saplings[k] - sap0; woodAt = f.FARMER.wood - wood0;
+        out.push({ id, k, confirm: !!first.confirm && !first.ok, queued1, second: second.ok, gone: !S.trees.includes(t), stump: S.trees.some(q => q.id === id), sap: sapAt, wood: woodAt,
+          log: S.events.some(e => new RegExp('砍倒一棵' + (k === 'apple' ? '苹果' : '橘子') + '树').test(e.msg)) }); }
+      const spot = { x: -120, y: -70 }; // a0's place: fill every other free orchard spot so the family must come back to this one
+      for (const q of f.orchardSpots()) if (Math.hypot(q.x - spot.x, q.y - spot.y) > 14) S.trees.push({ id: 'fixture_' + q.key, x: q.x, y: q.y, kind: 'apple', stage: 'tree', age: 0, ripe: 0, cd: 9 });
+      f.markNavDirty();
+      const refilled = until(() => young().filter(t => Math.hypot(t.x - spot.x, t.y - spot.y) < 14).length >= 1 && f.FARMER.saplings.apple + f.FARMER.saplings.orange <= 1, 2500);
+      return { out, refilled, sap: Object.assign({}, f.FARMER.saplings), young: young().map(t => [t.kind, t.x, t.y]) }; })()`);
+    check('fruit tree chop asks twice, always drops its sapling, slot is replanted', r, r.out.some(o => !o.confirm || o.queued1 || !o.second || !o.gone || o.stump || o.sap !== 1 || o.wood < 1 || o.wood > 6 || !o.log) || !r.refilled ? 'fruit chop wrong' : null); await p.context().close(); }
+
+  // 7. Chop then mark: the player marks a new spot for the sapling before the family's orchard errand -> it goes to the mark.
+  { const p = await page(); const r = await p.evaluate(`(() => { ${H} setup(); f.FARMER.saplings.apple = 0; f.FARMER.saplings.orange = 0;
+      const t = S.trees.find(q => q.id === 'a2'); f.orderChop('a2'); f.orderChop('a2'); let pos = null, marked = null;
+      for (let i = 0; i < 3000 && S.trees.includes(t); i++) f.advance(1, 3);
+      for (let y = 40; y < 120 && !pos; y += 6) for (let x = 0; x < 180; x += 6) if (f.plantSpot(x, y).ok) { pos = { x, y }; break; }
+      marked = f.orderPlant('apple', pos.x, pos.y);
+      const done = until(() => S.trees.some(q => q.kind === 'apple' && q.stage === 'sapling' && Math.hypot(q.x - pos.x, q.y - pos.y) < 1), 3000);
+      return { gone: !S.trees.includes(t), marked: marked.ok, done, orch: young().filter(q => orchR().some(rc => inR(q, rc))).length, sap: f.FARMER.saplings.apple }; })()`);
+    check('a mark placed after the chop takes the sapling, not the orchard', r, !r.gone || !r.marked || !r.done || r.orch || r.sap !== 0 ? 'mark lost to the orchard' : null); await p.context().close(); }
+
+  // 8. Locked fruit trees stay safe; leaving the tool forgets a half-made confirmation.
+  { const p = await page(); const r = await p.evaluate(`(() => { const f = __farm, S = f.S; S.coins = 5000; f.buy('axe');
+      const locked = f.orderChop('a0'); f.buy('orchard'); f.setMode('chop'); const c1 = f.orderChop('a0'); f.setMode(null); f.setMode('chop'); const c2 = f.orderChop('a0');
+      return { locked: locked.ok || !!locked.confirm, c1: !!c1.confirm, c2: !!c2.confirm, orders: S.orders.length }; })()`);
+    check('locked fruit trees refuse; confirmation resets with the tool', r, r.locked || !r.c1 || !r.c2 || r.orders ? 'safeguard wrong' : null); await p.context().close(); }
 
   await b.close(); server.close(); if (errs.length) fails.push(errs.join('\n')); if (fails.length) { console.error(fails.join('\n')); process.exit(1); } console.log('orchard-test all passed', VERSION);
 })().catch(e => { console.error(e); process.exit(1); });
