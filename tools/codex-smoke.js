@@ -31,7 +31,7 @@ async function test(name, fn) {
       const s = __farm.snapshot();
       return { v: __farm.version, sv: s.saveVersion, entries: Object.keys(s.codex.entries).length, food: s.inventory.fishFood, pond: (s.pondFish || []).length, btn: !!document.getElementById('codexBtn') };
     });
-    assert.strictEqual(r.v, '5.11.0.34'); assert.strictEqual(r.sv, 15); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
+    assert.strictEqual(r.v, '5.11.0.38'); assert.strictEqual(r.sv, 15); assert.strictEqual(r.entries, 0); assert.strictEqual(r.food, 0); assert.strictEqual(r.pond, 0); assert(r.btn);
     assert.deepStrictEqual(p.errs, []);
   });
 
@@ -206,7 +206,7 @@ async function test(name, fn) {
       const s = __farm.snapshot();
       return { sv: s.saveVersion, v: __farm.version, bass: !!(s.codex.entries && s.codex.entries['fish:bass']), sword: !!(s.codex.entries && s.codex.entries['fish:sword']), food: s.inventory.fishFood, coins: s.coins };
     });
-    assert.strictEqual(r.sv, 15); assert.strictEqual(r.v, '5.11.0.34'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
+    assert.strictEqual(r.sv, 15); assert.strictEqual(r.v, '5.11.0.38'); assert(r.bass); assert(!r.sword); assert.strictEqual(r.food, 0);
     assert.deepStrictEqual(p.errs, []);
     await p.close();
   });
