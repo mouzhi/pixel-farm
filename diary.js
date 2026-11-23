@@ -2,7 +2,8 @@
 // v5.10.13: a player asked "有没有日记功能，打开可以看到小人这一天种了多少菜钓了多少鱼". The game counts what each
 // family member did per in-game day and keeps the last DAYS days in the save (append-only `diary` field, save stays v15).
 // One entry: { d: day, w: 1 if it rained, a: { who: { p: {crop: n}, h: {item: n}, f: {fish: n} } }, pr: {product: n},
-// wd: wood chopped, in: gold earned, out: gold spent, buy: [item ids], ev: [short event codes] }.
+// wd: wood chopped, in: gold earned, out: gold spent, buy: [item ids], ev: [short event codes],
+// rs: { cabin|hut|villa|camp|diner|stall: gold } optional 农家乐账单 (v5.11.0.39, omitted when empty) }.
 'use strict';
 (function (root) {
   const DAYS = 30, MAX_WHO = 8, MAX_KEYS = 16, MAX_BUY = 8, MAX_EV = 8, MAX_N = 99999;
@@ -35,6 +36,32 @@
   function note(D, day, code) { const e = entry(D, day); if (!e || typeof code !== 'string' || !code) return false; code = code.slice(0, 24);
     if (code === 'rain') { e.w = 1; return true; }
     if (!e.ev.includes(code) && e.ev.length < MAX_EV) e.ev.push(code); return true; }
+  // v5.11.0.39 农家乐账单: optional per-day takings by source (append-only `rs` on the entry).
+  // Keys: cabin 民宿房费, hut 沙滩小屋, villa 度假小别墅, camp 帐篷营地, diner 农家菜馆, stall 海鲜摊.
+  // Pier / umbrellas / the sunset deck have no ticket fee; a kid's town shop or wage is not 农家乐 income.
+  const RS = { cabin: '民宿房费', hut: '沙滩小屋', villa: '度假小别墅', camp: '帐篷营地', diner: '农家菜馆', stall: '海鲜摊' };
+  const RS_IDS = Object.keys(RS);
+  const RS_OF_STAY = { inn: 'cabin', beach: 'hut', villa: 'villa', camp: 'camp' };
+  const rsOfStay = stay => RS_OF_STAY[stay] || 'cabin';
+  function addResort(D, day, src, n) {
+    n = Math.round(+n); if (!(n > 0) || !RS[src]) return false; const e = entry(D, day); if (!e) return false;
+    e.rs = e.rs || {}; e.rs[src] = Math.min(1e9, (e.rs[src] || 0) + n); return true;
+  }
+  const rsCnt = o => { const r = {}; if (o && typeof o === 'object') for (const k of RS_IDS) { const n = int(o[k], 0, 1e9); if (n) r[k] = n; } return r; };
+  function resortOf(e) {
+    const rs = (e && e.rs) || {}, rows = RS_IDS.filter(k => rs[k] > 0).map(k => ({ id: k, name: RS[k], gold: rs[k] }));
+    return { rows, total: total(rs) };
+  }
+  // last `n` days through `day` (inclusive), from whatever the diary still holds
+  function resortWeek(D, day, n) {
+    n = n || 7; const lo = (day | 0) - n + 1, by = {};
+    for (const e of (D && D.days) || []) {
+      if (!e || e.d < lo || e.d > day || !e.rs) continue;
+      for (const k of RS_IDS) if (e.rs[k]) by[k] = (by[k] | 0) + e.rs[k];
+    }
+    const rows = RS_IDS.filter(k => by[k] > 0).map(k => ({ id: k, name: RS[k], gold: by[k] }));
+    return { rows, total: total(by), days: n };
+  }
   function valid(raw) {
     const out = empty(); if (!raw || typeof raw !== 'object' || !Array.isArray(raw.days)) return out;
     const cnt = o => { const r = {}; if (o && typeof o === 'object') for (const k of Object.keys(o).slice(0, MAX_KEYS)) if (ID.test(k)) { const n = int(o[k], 0, MAX_N); if (n) r[k] = n; } return r; };
@@ -42,9 +69,11 @@
     for (const e of raw.days.slice(-DAYS)) {
       if (!e || typeof e !== 'object') continue; const d = int(e.d, 0, 1e7); if (!d || seen.has(d)) continue; seen.add(d);
       const a = {}; if (e.a && typeof e.a === 'object') for (const w of Object.keys(e.a).slice(0, MAX_WHO)) if (ID.test(w)) { const m = {}; for (const k of ACTS) { const c = cnt(e.a[w] && e.a[w][k]); if (Object.keys(c).length) m[k] = c; } a[w] = m; }
-      out.days.push({ d, w: e.w ? 1 : 0, a, pr: cnt(e.pr), wd: int(e.wd, 0, 1e9), in: int(e.in, 0, 1e9), out: int(e.out, 0, 1e9),
+      const row = { d, w: e.w ? 1 : 0, a, pr: cnt(e.pr), wd: int(e.wd, 0, 1e9), in: int(e.in, 0, 1e9), out: int(e.out, 0, 1e9),
         buy: (Array.isArray(e.buy) ? e.buy : []).filter(x => typeof x === 'string' && ID.test(x)).slice(0, MAX_BUY),
-        ev: (Array.isArray(e.ev) ? e.ev : []).filter(x => typeof x === 'string' && x).map(x => x.slice(0, 24)).slice(0, MAX_EV) });
+        ev: (Array.isArray(e.ev) ? e.ev : []).filter(x => typeof x === 'string' && x).map(x => x.slice(0, 24)).slice(0, MAX_EV) };
+      const rs = rsCnt(e.rs); if (Object.keys(rs).length) row.rs = rs; // v5.11.0.39 append-only, omitted when empty
+      out.days.push(row);
     }
     out.days.sort((x, y) => x.d - y.d); return out;
   }
@@ -52,7 +81,7 @@
   // v5.11.0.29 自动化机械: the day one is fitted
   const MACH_LINE = { feeder: '棚子装上了自动饲喂槽和自来水槽，以后不用人去添草加水了。', chute: '鸡舍装上了集蛋滑道，鸡蛋自己滚进仓库。', milker: '牛棚装上了挤奶机，牛奶直接灌进奶酪坊和仓库。', tray: '蜂箱接上了蜂蜜收集槽，蜂蜜自己流进仓库。' };
   const total = o => Object.values(o || {}).reduce((s, n) => s + n, 0);
-  const isEmpty = e => !e || (!Object.keys(e.a).some(w => ACTS.some(k => total(e.a[w][k]))) && !total(e.pr) && !e.wd && !e.in && !e.out && !e.buy.length && !e.ev.length);
+  const isEmpty = e => !e || (!Object.keys(e.a).some(w => ACTS.some(k => total(e.a[w][k]))) && !total(e.pr) && !e.wd && !e.in && !e.out && !e.buy.length && !e.ev.length && !total(e.rs));
   // L: { who(id) -> name, item(id) -> name, buy(id) -> name, weather(entry) -> '晴' }
   function list(o, L, unit, max) {
     const ks = Object.keys(o || {}).filter(k => o[k] > 0).sort((a, b) => o[b] - o[a]); if (!ks.length) return '';
@@ -96,6 +125,6 @@
     const bits = []; if (p) bits.push(`种了 ${p} 棵`); if (total(h)) bits.push(`收了 ${total(h)} 个`); if (total(f)) bits.push(`钓到 ${total(f)} 条鱼`); if (e.in) bits.push(`赚了 ${e.in} 金`);
     return bits.length ? `昨天（第${e.d}天）${bits.join('，')}。日记里写着呢` : '';
   }
-  const api = { DAYS, empty, blank, entry, add, bought, note, valid, lines, title, brief, isEmpty, total };
+  const api = { DAYS, empty, blank, entry, add, bought, note, valid, lines, title, brief, isEmpty, total, RS, RS_IDS, rsOfStay, addResort, resortOf, resortWeek };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFDiary = api;
 })(typeof window !== 'undefined' ? window : globalThis);
