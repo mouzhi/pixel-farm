@@ -2007,6 +2007,7 @@ function groundAt(x, y) { // -> [palette colour, kind]
     if (pv === 'gravel') { const v = vnoise(x * 1.7, y * 1.7, 23); return [v > 0.7 ? St[3] : v > 0.4 ? St[2] : v > 0.2 ? Wd[3] : St[1], 'dirt']; } }
   if (x >= 356 && TN && TN.onAvenue(x, y) && roadBuilt() && (x < TN.GATE.x + 2 || (S.eff && S.eff.town))) { // v5.11.0: the stone avenue
     const dy = y - TN.AVENUE.y + TN.AVENUE.hw, edge = dy < 0.9 || dy > 2 * TN.AVENUE.hw - 0.9; if (edge) return [St[1], 'dirt']; // kerb stones
+    if (TA && TA.cross && TA.cross(x, y)) return [Ac[0], 'dirt']; // v5.12.0: 斑马线 where a side street meets 主街
     const row = Math.floor(dy / 2.5), u = x + (row & 1) * 2.5, gx = Math.floor(u / 5), jx = u - gx * 5, jy = dy - row * 2.5; // running bond, 5 x 2.5 setts
     if (jx < 0.5 || jy < 0.5) return [St[2], 'dirt']; const k = vnoise(gx, row, 5); return [k > 0.72 ? Wd[5] : (k > 0.45 ? St[2] : St[3]), 'dirt']; }
   if (pd < pw || yd < 0) {
@@ -3387,11 +3388,45 @@ function sportsCrowd(dm) {
   }
   for (const g of SPT) { if (!g.race) continue; const at = SC.raceAt(g.i, realT, 8); g.x = at.x; g.y = at.y; g.moving = true; const prev = SC.raceAt(g.i, realT - 0.2, 8); g.fx = at.x >= prev.x ? 1 : -1; g.fy = at.y >= prev.y ? 1 : -1; }
 }
-function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
+// ---- v5.12.0 路人: townsfolk and day visitors strolling between the shops, the squares and the street ends (never saved) ----
+const TLW = window.PFTownLife, TLF = [], lifeR = mulberry32(0x7A11FE); // their own random stream: the farm's stays where it was
+let lifeSpawn = 0, lifeN = 0, LIFE_ON = true;
+const LIFE_NODES = TLW ? TLW.STOPS.concat(TLW.EDGES) : [], LIFE_EDGE0 = TLW ? TLW.STOPS.length : 0, lifeRoutes = new Map(); // node -> node routes, kept per nav version
+function lifeWant() {
+  const H = S.town && S.town.hall; if (!LIFE_ON || !TLW || !HL || !H || !townOpen()) return 0;
+  return TLW.lifeCount({ T: S.t % 1440, lv: townLv(), market: marketDay(), fest: !!(FV && FV.isDay(H, S.day)), rain: !!(WX && WX.isRaining && WX.isRaining(S.weather, S.day, S.t)) });
+}
+function lifeGo(g, to) { // walk from the node they are at to node `to` (routes between the fixed nodes are cached: A* once per pair and nav version)
+  ensureNav(); const key = g.at + '>' + to + '@' + navVer; let r = lifeRoutes.get(key);
+  if (!r) { if (lifeRoutes.size > 600) lifeRoutes.clear(); const A = LIFE_NODES[g.at]; r = routeVia({ x: A.x, y: A.y }, LIFE_NODES[to]); lifeRoutes.set(key, r); }
+  const B = LIFE_NODES[to], end = to < LIFE_EDGE0 ? { x: B.x + (lifeR() - 0.5) * 4, y: B.y + (lifeR() - 0.5) * 2 } : { x: B.x, y: B.y };
+  g.pts = r.concat([end]); g.moving = true; g.at = to; g.stop = to < LIFE_EDGE0 ? B : null; }
+const lifePick = g => { let i = 0; for (let k = 0; k < 4; k++) { i = (lifeR() * LIFE_EDGE0) | 0; if (i !== g.at) break; } return i; };
+const lifeEdge = () => LIFE_EDGE0 + ((lifeR() * TLW.EDGES.length) | 0);
+function townLife(dm) {
+  const want = lifeWant(); if (!want && !TLF.length) return;
+  if (!want) { for (const g of TLF) if (!g.leaving) { g.leaving = true; lifeGo(g, lifeEdge()); } }
+  else if (!TLF.length) { for (let i = 0; i < want; i++) { const at = (lifeR() * LIFE_EDGE0) | 0, s = LIFE_NODES[at]; // the page opens on a street that is already busy
+    TLF.push({ id: 'life' + (lifeN++), look: TLW.LOOKS[lifeN % TLW.LOOKS.length], x: s.x + (lifeR() - 0.5) * 4, y: s.y + (lifeR() - 0.5) * 2, fx: 0, fy: s.fy || 1, pts: [], moving: false, wait: lifeR() * 20, left: 1 + ((lifeR() * 3) | 0), at, stop: s }); } }
+  else { const here = TLF.filter(g => !g.leaving).length;
+    if (here < want && (lifeSpawn -= dm) <= 0) { lifeSpawn = 4 + lifeR() * 6; const at = lifeEdge(), e = LIFE_NODES[at];
+      const g = { id: 'life' + (lifeN++), look: TLW.LOOKS[lifeN % TLW.LOOKS.length], x: e.x, y: e.y, fx: 0, fy: 1, pts: [], moving: false, wait: 0, left: 2 + ((lifeR() * 3) | 0), at, stop: null };
+      TLF.push(g); lifeGo(g, lifePick(g)); }
+    if (here > want) { const g = TLF.find(q => !q.leaving); if (g) { g.leaving = true; lifeGo(g, lifeEdge()); } } }
+  for (let i = TLF.length - 1; i >= 0; i--) { const g = TLF[i];
+    if (g.pts.length) { guestStep(g, dm); continue; } g.moving = false;
+    if (g.leaving) { TLF.splice(i, 1); continue; }
+    if (g.stop) { g.fx = 0; g.fy = g.stop.fy || 1; }
+    if ((g.wait -= dm) > 0) continue;
+    if (--g.left < 0) { g.leaving = true; lifeGo(g, lifeEdge()); continue; }
+    lifeGo(g, lifePick(g)); g.wait = 6 + lifeR() * 20; }
+}
+function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); townLife(dm); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
 function townDraw(list) {
   for (const g of VISITORS) { const sh = famSheet(g.look, 6); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of NEIGH) if (g.out) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of MKT) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.3: the market crowd
+  for (const g of TLF) { const sh = famSheet(g.look, /^mate/.test(g.look) ? 6 : 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.12.0: 路人
   for (const g of SPT) { const sh = famSheet(g.look, g.race ? 6 : 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.9: sports day
 }
 // ---------- v5.9.0 phase 11: 好感, the new house, the wedding, the couple's little farm (rules in home.js, art in home-art.js) ----------
@@ -6113,7 +6148,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.39';
+const GAME_VERSION = '5.12.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6384,7 +6419,8 @@ Object.assign(window.__farm, { HM, HA, HT, SPOUSES, props, homeMoveOk: (x, y, i)
 Object.assign(window.__farm, { DC, DA, placeOk: (x, y, what, id, skip) => placeOk(x, y, what, id, skip), decorClick: w => decorClick(w), decorHover: w => decorHover(w), decorGain: (id, how) => decorGain(id, how),
   autoSpot: id => autoSpot(id), movables: () => movables(), clearMoves: () => { for (const q of S.decor.orders.slice()) if (q.mine) dropOrder(q); }, orderThing: (...a) => orderThing(...a), settle: q => settle(q),
   carryFields: a => carryFields(a), schoolWalk: a => schoolWalk(a), lookOf: m => lookOf(m), famReady: k => !!(FAM_PRE[k] && FAM_PRE[k].complete && FAM_PRE[k].naturalWidth), // v5.8.1
-  TN, TA, townOpen, VISITORS, NEIGH, priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
+  TN, TA, townOpen, VISITORS, NEIGH, townLife: () => TLF.map(g => ({ id: g.id, look: g.look, x: +g.x.toFixed(1), y: +g.y.toFixed(1), moving: !!g.moving, leaving: !!g.leaving, stop: g.stop && g.stop.why, at: g.at })), lifeWant: () => lifeWant(), lifeOn: v => { LIFE_ON = !!v; if (!v) TLF.length = 0; }, lifeRoutes: () => lifeRoutes.size, // v5.12.0 路人
+  priceOfAny: it => priceOfAny(it), schoolRoute: () => schoolRoute(), spawnMate: (a, ex) => spawnMate(a, ex), tradeTask: () => tradeTask(), tradeList: a => tradeList(a), townSkip: a => townSkip(a), townMateHome: (a, ex) => townMateHome(a, ex), // v5.8.0
   partyMorning: () => partyMorning(), partyTask: () => partyTask(), partyLawn: () => partyLawnNow(), partyPlan: () => partyPlanNow(), wedCer: () => wedCer(), wedLook: a => wedLook(a), famSheet: (l, c) => famSheet(l, c), wedCouple: () => wedCouple(), weddingTonight: () => wedNow(), homeTick: dm => homeTick(dm), homeMorning: () => homeMorning(), partyFx: () => PARTY_FX_LAST.slice(), partyDraw: () => PARTY_DRAW_LAST, partySpot: a => partySpot(a), partySprite: () => SPR, GUESTS, decorTick: dm => decorTick(dm), decorNight: () => decorNight(), decorBoard: (post, T) => decorBoard(post, T), decorDrop: (src, x, y) => decorDrop(src, x, y),
   decorKeepGiant: (t, x, y) => decorKeepGiant(t, x, y), partyArea: () => partyArea(), entrySpots: () => entrySpots() }); // v5.7.0 test hooks
 Object.assign(window.__farm, { plotBusy: id => worksBusy(id), worksVacateNote: id => worksVacateNote(id), worksVacate: (id, mod) => worksVacate(id, mod), movePenHost: to => movePenHost(to), pen2MoveOk: (x, y) => pen2MoveOk(x, y), PW, PWA, worksTick: dm => worksTick(dm), worksNight: () => worksNight(), sprinklerNext: () => sprinklerNext(), installTask: sp => installTask(sp), sprinklerClick: w => sprinklerClick(w), herdOn: () => herdOn(), wheatHave: () => wheatHave(), demandWant: () => demandWant(), demandPick: bag => demandPick(bag), chooseTask: () => chooseTask(), restOk: k => restOk(k), helpWinNow: T => helpWinNow(T), helpEnd: () => helpEnd(), farmHands: () => farmHands(), demandGrowing: () => demandGrowing(), demandShort: k => demandShort(k), seaQuota: () => seaQuota(), workPending: () => workPending(), board: () => board(), setF: a => { F = a; } }); // v5.6.0 test hooks
