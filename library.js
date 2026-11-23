@@ -21,12 +21,12 @@
     [['flour', 2, 4], ['apple', 4, 8]],
   ];
   // two locked 图鉴 entries for the day, in a stable order (the same after a reload)
-  function hints(got, day, catalog) {
+  function hints(got, day, catalog, extra) {
     const have = got && typeof got === 'object' ? got : {}, d = day | 0;
     const missing = (catalog || []).filter(e => e && e.id && e.hint && !have[e.id] && !e.later);
     if (!missing.length) return [];
     const h = (Math.imul(d + 41, 0x9E3779B1) >>> 0) % missing.length, out = [];
-    for (let k = 0; k < Math.min(2, missing.length); k++) {
+    for (let k = 0; k < Math.min(2 + (extra | 0), missing.length); k++) {
       const e = missing[(h + k * (1 + ((h >>> 7) % Math.max(1, missing.length - 1)))) % missing.length];
       if (!out.some(q => q.id === e.id)) out.push({ id: e.id, name: e.name || e.id, hint: e.hint });
     }
