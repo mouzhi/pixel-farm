@@ -27,12 +27,12 @@ const allShops = () => {
   return st;
 };
 const home = () => CR.empty();
-const ctxOf = (hall, extra) => Object.assign({ hall, lots: {}, coins: 200000, wood: 800, mate: 'm1', kidName: '小豆', nb: {}, day: 80 }, extra || {});
+const ctxOf = (hall, extra) => Object.assign({ hall, lots: {}, coins: 200000, wood: 800, mate: 'm1', kidName: '小豆', nb: {}, day: 80, town: true }, extra || {});
 
 ok('empty / valid(): missing fields become 留家种地 and no lots; save stays append-only', () => {
   assert.deepStrictEqual(CR.valid(null), CR.empty());
   assert.deepStrictEqual(CR.validLots(null), {});
-  assert.deepStrictEqual(CR.valid({ wage: -3, path: { kid0: { way: 'fly', at: 'moon' }, evil: { way: 'farm' } } }), { path: { kid0: { way: 'farm', at: null, kind: null, day: 0, ready: 0, pending: null, free: 0 } }, wage: 0 });
+  assert.deepStrictEqual(CR.valid({ wage: -3, path: { kid0: { way: 'fly', at: 'moon' }, evil: { way: 'farm' } } }), { path: { kid0: { way: 'farm', at: null, kind: null, day: 0, ready: 0, pending: null, free: 0, chg: 0 } }, wage: 0 });
   const lots = CR.validLots({ L2: 'kid0', L3: 'kid0', L9: 'kid1', L3: 'kid1', foo: 'kid0' });
   assert.deepStrictEqual(lots, { L2: 'kid0', L3: 'kid1' });
   const p = CR.pathOf(CR.empty(), 'kid0');
@@ -64,11 +64,16 @@ ok('tendency 3: otherwise they stay and farm', () => {
   const st = home();
   assert.deepStrictEqual(CR.prefer(st, 'kid0', ctxOf(HL.empty(), { mate: 'm1', coins: 10, wood: 0 })), { way: 'farm', at: null, kind: null });
   const opts = CR.options(st, 'kid0', ctxOf(richTown(), { mate: 'm1', nb: { n3: 20 } }));
-  assert.strictEqual(opts[0].way, 'farm'); assert.strictEqual(opts[2].selected, true);
-  assert.strictEqual(opts[2].ok, true); assert.strictEqual(opts[1].ok, true);
+  assert.strictEqual(opts[0].way, 'farm');
+  const shop = opts.find(o => o.way === 'shop' && o.kind === 'flower');
+  const bakery = opts.find(o => o.way === 'work' && o.at === 'bakery');
+  assert.ok(shop && shop.selected && shop.ok, 'flower shop is the default');
+  assert.ok(bakery && bakery.ok, 'bakery job is open');
   const locked = CR.options(st, 'kid0', ctxOf(houses(), { mate: 'm1' }));
-  assert.strictEqual(locked[1].ok, false); assert.ok(/面包房|铁匠|木工/.test(locked[1].why));
-  assert.strictEqual(locked[2].ok, false); assert.ok(/繁荣度/.test(locked[2].why));
+  const lockJob = locked.find(o => o.way === 'work' && o.at === 'bakery');
+  const lockShop = locked.find(o => o.way === 'shop' && o.kind === 'flower');
+  assert.ok(lockJob && !lockJob.ok); assert.ok(/面包房/.test(lockJob.why));
+  assert.ok(lockShop && !lockShop.ok); assert.ok(/繁荣度/.test(lockShop.why));
   assert.strictEqual(locked[0].selected, true);
 });
 
@@ -121,11 +126,13 @@ ok('换个活法: 2,000, next morning; closing a shop refunds half; a pre-v5.10.
   assert.ok(r.ok); assert.strictEqual(r.way, 'work'); assert.strictEqual(r.at, 'smith'); assert.strictEqual(st.path.kid0.free, 0);
   assert.strictEqual(st.path.kid0.pending, null);
 
-  const plan2 = CR.planChange(st, 'kid0', { way: 'shop', kind: 'flower' }, ctxOf(hall, { mate: 'm1', coins: 1500 }), 91);
+  const tooSoon = CR.planChange(st, 'kid0', { way: 'shop', kind: 'flower' }, ctxOf(hall, { mate: 'm1', coins: 20000 }), 91);
+  assert.ok(!tooSoon.ok); assert.ok(/再过/.test(tooSoon.why), tooSoon.why);
+  const plan2 = CR.planChange(st, 'kid0', { way: 'shop', kind: 'flower' }, ctxOf(hall, { mate: 'm1', coins: 1500 }), 96);
   assert.ok(!plan2.ok); assert.ok(/2,000/.test(plan2.why), plan2.why);
-  const plan3 = CR.planChange(st, 'kid0', { way: 'shop', kind: 'flower' }, ctxOf(hall, { mate: 'm1', coins: 20000 }), 91);
+  const plan3 = CR.planChange(st, 'kid0', { way: 'shop', kind: 'flower' }, ctxOf(hall, { mate: 'm1', coins: 20000 }), 96);
   assert.ok(plan3.ok, plan3.why); assert.strictEqual(plan3.fee, 2000);
-  const r3 = CR.applyPending(st, lots, 'kid0', ctxOf(hall, { mate: 'm1', coins: 20000, wood: 200 }), 92);
+  const r3 = CR.applyPending(st, lots, 'kid0', ctxOf(hall, { mate: 'm1', coins: 20000, wood: 200 }), 97);
   assert.ok(r3.ok, r3.why); assert.strictEqual(r3.paid, 15000); assert.strictEqual(r3.wood, 150); assert.deepStrictEqual(lots, { L2: 'kid0' });
 
   // close it once it has opened
@@ -199,14 +206,14 @@ ok('round-trip of a filled home.path / town.lots', () => {
 ok('v5.10.7: 经营民宿 / 菜馆 is a fourth option on the same choice UI, free, no town lot', () => {
   const st = home(), hall = richTown();
   const locked = CR.options(st, 'kid0', ctxOf(hall, { mate: 'm1' }));
-  assert.strictEqual(locked.length, 4);
-  assert.strictEqual(locked[3].way, 'inn');
-  assert.strictEqual(locked[3].title, '经营民宿 / 菜馆');
-  assert.strictEqual(locked[3].ok, false);
-  assert.ok(/民宿院|小木屋|菜馆/.test(locked[3].why));
+  const innL = locked.find(o => o.way === 'inn');
+  assert.ok(locked.length >= 12, 'farm + jobs + shops + inn, got ' + locked.length);
+  assert.ok(innL); assert.strictEqual(innL.title, '经营民宿 / 菜馆');
+  assert.strictEqual(innL.ok, false);
+  assert.ok(/民宿院|小木屋|菜馆/.test(innL.why));
   const open = CR.options(st, 'kid0', ctxOf(hall, { mate: 'm1', innPlot: 'glade', cabins: 1 }));
-  assert.strictEqual(open[3].ok, true);
-  assert.strictEqual(open[3].cost, 0);
+  const innO = open.find(o => o.way === 'inn');
+  assert.ok(innO && innO.ok); assert.strictEqual(innO.cost, 0);
   const r = CR.take(st, {}, 'kid0', { way: 'inn' }, ctxOf(hall, { innPlot: 'glade', cabins: 2, diner: 1 }), 80);
   assert.ok(r.ok); assert.strictEqual(r.way, 'inn'); assert.strictEqual(r.paid, 0); assert.strictEqual(r.wood, 0);
   assert.strictEqual(st.path.kid0.way, 'inn');
