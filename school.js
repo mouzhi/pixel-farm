@@ -20,16 +20,31 @@
   const open = (H, day, T) => isDay(H, day) && T >= HOURS.from && T < HOURS.to;
   const favorMul = H => (built(H) ? 2 : 1); // 上学日的好感翻倍 once the expansion is up
   const inYard = (x, y, pad = 0) => x >= YARD[0] - pad && x <= YARD[2] + pad && y >= YARD[1] - pad && y <= YARD[3] + pad;
-  // a point on the oval: u is 0..1 around the track, wobble keeps runners from stacking
-  function raceAt(i, realT, n) {
-    const u = (((realT * 0.045) + i * (1 / Math.max(2, n | 0))) % 1 + 1) % 1, a = u * Math.PI * 2;
-    const wob = ((i * 13) % 5) - 2;
-    return P(TRACK.cx + Math.cos(a) * (TRACK.rx + wob * 0.15), TRACK.cy + Math.sin(a) * (TRACK.ry + (i % 2 ? 0.4 : -0.2)));
+  // v5.12.0 操场重做: the oval is two lanes with painted lines between. A point at offset o lies on the ellipse (rx + o, ry + o),
+  // so a lane keeps one width all the way round; LANES are the lines (inner kerb, the line between the lanes, the outer edge).
+  const LANES = [-3, 0, 3];
+  function trackOff(x, y) { // -> the offset o of the ellipse (rx + o, ry + o) through (x, y)
+    const dx = x - TRACK.cx, dy = y - TRACK.cy; let lo = -TRACK.ry + 0.5, hi = 80;
+    const f = o => (dx / (TRACK.rx + o)) ** 2 + (dy / (TRACK.ry + o)) ** 2 - 1;
+    if (f(lo) <= 0) return lo;
+    for (let i = 0; i < 28; i++) { const m = (lo + hi) / 2; if (f(m) > 0) lo = m; else hi = m; }
+    return (lo + hi) / 2;
   }
-  const onTrack = (x, y) => {
-    const dx = (x - TRACK.cx) / TRACK.rx, dy = (y - TRACK.cy) / TRACK.ry, d = dx * dx + dy * dy;
-    return d > 0.55 && d < 1.25;
-  };
+  // a point on the oval: u is 0..1 around the track; runner i keeps to lane i % 2, in the middle of it (不串道)
+  function raceAt(i, realT, n) {
+    const u = (((realT * 0.045) + i * (1 / Math.max(2, n | 0))) % 1 + 1) % 1, a = u * Math.PI * 2, lane = ((i | 0) % 2 + 2) % 2;
+    const o = (LANES[lane] + LANES[lane + 1]) / 2;
+    return P(TRACK.cx + Math.cos(a) * (TRACK.rx + o), TRACK.cy + Math.sin(a) * (TRACK.ry + o));
+  }
+  const onTrack = (x, y) => { const o = trackOff(x, y); return o >= LANES[0] && o <= LANES[2]; };
+  // the rest of the playground (fixed): goals at the ends of the infield, the hoop, the toys from the farm's 乐园 on the
+  // north-west, short stands where the benches were. town-art.js draws them; nobody walks round them (not nav blocks).
+  const PLAY = [
+    { k: 'goal', x: TRACK.cx - 30, y: TRACK.cy, rot: 0 }, { k: 'goal', x: TRACK.cx + 30, y: TRACK.cy, rot: Math.PI },
+    { k: 'hoop', x: 700, y: -82 }, { k: 'slide', x: 614, y: -76 }, { k: 'swing', x: 636, y: -81 }, { k: 'sandbox', x: 662, y: -80 },
+    { k: 'stand', x: 644, y: -19 },
+  ];
+  const COURT = [686, -86, 714, -66]; // the half court round the hoop (painted lines)
   // ---------- state: inside town.hall as `school` (append-only; old saves start with nothing) ----------
   const empty = () => ({ last: 0 });
   const int = (v, lo, hi) => (typeof v === 'number' && isFinite(v) ? Math.min(hi, Math.max(lo, Math.round(v))) : 0);
@@ -37,6 +52,6 @@
     const o = v && typeof v === 'object' && !Array.isArray(v) ? v : {}, out = empty();
     out.last = int(o.last, 0, 1e6); return out;
   }
-  const api = { COST, WOOD, LV, EVERY, HOURS, LOT, YARD, TRACK, BENCHES, WATCH, FLAG, built, isDay, nextDay, open, favorMul, inYard, raceAt, onTrack, empty, valid };
+  const api = { COST, WOOD, LV, EVERY, HOURS, LOT, YARD, TRACK, LANES, PLAY, COURT, BENCHES, WATCH, FLAG, built, isDay, nextDay, open, favorMul, inYard, raceAt, trackOff, onTrack, empty, valid };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFSchool = api;
 })(typeof window !== 'undefined' ? window : globalThis);
