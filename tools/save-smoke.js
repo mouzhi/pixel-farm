@@ -199,7 +199,7 @@ async function test(name, fn) {
       // the hut: a stump is replanted overnight from a sapling
       F.wood = 200; f.buy('lumber'); F.saplings.apple = 5; F.saplings.orange = 0; const st = S.trees.find(t => t.kind === 'wild' && WD.regrows(t) && t.stage === 'tree'); st.stage = 'stump'; st.age = 0;
       const d0 = S.day; while (S.day === d0) f.advance(10, 5);
-      const replanted = st.stage === 'sapling' && F.saplings.apple < 5 && S.events.some(e => /伐木小屋用仓库里的 \d+ 棵树苗补种了林场/.test(e.msg)); // every 林场 stump that night
+      const replanted = st.stage === 'sapling' && F.saplings.apple < 5 && S.events.some(e => /伐木小屋用仓库里的 \d+ 棵(空闲)?树苗补种了林场/.test(e.msg)); // every 林场 stump that night
       // offline: some wood, never past the target
       F.wood = 0; const off = f.settleOffline(3 * 3600);
       return { none0, tgt, reached, outsideSame: outside0 === outside1, grown, label, idleOk, replanted, offWood: off && off.wood, woodAfterOff: F.wood, tgt2: f.woodAuto().target, hutProp: f.S.eff.lumber }; });
