@@ -2090,12 +2090,14 @@ const regionProps = {};
 for (const r of WD.REGIONS) { const [x0, y0, x1, y1] = r.rect, list = regionProps[r.id] = [];
   const openings = [r.gate, r.pier].filter(Boolean);
   const nearGate = (x, y) => openings.some(g => Math.hypot(x - g.x, y - g.y) < 12);
-  const join = (r.id === 'coast' && PL && PL.RESORT_JOIN) ? PL.RESORT_JOIN.beach : null;
-  const nearJoin = (x, y) => !!(join && Math.hypot(x - join.x, y - join.y) < 12);
+  const resortPt = (r.id === 'coast' && PL && PL.RESORT_JOIN) ? PL.RESORT_JOIN.beach : null;
+  const homePt = (r.id === 'coast' && PL && PL.HOME_JOIN) ? PL.HOME_JOIN.beach : null;
+  const nearJoin = (x, y) => !!(resortPt && Math.hypot(x - resortPt.x, y - resortPt.y) < 12);
+  const nearHomeJoin = (x, y) => !!(homePt && Math.hypot(x - homePt.x, y - homePt.y) < 12);
   const guestMouth = (r.id === 'coast' && IN && IN.guestPierMouth) ? IN.guestPierMouth() : (r.id === 'coast' && IN && IN.resortLayout) ? IN.resortLayout().pier.mouth : null;
   const nearGuestPier = (x, y) => !!(guestMouth && Math.hypot(x - guestMouth.x, y - guestMouth.y) < 16);
-  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); p.resortJoin = nearJoin(x + 4, y); p.guestPier = nearGuestPier(x + 4, y); list.push(p); }
-  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); p.resortJoin = nearJoin(x, y + 4); p.guestPier = nearGuestPier(x, y + 4); list.push(p); }
+  for (let x = x0; x < x1; x += 8) for (const y of [y0, y1]) { const p = addProp(models.fence, x + 4, y, 0, { region: r.id }); p.gate = nearGate(x + 4, y); p.resortJoin = nearJoin(x + 4, y); p.homeJoin = nearHomeJoin(x + 4, y); p.guestPier = nearGuestPier(x + 4, y); list.push(p); }
+  for (let y = y0; y < y1; y += 8) for (const x of [x0, x1]) { const p = addProp(models.fence, x, y + 4, Math.PI / 2, { region: r.id }); p.gate = nearGate(x, y + 4); p.resortJoin = nearJoin(x, y + 4); p.homeJoin = nearHomeJoin(x, y + 4); p.guestPier = nearGuestPier(x, y + 4); list.push(p); }
   const sign = { spr: SIGN, x: r.sign.x, y: r.sign.y, region: r.id, sign: 1 }; billboards.push(sign); list.push(sign);
   if (r.barrel) addProp(barrelModel, r.barrel.x, r.barrel.y, 0);
 }
@@ -3447,14 +3449,16 @@ function homeSave() { // v5.11.0.30: a helping spouse's basket is append-only ho
   return h;
 }
 const homeFeet = () => S.home.houses.map(h => HM.layout(h).foot);
-// ---- where a new house can go: any free 花甸 / 农田 plot, clear of what already stands there ----
+// ---- where a new house can go: a free 宅园 pad (preferred) or a free 花甸 / 农田 plot, clear of what already stands there ----
 function homeAvoid(skip) { const out = []; // skip: the house being moved (its own yard and itself are not in the way)
   for (const m of movables()) if (!(m.what === 'home')) out.push([m.x - Math.max(4, m.r * 0.6), m.y - Math.max(4, m.r * 0.6), m.x + Math.max(4, m.r * 0.6), m.y + Math.max(4, m.r * 0.6)]);
   S.home.houses.forEach((h, i) => { if (i !== skip) out.push(HM.layout(h).foot); });
   for (const t of S.trees) if (t.stage === 'tree') out.push([t.x - 5, t.y - 4, t.x + 5, t.y + 4]);
   return out; }
 function homeSpot() { const avoid = homeAvoid();
-  for (const id of HM.freeSites(S.plots, S.home.houses)) { const s = HM.spotsIn(id, S.plots[id].mod, avoid)[0]; if (s) return Object.assign({ site: id }, s); }
+  for (const id of HM.freeSites(S.plots, S.home.houses)) {
+    const pid = HM.padPlot ? HM.padPlot(id) : id, mod = (S.plots[pid] || S.plots[id] || {}).mod;
+    const s = HM.spotsIn(id, mod, avoid)[0]; if (s) return Object.assign({ site: id }, s); }
   return null; }
 let homeGateKey = '', homeGateVal = null;
 function homeGate(have) {
@@ -3475,7 +3479,7 @@ function homeHiveAside(h, p) { // move a hive that stands where the house goes t
   for (const c of DC.ringSpots(p, 40, 4)) { if (HM.siteAt(c.x, c.y) !== site || homeFeet().some(f => HM.inBox(c, f, 4))) continue;
     if (PWA.hiveSpots().some(q => q && q !== p && Math.hypot(q.x - c.x, q.y - c.y) < 7)) continue; h.x = c.x; h.y = c.y; if (WORKS_ON && PWA.sync) PWA.sync(true); return; }
 }
-// moving it (the shop's 挪东西 mode, like the other pieces): to a bought 花甸 / 农田, or a bought first-ring field such as 东田, with room, one house a plot; the family takes it
+// moving it (the shop's 挪东西 mode, like the other pieces): to a bought 宅园 pad, a 花甸 / 农田, or a bought first-ring field such as 东田, with room; one house a plot (宅园 holds 4); the family takes it
 // down and puts it up again there (HM.HOUSE.build minutes), the six tiles, the coop and what grows on them go along
 function homeMoveOk(x, y, ref) {
   const h = S.home.houses[ref];
@@ -3503,7 +3507,7 @@ function homeMoveDone(q) {
   for (const a of [FARMER, ...S.members, ...SPOUSES]) if (a.task && a.task.kind && /^hs-|^home$/.test(a.task.kind)) { a.task = null; a.path = []; }
   homeTilesSync(); homeGateKey = ''; dropOrder(q); if (HOME_ON) { HA.sync(true); HA.repaintAt && HA.repaintAt(from); } markNavDirty(); return true;
 }
-const homeBusy = id => S.home.houses.some(h => h.site === id) ? '这块地上有新房子，不能改建' : null;
+const homeBusy = id => S.home.houses.some(h => h.site === id || (HM.padPlot && HM.padPlot(h.site) === id)) ? '这块地上有新房子，不能改建' : null;
 // ---- building it: a grown-up goes over and puts it up (about 40 game minutes) ----
 function homeBoard(post) {
   S.home.houses.forEach((h, i) => { if (h.built) return; const L = HM.layout(h);
@@ -4863,23 +4867,31 @@ function familyDraw(list, T) { // pushes the family into the depth-sorted list; 
 }
 function syncRegionProps() { // open gates and take the signs down for bought regions
   const resortOn = !!(PL && PL.resortOpen && PL.resortOpen(S.plots));
+  const homeOn = !!(PL && PL.homesteadOpen && PL.homesteadOpen(S.plots));
   const pierOn = !!(IN && S.inn && IN.pierUp(S.inn));
   for (const id in regionProps) { const open = regionOpen(id);
     for (const p of regionProps[id]) {
-      const gateOpen = open && (p.gate || p.sign || (p.resortJoin && resortOn && regionOpen('coast') && regionOpen('eshore')) || (p.guestPier && pierOn));
+      const gateOpen = open && (p.gate || p.sign || (p.resortJoin && resortOn && regionOpen('coast') && regionOpen('eshore')) || (p.homeJoin && homeOn && regionOpen('coast') && regionOpen('nhome')) || (p.guestPier && pierOn));
       const want = !gateOpen, arr = p.sign ? billboards : props, i = arr.indexOf(p);
       if (want && i < 0) arr.push(p); else if (!want && i >= 0) arr.splice(i, 1); } }
 }
-function syncResortJoin() { // open the beach path, hide trees on it, when 东南滩 is a 度假村
+function syncResortJoin() { // open the beach path / 宅园 path, hide trees on them
   syncRegionProps();
-  if (!(PL && PL.resortOpen && PL.resortOpen(S.plots) && PL.RESORT_JOIN)) return;
-  const near = (x, y) => PL.joinDist(x, y) < 10 || PL.nearJoin(x, y, PL.RESORT_JOIN.lot, 12) || PL.nearJoin(x, y, PL.RESORT_JOIN.beach, 12);
-  for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (p.tree && near(p.x, p.y)) props.splice(i, 1); }
-  if (groundReady) {
-    const r = PL.plot('eshore').rect;
-    buildGroundBase([Math.min(r[0], 330) - 6, Math.min(r[1], 190) - 6, Math.max(r[2], 450) + 6, Math.max(r[3], 250) + 6]);
+  const hide = [];
+  if (PL && PL.resortOpen && PL.resortOpen(S.plots) && PL.RESORT_JOIN) {
+    hide.push((x, y) => PL.joinDist(x, y) < 10 || PL.nearJoin(x, y, PL.RESORT_JOIN.lot, 12) || PL.nearJoin(x, y, PL.RESORT_JOIN.beach, 12));
   }
-  markNavDirty();
+  if (PL && PL.homesteadOpen && PL.homesteadOpen(S.plots) && PL.HOME_JOIN) {
+    hide.push((x, y) => PL.joinDist(x, y, 'home') < 10 || PL.nearJoin(x, y, PL.HOME_JOIN.lot, 12) || PL.nearJoin(x, y, PL.HOME_JOIN.beach, 12));
+  }
+  if (hide.length) for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (p.tree && hide.some(fn => fn(p.x, p.y))) props.splice(i, 1); }
+  if (groundReady && hide.length) {
+    if (PL.resortOpen && PL.resortOpen(S.plots)) { const r = PL.plot('eshore').rect;
+      buildGroundBase([Math.min(r[0], 330) - 6, Math.min(r[1], 190) - 6, Math.max(r[2], 450) + 6, Math.max(r[3], 250) + 6]); }
+    if (PL.homesteadOpen && PL.homesteadOpen(S.plots)) { const r = PL.plot('nhome').rect;
+      buildGroundBase([r[0] - 6, r[1] - 6, Math.max(r[2], 352) + 6, Math.max(r[3], 216) + 6]); }
+  }
+  if (hide.length) markNavDirty();
 }
 const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111', '♥': '101111111010000' };
 function pixText(s, x, y, col, sc = 1) {
@@ -6102,7 +6114,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.0';
+const GAME_VERSION = '5.12.1';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

@@ -186,4 +186,49 @@ ok('moveOk + pathing: a house in 东田 keeps the farm door, well and warehouse 
   // the house block is already in the grid; a second copy must not cut the farm entries
   assert(DC.keepsPaths(NAV.build({ trees: trees.filter(t => t.stage === 'tree'), regions: ['east', 'forest', 'orchard', 'south', 'pasture', 'coast'], pens: {}, fence: true, houseTier: 3 }), L.block, [farm, well, barn, gate], farm), 'placing it does not cut the farm paths');
 });
+ok('v5.12.1: 宅园 pads are home sites; 4 houses fit; old houses elsewhere are kept; shop still sells two', () => {
+  assert.strictEqual(HM.HOUSE.max, 6); assert.strictEqual(HM.HOUSE.levels.length, 2);
+  assert.strictEqual(HM.siteAt(258, 142), 'nhome0'); assert.strictEqual(HM.siteAt(302, 180), 'nhome3');
+  assert.strictEqual(HM.siteName('nhome0'), '宅园·度假村北（西北）');
+  assert.strictEqual(HM.padPlot('nhome2'), 'nhome');
+  assert.strictEqual(HM.siteOwned('nhome0', {}, []), false);
+  assert.strictEqual(HM.siteOwned('nhome0', { nhome: { mod: 'homestead', day: 1 } }, []), true);
+  assert.strictEqual(HM.siteAllowsHouse('nhome0', { nhome: { mod: 'homestead' } }), true);
+  assert.strictEqual(HM.siteAllowsHouse('nhome0', {}), false);
+  assert.strictEqual(HM.isHomeSite('nhome'), false, 'the plot itself is not a house site');
+  assert.strictEqual(HM.isHomeSite('nhome0'), true);
+  const plots = { nhome: { mod: 'homestead', day: 40 }, glade: { mod: 'meadow', day: 20 }, eshore: { mod: 'field', day: 30 } };
+  const free = HM.freeSites(plots, []);
+  assert.deepStrictEqual(free.filter(id => HM.isPadId(id)), ['nhome0', 'nhome1', 'nhome2', 'nhome3']);
+  assert(free.includes('glade') && free.includes('eshore'));
+  assert(free[0] === 'nhome0', 'pads are offered before ordinary plots: ' + free[0]);
+  const oldHouse = { site: 'glade', x: -68, y: 160, m: 1, d: 60, built: 61, kid: 'kid0', tiles: [], eggs: 70, hens: 2 };
+  const v = HM.valid({ houses: [oldHouse, { site: 'nhome0', x: 258, y: 142, m: 1, d: 80, built: 80, tiles: [] }, { site: 'nhome1', x: 302, y: 142, m: 0, d: 80, built: 80, tiles: [] }, { site: 'nhome2', x: 258, y: 180, m: 1, d: 81, built: 0, tiles: [] }, { site: 'nhome3', x: 302, y: 180, m: 0, d: 81, built: 0, tiles: [] }, { site: 'eshore', x: 396, y: 128, m: 0, d: 70, built: 70, tiles: [] }],
+    wed: { kid0: { mate: 'm1', day: 70, moved: 70, house: 0 } } });
+  assert.strictEqual(v.houses.length, 6, 'cap raised to 6');
+  assert.strictEqual(v.houses[0].site, 'glade'); assert.strictEqual(v.houses[0].kid, 'kid0');
+  assert.deepStrictEqual(v.houses.map(h => h.site).sort(), ['eshore', 'glade', 'nhome0', 'nhome1', 'nhome2', 'nhome3']);
+  assert.deepStrictEqual(HM.valid(JSON.parse(JSON.stringify(v))), v, '6 houses including old+pads round-trip');
+});
+ok('v5.12.1 moveOk: snap to a free 宅园 pad; a taken pad is refused; unbought 宅园 is refused; glade houses stay put', () => {
+  const h = { site: 'glade', x: -68, y: 160, m: 1, built: 61 };
+  const ctx = { plots: { nhome: { mod: 'homestead', day: 40 }, glade: { mod: 'meadow', day: 20 } }, regions: ['east', 'coast'], houses: [], avoid: [] };
+  const okPad = HM.moveOk(258, 142, h, ctx);
+  assert(okPad.ok, 'empty pad takes the house: ' + okPad.why);
+  assert.strictEqual(okPad.spot.site, 'nhome0');
+  assert.deepStrictEqual([okPad.spot.x, okPad.spot.y, okPad.spot.m], [258, 142, 1]);
+  const snap = HM.moveOk(270, 150, h, ctx);
+  assert(snap.ok && snap.spot.site === 'nhome0', 'click near the pad snaps onto it: ' + (snap.why || snap.spot.site));
+  const taken = HM.moveOk(258, 142, h, Object.assign({}, ctx, { houses: [{ site: 'nhome0', x: 258, y: 142 }] }));
+  assert.strictEqual(taken.ok, false);
+  assert(/已经有一座新房子|这个房基/.test(taken.why), taken.why);
+  const other = HM.moveOk(302, 180, h, Object.assign({}, ctx, { houses: [{ site: 'nhome0', x: 258, y: 142 }] }));
+  assert(other.ok && other.spot.site === 'nhome3', 'a free pad on the same plot is fine');
+  const locked = HM.moveOk(258, 142, h, { plots: { glade: { mod: 'meadow' } }, regions: [], houses: [], avoid: [] });
+  assert.strictEqual(locked.ok, false);
+  assert(/还没买下/.test(locked.why), locked.why);
+  // an existing house on 林间空地 is still valid after the new plot exists
+  const keep = HM.valid({ houses: [{ site: 'glade', x: -68, y: 160, m: 1, d: 60, built: 61, tiles: [] }] });
+  assert.strictEqual(keep.houses[0].site, 'glade');
+});
 console.log(`home-test: ${n} ok`);
