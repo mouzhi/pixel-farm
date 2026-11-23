@@ -1039,8 +1039,8 @@ function board() {
   const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
   if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.28: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
-  const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0);
-  if (plant.length) { const o = rngNear(plant); post('transplant', 64, o, () => transplantTask(o)); }
+  const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0 && plantAccess(o.x, o.y));
+  if (plant.length) { const o = rngNear(plant); if (o) post('transplant', CHOP_ORDER_BASE + travel(F, o) / 8, o, () => transplantTask(o), undefined, undefined, true); }
   // v5.4.0: sprinkle fish food, release an ornamental fish the player flagged, pick up a truffle a dog found
   if (S.fishFood > 0 && S.pondFed !== S.day && T < 18 * 60) post('feedpond', 28, FS.POND_SPOT.stand, feedPondTask);
   const rel = S.orders.filter(o => o.type === 'release');
@@ -1253,7 +1253,7 @@ function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 a
     groundDirty = true;
   } };
 }
-const treeReachable = t => { const a = WD.areaAt(t.x, t.y); return a === 'home' || S.eff.regions.includes(a); };
+const treeReachable = t => ownGround(t.x, t.y); // v5.11.0.34: bought plot fruit belongs to the farm too
 const treeStand = t => ({ x: t.x - 8, y: t.y + 2 });
 function pickTask(t) {
   const fr = WD.FRUIT[t.kind];
@@ -1295,6 +1295,7 @@ function chopDrop(t, y) {
 function transplantTask(o) {
   return { label: `正在移植${WD.FRUIT[o.kind].name}树苗`, to: { x: o.x - 7, y: o.y + 1 }, tile: o, dur: 12, fx: 'dirt', pose: 'hoe', done: () => {
     if (FARMER.saplings[o.kind] <= 0 || !S.orders.includes(o)) return;
+    const sp = plantSpot(o.x, o.y, o); if (!sp.ok) { S.orders = S.orders.filter(q => q !== o); log(`树苗没有种下（${sp.why}），已留在仓库`); return; }
     S.orders = S.orders.filter(q => q !== o); FARMER.saplings[o.kind]--;
     const t = { id: 'p' + S.day + '_' + Math.floor(S.t % 1440) + '_' + S.trees.length, x: o.x, y: o.y, kind: o.kind, v: S.trees.length % 3, stage: 'sapling', age: 0, ripe: 0, cd: 0 };
     S.trees.push(t); treeChanged(t); burst(o.x, o.y, 6, ['#8cc6dc', '#5b9cc4'], 10, 'drop');
@@ -1314,8 +1315,9 @@ function postAutoChop(post, marked) {
   const t = rngNear(free); if (t) post('chop', WA.autoBase(SIM.SHOP, S.up), t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
 }
 function woodNight() {
-  const re = WA.replant(S.trees, FARMER.saplings, S.eff); for (const t of re) treeChanged(t);
-  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵树苗补种了林场`);
+  const reserved = {}; for (const o of S.orders) if (o.type === 'plant') reserved[o.kind] = (reserved[o.kind] || 0) + 1;
+  const re = WA.replant(S.trees, FARMER.saplings, S.eff, reserved); for (const t of re) treeChanged(t);
+  if (re.length) log(`伐木小屋用仓库里的 ${re.length} 棵空闲树苗补种了林场野树（已标记要种的果树苗不会使用）`);
 }
 function offlineWood(r) {
   const forestN = S.trees.filter(t => t.kind === 'wild' && WD.regrows(t)).length;
@@ -2637,6 +2639,7 @@ function placeOk(x, y, what, id, skip, self, slot) { // self: the order being ca
   if (blk && !DC.keepsPaths(g, blk, entrySpots(), NAV.LAYOUT.DOOR)) return res(false, '放在这里会把路堵上');
   return res(true, null);
 }
+const meadowAt = (x, y) => { const p = PL.plotAt(x, y); return p && S.plots[p.id] && S.plots[p.id].mod === 'meadow' ? p.id : null; }; // xhs 1.3.2
 const workYardAt = (x, y) => { const p = PL.plotAt(x, y); return p && S.plots[p.id] && S.plots[p.id].mod === 'workshop' ? p.id : null; }; // v5.10.12
 // things tied to a plot's use stay inside it: a workshop in its 工坊院, a hive in its 花甸 (or on 果园坡 for the orchard pair)
 function thingZone(what, skip) {
@@ -2645,7 +2648,7 @@ function thingZone(what, skip) {
     return { ok: (x, y) => { const id = workYardAt(x, y); return !!id && (id === w.at || PW.slotIn(S.works.works, id, skip.ref) >= 0); }, why: `${PW.WORKS[skip.ref].name}只能挪到工坊院里（哪一块都行，每块最多 3 座）` }; }
   if (what === 'hive' && skip) { const h = S.works.hives[skip.ref]; if (!h) return null;
     if (h.at === 'orchard') return { ok: (x, y) => WD.areaAt(x, y) === 'orchard', why: '这箱蜂只能在果园坡里挪' };
-    return { ok: inPlot(h.at, 'meadow'), why: '蜂箱只能挪到它所在的花甸里' }; }
+    return { ok: (x, y) => { const id = meadowAt(x, y); return !!id && PW.hiveSlotIn(S.plots, S.eff.regions, S.works.hives, id, skip.ref) >= 0; }, why: `蜂箱只能挪到花甸里（哪一块都行，每块最多 ${PW.HIVE.max} 箱）` }; } // xhs 1.3.2: any 花甸, not only its own
   return null;
 }
 const decorById = u => { const p = S.decor.placed.find(q => q.u === u); return p ? p.id : null; };
@@ -2711,7 +2714,10 @@ function settle(q) { // put it down at q.x, q.y (checked again: the ground may h
     if (to && to !== w.at) { const sl = PW.slotIn(S.works.works, to, q.ref); if (sl < 0) { dropOrder(q); log(`${thingName(q)}没法挪过去（那块工坊院满了），留在原处`); return false; }
       log(`${thingName(q)}从${PL.plot(w.at).name}搬到了${PL.plot(to).name}，里面的原料和成品一起带过去了`); w.at = to; w.slot = sl; }
     w.x = x; w.y = y; }
-  else if (q.what === 'hive') { const h = S.works.hives[q.ref]; h.x = x; h.y = y; }
+  else if (q.what === 'hive') { const h = S.works.hives[q.ref], to = h && h.at !== 'orchard' ? meadowAt(x, y) : null; if (!h) { dropOrder(q); return false; }
+    if (to && to !== h.at) { const sl = PW.hiveSlotIn(S.plots, S.eff.regions, S.works.hives, to, q.ref); if (sl < 0) { dropOrder(q); log(`${thingName(q)}没法挪过去（那块花甸放满了），留在原处`); return false; } // xhs 1.3.2: to another 花甸; its honey and countdown go with it
+      log(`${thingName(q)}从${PL.plot(h.at).name}搬到了${PL.plot(to).name}，里面的蜂蜜一起带过去了`); h.at = to; h.s = sl; }
+    h.x = x; h.y = y; }
   else if (q.what === 'spr') { const s = S.works.sprinklers[q.ref]; s.x = x; s.y = y; SPR_COVER = null; }
   dropOrder(q); markNavDirty(); DA.sync(true); PWA.sync(true); return true;
 }
@@ -4239,7 +4245,7 @@ function decorClick(w) {
     const o = orderThing('place', 'decor', null, id, r.x, r.y, true); if (!o.ok) return o;
     say(`标记好了，家人会把${DC.CATALOG[id].name}搬过去`); if (invFree(id) <= 0) setMode(null); return { ok: true }; }
   if (INPUT.mode === 'move') {
-    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器、第二套棚舍或新房子（老房子和第一套棚舍不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : m.what === 'home' ? '选中了新房子，再点新位置：买下的花甸、农田，或家里已买下的地（绿框，一块地一座）' : m.what === 'pen2' ? (PW.otherPasture(S.plots, S.works.penHost) ? '选中了第二套棚舍，再点另一块牧场（绿框），四座棚子、动物、饲槽和机械一起走' : '选中了第二套棚舍。还没有另一块牧场：先把另一块地改成牧场，再点那里（绿框）') : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
+    if (!INPUT.mvPick) { const m = movableAt(w.x, w.y); if (!m) return { ok: false, why: '先点要挪的东西：装饰、加工坊、蜂箱、浇水器、第二套棚舍或新房子（老房子和第一套棚舍不能挪）' }; INPUT.mvPick = m; say(m.what === 'work' ? `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置：任何一块工坊院里的空地都行（绿框，每块最多 ${PW.YARD_SLOTS} 座），原料和成品跟着走` : m.what === 'home' ? '选中了新房子，再点新位置：买下的花甸、农田，或家里已买下的地（绿框，一块地一座）' : m.what === 'pen2' ? (PW.otherPasture(S.plots, S.works.penHost) ? '选中了第二套棚舍，再点另一块牧场（绿框），四座棚子、动物、饲槽和机械一起走' : '选中了第二套棚舍。还没有另一块牧场：先把另一块地改成牧场，再点那里（绿框）') : m.what === 'hive' && S.works.hives[m.ref] && S.works.hives[m.ref].at !== 'orchard' ? '选中了蜂箱，再点新位置：任何一块花甸里的空地都行（绿框），蜂蜜跟着走' : `选中了${thingName({ what: m.what, ref: m.ref, id: m.id })}，再点新位置`); return null; }
     const m = INPUT.mvPick; const again = movableAt(w.x, w.y); if (again && again.what === m.what && again.ref === m.ref) { INPUT.mvPick = null; say('取消选择'); return null; }
     const r = m.what === 'spr' ? sprinklerSpot(w.x, w.y, m.ref) : m.what === 'home' ? homeMoveOk(w.x, w.y, m.ref) : m.what === 'pen2' ? pen2MoveOk(w.x, w.y) : placeOk(w.x, w.y, m.what, m.id, { what: m.what, ref: m.ref }); if (!r.ok) return r;
     const o = orderThing('move', m.what, m.ref, m.what === 'decor' ? null : null, m.what === 'spr' ? w.x : r.x, m.what === 'spr' ? w.y : r.y, true); if (!o.ok) return o;
@@ -5562,7 +5568,8 @@ function starterHud() { // v5.11.0.31: 「目标 2/5：…」 under the HUD unti
   const g = SIM.starterGoal(S.up, S.totalSold, S.day); let html = '';
   if (g) { const st = g.step, o = st.shop ? SIM.offer(S.up, S.coins, st.shop, FARMER.wood) : null;
     const need = o && !o.maxed ? (o.ok ? `（${o.cost} 金，够了！）` : o.locked ? '' : `（${o.cost} 金，还差 ${o.short}）`) : '';
-    html = `<b>目标 ${g.i + 1}/${g.n}</b> ${st.text}${need}<span class="rw">奖励 ${st.reward} 金</span>`; }
+    const needS = o && !o.maxed && !o.locked ? (o.ok ? ' ✓' : ` 差${o.short}`) : ''; // v5.11.0.34: the phone line (.gs) stays on one row at 390px
+    html = `<b>目标<span class="gl"> </span>${g.i + 1}/${g.n}</b> <span class="gl">${st.text}${need}</span><span class="gs">${st.short || st.text}${needS}</span><span class="rw">奖励 ${st.reward} 金</span><span class="rs">+${st.reward}</span>`; }
   if (html === goalKey) return; goalKey = html;
   el.hidden = !g; el.innerHTML = html; el.dataset.shop = g && g.step.shop ? g.step.shop : ''; el.classList.toggle('go', !!(g && g.step.shop));
 }
@@ -5617,7 +5624,13 @@ const PAN_KEYS = { w: [0, -1], a: [-1, 0], s: [0, 1], d: [1, 0], W: [0, -1], A: 
 const keyPan = new Set();
 const typing = e => e.target && /^(TEXTAREA|INPUT|BUTTON)$/.test(e.target.tagName); // the save menu has text boxes
 const INPUT = { mode: null, kind: 'apple', hover: null };
-function clampCam() { cam.x = clamp(cam.x, WORLD.x0 + 70, WORLD.x1 - 70); cam.y = clamp(cam.y, WORLD.y0 + 40, WORLD.y1 - 30); }
+function clampCam() {
+  // Tool targets must be able to pass under the fixed reticle, even at the world edge (the southern lots reach y=380).
+  // Only the camera's editing margin changes; ownership, placement and the map bounds are unchanged.
+  const pad = INPUT.mode ? Math.hypot(W / 2, H / 2 + 44) / (K * RS) : 0;
+  cam.x = clamp(cam.x, WORLD.x0 + (pad ? -pad : 70), WORLD.x1 + (pad ? pad : -70));
+  cam.y = clamp(cam.y, WORLD.y0 + (pad ? -pad : 40), WORLD.y1 + (pad ? pad : -30));
+}
 function panScreen(dx, dy) { // move the picture by (dx, dy) framebuffer pixels
   const rx = dx / RS, ry = dy / (K * RS); cam.x -= rx * CA + ry * SA; cam.y -= -rx * SA + ry * CA; clampCam(); }
 function panTo(x, y) { cam.x = x; cam.y = y; clampCam(); }
@@ -5627,23 +5640,27 @@ function treeAtScreen(px, py) { let best = null, bd = 1e9;
   for (const t of S.trees) { if (t.stage !== 'tree' || t.kind !== 'wild') continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60;
     if (Math.abs(px - sx) > 16 || py > sy + 6 || py < sy - h) continue; const d = Math.abs(px - sx) + Math.abs(py - (sy - h * 0.45)) * 0.5; if (d < bd) { bd = d; best = t; } }
   return best; }
-function plantSpot(x, y) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
-  const a = WD.areaAt(x, y);
-  if (!(a === 'home' || S.eff.regions.includes(a))) return { ok: false, why: '这里还没解锁' };
+function plantSpot(x, y, self) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
+  if (!ownGround(x, y)) return { ok: false, why: '这里还没解锁' };
   if (groundAt(x, y)[1] !== 'grass') return { ok: false, why: '只能种在草地上' };
   if (tiles.some(t => (t.open || !PL.isPlotId(t.f)) && Math.abs(t.x - x) < 9 && Math.abs(t.y - y) < 9)) return { ok: false, why: '不能种在田里' };
   if (yard.some(c => Math.hypot(c.x - x, c.y - y) < 7)) return { ok: false, why: '这里有杂物，等农夫收拾完再种' };
   if ([[HOUSE, 28], [BARN, 28], [STALL, 22], [WELL, 12]].some(([b, d]) => Math.hypot(b.x - x, b.y - y) < d)) return { ok: false, why: '离房子太近' };
   if (AN.PEN_IDS.some(k => (!PENS[k].second || S.eff[k]) && Math.hypot(PENS[k].bld.x - x, PENS[k].bld.y - y) < 20 || Math.hypot(PENS[k].trough.x - x, PENS[k].trough.y - y) < 10)) return { ok: false, why: '这里留给动物的棚子' }; // kept free even before it is built
   if (props.some(p => !p.region && Math.hypot(p.x - x, p.y - y) < (p.tree ? 11 : 8)) || S.trees.some(t => Math.hypot(t.x - x, t.y - y) < 11) ||
-      S.orders.some(o => o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
+      S.orders.some(o => o !== self && o.type === 'plant' && Math.hypot(o.x - x, o.y - y) < 11)) return { ok: false, why: '离别的树太近' };
+  if (!plantAccess(x, y)) return { ok: false, why: '家人走不到这里，先留出通路（河对岸要修好石桥）' };
   return { ok: true };
+}
+function plantAccess(x, y) {
+  const to = { x: x - 7, y: y + 1 }, r = pathTo(NAV.LAYOUT.DOOR, to), end = r.points[r.points.length - 1];
+  return !!end && Math.hypot(end.x - to.x, end.y - to.y) <= 6 && !r.fallback;
 }
 // v5.9.1: is there any grass left for a sapling? Scanned at most once per day or when trees / orders / regions change; stops at the first spot
 const PLANT_FULL = '没有能种树的空草地了：树之间要隔开一点，田里、路上、房子和棚子旁边都不能种。砍掉几棵野树或买下新的地块就有地方了';
 let plantRoomC = { key: '', ok: true };
 function plantRoom() {
-  const key = [S.day, S.trees.length, S.orders.length, S.eff.regions.length, tiles.length].join(',');
+  const key = [S.day, navVer, S.trees.length, S.orders.length, S.eff.regions.join(','), JSON.stringify(S.plots), tiles.length].join(',');
   if (key === plantRoomC.key) return plantRoomC.ok;
   let ok = false;
   for (let y = WORLD.y0 + 6; y < WORLD.y1 && !ok; y += 6) for (let x = WORLD.x0 + 6; x < WORLD.x1; x += 6) if (plantSpot(x, y).ok) { ok = true; break; }
@@ -5950,7 +5967,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.33';
+const GAME_VERSION = '5.11.0.34';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
