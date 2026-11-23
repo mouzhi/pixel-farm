@@ -1005,10 +1005,12 @@
     let h = '<div class="rel">';
     for (const k of H.kids) { const top = k.rel.filter(r => r.v > 0).slice(0, k.married ? 0 : 3);
       if (k.married) { const mate = k.wed && k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '';
-      const p = k.path, way = p && p.way, pending = p && p.pending;
-      const pathLine = way === 'work' ? '在镇上上班' : way === 'shop' ? '在镇上开店' : way === 'inn' ? '经营民宿 / 菜馆' : '留家种地';
-      h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(mate)}成家了，${pathLine}${pending ? '（明天换）' : ''}，住在新房子</div>`;
-      h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">换个活法</button></div>`; continue; }
+      const p = k.path, pending = p && p.pending;
+      const line = (window.PFCareers && PFCareers.pathLine) ? PFCareers.pathLine(p, k.name) : (p && p.way === 'work' ? '在镇上上班' : p && p.way === 'shop' ? '在镇上开店' : p && p.way === 'inn' ? '经营民宿 / 菜馆' : '留家种地');
+      const cool = (window.PFCareers && PFCareers.coolLeft) ? PFCareers.coolLeft(p, G.S ? G.S.day : 0) : 0;
+      h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(mate)}成家了，${esc(line)}${pending ? '（明天换）' : ''}，住在新房子</div>`;
+      const lab = cool ? `换个活法（还要 ${cool} 天）` : '换个活法';
+      h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">${lab}</button></div>`; continue; }
       if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }
       if (!top.length) continue;
       h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)} ${r.v}</span></div>`).join('');
@@ -1040,13 +1042,19 @@
   function paintCareer() {
     if (!careerBox || !careerData) return;
     const v = careerData, wedding = v.mode === 'wedding';
-    const fee = v.fee | 0;
-    const sub = wedding ? `${esc(v.name)}今天成家。选一个去向，之后就不用再管；关了窗口按推荐的来。` : (fee ? `换条路要 2,000 金，明天早上生效。关店会退一半装修费。` : `第一次换不用花钱，明天早上生效。`);
-    careerBox.innerHTML = `<h3>${wedding ? '成家以后做什么' : '换个活法'}</h3><div class="csub">${sub}</div>` +
-      v.options.map(o => `<button type="button" class="pbtn copt${careerSel && careerSel.way === o.way ? ' on' : ''}${o.ok ? '' : ' off'}" data-way="${o.way}" ${o.ok ? '' : 'disabled'}>${optLabel(o)}</button>`).join('') +
-      `<div class="crow"><button type="button" class="pbtn" id="careerOk">${wedding ? '就按这个' : '明天换过去'}</button>` + (wedding ? '' : `<button type="button" class="pbtn" id="careerNo">先不换</button>`) + `</div>`;
+    const fee = v.fee | 0, cool = v.cool | 0;
+    const keyOf = o => [o.way, o.at || '', o.kind || ''].join(':');
+    const sub = wedding ? `${esc(v.name)}今天成家。选一个去向；以后还可以在家人面板里换个活法。关了窗口按推荐的来。`
+      : (cool ? `再过 ${cool} 天才能再换（刚换过，要隔 5 天）。`
+      : (fee ? `换条路要 2,000 金，5 天内不能再换，明天早上生效。关店会退一半装修费。` : `第一次换不用花钱，5 天内不能再换，明天早上生效。`));
+    careerBox.innerHTML = `<h3>${wedding ? '成家以后做什么' : '换个活法'}</h3><div class="csub">${sub}</div><div class="clist">` +
+      v.options.map(o => `<button type="button" class="pbtn copt${careerSel && keyOf(careerSel) === keyOf(o) ? ' on' : ''}${o.ok ? '' : ' off'}" data-way="${o.way}" data-at="${o.at || ''}" data-kind="${o.kind || ''}" ${o.ok ? '' : 'disabled'}>${optLabel(o)}</button>`).join('') +
+      `</div><div class="crow"><button type="button" class="pbtn" id="careerOk"${(!wedding && cool) ? ' disabled' : ''}>${wedding ? '就按这个' : '明天换过去'}</button>` + (wedding ? '' : `<button type="button" class="pbtn" id="careerNo">先不换</button>`) + `</div>`;
     careerBox.hidden = false;
-    careerBox.querySelectorAll('[data-way]').forEach(b => b.onclick = () => { const o = v.options.find(q => q.way === b.getAttribute('data-way')); if (o && o.ok) { careerSel = o; paintCareer(); } });
+    careerBox.querySelectorAll('[data-way]').forEach(b => b.onclick = () => {
+      const o = v.options.find(q => keyOf(q) === [b.getAttribute('data-way'), b.getAttribute('data-at') || '', b.getAttribute('data-kind') || ''].join(':'));
+      if (o && o.ok) { careerSel = o; paintCareer(); }
+    });
     const ok = $('careerOk'); if (ok) ok.onclick = () => confirmCareer();
     const no = $('careerNo'); if (no) no.onclick = () => closeCareer(false);
   }

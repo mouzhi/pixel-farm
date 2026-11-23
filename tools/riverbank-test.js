@@ -1,4 +1,4 @@
-// v5.11.0.34: synthetic regressions for riverbank feedback (no player saves).
+// v5.11.0.36: synthetic regressions for riverbank feedback (no player saves).
 // node tools/riverbank-test.js: marked planting + reload/harvest, rezone/unreachable rejection without sapling loss,
 // normal autonomous bridge farming on both across-river fields within ten days (a reproduction scenario, not a claim about a player's device).
 const http = require('http'), fs = require('fs'), path = require('path');

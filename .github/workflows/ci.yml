@@ -54,6 +54,7 @@ jobs:
           node tools/bakery-test.js
           node tools/workshop-test.js
           node tools/careers-test.js
+          node tools/career-rechoose-test.js
           node tools/inn-test.js
           node tools/resort-test.js
           node tools/school-test.js
