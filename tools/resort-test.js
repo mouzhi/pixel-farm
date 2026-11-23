@@ -179,7 +179,24 @@ ok('beach slots are tidy, on the sand, and do not sit on the fishing pier or on 
   // guest pier sits east of the fishing pier and reaches into the sea
   assert.ok(L.pier.x - IN.COAST.pier.x >= 16);
   assert.ok(L.pier.hook.y >= IN.COAST.water[1]);
+  assert.ok(L.pier.mouth && L.pier.mouth.x === L.pier.x && L.pier.mouth.y === IN.COAST.rect[3]);
   assert.deepStrictEqual(IN.COAST.rect, WD.region('coast').rect, 'slots follow the real coast');
+});
+
+ok('sunset spots spread across the deck, both piers and the beach once the pier is up; four bench tiles are not enough', () => {
+  const none = IN.sunsetSpots(IN.empty());
+  assert.ok(none.every(s => s.kind !== 'guest-pier'), 'no guest-pier spots before it is built');
+  const I = IN.empty(); I.resort.deck = 1;
+  const deckOnly = IN.sunsetSpots(I);
+  assert.ok(deckOnly.length > 4, 'more than the four original bench seats, got ' + deckOnly.length);
+  assert.ok(deckOnly.every(s => s.kind !== 'guest-pier'));
+  I.resort.pier = 1;
+  const all = IN.sunsetSpots(I);
+  assert.ok(all.length >= deckOnly.length + 4, 'guest pier adds standing room');
+  assert.ok(all.some(s => s.kind === 'guest-pier') && all.some(s => s.kind === 'fish-pier') && all.some(s => s.kind === 'beach'));
+  const a = IN.sunsetSeat(I, 0), b = IN.sunsetSeat(I, 1), c = IN.sunsetSeat(I, all.length);
+  assert.ok(a && b && (a.x !== b.x || a.y !== b.y), 'adjacent people get different places');
+  assert.deepStrictEqual(c, a);
 });
 
 ok('东南滩 offers 度假村 and is the only reserved resort plot; rezoning is blocked once something is up', () => {

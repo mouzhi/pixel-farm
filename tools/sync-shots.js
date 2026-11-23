@@ -184,7 +184,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await b.close();
   await new Promise((resolve, reject) => server.close(err => err ? reject(err) : resolve()));
   const allErrs = errs.concat(errs2, errs3, errs4);
-  const bad = r.ver !== '5.11.0.34' ? 'ver ' + r.ver
+  const bad = r.ver !== '5.11.0.37' ? 'ver ' + r.ver
     : r.picked !== 1 ? 'hang path did not open picker'
     : !r.startInSame ? 'hang path startIn was not the stored handle'
     : !r.st.granted ? 'not granted'
