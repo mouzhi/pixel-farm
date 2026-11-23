@@ -1,4 +1,4 @@
-// v5.11.0.31: second pens can be moved with 挪东西, and a 牧场 can be re-zoned once they have somewhere to go.
+// v5.11.0.32: second pens can be moved with 挪东西, and a 牧场 can be re-zoned once they have somewhere to go.
 //   node tools/shedmove-shots.js [name-filter]   writes /workspace/pf-shots/shedmove_*.png (PF_SHOTS to change)
 // Player report: 「棚舍点挪东西挪不动，然后不挪的话地块又不能改建」 (高山牧场·山顶高地, day 51).
 const http = require('http'), fs = require('fs'), path = require('path');

@@ -57,13 +57,17 @@ async function test(name, fn) {
       const log = JSON.parse(localStorage.getItem('mouzhi/pixel-farm:playlog'));
       const d1 = log.days.find(d => d.day === 1);
       const d2 = log.days.find(d => d.day === 2);
-      return { day: __farm.S.day, coins: __farm.S.coins, d1, d2, nDays: log.days.length, events: log.events.map(e => e.type) };
+      const goal = __farm.S.events.filter(e => e.day === 1).reduce((a, e) => { const m = /完成目标.*奖励 (\d+) 金/.exec(e.msg); return a + (m ? +m[1] : 0); }, 0); // v5.11.0.31 starter goal rewards (not a playlog income source)
+      return { day: __farm.S.day, coins: __farm.S.coins, d1, d2, goal, nDays: log.days.length, events: log.events.map(e => e.type) };
     });
     assert.ok(r.day >= 2, 'reached day 2, got ' + r.day);
     assert.ok(r.d1, 'day 1 summary exists');
     assert.strictEqual(r.d1.open, false);
     assert.ok(r.d1.income.yard > 0, 'yard income recorded: ' + JSON.stringify(r.d1.income));
-    assert.strictEqual(r.d1.goldEnd, r.d1.goldStart + r.d1.income.yard);
+    // v5.11.0.31: day 1 now also sells its first carrots and buys seeds, and the starter goal pays a reward
+    const sum = o => Object.values(o || {}).reduce((a, b) => a + (+b || 0), 0);
+    assert.strictEqual(r.d1.goldEnd, r.d1.goldStart + sum(r.d1.income) - sum(r.d1.spend) + r.goal, JSON.stringify({ d1: r.d1, goal: r.goal }));
+    assert.ok(r.d1.income.crops > 0, 'the first carrots are sold on day 1');
     assert.ok(r.d1.busyMin + r.d1.idleMin + r.d1.sleepMin > 100, 'time buckets filled');
     assert.ok(r.d1.sleepMin > 0, 'sleep recorded');
     assert.ok(r.d1.idle.fish + r.d1.idle.rest + r.d1.idle.other > 0, 'idle breakdown');
@@ -143,7 +147,7 @@ async function test(name, fn) {
     assert.ok(/点此恢复本地同步/.test(r0.hintText), r0.hintText);
     assert.ok(/本地同步需要点一下重新授权/.test(r0.menu), r0.menu);
     assert.ok(/点此恢复本地同步/.test(r0.menu), r0.menu);
-    assert.strictEqual(r0.ver, '5.11.0.31', r0.ver);
+    assert.strictEqual(r0.ver, '5.11.0.34', r0.ver);
     fs.mkdirSync(OUT, { recursive: true });
     await p.screenshot({ path: path.join(OUT, 'sync_before.png') });
 
@@ -302,8 +306,8 @@ async function test(name, fn) {
     await p.evaluate(async () => {
       const dir = PFPlaylog.memoryDir({ name: 'pixelfarm', permission: 'granted' });
       const wrap = (day, coins, at, t) => ({
-        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.31', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
-        save: { saveVersion: 15, gameVersion: '5.11.0.31', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
+        meta: { kind: 'pixel-farm-save', gameVersion: '5.11.0.34', saveVersion: 15, timeline: 'a', exportedAt: new Date(at).toISOString() },
+        save: { saveVersion: 15, gameVersion: '5.11.0.34', createdAt: Date.parse('2026-10-01T00:00:00-07:00'), savedAt: at, clock: { day, t }, coins }
       });
       const w8 = wrap(8, 200, Date.parse('2026-11-15T12:00:00-08:00'), 800);
       const w12 = wrap(12, 999, Date.parse('2026-11-21T02:02:00-08:00'), 800); // wedding day in the fixture story

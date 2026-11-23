@@ -1,5 +1,6 @@
 // v5.10.7 农家乐 I：小木屋、农家菜馆、门口的桌子、路灯和留言本（规则在 inn.js）。
 // v5.10.8: two-storey inn cabins, beach huts, umbrellas, the seafood stall, the guest pier and the sunset deck.
+// resort villas and a tent campsite (with a campfire) on 东南滩 itself.
 // game.js calls mount(X) once its models exist, sync() whenever a cabin, the restaurant or a resort building goes up (idempotent: a key decides).
 'use strict';
 (function (root) {
@@ -229,13 +230,73 @@
       if (z === 3 && y >= 6 && y <= 9 && ((x >= 4 && x <= 10) || (x >= 17 && x <= 23))) return Wd[4]; // benches facing the sea
       return null;
     });
+    // 度假小别墅: cream plaster, a terracotta roof, a sea-blue door, flower boxes. Same storey and door
+    // as the inn cabin (walls 16 x 11, door 22) so it meets the housing scale rule, just a different look.
+    const VW = 40, VD = 34, VX0 = 4, VX1 = 35, VY0 = 3, VY1 = 24, VZW = 27, VDOOR = { x0: 16, x1: 23, top: 24 };
+    const plaster = (x, y, z) => ((x + y + z) % 7 === 0 ? '#efe4c8' : Ac[0]);
+    const villa = (lit) => B(VW, VD, VZW + 20, (x, y, z) => {
+      const wfn = lit ? litWin : win;
+      const inX = x >= VX0 && x <= VX1, inY = y >= VY0 && y <= VY1;
+      if (x >= VX1 - 6 && x <= VX1 - 3 && y >= VY0 + 3 && y <= VY0 + 6 && z >= 3 && z <= VZW + 18) return z >= VZW + 17 ? St[1] : (z % 4 === 0 ? St[1] : St[2]);
+      if (z <= 2 && x >= VX0 - 1 && x <= VX1 + 1 && y >= VY0 - 1 && y <= VY1 + 1) return (z === 2 || (x + y + z) % 5) ? St[2] : St[1];
+      if (inX && inY && z >= 3 && z <= VZW) {
+        const front = y >= VY1 - 1, back = y <= VY0 + 1, side = x <= VX0 + 1 || x >= VX1 - 1;
+        if (!(front || back || side)) { if (z >= 7 && z <= VZW - 4 && x >= VX0 + 5 && x <= VX1 - 5 && y >= VY0 + 5 && y <= VY1 - 5) return null; return Wd[5]; }
+        if (side && (front || back)) return Wd[1];
+        if (z >= VZW - 1) return Wd[2];
+        if (front) {
+          if (x >= VDOOR.x0 && x <= VDOOR.x1 && z <= VDOOR.top) { if (x === VDOOR.x0 || x === VDOOR.x1 || z === VDOOR.top) return Wd[1]; if (x === VDOOR.x1 - 2 && z === 13) return Ac[1]; return (x - VDOOR.x0) % 3 === 0 ? Wt[3] : Wt[4]; }
+          const w = wfn(x, z, 6, 10, 6) || wfn(x, z, 28, 10, 6); if (w) return w;
+          if (z === 9 && ((x >= 6 && x <= 11) || (x >= 28 && x <= 33))) return G[3]; // flower boxes
+        }
+        if (side) { const w = wfn(y, z, 8, 10, 5); if (w) return w; }
+        return plaster(x, y, z);
+      }
+      if (z === 0 && y > VY1 + 1 && y <= VY1 + 3 && x >= VDOOR.x0 - 1 && x <= VDOOR.x1 + 1) return Wd[3];
+      const r = gable(x, y, z, { z0: VZW + 1, pitch: 1, x0: VX0 - 2, x1: VX1 + 2, y0: VY0 - 1, y1: VY1 + 1, fy0: VY0, fy1: VY1, base: Rf[2], line: Rf[1], ridge: Rf[0], trim: Wd[4] });
+      return r === 'fill' ? Wd[5] : r;
+    });
+    const villaFrame = B(VW, VD, VZW + 8, (x, y, z) => {
+      const edge = x === VX0 || x === VX1 || y === VY0 || y === VY1;
+      if (z <= 1 && x >= VX0 && x <= VX1 && y >= VY0 && y <= VY1) return (x === VX0 || x === VX1 || y === VY0 || y === VY1) ? St[2] : Wd[4];
+      if ((x === VX0 || x === VX1) && (y === VY0 || y === VY1) && z <= VZW) return Wd[2];
+      if (edge && z === VZW) return Wd[3];
+      return null;
+    });
+    // a canvas A-frame tent: coloured fly, a dark opening on the south, pegs at the corners. Three colourways.
+    const tent = (c1, c2) => B(16, 16, 16, (x, y, z) => {
+      const cx = 7.5, peak = 15 - Math.abs(x - cx) * 1.6;
+      if (z === 0 && ((x <= 1 && (y <= 1 || y >= 14)) || (x >= 14 && (y <= 1 || y >= 14)))) return Wd[2]; // pegs
+      if (z < 1 && Math.abs(x - cx) <= 6 && y >= 1 && y <= 14) return Wd[4]; // a groundsheet
+      if (z > peak || z < 1) return null;
+      const front = y >= 13, back = y <= 2, wall = Math.abs((15 - z) / 1.6 - Math.abs(x - cx)) < 1.1;
+      if (!(front || back || wall)) return null;
+      if (front && Math.abs(x - cx) < 3 && z < 9) return (x === Math.round(cx - 2) || x === Math.round(cx + 2) || z === 8) ? Wd[1] : '#1c1626';
+      if (z >= peak - 1) return Wd[2]; // ridge pole
+      return ((x + y) & 1) ? c1 : c2;
+    });
+    // a ring of stones, two logs, and a small flame
+    const fire = B(14, 14, 12, (x, y, z) => {
+      const d = Math.hypot(x - 6.5, y - 6.5);
+      if (z <= 1 && d >= 4.2 && d <= 6.2) return (x + y) % 2 ? St[1] : St[2];
+      if (z <= 2 && d < 4.2 && ((y === 4 && x >= 4 && x <= 9) || (y === 9 && x >= 4 && x <= 9))) return z === 2 ? Wd[2] : Wd[1];
+      if (d < 2.4 && z >= 2 && z <= 8) {
+        const top = 8 - d * 2;
+        if (z <= top) return z >= top - 1 ? '#f2cf55' : (z >= 5 ? '#e06a2c' : '#a8432e');
+      }
+      return null;
+    });
     return { cabinDay: cabin(Rf[3], false), cabinNight: cabin(Rf[3], true), cabinAlt: cabin(G[2], false), cabinAltNight: cabin(G[2], true),
+
       cabin2Day: cabin2(Rf[3], false), cabin2Night: cabin2(Rf[3], true), cabin2Alt: cabin2(G[2], false), cabin2AltNight: cabin2(G[2], true), frame,
       diner0: diner(1, false), diner0n: diner(1, true), diner1: diner(2, false), diner1n: diner(2, true), diner2: diner(3, false), diner2n: diner(3, true),
       dinerFrame, kitchenFrame, table, lamp, pot, board,
       hutDay: hut(false), hutNight: hut(true), hutFrame,
       parasolA: parasol(Rf[2], Ac[0]), parasolB: parasol(Wt[3], Ac[0]), parasolC: parasol(G[2], Ac[0]), parasolD: parasol('#3a5a8c', Ac[0]),
-      stall, pierSeg, deck };
+      stall, pierSeg, deck,
+      villaDay: villa(false), villaNight: villa(true), villaFrame,
+      tentA: tent('#c9a85a', '#efe4c8'), tentB: tent('#a8432e', '#cf6a3c'), tentC: tent('#3a5a8c', '#4fa3cf'),
+      fire };
   }
   const DINER_CY = 1.5; // v5.11.0.9: the restaurant's walls fill its block (hd 8), the steps and awning hang south
   const CABIN_CY = 1.5; // model centre sits a little north of the door so the porch hangs south (v5.11.0.9: the bigger cabin's walls fill hd 6.5)
@@ -265,6 +326,14 @@
     if (night) for (const g of stay) if (IN.stayOf && IN.stayOf(g) === 'beach') rooms.add(g.room);
     return rooms;
   }
+  function occupiedStay(T, stay) {
+    const t = ((T % 1440) + 1440) % 1440, day = S && S.day | 0;
+    const night = t >= 18 * 60 || t < IN.LEAVE_MORNING;
+    const list = IN && S && S.inn ? IN.staying(S.inn, day) : [];
+    const rooms = new Set();
+    if (night) for (const g of list) if (IN.stayOf && IN.stayOf(g) === stay) rooms.add(g.room);
+    return rooms;
+  }
   function clock() {
     const t = ((S && S.t || 0) % 1440 + 1440) % 1440;
     return { t, late: t >= 17 * 60 + 30 || t < 6 * 60 + 30, dusk: t >= 17 * 60 + 30 && t < 22 * 60 + 30 };
@@ -273,8 +342,9 @@
     const I = S && S.inn, L = layout(), R = I && I.resort;
     if (!I) return 'none';
     const c = clock(), rooms = [...occupiedRooms(S.t)].join(','), huts = [...occupiedHuts(S.t)].join(',');
+    const villas = [...occupiedStay(S.t, 'villa')].join(','), tents = [...occupiedStay(S.t, 'camp')].join(',');
     return [L ? L.plot : '-', I.cabins | 0, I.inn2 | 0, (I.diner && I.diner.lv) | 0, I.job ? I.job.id + I.job.day : '',
-      R ? [R.huts, R.parasols, R.stall, R.pier, R.deck].join('.') : '', rooms, huts, c.late ? 1 : 0, c.dusk ? 1 : 0].join('|');
+      R ? [R.huts, R.parasols, R.stall, R.pier, R.deck, R.villas, R.camp].join('.') : '', rooms, huts, villas, tents, c.late ? 1 : 0, c.dusk ? 1 : 0].join('|');
   }
   function clear() { for (const p of own) { const i = X.props.indexOf(p); if (i >= 0) X.props.splice(i, 1); } own.length = 0; }
   function add(m, x, y, rot, meta) { if (!m) return null; const p = X.addProp(m, x, y, rot || 0, Object.assign({ inn: 1, big: 1 }, meta || {})); own.push(p); return p; }
@@ -329,6 +399,20 @@
       } else if (job && job.id === 'pier') add(MD.pierSeg, RL.pier.from.x, RL.pier.from.y, 0, { pier: 1, frame: 1 });
       if (r.deck) add(MD.deck, RL.deck.x, RL.deck.y, 0, { deck: 1 });
       else if (job && job.id === 'deck') add(MD.hutFrame, RL.deck.x, RL.deck.y, 0, { deck: 1, frame: 1 });
+      const villasLit = occupiedStay(S.t, 'villa');
+      for (let i = 0; i < (r.villas | 0); i++) {
+        const c = RL.villas && RL.villas[i]; if (!c) continue;
+        const lit = ck.late && (villasLit.has(i) || ck.dusk);
+        add(lit ? MD.villaNight : MD.villaDay, c.x, c.y + 1.5, 0, { villa: i });
+      }
+      if (job && job.id === 'villa' && RL.villas && RL.villas[r.villas | 0]) add(MD.villaFrame, RL.villas[r.villas | 0].x, RL.villas[r.villas | 0].y + 1.5, 0, { villa: r.villas | 0, frame: 1 });
+      if (r.camp) {
+        const tents = [MD.tentA, MD.tentB, MD.tentC];
+        if (RL.fire) add(MD.fire, RL.fire.x, RL.fire.y, 0, { fire: 1, big: 0 });
+        for (let i = 0; i < (RL.tents || []).length; i++) {
+          const c = RL.tents[i]; if (c) add(tents[i % tents.length], c.x, c.y, 0, { tent: i, big: 0 });
+        }
+      } else if (job && job.id === 'camp' && RL.fire) add(MD.villaFrame, RL.fire.x, RL.fire.y, 0, { camp: 1, frame: 1 });
     }
   }
   function lights(hz, T) {
@@ -359,6 +443,12 @@
       }
       if (r.stall && dusk) hz(RL.stall.door.x, RL.stall.door.y - 2, 14, 16, 0.6);
       if (r.deck) hz(RL.deck.x, RL.deck.y, 10, 14, dusk ? 0.7 : 0.35);
+      const villasLit = occupiedStay(T, 'villa');
+      for (let i = 0; i < (r.villas | 0); i++) {
+        const c = RL.villas && RL.villas[i]; if (!c) continue;
+        if (villasLit.has(i) || dusk) hz(c.door.x, c.door.y - 2, 14, villasLit.has(i) ? 20 : 14, villasLit.has(i) ? 0.85 : 0.45);
+      }
+      if (r.camp && RL.fire) hz(RL.fire.x, RL.fire.y, 8, late ? 22 : 10, late ? 0.95 : 0.4);
     }
   }
   function smoke() {
@@ -369,6 +459,7 @@
     if (L && (I.diner && I.diner.lv) > 0 && t >= 10 * 60 && t < 20 * 60) out.push({ x: L.diner.x + 10, y: L.diner.y - 6.5, z: 26 });
     const RL = rLayout();
     if (RL && I.resort && I.resort.stall && t >= 10 * 60 && t < 20 * 60) out.push({ x: RL.stall.x + 3, y: RL.stall.y - 2, z: 16 });
+    if (RL && I.resort && I.resort.camp && RL.fire) out.push({ x: RL.fire.x, y: RL.fire.y, z: 8 });
     return out;
   }
   function blocks() {
@@ -383,6 +474,11 @@
       for (let i = 0; i < (r.huts | 0); i++) { const c = RL.huts[i]; if (c) out.push([c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1]); }
       if (r.stall) out.push([RL.stall.x - RL.stall.hw, RL.stall.y - RL.stall.hd, RL.stall.x + RL.stall.hw, RL.stall.y + RL.stall.hd - 1]);
       if (r.deck) out.push([RL.deck.x - RL.deck.hw, RL.deck.y - RL.deck.hd, RL.deck.x + RL.deck.hw, RL.deck.y + RL.deck.hd - 1]);
+      for (let i = 0; i < (r.villas | 0); i++) { const c = RL.villas && RL.villas[i]; if (c) out.push([c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1]); }
+      if (r.camp) {
+        if (RL.fire) out.push([RL.fire.x - 3, RL.fire.y - 3, RL.fire.x + 3, RL.fire.y + 3]);
+        for (const c of (RL.tents || [])) out.push([c.x - c.hw, c.y - c.hd, c.x + c.hw, c.y + c.hd - 1]);
+      }
     }
     return out;
   }
@@ -416,14 +512,24 @@
       }
     }
     const RL = rLayout(), r = S && S.inn && S.inn.resort;
-    if (RL && r && (r.huts || r.parasols || r.stall || r.deck)) {
-      for (let i = 0; i < RL.path.length - 1; i++) {
-        const a = RL.path[i], b = RL.path[i + 1], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    const along = (path, w, sand) => {
+      if (!path) return null;
+      for (let i = 0; i < path.length - 1; i++) {
+        const a = path[i], b = path[i + 1], dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
         const t = ((x - a.x) * dx + (y - a.y) * dy) / (len * len);
         if (t < -0.02 || t > 1.02) continue;
         const px = a.x + t * dx, py = a.y + t * dy;
-        if (Math.hypot(x - px, y - py) < 2.6) return [hash(x, y, 5) > 0.5 ? Wd[4] : Wd[5], 'sand'];
+        if (Math.hypot(x - px, y - py) < w) return sand ? [hash(x, y, 5) > 0.5 ? Wd[4] : Wd[5], 'sand'] : [hash(x, y, 3) > 0.7 ? Wd[3] : Wd[4], 'dirt'];
       }
+      return null;
+    };
+    if (RL && r && (r.huts || r.parasols || r.stall || r.deck)) {
+      const hit = along(RL.path, 2.6, true); if (hit) return hit;
+    }
+    const zoned = !!(S && S.plots && IN && IN.resortPlotOf && IN.resortPlotOf(S.plots));
+    if (RL && zoned) {
+      const lot = along(RL.lotPath, 3.0, true); if (lot) return lot;
+      const join = along(RL.join && RL.join.path, 3.2, true); if (join) return join;
     }
     return null;
   }

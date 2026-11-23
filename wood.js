@@ -46,10 +46,10 @@
   const wants = (eff, wood, tgt) => canAuto(eff) && wood < tgt;
   // the lumber hut's night: every 林场 stump is replanted from a stored sapling (any kind; the forest grows it as a wild
   // tree). Returns the replanted trees. Runs before world.js treeOvernight, which then ages the saplings.
-  function replant(trees, saplings, eff) {
+  function replant(trees, saplings, eff, reserved) {
     const out = []; if (!(eff && eff.lumber)) return out;
     for (const t of trees) { if (t.kind !== 'wild' || t.stage !== 'stump' || !WD.regrows(t)) continue;
-      const k = WD.FRUIT_IDS.slice().sort((a, b) => (saplings[b] || 0) - (saplings[a] || 0))[0]; if (!k || !(saplings[k] > 0)) break;
+      const k = WD.FRUIT_IDS.slice().sort((a, b) => ((saplings[b] || 0) - ((reserved && reserved[b]) || 0)) - ((saplings[a] || 0) - ((reserved && reserved[a]) || 0)))[0]; if (!k || !(saplings[k] > ((reserved && reserved[k]) || 0))) break;
       saplings[k]--; t.stage = 'sapling'; t.age = Math.max(t.age, WD.STUMP_TO_TREE - HUT_REGROW); out.push(t); }
     return out;
   }

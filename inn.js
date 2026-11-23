@@ -8,7 +8,7 @@
 // same-day lines. Save stays v15: append-only diner.missedLast / servedLast / short / dishLast.
 // A bought flat-ish plot can be zoned 「民宿院」. Up to 4 cabins and one 农家菜馆 go up on it (family builds in a day).
 // v5.10.8: the yard can become a two-storey inn (each cabin hosts one extra group). 东南滩 zones as 「度假村」; the existing
-// beach holds huts, umbrellas, a seafood stall, a guest pier and a sunset deck. Resort guests stay only on the beach.
+// beach holds huts, umbrellas, a seafood stall, a guest pier and a sunset deck. 东南滩 itself holds villas and a tent campsite, with a walkable path down to the beach; resort guests stay in huts, villas or tents.
 // Guests arrive along the east avenue 10:00–16:00, stay 1–2 nights, wander the farm by day and go back to a lit cabin at night.
 // Room fee 300 × star coefficient, settled at checkout. The kitchen serves home-grown dishes at 1.6× the stall. The seafood
 // stall uses the farm's sea fish; its takings go into earn.meals. Save stays at v15: append-only top-level `inn`. Missing
@@ -45,14 +45,18 @@
   const GUEST_PIER = { cost: 25000, wood: 300 };
   const DECK = { cost: 20000, wood: 200 };
   const INN2 = { cost: 60000, wood: 600 };
+  const MAX_VILLAS = 3, MAX_TENTS = 3;
+  const VILLA = { cost: 22000, wood: 260 };
+  const CAMP = { cost: 12000, wood: 80 };
+  const VILLA_ROOM = 400, CAMP_ROOM = 160;
   const SUNSET = { from: 17 * 60, to: 19 * 60 };
   // the existing 海边 (world.js coast). Layout slots stay on this beach; 东南滩 only has to be zoned 度假村.
   const COAST = { rect: [200, 212, 344, 256], gate: P(220, 212), pier: P(280, 256), water: [200, 248, 352, 288],
     fish: { stand: P(280, 268), hook: P(280, 278) }, center: P(272, 236) };
   const SEA_FISH = ['sardine', 'seabass', 'snapper', 'tuna', 'sword'];
-  const RESORT_JOBS = /^(hut|stall|pier|deck)$/;
+  const RESORT_JOBS = /^(hut|stall|pier|deck|villa|camp)$/;
   const INN_JOBS = /^(cabin|diner|kitchen|inn2)$/;
-  const ALL_JOBS = /^(cabin|diner|kitchen|inn2|hut|stall|pier|deck)$/;
+  const ALL_JOBS = /^(cabin|diner|kitchen|inn2|hut|stall|pier|deck|villa|camp)$/;
 
   // ---------- dishes: eat what the farm grows. price = 1.6 × stall of the ingredients ----------
   const UNIT = {
@@ -109,7 +113,9 @@
   // ---------- star coefficient and daily arrivals ----------
   // 1 star 0.8 … 5 star 1.3, linear. An empty guestbook starts at 3 stars (one group a day).
   const starCoef = s => { const v = clamp(+s || 3, 1, 5); return Math.round((0.8 + (v - 1) * 0.125) * 1000) / 1000; };
-  const roomFee = (nights, stars) => Math.round(ROOM * (nights | 0) * starCoef(stars));
+  const roomBase = stay => stay === 'villa' ? VILLA_ROOM : stay === 'camp' ? CAMP_ROOM : ROOM;
+  const roomFee = (nights, stars, stay) => Math.round(roomBase(stay) * (nights | 0) * starCoef(stars));
+
   // 3 stars → 1 group / day, 5 stars → 3. Below 3 a day may be skipped (deterministic on the day number).
   function groupsWanted(stars, day, fest) {
     const s = clamp(+stars || 3, 1, 5);
@@ -272,30 +278,53 @@
     const pier = { x: 318, y: 262, hw: 4, hd: 14, stand: P(318, 270), hook: P(318, 278), from: P(318, 250) };
     const deck = { x: 210, y: 250, hw: 8, hd: 5, sit: [P(206, 250), P(210, 250), P(214, 250), P(218, 250)] };
     const path = [COAST.gate, P(250, 228), P(272, 236), COAST.pier];
-    return { plot: RESORT_PLOT, coast: COAST, huts, parasols, stall, pier, deck, path, gate: COAST.gate };
+    // tidy fixed slots on 东南滩 itself (the lot was empty after zoning). Villas along the north and east,
+    // the campsite in the south-west by the new beach path. The west gate (362, 150) and the south join stay clear.
+    const vw = 9, vd = 7;
+    const villas = [
+      { i: 0, x: 390, y: 130, hw: vw, hd: vd, door: P(390, 137), rot: 0 },
+      { i: 1, x: 420, y: 130, hw: vw, hd: vd, door: P(420, 137), rot: 0 },
+      { i: 2, x: 420, y: 164, hw: vw, hd: vd, door: P(420, 171), rot: 0 },
+    ];
+    const fire = { x: 386, y: 180, sit: [P(380, 178), P(392, 178), P(386, 186)] };
+    const tents = [
+      { i: 0, x: 374, y: 172, hw: 4, hd: 4, door: P(374, 176), rot: 0 },
+      { i: 1, x: 398, y: 172, hw: 4, hd: 4, door: P(398, 176), rot: 0 },
+      { i: 2, x: 374, y: 188, hw: 4, hd: 4, door: P(374, 192), rot: 0 },
+    ];
+    const join = (PL && PL.RESORT_JOIN) ? PL.RESORT_JOIN : { lot: P(376, 200), beach: P(344, 220), path: [P(376, 200), P(360, 208), P(344, 220), P(332, 236)] };
+    const lotPath = [P(362, 150), P(386, 150), P(386, 176), P(376, 200)];
+    const lotGate = P(362, 150);
+    return { plot: RESORT_PLOT, coast: COAST, huts, parasols, stall, pier, deck, path, gate: COAST.gate,
+      villas, tents, fire, lotPath, lotGate, join, beachJoin: join.beach, lotJoin: join.lot };
   }
   const isSunset = t => { const T = ((t % 1440) + 1440) % 1440; return T >= SUNSET.from && T < SUNSET.to; };
 
   // ---------- save (append-only; missing = nothing built) ----------
-  const emptyResort = () => ({ huts: 0, parasols: 0, stall: 0, pier: 0, deck: 0 });
+  const emptyResort = () => ({ huts: 0, parasols: 0, stall: 0, pier: 0, deck: 0, villas: 0, camp: 0 });
   const emptyDiner = () => ({ lv: 0, menu: 'auto', served: 0, missed: 0, last: 0 });
   const emptyStars = () => ({ avg: 3, last: [] });
   const emptyEarn = () => ({ rooms: 0, meals: 0 });
   const empty = () => ({ cabins: 0, inn2: 0, guests: [], diner: emptyDiner(), resort: emptyResort(), stars: emptyStars(), earn: emptyEarn(), job: null, walkins: 0, arrived: 0 });
-  const stayOf = g => (g && g.stay === 'beach') ? 'beach' : 'inn';
+  const stayOf = g => (g && (g.stay === 'beach' || g.stay === 'villa' || g.stay === 'camp')) ? g.stay : 'inn';
+  const isResortStay = stay => stay === 'beach' || stay === 'villa' || stay === 'camp';
   const innRoomsOf = I => cabinsUp(I) * (I && I.inn2 ? 2 : 1);
   const hutsUp = I => (I && I.resort && I.resort.huts) | 0;
   const parasolsUp = I => (I && I.resort && I.resort.parasols) | 0;
   const stallUp = I => !!(I && I.resort && I.resort.stall);
   const pierUp = I => !!(I && I.resort && I.resort.pier);
   const deckUp = I => !!(I && I.resort && I.resort.deck);
+  const villasUp = I => (I && I.resort && I.resort.villas) | 0;
+  const campUp = I => !!(I && I.resort && I.resort.camp);
+  const tentsUp = I => campUp(I) ? MAX_TENTS : 0;
+  const capOf = (I, stay) => stay === 'beach' ? hutsUp(I) : stay === 'villa' ? villasUp(I) : stay === 'camp' ? tentsUp(I) : innRoomsOf(I);
   function validGuest(g, i, I) {
     if (!g || typeof g !== 'object') return null;
     const stay = stayOf(g);
-    const cap = stay === 'beach' ? hutsUp(I) : innRoomsOf(I);
+    const cap = capOf(I, stay);
     if (cap <= 0) return null;
-    const id = typeof g.id === 'string' && /^g[0-9A-Za-z]{1,12}$/.test(g.id) ? g.id : 'g' + i;
-    const looks = stay === 'beach' ? BEACH_LOOKS : LOOKS;
+    const id = typeof g.id === 'string' && /^[gcbv][0-9A-Za-z]{1,12}$/.test(g.id) ? g.id : (stay === 'villa' ? 'v' : stay === 'camp' ? 'c' : stay === 'beach' ? 'b' : 'g') + i;
+    const looks = isResortStay(stay) ? BEACH_LOOKS : LOOKS;
     const look = looks.includes(g.look) ? g.look : looks[i % looks.length];
     const n = int(g.n, GROUP.min, GROUP.max) || 1;
     const room = int(g.room, 0, Math.max(0, cap - 1));
@@ -337,13 +366,14 @@
     out.cabins = int(o.cabins, 0, MAX_CABINS);
     out.inn2 = o.inn2 ? 1 : 0;
     const r = obj(o.resort);
-    out.resort = { huts: int(r.huts, 0, 4), parasols: int(r.parasols, 0, 8), stall: r.stall ? 1 : 0, pier: r.pier ? 1 : 0, deck: r.deck ? 1 : 0 };
-    const cap = innRoomsOf(out) + hutsUp(out);
+    out.resort = { huts: int(r.huts, 0, 4), parasols: int(r.parasols, 0, 8), stall: r.stall ? 1 : 0, pier: r.pier ? 1 : 0, deck: r.deck ? 1 : 0,
+      villas: int(r.villas, 0, MAX_VILLAS), camp: r.camp ? 1 : 0 };
+    const cap = innRoomsOf(out) + hutsUp(out) + villasUp(out) + tentsUp(out);
     out.guests = (Array.isArray(o.guests) ? o.guests : []).map((g, i) => validGuest(g, i, out)).filter(Boolean).slice(0, Math.max(0, cap));
     const rooms = new Set();
     out.guests = out.guests.filter(g => {
       const key = stayOf(g) + ':' + g.room;
-      const max = stayOf(g) === 'beach' ? hutsUp(out) : innRoomsOf(out);
+      const max = capOf(out, stayOf(g));
       if (rooms.has(key) || g.room >= max) return false; rooms.add(key); return true;
     });
     const d = obj(o.diner);
@@ -449,11 +479,20 @@
       if (deckUp(I)) return { id, ok: false, reason: 'done', why: '日落观景台已经盖好了', name: '日落观景台' };
       return { id, name: '日落观景台', cost: DECK.cost, wood: DECK.wood, ok: true };
     }
+    if (id === 'villa') {
+      const n = villasUp(I);
+      if (n >= MAX_VILLAS) return { id, ok: false, reason: 'full', why: '度假小别墅最多 3 栋', name: '度假小别墅' };
+      return { id, name: n ? '再盖一栋度假小别墅' : '第一栋度假小别墅', cost: VILLA.cost, wood: VILLA.wood, ok: true };
+    }
+    if (id === 'camp') {
+      if (campUp(I)) return { id, ok: false, reason: 'done', why: '帐篷露营地已经盖好了', name: '帐篷露营地' };
+      return { id, name: '帐篷露营地', cost: CAMP.cost, wood: CAMP.wood, ok: true };
+    }
     return { id, ok: false, reason: 'unknown', why: '没有这个项目' };
   }
   function canStart(I, id, ctx) {
     const o = offer(I, id); if (!o.ok) return o.why;
-    const resort = /^(hut|parasol|stall|pier|deck)$/.test(id);
+    const resort = /^(hut|parasol|stall|pier|deck|villa|camp)$/.test(id);
     if (resort) {
       if (!(ctx && ctx.coast)) return '先买下海边';
       if (!(ctx && ctx.resort)) return '先把东南滩改建成度假村';
@@ -486,6 +525,8 @@
     if (id === 'stall') I.resort.stall = 1;
     if (id === 'pier') I.resort.pier = 1;
     if (id === 'deck') I.resort.deck = 1;
+    if (id === 'villa' && villasUp(I) < MAX_VILLAS) I.resort.villas = villasUp(I) + 1;
+    if (id === 'camp') I.resort.camp = 1;
     return id;
   }
   const plotBusy = (plotId, plots, I) => {
@@ -493,7 +534,7 @@
     // v5.11.0.5: the lodging moved to the 农家乐区, so an old 民宿院 plot is an empty yard and never busy
     if (plots[plotId].mod === 'resort') {
       const r = I && I.resort;
-      if ((r && (r.huts || r.parasols || r.stall || r.pier || r.deck)) || (I && I.job && RESORT_JOBS.test(I.job.id))) return '这块地上有度假村，不能改建';
+      if ((r && (r.huts || r.parasols || r.stall || r.pier || r.deck || r.villas || r.camp)) || (I && I.job && RESORT_JOBS.test(I.job.id))) return '这块地上有度假村，不能改建';
     }
     return null;
   };
@@ -527,6 +568,16 @@
     const out = []; for (let i = 0; i < hutsUp(I); i++) if (!used.has(i)) out.push(i);
     return out;
   };
+  const freeVillas = I => {
+    const used = new Set((I.guests || []).filter(g => stayOf(g) === 'villa').map(g => g.room));
+    const out = []; for (let i = 0; i < villasUp(I); i++) if (!used.has(i)) out.push(i);
+    return out;
+  };
+  const freeTents = I => {
+    const used = new Set((I.guests || []).filter(g => stayOf(g) === 'camp').map(g => g.room));
+    const out = []; for (let i = 0; i < tentsUp(I); i++) if (!used.has(i)) out.push(i);
+    return out;
+  };
   const staying = (I, day) => (I.guests || []).filter(g => (g.from | 0) <= (day | 0) && (g.until | 0) > (day | 0));
   const leaving = (I, day) => (I.guests || []).filter(g => (g.until | 0) <= (day | 0));
   const stayingStay = (I, day, stay) => staying(I, day).filter(g => stayOf(g) === stay);
@@ -540,9 +591,9 @@
     const nights = STAY.min + ((h >>> 4) % (STAY.max - STAY.min + 1));
     const span = ARRIVE.to - ARRIVE.from;
     const at = ARRIVE.from + ((h >>> 8) % Math.max(1, span));
-    const looks = stay === 'beach' ? BEACH_LOOKS : LOOKS;
+    const looks = isResortStay(stay) ? BEACH_LOOKS : LOOKS;
     const look = looks[(h >>> 16) % looks.length];
-    const prefix = stay === 'beach' ? 'b' : 'g';
+    const prefix = stay === 'beach' ? 'b' : stay === 'villa' ? 'v' : stay === 'camp' ? 'c' : 'g';
     return { id: prefix + day + k, look, n, room, from: day | 0, until: (day | 0) + nights, at, stay };
   }
   function planArrivals(I, day, stars, fest) {
@@ -559,8 +610,25 @@
     for (let k = 0; k < want && k < rooms.length; k++) out.push(planGroup(day, k, rooms[k], 'beach', 41));
     return out;
   }
+  function planVillaArrivals(I, day, stars, fest) {
+    const rooms = freeVillas(I); if (!rooms.length) return [];
+    const want = groupsWanted(stars, day, fest);
+    const out = [];
+    for (let k = 0; k < want && k < rooms.length; k++) out.push(planGroup(day, k, rooms[k], 'villa', 67));
+    return out;
+  }
+  function planCampArrivals(I, day, stars, fest) {
+    const rooms = freeTents(I); if (!rooms.length) return [];
+    const want = groupsWanted(stars, day, fest);
+    const out = [];
+    for (let k = 0; k < want && k < rooms.length; k++) out.push(planGroup(day, k, rooms[k], 'camp', 89));
+    return out;
+  }
   function checkIn(I, day, stars, fest) {
-    const add = planArrivals(I, day, stars, fest).concat(planBeachArrivals(I, day, stars, fest));
+    const add = planArrivals(I, day, stars, fest)
+      .concat(planBeachArrivals(I, day, stars, fest))
+      .concat(planVillaArrivals(I, day, stars, fest))
+      .concat(planCampArrivals(I, day, stars, fest));
     I.guests = (I.guests || []).concat(add);
     return add;
   }
@@ -598,7 +666,7 @@
     let gold = 0; const notes = [];
     for (const g of gone) {
       const nights = Math.max(STAY.min, (g.until | 0) - (g.from | 0));
-      const pay = roomFee(nights, stars);
+      const pay = roomFee(nights, stars, stayOf(g));
       gold += pay; I.earn.rooms = (I.earn.rooms | 0) + pay;
       const rated = rate ? rate(g, nights) : { s: 3, note: '' };
       const rec = { day: day | 0, s: int(rated.s, 1, 5) || 3, note: String(rated.note || '').slice(0, NOTE_MAX) };
@@ -733,7 +801,7 @@
     return cap ? Math.min(raw, cap) : raw;
   }
   function stallMealsWanted(I, day) {
-    return peopleStay(I, day, 'beach') * MEALS_EACH;
+    return (peopleStay(I, day, 'beach') + peopleStay(I, day, 'villa') + peopleStay(I, day, 'camp')) * MEALS_EACH;
   }
   const STALL_DISHES = DISHES.filter(d => d.stall);
   function stallMenu(counts, priceOf) {
@@ -845,15 +913,15 @@
 
   const api = {
     INN_PLOTS, RESORT_PLOT, PROSPERITY, MAX_CABINS, MAX_HUTS, MAX_PARASOLS, ROOM, FIRST, NEXT, DINER, KITCHEN,
-    HUT, PARASOL, SEA_STALL, GUEST_PIER, DECK, INN2, MEAL_MARK, MEALS_EACH, SUNSET, COAST, SEA_FISH,
+    HUT, PARASOL, SEA_STALL, GUEST_PIER, DECK, INN2, VILLA, CAMP, MAX_VILLAS, MAX_TENTS, VILLA_ROOM, CAMP_ROOM, MEAL_MARK, MEALS_EACH, SUNSET, COAST, SEA_FISH,
     STAY, GROUP, ARRIVE, LEAVE_MORNING, ON_SCREEN, STAR_BOOST, FURNISH, BOOK_MAX, STARS_MAX, NOTE_MAX, LOOKS, BEACH_LOOKS,
     UNIT, ITEM_NAME, itemName, DISHES, DISH, STALL_DISHES, GARDEN_DISH, unitOf, dishBase, dishPay, canMake, pullDish, isSeaFish, seaCount, pullSea,
-    starCoef, roomFee, groupsWanted, effectiveStars,
+    starCoef, roomFee, roomBase, groupsWanted, effectiveStars,
     innPlotOf, resortPlotOf, plotOk, layout, SITE, AGRI, siteOf, anyInn, agriLayout, migrate, resortLayout, isSunset,
     empty, emptyDiner, emptyStars, emptyEarn, emptyResort, valid, validMenu, avgOf,
     cabinsUp, dinerUp, kitchenLv, seatsOf, dishSlots, unlocked, gardenYield, kitchenCap, stockWithGarden, cabinCost, offer, canStart, start, finish, plotBusy,
-    innRoomsOf, hutsUp, parasolsUp, stallUp, pierUp, deckUp, stayOf, cabinOf,
-    hash, freeRooms, freeHuts, staying, stayingStay, leaving, peopleOf, peopleStay, planArrivals, planBeachArrivals, checkIn, checkOut,
+    innRoomsOf, hutsUp, parasolsUp, stallUp, pierUp, deckUp, villasUp, campUp, tentsUp, capOf, stayOf, isResortStay, cabinOf,
+    hash, freeRooms, freeHuts, freeVillas, freeTents, staying, stayingStay, leaving, peopleOf, peopleStay, planArrivals, planBeachArrivals, planVillaArrivals, planCampArrivals, checkIn, checkOut,
     listed, autoMenu, todayMenu, setMenu, serve, serveStall, stallMenu, mealsWanted, stallMealsWanted, walkinsOf,
     shortOf, shortNote, planServe, reserveNeed, mealReview, pushStar,
     NOTES, rateStay, book, isFest, entryOf,

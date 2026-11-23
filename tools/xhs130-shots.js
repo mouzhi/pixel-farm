@@ -1,4 +1,4 @@
-// 小红书小工具 1.3.1（同步网页版 v5.11.0.31）：手机截图 + 检查，跑在打好的包上（390×844 @3x，真触摸事件）。
+// 小红书小工具 1.3.2（同步网页版 v5.11.0.34）：手机截图 + 检查，跑在打好的包上（390×844 @3x，真触摸事件）。
 //   bash platforms/xhs/pack.sh && node tools/xhs130-shots.js [name-filter]   writes /workspace/pf-shots/xhs130_*.png (PF_SHOTS / PF_TAG)
 // Checks the v5.11 features on the phone layout: 活动倒计时 in the HUD (tap opens the list), the hotbar in the 背包 dock, 相册 as a tab of the
 // diary (no new bottom-bar button; the photo toast opens it), the restaurant panel, the opaque cloud over locked districts, the party spread,
@@ -62,7 +62,7 @@ const MOCK = seed => `(() => { const mem = Object.assign({}, ${JSON.stringify(se
       const snap = f.snapshot(), json = JSON.stringify(window.PFSave.compact(snap));
       return { ver: f.version, sv: snap.saveVersion, bytes: new Blob([json]).size, bar: vis('#xhs-bar'), hud: vis('#hud'), cd: vis('#countdown'), cdText: (document.getElementById('countdown') || {}).textContent,
         web: ['navBtns', 'menuBtn', 'albumBtn', 'diaryBtn', 'codexBtn', 'mmJump', 'mapBtn', 'title', 'titleS'].filter(id => vis('#' + id)), saveBtns: saveBtns(), hudIn: inside('#hud') }; })()`),
-      r => r.ver !== '5.11.0.31' ? 'game version ' + r.ver : r.sv !== 15 ? 'save v' + r.sv : r.bytes >= 65536 ? 'compact save ' + r.bytes + ' >= 64KB' : !r.bar || !r.hud || !r.hudIn ? 'chrome missing' : r.web.length ? 'web chrome showing: ' + r.web : r.saveBtns.length ? 'a save button: ' + r.saveBtns : null);
+      r => r.ver !== '5.11.0.34' ? 'game version ' + r.ver : r.sv !== 15 ? 'save v' + r.sv : r.bytes >= 65536 ? 'compact save ' + r.bytes + ' >= 64KB' : !r.bar || !r.hud || !r.hudIn ? 'chrome missing' : r.web.length ? 'web chrome showing: ' + r.web : r.saveBtns.length ? 'a save button: ' + r.saveBtns : null);
     await step(p, 'hotbar.png', async () => { await touch(p, [[200, 500]]); await tapEl(p, '#xhs-btn-bag'); await p.waitForTimeout(300);
       return p.evaluate(`(() => { ${H} const s = [...document.querySelectorAll('#inv .slot')].filter(vis); return { dock: vis('#xhs-inv-dock'), slots: s.length, min: Math.min(...s.map(e => Math.min(e.getBoundingClientRect().width, e.getBoundingClientRect().height))), off: s.filter(e => !inside(e)).length, inv: inside('#inv') }; })()`); },
       r => !r.dock || !r.slots ? 'bag dock empty' : r.min < 40 ? 'slots ' + r.min + 'px' : r.off || !r.inv ? r.off + ' slots off screen' : null);

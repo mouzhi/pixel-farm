@@ -41,7 +41,7 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('aim_commit.png', { viewport: { width: 390, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true }, null, async p => {
     const r = await p.evaluate(`(() => { ${setup} f.FARMER.saplings.apple = 2; S.decor.inv.bench = 1; f.panTo(f.HOUSE.x + 20, f.HOUSE.y + 70); f.render(); f.setMode('chop');
       const R = document.querySelector('canvas').getBoundingClientRect();
-      const t = S.trees.filter(t => t.stage === 'tree' && t.kind === 'wild' && window.PFWorld.choppable(t, S.eff.regions)).map(t => ({ t, c: f.toClient(t.x, t.y) })).filter(o => o.c.x > R.left + 30 && o.c.x < R.right - 30 && o.c.y > R.top + 40 && o.c.y < R.bottom - 5);
+      const t = S.trees.filter(t => t.stage === 'tree' && t.kind === 'wild' && window.PFWorld.choppable(t, S.eff.regions)).map(t => ({ t, c: f.toClient(t.x, t.y) })).filter(o => o.c.x > R.left + 30 && o.c.x < R.right - 30 && o.c.y > R.top + 40 && o.c.y < R.bottom - 5 && document.elementFromPoint(o.c.x, o.c.y - 10) === document.querySelector('canvas') && document.elementFromPoint(o.c.x + 7, o.c.y - 10) === document.querySelector('canvas')); // v5.11.0.31: not under the HUD (the starter goal makes it taller)
       const o = t[0], x = o.c.x, y = o.c.y - 10; const a0 = f.aimAt(x, y), c0 = f.commitAt(x, y), a1 = f.aimAt(x, y), c1 = f.commitAt(x, y);
       const miss = f.aimAt(R.left + 3, R.top + 3);
       f.setMode('plant', 'apple'); let good = null, bad = null; for (let yy = R.top + 10; yy < R.bottom && !(good && bad); yy += 6) for (let xx = R.left + 10; xx < R.right; xx += 6) { const a = f.aimAt(xx, yy); if (a.ok && !good) good = [xx, yy]; if (a.ok === false && !bad) bad = [xx, yy]; }

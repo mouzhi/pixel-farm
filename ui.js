@@ -254,7 +254,7 @@
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
-    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置` });
+    for (const k of PFWorld.FRUIT_IDS) if (F.saplings[k]) add({ id: 'sap-' + k, ico: pic(SAPLING_ICON[k] || FRUIT_ICON[k]), name: `${PFWorld.FRUIT[k].name}苗`, n: F.saplings[k], tip: `${PFWorld.FRUIT[k].name}树苗：用右下角的「种${PFWorld.FRUIT[k].name}」指定位置；家人按标记种果树，不会自动选址。伐木小屋只用未标记的树苗补种林场野树` });
     if (['coop', 'sty', 'fold', 'shed'].some(k => S.eff[k])) add({ id: 'hay', ico: pic(ICONS.hay), name: '干草', n: S.hay, dim: !S.hay, tip: `仓库里的干草：每只鸡每天 1 份，猪和羊 2 份，牛 3 份。拔草会晒出干草，不够时去集市买（${PFAnimals.HAY.price} 金一捆）` });
     if (S.animals.length) { const avg = Math.round(S.animals.reduce((n, a) => n + a.h, 0) / S.animals.length), mood = PFAnimals.mood(avg);
       add({ id: 'animals', ico: pic(ICONS.chicken), name: mood, n: S.animals.length, tip: `${S.animals.map(a => `${PFAnimals.KINDS[a.kind].name} ${a.h}（${PFAnimals.mood(a.h)}）`).join('，')}。喂饱、加水、摸一摸会更开心；开心（80 以上）多产一份，闷闷不乐（30 以下）不产。` }); }
@@ -431,7 +431,7 @@
       (v.staffed ? '，孩子在帮忙经营' : '') + (v.furnish ? '，木工家具让屋子更舒服' : '') +
       (v.guests && v.guests.length ? `，今天住着 ${v.guests.length} 组共 ${v.people} 人` : '，今天还没有客人') +
       `。房费和菜钱一共 ${v.earn.rooms + v.earn.meals} 金。</div>`;
-    const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台' };
+    const jobName = { cabin: '小木屋', diner: '农家菜馆', kitchen: '厨房', inn2: '二层客栈', hut: '沙滩小屋', stall: '海鲜摊', pier: '游客栈桥', deck: '日落观景台', villa: '度假小别墅', camp: '帐篷露营地' };
     if (v.job) h += `<div class="more">家人正在盖${jobName[v.job.id] || '这个项目'}，明天一早搭好。</div>`;
     const label = o => o.name || jobName[o.id] || '农家乐项目'; // v5.11.0.5: never a raw id (the kitchen card showed "kitchen")
     const desc = o => ({
@@ -439,16 +439,19 @@
       diner: '农家乐区南边的农家菜馆。用家里种的菜做饭，按摊位价的 1.6 倍收。先摆 4 个座位、2 道菜，旁边还有一块菜园。',
       kitchen: '厨房升一级，多 2 道菜、多 4 个座位。一共可以升两级。',
       inn2: '把农家乐区的小木屋都加盖成二层客栈，每间多住一组客人。家人一天改好。',
-      hut: '海边的沙滩小屋。度假村的客人只住这里，白天在沙滩上走、在伞下躺。家人一天盖好。',
+      hut: '海边的沙滩小屋。客人晚上住在这里，白天在沙滩上走、在伞下躺，也会走到东南滩的小别墅和营地。家人一天盖好。',
       parasol: '一把遮阳伞。家人马上摆到沙滩上固定的位置，最多 8 把。',
       stall: '用家里钓的海鱼做海鱼烤和海鲜汤，收入算进菜馆。家人一天盖好。',
       pier: '游客在海上钓鱼，钓到的会放回去，不占家里的鱼。家人一天铺好。',
       deck: '傍晚 17 点到 19 点，海面和天空会暖起来，游客和家人会来坐着看落日。家人一天修好。',
+      villa: '盖在东南滩上的度假小别墅。比沙滩小屋更安静，房费也高一些。客人白天会走到海边。家人一天盖好。最多 3 栋。',
+      camp: '东南滩南边的帐篷露营地：三顶帐篷围着篝火。过夜便宜一些，夜里能看见火光。家人一天搭好。',
     })[o.id] || '';
     const lvOf = o => o.id === 'cabin' ? v.cabins + '/4' : o.id === 'kitchen' ? v.diner + '/3' : o.id === 'inn2' ? (v.inn2 ? '已有' : '未盖')
       : o.id === 'diner' ? (v.diner ? '已有' : '未盖') : o.id === 'hut' ? (v.huts || 0) + '/4' : o.id === 'parasol' ? (v.parasols || 0) + '/8'
-      : o.id === 'stall' ? (v.stall ? '已有' : '未盖') : o.id === 'pier' ? (v.pier ? '已有' : '未盖') : o.id === 'deck' ? (v.deck ? '已有' : '未盖') : '';
-    const innIds = ['cabin', 'diner', 'kitchen', 'inn2'], resortIds = ['hut', 'parasol', 'stall', 'pier', 'deck'];
+      : o.id === 'stall' ? (v.stall ? '已有' : '未盖') : o.id === 'pier' ? (v.pier ? '已有' : '未盖') : o.id === 'deck' ? (v.deck ? '已有' : '未盖')
+      : o.id === 'villa' ? (v.villas || 0) + '/3' : o.id === 'camp' ? (v.camp ? '已有' : '未盖') : '';
+    const innIds = ['cabin', 'diner', 'kitchen', 'inn2'], resortIds = ['villa', 'camp', 'hut', 'parasol', 'stall', 'pier', 'deck'];
     const cards = (ids) => {
       let out = '';
       for (const o of v.offers.filter(x => ids.includes(x.id))) {
@@ -465,8 +468,9 @@
     h += cards(innIds);
     h += `<div class="sec">海边度假村${v.resortName ? ' · ' + esc(v.resortName) : ''}</div>`;
     if (!v.coast) h += `<div class="more">先在商店「地块」里买下海边。</div>`;
-    if (!v.resort) h += `<div class="more">再把东南滩改建成度假村，才能在沙滩上盖小屋、摆伞。</div>`;
-    h += `<div class="more">现在沙滩小屋 ${v.huts || 0} / 4，遮阳伞 ${v.parasols || 0} / 8` +
+    if (!v.resort) h += `<div class="more">再把东南滩改建成度假村，这块地就会通到海边，并能在上面盖小别墅和帐篷营地；沙滩上也能盖小屋、摆伞。</div>`;
+    h += `<div class="more">现在度假小别墅 ${v.villas || 0} / 3` + (v.camp ? '，帐篷营地已搭' : '，帐篷营地未搭') +
+      `，沙滩小屋 ${v.huts || 0} / 4，遮阳伞 ${v.parasols || 0} / 8` +
       (v.stall ? '，海鲜摊已开' : '') + (v.pier ? '，栈桥已铺' : '') + (v.deck ? '，观景台已修好' : '') + '。</div>';
     h += cards(resortIds);
     if (v.diner) {
@@ -590,6 +594,8 @@
     if (d.inn) { const [a, id] = d.inn.split(':'); if (a === 'start') { const r = G.innStart(id); drawShop(true); if (!r.ok) el.classList.add('shake'); } else if (a === 'mode') { const v = G.innView(); G.setInnMenu(v && v.auto ? [] : 'auto'); drawShop(true); } else if (a === 'dish') { const v = G.innView(); const cur = Array.isArray(v.menu) ? v.menu.slice() : v.listed.filter(d => d.can).map(d => d.id); const i = cur.indexOf(id); if (i >= 0) cur.splice(i, 1); else if (cur.length < v.dishes) cur.push(id); G.setInnMenu(cur.length ? cur : 'auto'); drawShop(true); } } // v5.10.7
   });
   $('shopBtn').addEventListener('click', () => toggleShop());
+  if ($('goal')) $('goal').addEventListener('click', () => { const id = $('goal').dataset.shop; if (!id) return; // v5.11.0.31: the starter goal opens its shop tab
+    const t = (SIM.SHOP_TABS || []).find(t => t.ids.includes(id)); toggleShop(true, { tab: t ? t.id : undefined, focus: id }); });
   G.openPlot = id => toggleShop(true, { tab: 'land', plot: id }); // v5.5.0: the plot labels on the map
   G.openHall = () => toggleShop(true, { tab: 'hall' }); // v5.10.0: the notice board in the town
   G.openInn = () => toggleShop(true, { tab: 'inn' }); // v5.10.7

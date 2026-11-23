@@ -62,6 +62,10 @@
     const p = (x < -24 || x > 352 || y > 136 || y < -110) ? fastPlot(x, y) : null;
     if (p) return plotGround(p, x, y, plots);
     if (x > 440 && y > 40 && y < 92) return [Math.abs(y - 66) < 5 ? Wd[4] : G[2], Math.abs(y - 66) < 5 ? 'dirt' : 'grass']; // beyond the town gate
+    // the short sandy path from 东南滩's south gate down to the east end of the beach
+    if (plots && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN && PL.joinDist(x, y) < 3.4) {
+      return [vnoise(x / 5, y / 5, 61) > 0.55 ? Wd[4] : Wd[5], 'sand'];
+    }
     return null;
   }
   let GRAZED = false; // the meadow is bought (set by sync); a locked meadow is a wild one
@@ -83,7 +87,7 @@
     if (mod === 'road') { const d = Math.abs(y - 66); return d < 5 ? [d > 3.8 ? Wd[3] : Wd[4], 'dirt'] : [G[3], 'grass']; }
     if (mod === 'playground') { const s = playSand(p, x, y); if (s) return s; return [v > 0.7 ? G[4] : G[3], 'grass']; }
     if (mod === 'inn') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const w = vnoise(x / 4, y / 4, 51); return [w > 0.78 ? Wd[3] : w < 0.12 ? St[2] : Wd[4], 'dirt']; }
-    if (mod === 'resort') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const path = Math.abs((x - x0) / Math.max(1, x1 - x0) - (y - y0) / Math.max(1, y1 - y0)); const w = vnoise(x / 5, y / 5, 61); if (path < 0.12 || (x - x0) + (y1 - y) < 28) return [w > 0.55 ? Wd[4] : Wd[5], 'sand']; return [w > 0.7 ? Wd[4] : G[3], w > 0.7 ? 'sand' : 'grass']; }
+    if (mod === 'resort') { const e = Math.min(x - x0, x1 - x, y - y0, y1 - y); if (e < 5) return [G[3], 'grass']; const path = Math.abs((x - x0) / Math.max(1, x1 - x0) - (y - y0) / Math.max(1, y1 - y0)); const w = vnoise(x / 5, y / 5, 61); const join = PL.RESORT_JOIN && PL.RESORT_JOIN.lot; const toGate = join && (Math.abs(x - join.x) < 3.4 && y > join.y - 44); const mid = Math.abs(y - 150) < 3.0 && x < 392; if (path < 0.12 || (x - x0) + (y1 - y) < 28 || toGate || mid) return [w > 0.55 ? Wd[4] : Wd[5], 'sand']; return [w > 0.7 ? Wd[4] : G[3], w > 0.7 ? 'sand' : 'grass']; }
     if (mod === 'trail') return null;
     return [G[3], 'grass'];
   }
@@ -181,8 +185,10 @@
     // fences and a sign for every plot that has a fence; registered with the regions so their gates and signs follow the shop
     for (const p of PL.PLOTS) { const list = x.regionProps[p.id] = [];
       if (!p.special) { const [x0, y0, x1, y1] = p.rect, nearGate = (gx, gy) => Math.hypot(gx - p.gate.x, gy - p.gate.y) < 12;
-        for (let fx = x0; fx < x1; fx += 8) for (const fy of [y0, y1]) { if (PL.riverDist(fx + 4, fy) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx + 4, fy, 0, { region: p.id }); q.gate = nearGate(fx + 4, fy); list.push(q); }
-        for (let fy = y0; fy < y1; fy += 8) for (const fx of [x0, x1]) { if (PL.riverDist(fx, fy + 4) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx, fy + 4, Math.PI / 2, { region: p.id }); q.gate = nearGate(fx, fy + 4); list.push(q); } }
+        const join = (p.id === 'eshore' && PL.RESORT_JOIN) ? PL.RESORT_JOIN.lot : null;
+        const nearJoin = (gx, gy) => !!(join && Math.hypot(gx - join.x, gy - join.y) < 12);
+        for (let fx = x0; fx < x1; fx += 8) for (const fy of [y0, y1]) { if (PL.riverDist(fx + 4, fy) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx + 4, fy, 0, { region: p.id }); q.gate = nearGate(fx + 4, fy); q.resortJoin = nearJoin(fx + 4, fy); list.push(q); }
+        for (let fy = y0; fy < y1; fy += 8) for (const fx of [x0, x1]) { if (PL.riverDist(fx, fy + 4) < PL.RIVER_HW + 2) continue; const q = add(x.models.fence, fx, fy + 4, Math.PI / 2, { region: p.id }); q.gate = nearGate(fx, fy + 4); q.resortJoin = nearJoin(fx, fy + 4); list.push(q); } }
       if (p.special === 'trail') { const q = add(md.barrier, p.gate.x, p.gate.y, 0.5, { region: p.id }); q.gate = true; list.push(q); }
       const sign = { spr: x.SIGN, x: p.sign.x, y: p.sign.y, region: p.id, sign: 1 }; x.billboards.push(sign); list.push(sign); }
     // the grazing meadow's sign (taken down once the fold has its meadow)
@@ -289,7 +295,7 @@
     if (o.mod === 'road' && !(S.eff && S.eff.town)) X.log('大道修通到了镇口（东边那条土路）；镇门还关着，孩子上过一天学后，可以在商店「地块」里开镇门'); // v5.10.11.1: say where the road is and what is next
     X.popText(X.FARMER.x, X.FARMER.y, 22, '-' + o.cost, '#ffd76a'); X.burst(p.sign.x, p.sign.y, 14, ['#ffd76a', '#fff2a8', '#ffffff'], 14, 'spark');
     X.emit('purchase', { item: 'plot:' + id, mod: o.mod, gold: o.cost, wood: o.wood, who: 'player' });
-    X.applyUpgrades(); X.saveNow(); return Object.assign({}, o, { ok: true });
+    X.applyUpgrades(); if (id === 'eshore' && o.mod === 'resort' && X.syncResortJoin) X.syncResortJoin(); X.saveNow(); return Object.assign({}, o, { ok: true });
   }
   function rezonePlot(id, mod) {
     const o = PL.rezoneOffer(S.plots, id, mod, S.coins, X.FARMER.wood); if (!o) return { ok: false, reason: 'unknown' }; if (!o.ok) return o;
@@ -300,7 +306,7 @@
     const p = o.plot; X.log(`「${p.name}」从${PL.MODULES[o.from].name}改成了${PL.MODULES[mod].name}（${o.cost} 金）${back.gold ? '，地里的庄稼折了 ' + back.gold + ' 金' : ''}${back.wood ? '，砍下的树得了 ' + back.wood + ' 木材' : ''}`);
     X.popText(p.sign.x, p.sign.y, 22, '-' + o.cost, '#ffd76a');
     X.emit('purchase', { item: 'rezone:' + id, mod, gold: o.cost, wood: o.wood, who: 'player' });
-    X.applyUpgrades(); repaint(id); X.markNavDirty(); X.saveNow(); return Object.assign({}, o, { ok: true, back });
+    X.applyUpgrades(); repaint(id); if (X.syncResortJoin) X.syncResortJoin(); X.markNavDirty(); X.saveNow(); return Object.assign({}, o, { ok: true, back });
   }
   // the world rules learn about plots: a plot is an area of its own; woodland trees grow back
   function patchWorld(WD) {
@@ -317,6 +323,7 @@
     if (!diff.length || diff.some(id => !PL.isPlotId(id))) return null;
     const r = [1e9, 1e9, -1e9, -1e9];
     for (const id of diff) { const p = PL.plot(id); let q = p.rect; if (p.special === 'trail') q = [170, -200, 240, -100];
+      if (id === 'eshore') q = [Math.min(q[0], 330), Math.min(q[1], 190), Math.max(q[2], 450), Math.max(q[3], 250)]; // the beach join
       r[0] = Math.min(r[0], q[0] - 10); r[1] = Math.min(r[1], q[1] - 10); r[2] = Math.max(r[2], q[2] + 10); r[3] = Math.max(r[3], q[3] + 10); }
     return r;
   }
