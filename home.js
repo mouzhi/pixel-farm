@@ -298,8 +298,10 @@
     if (w && w.moved) {
       let s = `${name}和${mateName(w.mate)}成家了，住在新房子`;
       const CR = careers(), p = CR && CR.pathOf(st, kid);
-      if (p && p.way === 'work' && p.at && CR.JOB[p.at]) s += `，在${CR.JOB[p.at].name}上班`;
+      if (p && CR.pathLine) { const line = CR.pathLine(p, name); if (line && line !== '留家种地') s += '，' + line; }
+      else if (p && p.way === 'work' && p.at && CR.JOB[p.at]) s += `，在${CR.JOB[p.at].name}上班`;
       else if (p && p.way === 'shop' && p.kind) s += `，在镇上开了${CR.shopName(name, p.kind)}`;
+      else if (p && p.way === 'inn') s += '，经营民宿 / 菜馆';
       return s;
     }
     if (w && w.mate) return `${name}今晚和${mateName(w.mate)}办婚礼`;

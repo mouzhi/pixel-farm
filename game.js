@@ -1258,7 +1258,7 @@ function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 a
     groundDirty = true;
   } };
 }
-const treeReachable = t => ownGround(t.x, t.y); // v5.11.0.34: bought plot fruit belongs to the farm too
+const treeReachable = t => ownGround(t.x, t.y); // v5.11.0.36: bought plot fruit belongs to the farm too
 const treeStand = t => ({ x: t.x - 8, y: t.y + 2 });
 function pickTask(t) {
   const fr = WD.FRUIT[t.kind];
@@ -1692,9 +1692,9 @@ function overnight() {
   for (const t of S.trees) { const before = t.stage + t.ripe; WD.treeOvernight(t); if (t.stage + t.ripe !== before) treeChanged(t); }
   S.prices = Object.assign(SIM.driftPrices(S.prices, rand), driftProducts(S.prices));
   machFeed(); // v5.11.0.29: fitted troughs are full before the animals eat
-  if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0, YD.penBonus(S.homeyard.put, yardPens()), CL && S.town ? CL.floor(S.town.hall) : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
+  if (S.animals.length) { const r = AN.overnightPens(S.animals, S.troughs, S.eff.fence ? AN.CARE.fence : 0, YD.penBonus(S.homeyard.put, yardPens()), CL && S.town ? CL.floor(S.town.hall) + (CR && S.home ? CR.clinicFloor(S.home) : 0) : 0); S.troughs = r.troughs; const m = r.report.made, t = AN.PRODUCT_IDS.filter(k => m[k]).map(k => `${AN.PRODUCTS[k].name} ${m[k]}`).join('、');
     log((r.report.hungry ? `有 ${r.report.hungry} 只动物没吃饱，` : '') + (t ? `夜里产了：${t}` : '动物们夜里没有新产出')); }
-  if (CL && S.town && CL.isCheck(S.town.hall, S.day)) { const n = CL.checkup(S.town.hall, S.animals, S.day), pets = PETS_LIVE.length; // v5.10.10 monthly checkup
+  if (CL && S.town && CL.isCheck(S.town.hall, S.day)) { const n = CL.checkup(S.town.hall, S.animals, S.day, CR && S.home ? CR.clinicCheck(S.home) : 0), pets = PETS_LIVE.length; // v5.10.10 monthly checkup; v5.11.0.36 clinic helper
     if (n || pets) log(`诊所的苏大夫来家里做了每月体检${n ? '，' + n + ' 只动物心情好了一些' : ''}${pets ? '，还看看了家里的猫和狗' : ''}`); }
   worksNight(); // v5.6.0: honey, the lamps' orchard, the herded sheep
   decorNight(); // v5.7.0: a full book page leaves a piece
@@ -3048,7 +3048,7 @@ function hallView() { // what the board shows (ui.js)
     inv: Object.keys(S.decor.inv).filter(id => HL.GIFT_OK(id) && S.decor.inv[id] > 0).map(id => ({ id, name: DC.CATALOG[id].name, n: S.decor.inv[id] })),
     placed: Object.keys(placed).map(id => ({ id, name: DC.CATALOG[id].name, n: placed[id].length, u: placed[id][placed[id].length - 1] })),
     school: SC && SC.built(H) ? { next: SC.nextDay(H, S.day), sports: SC.isDay(H, S.day) } : null,
-    library: LB && LB.built(H) ? { hints: LB.hints((S.codex && S.codex.got) || {}, S.day, window.PFCodex && PFCodex.ENTRIES) } : null,
+    library: LB && LB.built(H) ? { hints: LB.hints((S.codex && S.codex.got) || {}, S.day, window.PFCodex && PFCodex.ENTRIES, CR && S.home ? CR.libraryHints(S.home) : 0) } : null,
     clinic: CL && CL.built(H) ? { next: CL.nextCheck(H, S.day), floor: CL.FLOOR, paved: CL.paved(H) } : null,
     festival: FV && FV.ready(H) ? { today: FV.isDay(H, S.day), next: FV.nextDay(H, S.day), lantern: FV.hasShops(H), gift: FV.GIFT } : null }; }
 // ---- the town shop: a grown-up takes workshop goods, honey and fish over at a fifth more ----
@@ -3317,7 +3317,7 @@ function marketCrowd(dm) {
 function libraryRead(a) { // v5.10.9: 上学日 +1 with 书屋阿宁, once a day
   const H = S.town && S.town.hall; if (!LB || !H || !LB.built(H) || !HM) return;
   const L = H.library || (H.library = LB.empty()); if (L.last === S.day) return;
-  L.last = S.day; L.days = (L.days | 0) + 1; HM.clampAdd(S.home.nb, 'n9', LB.FAVOR);
+  L.last = S.day; L.days = (L.days | 0) + 1; HM.clampAdd(S.home.nb, 'n9', LB.FAVOR + (CR && S.home ? CR.libraryFavor(S.home) : 0));
 }
 function sleepAt() { // v5.10.11: on a lantern-fair night the family stays up until 22:00; then the usual night sleep speedup starts
   const H = S.town && S.town.hall, t = (FV && H && townOpen()) ? FV.bedtime(H, S.day) : null; return t == null ? BEDTIME : t; }
@@ -3472,7 +3472,7 @@ function homeBuildTask(i) { const h = S.home.houses[i], L = HM.layout(h);
     burst(h.x, h.y, 26, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); log(`${HM.siteName(h.site)}的新房子盖好了，旁边留了 6 格小田和一个小鸡舍`); noteProgress(); } };
 }
 // ---- 好感: school days, a classmate coming home, parties, the town shop ----
-function homeSchoolDay(a) { HM.schoolDay(S.home, a.id, homeDayRng(0x5D + kidSalt(a.id)), townOpen(), SC && S.town ? SC.favorMul(S.town.hall) : 1); }
+function homeSchoolDay(a) { HM.schoolDay(S.home, a.id, homeDayRng(0x5D + kidSalt(a.id)), townOpen(), (SC && S.town ? SC.favorMul(S.town.hall) : 1) + (CR && S.home ? CR.schoolFavor(S.home) : 0)); }
 function homeVisit(a, mateIdx) { HM.visit(S.home, a.id, TN.MATES[mateIdx % TN.MATES.length].id); }
 function homeTrade() { HM.clampAdd(S.home.nb, 'n0', HM.NB.shop); }
 let homePartyNoted = 0, homeFriendDay = 0;
@@ -3507,7 +3507,7 @@ function homeTeenVisit(T) {
 let careerPayDay = 0, careerPrompt = null; // prompt: { kid, day } while the wedding-morning choice is open
 function careerCtx(kid, extra) {
   const w = S.home && S.home.wed && S.home.wed[kid], k = S.family.kids.find(q => q.id === kid);
-  return Object.assign({ hall: S.town && S.town.hall, lots: (S.town.lots || (S.town.lots = {})), coins: S.coins, wood: FARMER.wood, mate: w && w.mate, kidName: k ? k.name : '孩子', nb: (S.home && S.home.nb) || {}, day: S.day, innPlot: IN ? innPlot() : null, cabins: S.inn ? S.inn.cabins : 0, diner: S.inn && S.inn.diner ? S.inn.diner.lv : 0 }, extra || {});
+  return Object.assign({ hall: S.town && S.town.hall, lots: (S.town.lots || (S.town.lots = {})), coins: S.coins, wood: FARMER.wood, mate: w && w.mate, kidName: k ? k.name : '孩子', nb: (S.home && S.home.nb) || {}, day: S.day, town: townOpen(), innPlot: IN ? innPlot() : null, cabins: S.inn ? S.inn.cabins : 0, diner: S.inn && S.inn.diner ? S.inn.diner.lv : 0 }, extra || {});
 }
 function careerDone() { try { dispatchEvent(new Event('pf:career-done')); } catch (e) {} }
 function careerSettle(r, kid, how) {
@@ -3516,7 +3516,7 @@ function careerSettle(r, kid, how) {
   if (r.wood) FARMER.wood -= r.wood;
   if (r.refund) { S.coins += r.refund; emit('income', { gold: r.refund, source: 'career-refund', who: kid }); }
   const name = kidName(kid), p = CR.pathOf(S.home, kid);
-  if (r.way === 'work') log(`${name}以后去${CR.JOB[p.at] ? CR.JOB[p.at].name : '镇上'}上班，每天工钱 ${CR.WAGE} 金` + (how || ''));
+  if (r.way === 'work') { const j = CR.JOB[p.at]; log(`${name}以后${j && j.going ? j.going : ('去' + (j ? j.name : '镇上') + '上班')}，每天工钱 ${CR.WAGE} 金` + (how || '')); }
   else if (r.way === 'shop') log(`${name}要在镇上开${CR.shopName(name, p.kind)}，装修花了 ${r.paid} 金和 ${r.wood} 份木材，家人明天搭好` + (how || ''));
   else if (r.way === 'inn') log(`${name}以后帮家里经营民宿和菜馆，客人住得更满意，菜馆能多做一份拿手菜` + (how || ''));
   else log(`${name}留在新房子种地` + (how || ''));
@@ -3595,7 +3595,19 @@ function careerDayPay() {
       const g = CR.payWage(S.home), p = CR.pathOf(S.home, k), job = CR.JOB[p.at];
       S.coins += g; S.earned += g; S.todayEarn += g;
       emit('income', { gold: g, source: 'wage', who: k }); noteLog('income', 'town', g);
-      log(`${kidName(k)}在${job ? job.name : '镇上'}帮工，傍晚领了 ${g} 金工钱，算进家里的收入`);
+      let extra = '';
+      if (p.at === 'fish' && FS) {
+        const id = CR.FISH_CATCH.id, item = FS.fishOf && FS.fishOf(id);
+        const gold = item && item.price != null ? item.price : (item && item.gold) || 5;
+        const cap = (typeof BASK === 'function') ? BASK() : 10;
+        if (FARMER.crops.length < cap) { FARMER.crops.push(id); extra = `，还带回一条${(item && item.name) || CR.FISH_CATCH.name}`; }
+        else { S.coins += gold; S.earned += gold; S.todayEarn += gold; emit('income', { gold, source: 'fish-catch', who: k }); extra = `，篮子满了，一条${(item && item.name) || CR.FISH_CATCH.name}卖了 ${gold} 金`; }
+      }
+      if (p.at === 'art' && CR.sketchDue(S.home, k, S.day)) {
+        const sg = CR.ART_SKETCH.gold; S.coins += sg; S.earned += sg; S.todayEarn += sg;
+        emit('income', { gold: sg, source: 'art-sketch', who: k }); extra += `，卖掉一幅写生又收了 ${sg} 金`;
+      }
+      log(`${kidName(k)}在${job ? job.name : '镇上'}帮工，傍晚领了 ${g} 金工钱，算进家里的收入` + extra);
     }
     if (CR.shopsToday(S.home, k, S.day)) {
       const p = CR.pathOf(S.home, k), sold = CR.sell(p.kind, careerStock(), id => priceOfAny(id === 'fishFood' && FS ? FS.FOOD.price : id), id => FS && FS.isFish && FS.isFish(id));
@@ -3610,9 +3622,12 @@ function careerDayPay() {
 }
 function careerView(kid, mode) {
   if (!CR || !S.home) return null;
-  const ctx = careerCtx(kid), opts = CR.options(S.home, kid, ctx), p = CR.pathOf(S.home, kid);
-  const fee = mode === 'wedding' ? 0 : (p.free || p.implied ? 0 : CR.CHANGE.cost);
-  return { kid, name: ctx.kidName, mate: ctx.mate ? HM.mateName(ctx.mate) : '', mode: mode || 'change', fee, free: fee === 0 && mode !== 'wedding', coins: S.coins, wood: FARMER.wood, path: { way: p.way, at: p.at, kind: p.kind, pending: p.pending }, options: opts };
+  const ctx = careerCtx(kid), p = CR.pathOf(S.home, kid), mode0 = mode || 'change';
+  const opts = CR.options(S.home, kid, ctx);
+  if (mode0 !== 'wedding') for (const o of opts) o.selected = CR.sameChoice(o, p);
+  const fee = mode0 === 'wedding' ? 0 : (p.free || p.implied ? 0 : CR.CHANGE.cost);
+  const cool = mode0 === 'wedding' ? 0 : CR.coolLeft(p, S.day);
+  return { kid, name: ctx.kidName, mate: ctx.mate ? HM.mateName(ctx.mate) : '', mode: mode0, fee, free: fee === 0 && mode0 !== 'wedding', cool, coins: S.coins, wood: FARMER.wood, path: { way: p.way, at: p.at, kind: p.kind, pending: p.pending, chg: p.chg || 0 }, options: opts };
 }
 function careerVia(from, dest, homeward) {
   if (!TN || !dest) return [];
@@ -3680,7 +3695,7 @@ function innDuty(a, sp) {
 function innFest() { const H = S.town && S.town.hall; return !!(IN && IN.isFest({ market: MK && H && MK.isDay(H, S.day), harvest: FV && H && FV.isDay(H, S.day), lantern: FV && H && FV.hasLantern(H, S.day) })); }
 function innFurnished() { const W = S.town && S.town.hall && S.town.hall.woodshop; return !!(W && ((W.used | 0) > 0 || (W.days | 0) > 0 || (W.made | 0) > 0)); }
 function innStaffedNow() { return !!(CR && S.home && CR.innStaffed(S.home)); }
-function innStarsNow() { return IN && S.inn ? IN.effectiveStars(S.inn, innStaffedNow(), innFurnished()) : 3; }
+function innStarsNow() { const base = IN && S.inn ? IN.effectiveStars(S.inn, innStaffedNow(), innFurnished()) : 3; const extra = (CR && S.home && CR.artStars(S.home)) || 0; return Math.max(1, Math.min(5, base + extra)); }
 function innPay(id) {
   if (id === 'seafish') id = 'sardine';
   if (id === 'greens') return (IN && IN.UNIT && IN.UNIT.greens) || 20;
@@ -4137,11 +4152,11 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     const onShift = work ? CR.workHours(T) : CR.shopHours(T);
     const at = Math.hypot(F.x - dest.x, F.y - dest.y) < 5;
     if (onShift && at) {
-      const label = work ? (`在${CR.JOB[path.at] ? CR.JOB[path.at].name : '镇上'}帮工`) : shop ? (`在${CR.shopName(kidName(kid), path.kind)}守店`) : '在民宿和菜馆招呼客人';
+      const label = work ? (`${CR.JOB[path.at] && CR.JOB[path.at].doing ? CR.JOB[path.at].doing : ('在' + (CR.JOB[path.at] ? CR.JOB[path.at].name : '镇上') + '帮工')}`) : shop ? (`在${CR.shopName(kidName(kid), path.kind)}守店`) : '在民宿和菜馆招呼客人';
       return { kind: work ? 'work' : shop ? 'shop-keep' : 'inn-keep', label, to: dest, dur: 16, rest: true };
     }
     if (T < (work ? CR.WORK.end : CR.SHOP_HOURS.to)) {
-      const label = work ? (`去${CR.JOB[path.at] ? CR.JOB[path.at].name : '镇上'}上班`) : shop ? (`去${CR.shopName(kidName(kid), path.kind)}守店`) : '去民宿招呼客人';
+      const label = work ? (`${CR.JOB[path.at] && CR.JOB[path.at].going ? CR.JOB[path.at].going : ('去' + (CR.JOB[path.at] ? CR.JOB[path.at].name : '镇上') + '上班')}`) : shop ? (`去${CR.shopName(kidName(kid), path.kind)}守店`) : '去民宿招呼客人';
       return { kind: work ? 'work-go' : shop ? 'shop-go' : 'inn-go', label, to: dest, via: careerVia(F, dest, false), keepVia: true, dur: 8 };
     }
   }
@@ -5623,7 +5638,7 @@ function starterHud() { // v5.11.0.31: 「目标 2/5：…」 under the HUD unti
   const g = SIM.starterGoal(S.up, S.totalSold, S.day); let html = '';
   if (g) { const st = g.step, o = st.shop ? SIM.offer(S.up, S.coins, st.shop, FARMER.wood) : null;
     const need = o && !o.maxed ? (o.ok ? `（${o.cost} 金，够了！）` : o.locked ? '' : `（${o.cost} 金，还差 ${o.short}）`) : '';
-    const needS = o && !o.maxed && !o.locked ? (o.ok ? ' ✓' : ` 差${o.short}`) : ''; // v5.11.0.34: the phone line (.gs) stays on one row at 390px
+    const needS = o && !o.maxed && !o.locked ? (o.ok ? ' ✓' : ` 差${o.short}`) : ''; // v5.11.0.36: the phone line (.gs) stays on one row at 390px
     html = `<b>目标<span class="gl"> </span>${g.i + 1}/${g.n}</b> <span class="gl">${st.text}${need}</span><span class="gs">${st.short || st.text}${needS}</span><span class="rw">奖励 ${st.reward} 金</span><span class="rs">+${st.reward}</span>`; }
   if (html === goalKey) return; goalKey = html;
   el.hidden = !g; el.innerHTML = html; el.dataset.shop = g && g.step.shop ? g.step.shop : ''; el.classList.toggle('go', !!(g && g.step.shop));
@@ -6027,7 +6042,7 @@ window.__farm.debugBlank = () => { const g = groundBase.getContext('2d'); g.clea
 let groundReady = false; // the first ground is built after the save is read (it shows which regions are open)
 
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.11.0.35';
+const GAME_VERSION = '5.11.0.36';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
