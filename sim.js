@@ -308,7 +308,7 @@
   // v5.11.0.31 前几天的节奏: a short starter goal chain shown under the HUD until the first chicken. Each step pays a small
   // reward the moment it is done while it is the current goal (so it is paid once, with no save field: a step is a sale or a
   // purchase that only happens once). Never tied to follow / share / tip. Old farms that are past the chain see nothing.
-  // short: the phone line (v5.11.0.34: the full one wrapped to three lines at 390px)
+  // short: the phone line (v5.11.0.37: the full one wrapped to three lines at 390px)
   const STARTER = [
     { id: 'sell', text: '收获并卖出第一批胡萝卜', short: '卖掉胡萝卜', reward: 20 },
     { id: 'field', text: '去商店「地块」开垦新田', short: '开垦新田', shop: 'field', reward: 30 },

@@ -174,7 +174,7 @@
     const up = obj(s.upgrades);
     const clock = obj(s.clock), stats = obj(s.stats), inv = obj(s.inventory), f = obj(s.farmer), prices = obj(s.prices);
     if (!Array.isArray(s.tiles) || !s.tiles.length) throw new Error('save has no tiles');
-    return {
+    const out = {
       saveVersion: CURRENT,
       gameVersion: String(s.gameVersion || '?'),
       createdAt: int(s.createdAt, Date.now()),
@@ -224,6 +224,11 @@
       ...(s.diary && DY ? { diary: DY.valid(s.diary) } : {}), // v5.10.13 append-only: the last 30 days of the family diary
       ...(Array.isArray(s.album) && AL ? { album: AL.pack(AL.valid(s.album)) } : {}), // v5.11.0.11 append-only: photo album metadata (a few bytes a photo; pictures live outside the save)
     };
+    // v5.11.0.38: 新房入伙 was left as a later-phase stub, so already-moved-in couples stay locked.
+    // Append it on load (save stays v15) using the first move-in day; unlock is idempotent.
+    const moved = CX.movedInDay(out.home);
+    if (moved > 0) out.achievements = CX.unlock(out.achievements, [{ id: 'newhouse', day: moved }]).list;
+    return out;
   }
   // v5.0 family: love 0..100, the day they met / last chatted / she moved in (0 = not yet), up to two children
   function validFamily(f) {

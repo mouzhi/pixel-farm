@@ -63,7 +63,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await until(p, () => __farm.S.day === 31, 2000); await p.evaluate(() => __farm.advance(2, 3));
     const r = await p.evaluate(st); check('day 30 chicken: +50 exactly once, nothing more at the rollover', a1.paid.join() === 'chicken' && r.paid.join() === 'chicken' ? '' : 'bad', { a1: a1.paid, r: r.paid, day: r.day });
     await p.close(); }
-  // 6. v5.11.0.34: on a 390px phone the goal is one row (short text, +reward) at every step, and still opens its shop tab
+  // 6. v5.11.0.37: on a 390px phone the goal is one row (short text, +reward) at every step, and still opens its shop tab
   { const p = await page(null, { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
     const rows = [];
     for (const k of [null, 'sell', 'field', 'can', 'coop']) {

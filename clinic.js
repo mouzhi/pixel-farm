@@ -29,12 +29,13 @@
   const floor = H => (built(H) ? FLOOR : 0);
   const isCheck = (H, day) => built(H) && (day | 0) > (H.built.clinic | 0) && (day | 0) % CHECK_EVERY === 0;
   const nextCheck = (H, day) => { if (!built(H)) return null; let d = Math.max((day | 0) + 1, (H.built.clinic | 0) + 1); while (d % CHECK_EVERY) d++; return d; };
-  function checkup(st, animals, day) {
+  function checkup(st, animals, day, extra) {
     if (!isCheck(st, day) || ((st.clinic && st.clinic.last) | 0) === (day | 0)) return 0;
     if (!st.clinic) st.clinic = empty();
     st.clinic.last = day | 0;
+    const add = CHECK + (extra | 0);
     let n = 0;
-    for (const a of animals || []) { a.h = Math.min(100, (a.h | 0) + CHECK); n++; }
+    for (const a of animals || []) { a.h = Math.min(100, (a.h | 0) + add); n++; }
     return n;
   }
   const empty = () => ({ last: 0 });
