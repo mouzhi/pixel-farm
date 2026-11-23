@@ -942,7 +942,10 @@ function homeTask() { const me = F; return { kind: 'home', label: '回家睡觉'
 const CHOP_ORDER_BASE = 95, CHOP_CHAIN_R = 48, REST_CAP = 60, SEA_QUOTA_MIN = 60, SEA_QUOTA_BY = 11 * 60 + 15;
 const HELP_WIN = [[6 * 60, 8 * 60], [17 * 60, 19 * 60]], HELP_KINDS = ['harvest', 'collect', 'pick', 'honey', 'water', 'refill', 'sell', 'deliver'];
 const DEMAND_TILES = { wheat: 8, cabbage: 4, carrot: 4 }; // the mill's wheat run is an errand too (worksBoard), so the flour does not wait behind field work
-const orderedChop = () => S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && S.eff.axe && WD.choppable(t, S.eff.regions));
+// v5.11.0.35: a grown fruit tree on the farm's own ground can be marked too (it always leaves a sapling, so it can be moved)
+const fruitChoppable = t => !!(t && WD.FRUIT[t.kind] && t.stage === 'tree' && ownGround(t.x, t.y));
+const canChop = t => !!t && (WD.choppable(t, S.eff.regions) || fruitChoppable(t));
+const orderedChop = () => S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && S.eff.axe && canChop(t));
 function chopNext() { // the marked tree beside the one just felled (chopTask leaves it in F._chopNext)
   const t0 = F._chopNext; F._chopNext = null; if (!t0 || F.crops.length >= BASK() || F._helpWin) return null;
   const T = S.t % 1440; if (T >= sleepAt() - 20) return null;
@@ -1051,7 +1054,7 @@ function board() {
   // v4.3: fruit to pick, and the player's orders (chop a marked tree, transplant a sapling where he pointed)
   const ripeTrees = S.trees.filter(t => t.stage === 'tree' && t.ripe && WD.FRUIT[t.kind] && treeReachable(t));
   if (ripeTrees.length && F.crops.length + WD.FRUIT.apple.n <= BASK()) { const t = rngNear(ripeTrees); post('pick', 75, t, () => pickTask(t)); }
-  const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && WD.choppable(t, E.regions));
+  const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && canChop(t));
   if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.28: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0 && plantAccess(o.x, o.y));
@@ -1283,6 +1286,13 @@ function pickTask(t) {
 function chopTask(t) {
   return { label: '正在砍树', to: treeStand(t), tile: t, dur: WA.chopMinutes(S.eff), fx: 'wood', pose: 'hoe', done: () => {
     S.orders = S.orders.filter(o => !(o.type === 'chop' && o.id === t.id));
+    if (fruitChoppable(t)) { // v5.11.0.35: a fruit tree comes out whole (no stump), always 1 sapling of its kind, half the usual wood
+      const name = WD.FRUIT[t.kind].name, wood = Math.max(1, Math.round(WA.perTree(S.eff, false) / 2)), i = S.trees.indexOf(t);
+      if (i >= 0) S.trees.splice(i, 1); TV.delete(t.id); markNavDirty();
+      FARMER.wood += wood; FARMER.saplings[t.kind] = (FARMER.saplings[t.kind] || 0) + 1; S.woodCut = (S.woodCut || 0) + wood; diary('wd', null, wood);
+      burst(t.x, t.y, 6, [Wd[3], Wd[4], G[3]], 16, 'wood'); popText(t.x, t.y, 20, '+1 ' + name + '树苗', '#a8e070');
+      log(`砍倒一棵${name}树：${name}树苗 1 棵、木材 ${wood} 份进仓库（用「种${name}」标记新位置就能移植；不标记的话，家人会把它种进空着的果园）`);
+      F._chopNext = t; return; }
     if (t.stage !== 'tree' || t.kind !== 'wild') return;
     // v5.0: only the 林场 forest grows back; anywhere else the stump is dug out overnight (the sapling is the tree's legacy)
     const y = WD.chopYield(rand), back = WD.regrows(t); y.wood = WA.perTree(S.eff, back); t.stage = 'stump'; t.age = 0; treeChanged(t);
@@ -5697,7 +5707,7 @@ function panTo(x, y) { cam.x = x; cam.y = y; clampCam(); }
 function toWorld(clientX, clientY) { const r = cv.getBoundingClientRect(), px = (clientX - r.left) * W / r.width, py = (clientY - r.top) * H / r.height;
   const rx = (px - CX) / RS, ry = (py - CY) / (K * RS); return { x: rx * CA + ry * SA, y: -rx * SA + ry * CA, px, py }; }
 function treeAtScreen(px, py) { let best = null, bd = 1e9;
-  for (const t of S.trees) { if (t.stage !== 'tree' || t.kind !== 'wild') continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60;
+  for (const t of S.trees) { if (t.stage !== 'tree' || (t.kind !== 'wild' && !WD.FRUIT[t.kind])) continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60; // v5.11.0.35: fruit trees too
     if (Math.abs(px - sx) > 16 || py > sy + 6 || py < sy - h) continue; const d = Math.abs(px - sx) + Math.abs(py - (sy - h * 0.45)) * 0.5; if (d < bd) { bd = d; best = t; } }
   return best; }
 function plantSpot(x, y, self) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
@@ -5868,7 +5878,12 @@ function orderChop(id) {
   const t = S.trees.find(q => q.id === id); if (!t) return { ok: false };
   const i = S.orders.findIndex(o => o.type === 'chop' && o.id === id); if (i >= 0) { S.orders.splice(i, 1); return { ok: true, removed: true }; }
   if (!S.eff.axe) return { ok: false, why: '先在商店买斧头' };
-  if (!WD.choppable(t, S.eff.regions)) return { ok: false, why: t.kind !== 'wild' ? '果树不砍' : t.stage !== 'tree' ? '这棵还没长大' : '这片区域还没买下' };
+  if (WD.FRUIT[t.kind] && t.stage === 'tree') { // v5.11.0.35: a fruit tree asks twice, so one stray tap never fells it
+    if (!fruitChoppable(t)) return { ok: false, why: '这棵果树所在的区域还没买下' };
+    const name = WD.FRUIT[t.kind].name;
+    if (INPUT.fruitChop !== id) { INPUT.fruitChop = id; return { ok: false, confirm: true, why: `这是${name}树${t.ripe ? '，树上还有果子' : ''}。再点一次确认砍掉：会得到 1 棵${name}树苗（可以移植）和一点木材` }; }
+    INPUT.fruitChop = null;
+  } else if (!WD.choppable(t, S.eff.regions)) return { ok: false, why: t.stage !== 'tree' ? '这棵还没长大' : '这片区域还没买下' };
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
   S.orders.push({ type: 'chop', id }); noteLog('event', { type: 'chop', id, day: S.day, t: S.t }); return { ok: true };
 }
@@ -5889,7 +5904,7 @@ function orderPlant(kind, x, y) {
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
   S.orders.push({ type: 'plant', kind, x: Math.round(x * 10) / 10, y: Math.round(y * 10) / 10 }); noteLog('event', { type: 'plant', kind, x, y, day: S.day, t: S.t }); return { ok: true };
 }
-function setMode(mode, kind) { INPUT.mode = mode || null; INPUT.sprPick = null; INPUT.mvPick = null; if (kind) INPUT.kind = kind; INPUT.hover = null; cv.style.cursor = mode ? 'crosshair' : '';
+function setMode(mode, kind) { INPUT.mode = mode || null; INPUT.sprPick = null; INPUT.mvPick = null; INPUT.fruitChop = null; if (kind) INPUT.kind = kind; INPUT.hover = null; cv.style.cursor = mode ? 'crosshair' : '';
   window.dispatchEvent(new CustomEvent('pf:mode', { detail: { mode: INPUT.mode, kind: INPUT.kind } })); }
 function hoverAt(e) {
   if (FOG.on && fogHover(e)) { INPUT.hover = null; return; } // v5.11.0.13: over the cloud only its hint, no tool marker
@@ -5905,7 +5920,7 @@ function hoverAt(e) {
 function clickAt(e) {
   const w = toWorld(e.clientX, e.clientY); let r = null;
   if (fogTap(w)) return { ok: false, fog: true }; // v5.11.0.13: nothing under the cloud can be picked, planted or moved
-  if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); r = t ? orderChop(t.id) : { ok: false, why: '点一棵野树：家门口或已买区域里的都行（地图边上的森林是风景，不能砍）' }; if (r.ok) say(r.removed ? '取消了砍树' : '标记了要砍的树'); }
+  if (INPUT.mode === 'chop') { const t = treeAtScreen(w.px, w.py); r = t ? orderChop(t.id) : { ok: false, why: '点一棵树：家门口或已买区域里的野树、果树都行（地图边上的森林是风景，不能砍）' }; if (r.ok) say(r.removed ? '取消了砍树' : WD.FRUIT[t.kind] ? `标记了要砍的${WD.FRUIT[t.kind].name}树（砍下会得到树苗）` : '标记了要砍的树'); }
   else if (INPUT.mode === 'plant') { r = orderPlant(INPUT.kind, w.x, w.y); if (r.ok) say(`标记了种${WD.FRUIT[INPUT.kind].name}树苗的位置`); }
   else if (INPUT.mode === 'release') { r = inHomePond(w.x, w.y) ? orderRelease(INPUT.kind) : { ok: false, why: '点家门口的池塘，把观赏鱼放进去养着（海鱼不能放进淡水）' }; if (r.ok) say('标记了要放进池塘的' + ((FS.ORN_BY[INPUT.kind] && FS.ORN_BY[INPUT.kind].name) || '')); }
   else if (INPUT.mode === 'sprinkler') r = sprinklerClick(w); // v5.6.0
