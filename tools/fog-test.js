@@ -28,7 +28,7 @@ ok(FG.hint('agri', { town: true, lv: 3 }) === null, 'no agri hint once open');
 // the field: farm never shaded, districts shaded, sea clear, a dithered edge, the road lit once built
 const m0 = FG.membership({ road: false }), m1 = FG.membership({ road: true });
 const both = FG.field(m0, { agri: true, town: true }), agriOnly = FG.field(m1, { agri: true, town: false }), none = FG.field(m1, { agri: false, town: false });
-ok(FG.GW === 568 && FG.GH === 592, 'one cell per world unit over 440..1008 x -208..384');
+ok(FG.GW === 888 && FG.GH === 592, 'one cell per world unit over 440..1328 x -208..384');
 for (let x = 440; x < 448; x++) for (let y = -200; y < 380; y += 7) ok(at(both, x, y) === 0, `farm side x ${x} y ${y} never shaded`);
 for (const [x, y] of [[0, 0], [100, 60], [300, 60], [400, 66], [362, 150]]) ok(!FG.zoneAt(x, y, { agri: true, town: true }), `farm point ${x},${y} is in no district`);
 ok(at(both, 520, 20) === 1 && at(both, 790, 60) === 1 && at(both, 900, -150) === 1, 'inside both districts: full shade');
@@ -90,5 +90,23 @@ for (const [S, kind] of [[128, 'body'], [96, 'wisp']]) { const t = FG.cloudTex(S
   ok(cut(S - 1) <= Math.max(...cuts) * 1.6 + 4, kind + ' tile wraps without a seam (' + cut(S - 1) + ' vs max ' + Math.max(...cuts) + ')'); }
 ok(FG.CLOUD.every(c => /^#[0-9a-f]{6}$/.test(c)), 'cloud colours are palette hex');
 // zoneOf carries past the north / east map edge (the bank does too)
-ok(FG.zoneOf(900, -400) === 'town' && FG.zoneOf(1200, 0) === 'town' && FG.zoneOf(520, -400) === 'agri' && FG.zoneOf(300, 0) === null, 'zoneOf past the edges');
+ok(FG.zoneOf(900, -400) === 'town' && FG.zoneOf(1200, 0) === 'eastave' && FG.zoneOf(1400, 0) === 'eastave' && FG.zoneOf(520, -400) === 'agri' && FG.zoneOf(300, 0) === null, 'zoneOf past the edges');
+// v5.12.2: 东门大道 is its own fog district east of the old map edge
+ok(FG.locked({}).eastave && FG.locked({}).vacbeach, 'fresh farm: 东门大道 and 沙滩 jumps are shut');
+ok(FG.locked({ town: true, lv: 5 }).eastave, 'opening the town does not lift the avenue fog');
+ok(!FG.locked({ eastave: true }).eastave, 'buying 东门大道 lifts its fog');
+ok(!FG.locked({ vacbeach: true }).vacbeach, 'buying 度假沙滩 lights its jump');
+ok(/东门大道/.test(FG.hint('eastave', { town: true, lv: 4 })), 'avenue hint names the shop and prosperity');
+ok(/海边/.test(FG.hint('vacbeach', { town: true, coast: false })), 'beach hint names 海边');
+ok(FG.hint('vacbeach', { town: true, coast: true, vacbeach: true }) === null, 'no beach hint once bought');
+ok(FG.hint('eastave', { eastave: true }) === null, 'no avenue hint once bought');
+ok(FG.zoneAt(1160, 90, { agri: false, town: false, eastave: true }) === 'eastave', 'tapping the unbought avenue is the new district');
+ok(FG.zoneAt(1160, 90, { agri: false, town: false, eastave: false }) === null, 'bought avenue is not a lock-tap');
+ok(FG.zoneAt(790, 60, { agri: true, town: true, eastave: true }) === 'town', 'town zone still ends at the old edge');
+const eastShut = FG.field(FG.membership({ road: true }), { agri: false, town: false, eastave: true });
+ok(at(eastShut, 790, 60) === 0 && at(eastShut, 1160, 40) === 1, 'town open + avenue shut: only the new strip is shaded');
+const allOpen = FG.field(FG.membership({ road: true }), { agri: false, town: false, eastave: false });
+ok(allOpen.every(v => v === 0), 'avenue open: the new strip is clear too');
+
 console.log('fog-test: ' + n + ' checks ok');
+

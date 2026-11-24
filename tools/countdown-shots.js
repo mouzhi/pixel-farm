@@ -97,13 +97,13 @@ fs.mkdirSync(OUT, { recursive: true });
   // 1. the day-72 cottage fixture has no town projects: the chip stays hidden; save stays v15
   await shot('countdown_fixture.png', `(() => { ${helpers} look(96, 60, 0); f.advance(0.3, 10);
     const s = f.snapshot(); return Object.assign(cd(), { fxDay: s.clock.day, ov: overlaps() }); })()`,
-    r => r.fxDay !== save.clock.day ? 'day ' + r.fxDay : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.1' ? 'ver ' + r.ver : !r.hidden ? 'chip shown on a hall-less save: ' + r.text : r.ids.length ? 'items ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
+    r => r.fxDay !== save.clock.day ? 'day ' + r.fxDay : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.2' ? 'ver ' + r.ver : !r.hidden ? 'chip shown on a hall-less save: ' + r.text : r.ids.length ? 'items ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
     save);
 
   // 2. desktop, 3 days before a harvest festival (also a market + sports day): 「🏮丰收节 还有3天」
   await shot('countdown_desktop.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => r.ver !== '5.12.1' ? 'ver ' + r.ver : !r.ov.diaryBtn ? 'no 日记 button' : r.hidden ? 'chip hidden' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.ids.join() !== 'festival,market,sports' && r.ids.join() !== 'market,sports,festival' ? 'ids ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
+    r => r.ver !== '5.12.2' ? 'ver ' + r.ver : !r.ov.diaryBtn ? 'no 日记 button' : r.hidden ? 'chip hidden' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.ids.join() !== 'festival,market,sports' && r.ids.join() !== 'market,sports,festival' ? 'ids ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
     save);
 
   // 3. expanded list on desktop, staggered upcoming days
@@ -128,7 +128,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 6. mobile 390x844, collapsed
   await shot('countdown_mobile.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : r.ov.jumps !== 4 ? 'jump n ' + r.ov.jumps : r.ov.vw !== 390 || r.ov.vh !== 844 ? 'viewport ' + r.ov.vw + 'x' + r.ov.vh : null,
+    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : r.ov.jumps !== 6 ? 'jump n ' + r.ov.jumps : r.ov.vw !== 390 || r.ov.vh !== 844 ? 'viewport ' + r.ov.vw + 'x' + r.ov.vh : null,
     save, { width: 390, height: 844 });
 
   // 7. mobile expanded: the list stays inside the HUD and does not cover the right-side buttons

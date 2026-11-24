@@ -71,7 +71,7 @@ fs.mkdirSync(OUT, { recursive: true });
         houseH: M.houses[0].h, twoH: M.two[0].h, twoHouseH: M.twoHouse[0].h, schoolH: M.school.h }; })()`;
   // 1. wide overview of the whole new town, everything built
   await shot('v5110_overview.png', `(() => { ${setup} ${toLv4} ${allHouses} at(15 * 60); look(792, 60, 0); hide(); return ${facts}; })()`,
-    r => r.ver !== '5.12.1' ? 'ver ' + r.ver : r.world[1] !== 1008 ? 'world ' + r.world : !r.open ? 'town shut' : r.lv < 5 ? 'lv ' + r.lv : null, null, { viewport: { width: 1600, height: 1000 }, query: '&view=800x500' });
+    r => r.ver !== '5.12.2' ? 'ver ' + r.ver : r.world[1] !== 1328 ? 'world ' + r.world : !r.open ? 'town shut' : r.lv < 5 ? 'lv ' + r.lv : null, null, { viewport: { width: 1600, height: 1000 }, query: '&view=800x500' });
   // 2. a house beside the farmer, for scale (old one-storey and a two-storey side by side)
   await shot('v5110_scale.png', `(() => { ${setup} openTown(); at(9 * 60); start('L11'); nextMorning(); at(10 * 60);
     f.FARMER.x = 947; f.FARMER.y = 52; f.FARMER.task = null; look(944, 34, 0); hide(); const r = ${facts};
@@ -106,7 +106,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const out = {}; for (const b of document.querySelectorAll('#mmJump button')) { b.click(); f.advance(0.1, 10); out[b.dataset.j] = [Math.round(f.cam.x), Math.round(f.cam.y)]; }
     document.querySelector('#mmJump button[data-j=town]').click(); f.advance(0.2, 10); f.minimapDraw();
     const r = mm.getBoundingClientRect(), jb = document.getElementById('mmJump').getBoundingClientRect(); return { out, mm: [Math.round(r.width), Math.round(r.height)], jb: [Math.round(jb.width), Math.round(jb.height)], n: document.querySelectorAll('#mmJump button').length }; })()`,
-    r => r.n !== 4 ? 'buttons ' + r.n : r.out.town[0] < 700 ? 'town jump ' + r.out.town : r.out.home[0] > 200 ? 'home jump ' + r.out.home : r.out.beach[1] < 100 ? 'beach jump ' + r.out.beach : !r.out.agri ? 'agri' : r.mm[0] < 200 ? 'minimap ' + r.mm : null);
+    r => r.n !== 6 ? 'buttons ' + r.n : r.out.town[0] < 700 ? 'town jump ' + r.out.town : r.out.home[0] > 200 ? 'home jump ' + r.out.home : r.out.beach[1] < 100 ? 'beach jump ' + r.out.beach : !r.out.agri ? 'agri' : !r.out.eastave || r.out.eastave[0] < 1100 ? 'eastave jump ' + r.out.eastave : !r.out.vacbeach || r.out.vacbeach[1] < 200 ? 'vacbeach jump ' + r.out.vacbeach : r.mm[0] < 200 ? 'minimap ' + r.mm : null);
   // 7. mobile portrait (390 x 844, as on 小红书): the town, the HUD and the minimap buttons fit
   await shot('v5110_mobile.png', `(() => { ${setup} ${toLv4} at(11 * 60); const mm = document.getElementById('minimap'); mm.hidden = false; look(700, 60, 0); f.minimapDraw();
     const vw = innerWidth, over = [...document.querySelectorAll('#mmJump button, #minimap')].filter(e => { const q = e.getBoundingClientRect(); return q.right > vw + 1 || q.left < -1; }).length, wrap = [...document.querySelectorAll('#mmJump button')].filter(e => e.getBoundingClientRect().height > 30).length;
@@ -143,7 +143,7 @@ fs.mkdirSync(OUT, { recursive: true });
       let stuck = 0; for (let i = 0; i < 40; i++) { f.advance(0.5, 10); stuck += (f.actors ? f.actors() : []).filter(a => a && !a.away && !a.home && inB(a)).length; }
       if (town) look(780, 60, 0); else look(96, 60, 0); hide(); const s2 = f.snapshot();
       return { day: s.clock.day, sv: s2.saveVersion, ver: f.version, town, stuck, built: town ? Object.keys(S.town.hall.built).filter(k => S.town.hall.built[k]).length : 0 }; })()`,
-      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.1' ? 'ver ' + r.ver : r.stuck ? 'someone inside a building x' + r.stuck : null, save);
+      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.2' ? 'ver ' + r.ver : r.stuck ? 'someone inside a building x' + r.stuck : null, save);
   }
 
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

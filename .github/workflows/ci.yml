@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fog.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fog.js east.js east-art.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -69,6 +69,7 @@ jobs:
           node tools/fog-test.js
           node tools/kids-test.js
           node tools/townart-test.js
+          node tools/east-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -156,6 +157,9 @@ jobs:
           # v5.12.1 宅园·度假村北: + homestead-shots (locked/bought/old houses/move/shop, desktop + phone; light leg)
           - group: townart
             scripts: townart-shots.js homestead-shots.js
+          # v5.12.2: 东门大道 + 度假沙滩 in its own leg (do not load hall-market / townscale)
+          - group: eastave
+            scripts: eastave-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

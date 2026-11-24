@@ -29,10 +29,12 @@ if (TN) for (const k in TN.STREETS) if (!WD.ROUTES[k]) WD.ROUTES[k] = TN.STREETS
 const HM = window.PFHome, HA = window.PFHomeArt; // v5.9.0 phase 11: closeness, the new house, the married children's little farms (home.js rules, home-art.js art)
 const CR = window.PFCareers; // v5.10.6: 成家后的出路 (careers.js rules; walking here, art in town-art.js)
 const IN = window.PFInn, IA = window.PFInnArt; // v5.10.7: 民宿 + 农家菜馆; v5.10.8: 海边度假村 + 二层客栈
+const EA = window.PFEast, EAA = window.PFEastArt; // v5.12.2: 东门大道, 停车场, 度假沙滩
 const SC = window.PFSchool, LB = window.PFLibrary, CL = window.PFClinic, FV = window.PFFestival; // v5.10.9–v5.10.11
 // v5.11.0: 东大道 and the town's main street are laid in stone once the road is bought: everyone walks 1.3x faster on them
 const roadBuilt = () => !!(S.plots && S.plots.eroad && S.plots.eroad.mod === 'road');
-const aveWalk = (x, y) => (TN && TN.onAvenue && TN.onAvenue(x, y) && roadBuilt() ? TN.AVENUE.walk : 1);
+const aveWalk = (x, y) => (TN && TN.onAvenue && TN.onAvenue(x, y) && roadBuilt() ? TN.AVENUE.walk
+  : (EA && S.eff && S.eff.eastave && EA.onAvenue(x, y) ? EA.AVENUE.walk : 1)); // v5.12.2: the new east avenue too
 const DY = window.PFDiary; // v5.10.13: the family's daily diary (diary.js rules, diary-ui.js panel)
 const ALB = window.PFAlbum; // v5.11.0.11: the photo album (album.js rules, album-ui.js panel)
 const GM = 28, GX0 = WORLD.x0 - GM, GY0 = WORLD.y0 - GM; // the ground canvas covers the whole world plus a margin
@@ -49,6 +51,7 @@ const FOG = { on: !!FG, init: false, key: '', shut: null, L: null, road: false, 
 function fogCtx() {
   const I = S.inn, inn = !!(IN && I && (IN.anyInn ? IN.anyInn(I) : ((I.cabins | 0) > 0 || (I.inn2 | 0) > 0 || IN.dinerUp(I) || (I.job && /^(cabin|diner|kitchen|inn2)$/.test(I.job.id)))) || (IN && S.plots && IN.innPlotOf(S.plots)));
   return { town: townOpen(), lv: TN && S.town ? townLv() : 0, inn, coast: !!(S.eff && S.eff.regions && S.eff.regions.includes('coast')),
+    eastave: !!(S.eff && S.eff.eastave), vacbeach: !!(S.eff && S.eff.vacbeach),
     plots: S.plots || {}, schoolDays: TN && S.town ? TN.schoolDays(S.town) : 0 };
 }
 function fogReset() { FOG.init = false; FOG.key = ''; FOG.next = 0; FOG.fading = false; FOG.from = FOG.to = null; FOG.scrKey = ''; }
@@ -71,7 +74,7 @@ const FOG_EDGE = 64;
 function fogUpdate(force) {
   if (!FOG.on || !S.eff) return;
   if (force || !FOG.init || realT >= FOG.next || realT < FOG.next - 1) { FOG.next = realT + 0.25;
-    const c = fogCtx(), L = FG.locked(c), road = roadBuilt(), shut = { agri: L.agri, town: L.town }, key = [shut.agri, shut.town, road].join();
+    const c = fogCtx(), L = FG.locked(c), road = roadBuilt(), shut = { agri: L.agri, town: L.town, eastave: L.eastave }, key = [shut.agri, shut.town, shut.eastave, road].join();
     FOG.L = L; FOG.ctxv = c; FOG.road = road;
     if (key !== FOG.key) {
       const memb = FOG.memb[road] || (FOG.memb[road] = FG.membership({ road })), nf = FG.field(memb, shut), was = FOG.shut;
@@ -145,7 +148,7 @@ function fogTap(w) { const id = fogZone(w.x, w.y), h = id && fogHint(id); if (h)
 function fogHover(e) { const w = toWorld(e.clientX, e.clientY), id = fogZone(w.x, w.y), t = (id && fogHint(id)) || ''; if (cv.title !== t) cv.title = t; return !!id; }
 // the jump buttons under the minimap: dimmed (still clickable, to have a look) while their place is shut
 function fogButtons() {
-  if (!FOG.L) return; const L = FOG.L, key = [L.agri, L.town, L.beach, fogHint('town'), fogHint('agri')].join('|'); if (key === FOG.btnKey) return; FOG.btnKey = key;
+  if (!FOG.L) return; const L = FOG.L, key = [L.agri, L.town, L.beach, L.eastave, L.vacbeach, fogHint('town'), fogHint('agri')].join('|'); if (key === FOG.btnKey) return; FOG.btnKey = key;
   const jb = document.getElementById('mmJump'); if (!jb) return;
   for (const b of jb.querySelectorAll('button[data-j]')) { const id = b.dataset.j; if (!(id in L)) continue; if (b.dataset.t0 === undefined) b.dataset.t0 = b.title || '';
     b.classList.toggle('locked', !!L[id]); b.title = L[id] ? '待解锁 · ' + (fogHint(id) || b.dataset.t0) : b.dataset.t0; }
@@ -789,7 +792,8 @@ function navState() {
   return {
     houseTier: (S.eff && S.eff.house) || 0, regions: (S.eff && S.eff.regions) || [],
     pens: Object.fromEntries(AN.PEN_IDS.map(k => [k, !!(S.eff && S.eff[k])])), fence: !!(S.eff && S.eff.fence),
-    trees: (S.trees || []).filter(t => t.stage === 'tree').map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : [], DECOR_ON ? DA.blocks() : [], TN ? TN.blocks(!!(S.eff && S.eff.town), !!innPlot()) : [], TN && HL && S.eff && S.eff.town ? HL.blocks(S.town.hall).concat((FV && FV.isDay(S.town.hall, S.day)) ? FV.blocks() : []) : [], TN && CR && S.eff && S.eff.town ? CR.blocks(S.town.lots, S.home && S.home.path, S.day) : [], HOME_ON ? HA.blocks() : [], INN_ON ? IA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops; v5.10.7 inn
+    eastave: !!(S.eff && S.eff.eastave), vacbeach: !!(S.eff && S.eff.vacbeach),
+    trees: (S.trees || []).filter(t => t.stage === 'tree' && !eastHideAt(t.x, t.y)).map(t => ({ x: t.x, y: t.y })), blocks: WA.blocks(S.eff).concat(WORKS_ON ? PWA.blocks() : [], DECOR_ON ? DA.blocks() : [], TN ? TN.blocks(!!(S.eff && S.eff.town), !!innPlot()) : [], TN && HL && S.eff && S.eff.town ? HL.blocks(S.town.hall).concat((FV && FV.isDay(S.town.hall, S.day)) ? FV.blocks() : []) : [], TN && CR && S.eff && S.eff.town ? CR.blocks(S.town.lots, S.home && S.home.path, S.day) : [], HOME_ON ? HA.blocks() : [], INN_ON ? IA.blocks() : []), // v5.3.1: the lumber hut; v5.6.0 the workshops; v5.10.7 inn
     rocks: (typeof yard !== 'undefined' ? yard : []).filter(c => c.type === 'rock').map(c => ({ x: c.x, y: c.y })), graze: !!(S.eff && S.eff.graze),
     plots: S.plots || {},
     guestPier: (IN && S.inn && IN.pierUp(S.inn) && IN.resortLayout) ? IN.resortLayout().pier : null
@@ -860,8 +864,9 @@ function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
   if (typeof syncLumberProps === 'function') syncLumberProps();
   syncAvenue();
   if (S.works && S.works.works) worksRestock(); // v5.10.12: stored workshops go back up once a yard has room
-  XP.sync(); if (WORKS_ON) PWA.sync(); if (INN_ON) IA.sync(); SPR_COVER = null;
+  XP.sync(); if (WORKS_ON) PWA.sync(); if (INN_ON) IA.sync(); if (EAST_ON) EAA.sync(); SPR_COVER = null;
   markNavDirty();
+  if (typeof syncEast === 'function') syncEast();
 }
 function buy(id, who = 'player') { // the player's one action: spend gold on the next level of a shop item, or a stall consumable (v5.4.0 fish food / goldfish)
   if (id === 'fishfood') {
@@ -904,6 +909,8 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
   worksBoughtLog(id);
   if (YD.ITEM[id]) yardBought(id, who); // v5.10.11.1: say who is coming and when, and show where it goes
   if (id === 'town' && TN) { if (TOWN_ON) TA.sync(true); markNavDirty(); log('镇门打开了：孩子们以后去镇上的学校，镇上的小店收工坊货、蜂蜜和鱼（多给两成）'); burst(TN.GATE.x, TN.GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); albumSnap('towngate', TN.GATE.x, TN.GATE.y + 6, { wait: 0 }); }
+  if (id === 'eastave' && EA) { log('东门大道修好了：镇东有了停车场，私家车会在大道上来回'); burst(EA.PARK_GATE.x, EA.PARK_GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); albumSnap('eastave', EA.PARK_GATE.x, EA.AVENUE.y + 8, { wait: 0 }); if (typeof syncEast === 'function') syncEast(true); }
+  if (id === 'vacbeach' && EA) { log('度假沙滩开放了：栈桥以东清出了沙滩，摆上了伞、躺椅、救生塔和落日台'); burst(680, 236, 20, [Wd[4], Wd[5], '#fff2a8'], 12, 'wood'); albumSnap('vacbeach', 680, 236, { wait: 0 }); if (typeof syncEast === 'function') syncEast(true); }
   if (DC.CATALOG[id]) log(id === 'party' ? '派对区的桌椅和串灯买好了，家人会找一块空地搭起来' : `${o.item.name}放进了仓库，家人会找地方摆上（也可以用「摆${o.item.name}」自己选地方）`); // v5.7.0
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
   if (PENS[id]) for (let i = yard.length - 1; i >= 0; i--) { const c = yard[i], P = PENS[id]; if (Math.hypot(c.x - P.bld.x, c.y - P.bld.y) < 16 || Math.hypot(c.x - P.trough.x, c.y - P.trough.y) < 10) yard.splice(i, 1); } // builders tidy the spot
@@ -1995,6 +2002,21 @@ function groundAt(x, y) { // -> [palette colour, kind]
     if (TA && TA.cross && TA.cross(x, y)) return [Ac[0], 'dirt']; // v5.12.0: 斑马线 where a side street meets 主街
     const row = Math.floor(dy / 2.5), u = x + (row & 1) * 2.5, gx = Math.floor(u / 5), jx = u - gx * 5, jy = dy - row * 2.5; // running bond, 5 x 2.5 setts
     if (jx < 0.5 || jy < 0.5) return [St[2], 'dirt']; const k = vnoise(gx, row, 5); return [k > 0.72 ? Wd[5] : (k > 0.45 ? St[2] : St[3]), 'dirt']; }
+  if (EA && S && S.eff && S.eff.eastave && EA.onAvenue(x, y)) { // v5.12.2 东门大道
+    const dy = y - EA.AVENUE.y + EA.AVENUE.hw, edge = dy < 0.9 || dy > 2 * EA.AVENUE.hw - 0.9; if (edge) return [St[1], 'dirt'];
+    const row = Math.floor(dy / 2.5), u = x + (row & 1) * 2.5, gx = Math.floor(u / 5), jx = u - gx * 5, jy = dy - row * 2.5;
+    if (jx < 0.5 || jy < 0.5) return [St[2], 'dirt']; const k = vnoise(gx, row, 5); return [k > 0.72 ? Wd[5] : (k > 0.45 ? St[2] : St[3]), 'dirt']; }
+  if (EA && S && S.eff && S.eff.eastave && EA.inPark(x, y)) {
+    const e = Math.min(x - EA.PARK.x0, EA.PARK.x1 - x, y - EA.PARK.y0, EA.PARK.y1 - y);
+    if (e < 2.2) return [St[1], 'dirt'];
+    // stall lines
+    for (const s of EA.CAR_SLOTS) { if (Math.abs(x - s.x) < 10 && Math.abs(y - s.y) < 8) { const bx = Math.abs(Math.abs(x - s.x) - 10) < 0.6 || Math.abs(Math.abs(y - s.y) - 8) < 0.6; if (bx) return [St[3], 'dirt']; } }
+    for (const s of EA.BUS_SLOTS) { if (Math.abs(x - s.x) < 16 && Math.abs(y - s.y) < 10) { const bx = Math.abs(Math.abs(x - s.x) - 16) < 0.7 || Math.abs(Math.abs(y - s.y) - 10) < 0.7; if (bx) return [Ac[0], 'dirt']; } }
+    const v = vnoise(x / 4, y / 4, 19); return [v > 0.65 ? St[2] : v > 0.35 ? Wd[3] : St[1], 'dirt']; }
+  if (EA && S && S.eff && S.eff.vacbeach && EA.sandAt(x, y, { beach: true, avenue: !!S.eff.eastave, world: WD })) {
+    const bw = EA.boardwalk(!!S.eff.eastave);
+    if (Math.abs(y - bw.y) <= bw.hw + 0.4 && x >= bw.x0 && x <= bw.x1) return [vnoise(x / 2, y / 2, 13) > 0.5 ? Wd[2] : Wd[3], 'dirt'];
+    const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; }
   if (pd < pw || yd < 0) {
     if (yd >= 0 && x >= 446 && TN && TN.inTown(x, y) && HL && HL.paved && S.town && HL.paved(S.town.hall)) { // v5.10.10: 路面铺石板
       const u = x + 400 + (Math.floor((y + 400) / 3) & 1) * 1.5, cx = Math.floor(u / 3), cy = Math.floor((y + 400) / 3), k = vnoise(cx, cy, 5);
@@ -2032,6 +2054,44 @@ function buildGround() { groundDirty = false; }
 let aveKey = null; // v5.11.0: the stone avenue and the paved town repaint when the road is bought, the town opens or the streets are paved
 function syncAvenue() { if (!TN || !TN.AVENUE) return; const k = [roadBuilt(), !!(S.eff && S.eff.town), !!(HL && HL.paved && S.town && HL.paved(S.town.hall))].join();
   if (k === aveKey) return; const first = aveKey === null; aveKey = k; if (!first && groundReady) buildGroundBase([356, TN.RECT[1] - 4, TN.RECT[2] + 4, TN.RECT[3] + 4]); }
+var EAST_ON = false, EAST_VIS = [], eastKey = null, eastTKey = '';
+function eastOpts() { return { beach: !!(S && S.eff && S.eff.vacbeach), avenue: !!(S && S.eff && S.eff.eastave), world: WD }; }
+function eastHideAt(x, y) {
+  if (!EA || !S || !S.eff) return false;
+  const o = eastOpts();
+  if (o.beach && EA.hideTree(x, y, o)) return true;
+  if (o.avenue && (EA.onAvenue(x, y) || EA.inPark(x, y, 6))) return true;
+  if (o.beach) {
+    const j = EA.ESHORE_JOIN; if (j && Math.abs(x - j.lot.x) < 8 && y >= j.lot.y - 2 && y <= j.beach.y + 8) return true;
+  }
+  if (o.avenue && o.beach) {
+    const j = EA.PARK_JOIN; if (j && Math.abs(x - j.lot.x) < 8 && y >= j.lot.y - 2 && y <= j.beach.y + 8) return true;
+  }
+  return false;
+}
+function syncEast(force) {
+  if (!EA) return;
+  const k = [!!(S.eff && S.eff.eastave), !!(S.eff && S.eff.vacbeach)].join();
+  if (!force && k === eastKey) return; const first = eastKey === null; eastKey = k;
+  if (typeof syncResortJoin === 'function') syncResortJoin();
+  if (EAST_ON) EAA.sync(true);
+  if ((!first || force) && groundReady) {
+    if (S.eff && S.eff.eastave) buildGroundBase([980, 56, EA.NEW_X1, EA.PARK.y1 + 16]);
+    if (S.eff && S.eff.vacbeach) buildGroundBase([EA.BEACH.x0 - 10, EA.BEACH.y0 - 8, EA.beachX1(!!S.eff.eastave) + 8, 280]);
+  }
+  markNavDirty(); eastTKey = ''; if (typeof eastTick === 'function') eastTick();
+}
+function eastTick() {
+  if (!EA || !S || !S.eff || !S.eff.eastave) {
+    EAST_VIS.length = 0;
+    if (EAST_ON && EAA.syncTraffic) EAA.syncTraffic({ moving: [], parked: [] });
+    return;
+  }
+  const tr = EA.trafficAt(S.day, S.t, { avenue: true, beach: !!S.eff.vacbeach });
+  const k = (tr.moving || []).map(c => c.id + ':' + (c.x | 0) + ',' + (c.y | 0) + ':' + ((c.rot || 0).toFixed(1))).join(';') + '|' + (tr.parked || []).map(c => c.id).join();
+  if (k !== eastTKey) { eastTKey = k; if (EAST_ON) EAA.syncTraffic(tr); }
+  EAST_VIS.length = 0; for (const v of tr.visitors) EAST_VIS.push(v);
+}
 // decals: grass tufts, flowers, pebbles; placed in the world but drawn upright, like billboards lying on the ground
 const decals = [];
 COAST_OLD = true;
@@ -2243,6 +2303,8 @@ const workersNow = () => 1 + S.members.filter(m => m.role === 'partner' || m.rol
 SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the shop card shows the text)
   if (id === 'cottage' && HM) return homeGate(have); // v5.9.0
   if (id === 'town' && TN) return have ? null : TN.gate({ plots: S.plots, schoolDays: TN.schoolDays(S.town) }); // v5.8.0
+  if (id === 'eastave' && EA) return have ? null : EA.gateAve({ town: townOpen(), lv: townLv() });
+  if (id === 'vacbeach' && EA) return have ? null : EA.gateBeach({ town: townOpen(), coast: !!(S.eff && S.eff.regions && S.eff.regions.includes('coast')) });
   if (id === 'sprinkler') return PW.sprinklerGate(S.up, workersNow()) ? null : '先买花洒水壶，或等家里有 3 个能干活的人';
   if (PW.WORKS[id]) return PW.workGate(id, worksCtx());
   if (id === 'wheel') return PW.wheelGate(S.plots, have);
@@ -3408,12 +3470,13 @@ function townLife(dm) {
     if (--g.left < 0) { g.leaving = true; lifeGo(g, lifeEdge()); continue; }
     lifeGo(g, lifePick(g)); g.wait = 6 + lifeR() * 20; }
 }
-function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); townLife(dm); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
+function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); townLife(dm); if (typeof eastTick === 'function') eastTick(); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
 function townDraw(list) {
   for (const g of VISITORS) { const sh = famSheet(g.look, 6); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of NEIGH) if (g.out) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of MKT) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.3: the market crowd
   for (const g of TLF) { const sh = famSheet(g.look, /^mate/.test(g.look) ? 6 : 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.12.0: 路人
+  for (const g of EAST_VIS) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh, fx: g.fx || 0, fy: g.fy || 1 })); } // v5.12.2: parking / beach visitors
   for (const g of SPT) { const sh = famSheet(g.look, g.race ? 6 : 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.9: sports day
 }
 // ---------- v5.9.0 phase 11: 好感, the new house, the wedding, the couple's little farm (rules in home.js, art in home-art.js) ----------
@@ -4584,6 +4647,7 @@ if (YA && YD) { YA.mount({ S, buildModel, addProp, props, stackCanvas, mailProp,
 if (TA) { TA.mount({ S, buildModel, gableY, addProp, props, models, treeDefs, addTree, lampModel: () => PWA.models().lamp, markNavDirty: () => markNavDirty(), xpModels: () => XP.models() }); TOWN_ON = true; } // v5.8.0
 if (HA && HM) { HA.mount({ S, buildModel, gableY, addProp, props, markNavDirty: () => markNavDirty(), repaint: r => { if (groundReady) buildGroundBase(r); } }); HOME_ON = true; } // v5.9.0
 if (IA && IN) { IA.mount({ S, buildModel, gableY, addProp, props, innLay: () => innLay() }); INN_ON = true; } // v5.10.7; v5.11.0.5 the 农家乐区 layout
+if (EAA && EA) { EAA.mount({ S, buildModel, gableY, addProp, props }); EAST_ON = true; } // v5.12.2
 
 // animal sprites face right; frames: [step A, step B, head down]. Same palette and outline as the rest of style A.
 const lowerHead = (rows, col, dy) => rows.map((r, y) => r.slice(0, col) + (y - dy >= 0 ? rows[y - dy].slice(col) : '.'.repeat(r.length - col)));
@@ -4884,6 +4948,8 @@ function syncResortJoin() { // open the beach path / 宅园 path, hide trees on 
   if (PL && PL.homesteadOpen && PL.homesteadOpen(S.plots) && PL.HOME_JOIN) {
     hide.push((x, y) => PL.joinDist(x, y, 'home') < 10 || PL.nearJoin(x, y, PL.HOME_JOIN.lot, 12) || PL.nearJoin(x, y, PL.HOME_JOIN.beach, 12));
   }
+  if (EA && S.eff && S.eff.vacbeach) hide.push((x, y) => eastHideAt(x, y));
+  else if (EA && S.eff && S.eff.eastave) hide.push((x, y) => eastHideAt(x, y));
   if (hide.length) for (let i = props.length - 1; i >= 0; i--) { const p = props[i]; if (p.tree && hide.some(fn => fn(p.x, p.y))) props.splice(i, 1); }
   if (groundReady && hide.length) {
     if (PL.resortOpen && PL.resortOpen(S.plots)) { const r = PL.plot('eshore').rect;
@@ -5187,7 +5253,7 @@ function rainFeet() { // rotated footprints of the tall props (+ a trunk circle 
       const k = cx * 4096 + cy; let l = rainFoot.get(k); if (!l) rainFoot.set(k, l = []); l.push(e); } };
   for (const p of props) { if (p.tree) { add(p.x, p.y, 4.5, 4.5, 1, 0); continue; } const m = p.m; if (!m || (m.h | 0) < 10) continue;
     const r = p.rot || 0; add(p.x + (m.cx || 0), p.y + (m.cy || 0), m.w / 2 / RS + 1, m.d / 2 / RS + 1, Math.cos(r), Math.sin(r)); }
-  for (const t of S.trees) add(t.x, t.y, 4.5, 4.5, 1, 0);
+  for (const t of S.trees) if (!eastHideAt(t.x, t.y)) add(t.x, t.y, 4.5, 4.5, 1, 0);
   return rainFoot;
 }
 function rainUnder(x, y) { const l = rainFeet().get(Math.floor(x / RF_CELL) * 4096 + Math.floor(y / RF_CELL)); if (!l) return false;
@@ -5487,9 +5553,9 @@ function render() {
   tick('soil+decals');
   const list = [];
   if (WX && WX.eachDrop) WX.eachDrop(d => list.push({ rain: d, x: d.x, y: d.y, flat: 1 })); // falling drops sort with the objects
-  for (const p of props) if (onScreen(p.x, p.y, p.tree ? 70 : 50)) list.push(p);
+  for (const p of props) if (!(p.tree && eastHideAt(p.x, p.y)) && onScreen(p.x, p.y, p.tree ? 70 : 50)) list.push(p);
   for (const b of billboards) if (onScreen(b.x, b.y, 30)) list.push(b);
-  for (const t of S.trees) if (onScreen(t.x, t.y, 70)) list.push(treeView(t));
+  for (const t of S.trees) if (!eastHideAt(t.x, t.y) && onScreen(t.x, t.y, 70)) list.push(treeView(t));
   for (const t of allTiles) { if (!onScreen(t.x, t.y, 30)) continue;
     if (t.debris) list.push({ m: debrisModel(t.debris), x: t.x, y: t.y, rot: t.debris.rot, z: 0 });
     if (t.weed) list.push({ spr: weedSprite(t.weed), x: t.x, y: t.y, sway: 0.8, w: 1 });
@@ -5651,6 +5717,7 @@ function lighting(night, T) {
   if (YARD_ON) YA.lights(hz, T, HOUSE); // v5.10.3: the door lantern, the curtained windows
   if (HOME_ON) HA.lights(hz, T); // v5.9.0: the new house's windows once someone lives there
   if (INN_ON) IA.lights(hz, T); // v5.10.7: cabin windows and path lamps
+  if (EAST_ON) EAA.lights(hz, T); // v5.12.2: lifeguard tower and sunset decks only
   if (TOWN_ON && TA.lights) TA.lights(hz, T); // v5.9.1: the town's street lamps and lit windows
   // v5.9.1: lights snap to whole pixels, off-screen ones are dropped, and each light only touches its own box (a running max per
   // pixel instead of testing every light at every lit pixel); the layer is rebuilt only when the lights or the darkness change
@@ -5771,7 +5838,7 @@ function panTo(x, y) { cam.x = x; cam.y = y; clampCam(); }
 function toWorld(clientX, clientY) { const r = cv.getBoundingClientRect(), px = (clientX - r.left) * W / r.width, py = (clientY - r.top) * H / r.height;
   const rx = (px - CX) / RS, ry = (py - CY) / (K * RS); return { x: rx * CA + ry * SA, y: -rx * SA + ry * CA, px, py }; }
 function treeAtScreen(px, py) { let best = null, bd = 1e9;
-  for (const t of S.trees) { if (t.stage !== 'tree' || (t.kind !== 'wild' && !WD.FRUIT[t.kind])) continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60; // v5.11.0.35: fruit trees too
+  for (const t of S.trees) { if (eastHideAt(t.x, t.y) || t.stage !== 'tree' || (t.kind !== 'wild' && !WD.FRUIT[t.kind])) continue; const [sx, sy] = proj(t.x, t.y), o = TV.get(t.id), h = o && o.tree ? o.tree.h : 60; // v5.11.0.35: fruit trees too
     if (Math.abs(px - sx) > 16 || py > sy + 6 || py < sy - h) continue; const d = Math.abs(px - sx) + Math.abs(py - (sy - h * 0.45)) * 0.5; if (d < bd) { bd = d; best = t; } }
   return best; }
 function plantSpot(x, y, self) { // where a sapling may go: open ground in the farm or a bought region, clear of buildings, paths, fields and trees
@@ -6114,7 +6181,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.1';
+const GAME_VERSION = '5.12.2';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6344,6 +6411,7 @@ if (boot.state) { restore(boot.state); log(`读取存档：第 ${S.day} 天，${
 else { fillYard(yardRng(0xA5A5A5), YARD_START); log('早上好！农场里乱糟糟的，先收拾一下'); albumSnap('open', null, null, { wait: 30, follow: 'farmer' }); } // v5.11.0.11: the album's first photo
 if (WX && WX.ensure) S.weather = WX.ensure(S.weather || WX.emptyWeather(), S.day, (S.createdAt | 0) || 1);
 OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (typeof syncResortJoin === 'function') syncResortJoin(); buildGroundBase(); groundReady = true;
+if (typeof syncEast === 'function') syncEast(true);
 if (!boot.blocked) saveNow();
 noteLog('boot', logSnap(), { getSave: snapshot });
 if (boot.state) try { albumBackfill(); } catch (e) {} // v5.11.0.11: an old save's story so far, as re-staged frames
@@ -6443,7 +6511,7 @@ if (MM.el) { window.__farm.onGround = () => { MM.base = null; };
   MM.el.addEventListener('pointerdown', e => { const r = MM.el.getBoundingClientRect(); panTo(WORLD.x0 + (e.clientX - r.left) / r.width * (WORLD.x1 - WORLD.x0), WORLD.y0 + (e.clientY - r.top) / r.height * (WORLD.y1 - WORLD.y0)); minimapDraw(); });
   setInterval(minimapDraw, 250); }
 window.__farm.minimapDraw = minimapDraw;
-// v5.11.0: four jump buttons under the minimap — 家 / 农家乐 / 小镇 / 海边. 农家乐 goes to the 农家乐区 (v5.11.0.5: the lodging is
+// v5.11.0: jump buttons under the minimap — 家 / 农家乐 / 小镇 / 海边; v5.12.2 adds 东门 / 沙滩. 农家乐 goes to the 农家乐区 (v5.11.0.5: the lodging is
 // built there); 海边 to the beach resort plot, else the sea shore (v5.11.2 moves it).
 function jumpSpot(id) {
   if (id === 'home') return { x: HOME_CAM.x, y: HOME_CAM.y };
@@ -6451,11 +6519,14 @@ function jumpSpot(id) {
   if (id === 'agri') { const L = innLay(); if (L) return { x: (L.rect[0] + L.rect[2]) / 2, y: (L.rect[1] + L.rect[3]) / 2 };
     return { x: (TN.AGRI[0] + TN.AGRI[2]) / 2, y: (TN.AGRI[1] + TN.AGRI[3]) / 2 }; }
   if (id === 'beach') { const r = PL.plot(IN ? IN.RESORT_PLOT || 'eshore' : 'eshore').rect; return { x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2 + 20 }; }
+  if (id === 'eastave') return { x: (EA.PARK.x0 + EA.PARK.x1) / 2, y: (EA.PARK.y0 + EA.AVENUE.y) / 2 };
+  if (id === 'vacbeach') return { x: 680, y: 236 };
   return null;
 }
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
+Object.assign(window.__farm, { EA, EAA, eastHideAt, eastTraffic: () => EA && S.eff ? EA.trafficAt(S.day, S.t, { avenue: !!S.eff.eastave, beach: !!S.eff.vacbeach }) : null, eastVis: () => EAST_VIS.slice() });
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
 window.__farm.art = { models, pasture: pastureModels, props, stackCanvas, SPR, ALLM }; // v5.11.0.9 test hook: tools/scale-audit.js renders every building beside a grown-up
 Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); MM.base = null; }, fogHid: (x, y) => fogHid(x, y), fogVeil: on => { FOG.veil = !!on; MM.base = null; }, fogPeek: on => { FOG.peek = !!on; FOG.scrKey = ''; }, fogClock: t => { FOG.clock = t == null ? null : +t; }, fogHidden: () => FOG.hidN | 0,
