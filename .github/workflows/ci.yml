@@ -91,9 +91,12 @@ jobs:
             # v5.11.0.26: workshop-shots tried here (works-town was 11m09s on run 44916066351) then got its own leg
             # (works-town hit 25m01s on run 44918453900, over the 22m cap)
             scripts: works-shots.js decor-shots.js
-          # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
+          # v5.12.3: home split in two (home was 25m37s on run 45353460574 on a slow runner: home 7.9m, polish 2.3m, cottage 3.0m,
+          # fixroad 2.3m, fixws 5.3m, fishdiary 2.0m, touchhooks 1.7m, coast/pine/kidslove 1.1m)
           - group: home
-            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
+            scripts: home-shots.js polish-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
+          - group: home-fix
+            scripts: cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
           # v5.11.0.8: + rain-shots from recent-b (recent-b ran 24m39s, hall-market 9m44s on run 44743060653)
