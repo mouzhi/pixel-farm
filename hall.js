@@ -15,6 +15,7 @@
   const SC = (typeof require === 'function' && typeof document === 'undefined') ? require('./school.js') : root.PFSchool; // v5.10.9
   const LB = (typeof require === 'function' && typeof document === 'undefined') ? require('./library.js') : root.PFLibrary; // v5.10.9
   const CL = (typeof require === 'function' && typeof document === 'undefined') ? require('./clinic.js') : root.PFClinic; // v5.10.10
+  const PK = (typeof require === 'function' && typeof document === 'undefined') ? require('./park.js') : root.PFPark; // v5.12.3 镇公园
   const FS = (typeof require === 'function' && typeof document === 'undefined') ? require('./festival.js') : root.PFFestival; // v5.10.11
   const P = (x, y) => ({ x, y });
   const HALL = TN.BY_ID.hall;
@@ -53,12 +54,15 @@
     { id: 'library', name: '书屋', desc: '书屋阿宁在东街开馆。孩子放学顺路看书（上学日 +1）；图鉴里还没收集到的条目给出提示；解锁苹果派配方给面包房订单用', cost: 25000, wood: 150, lv: 3, kind: 'library', who: 'n9' },
     // v5.10.10: 诊所 + 老房翻盖 (clinic.js): monthly checkup, mood floor, streets paved at 繁荣度 5
     { id: 'clinic', name: '诊所', desc: '苏大夫在东街开诊所。动物和猫狗心情的下限更高；每月来家里做一次体检，开心值 +。不做生病', cost: 30000, wood: 0, lv: 4, kind: 'clinic', who: 'n10' },
-  ].concat(CL && CL.REBUILDS ? CL.REBUILDS : []);
+  ].concat(CL && CL.REBUILDS ? CL.REBUILDS : []).concat(PK ? [PK.PROJECT] : []); // v5.12.3: 镇公园 last (after the five rebuilds)
   const PROJ = Object.fromEntries(PROJECTS.map(p => [p.id, p]));
   const LEVELS = [0, 3, 5, 9, 15];                          // 繁荣度 1–5 (v5.10.9 school + library make 9 → 4; v5.10.10 clinic + 5 rebuilds make 15 → 5)
-  const LV_NAME = ['', '小镇', '热闹的小镇', '繁华的小镇', '大镇子', '远近闻名'];
-  const prosperity = st => { const n = Object.keys((st && st.built) || {}).length; let lv = 1; for (let i = 1; i < LEVELS.length; i++) if (n >= LEVELS[i]) lv = i + 1; return lv; };
-  const nextLevelAt = st => { const n = Object.keys((st && st.built) || {}).length; const nx = LEVELS.find(t => t > n); return nx === undefined ? null : { need: nx - n }; };
+  const LV_NAME = ['', '小镇', '热闹的小镇', '繁华的小镇', '大镇子', '远近闻名', '旅游小镇']; // v5.12.3: 6
+  // v5.12.3: the park does not count towards 1–5 (it needs 5 already); level 6 is the day `lv6` was reached (park + tourists, game.js)
+  const counted = st => Object.keys((st && st.built) || {}).filter(id => id !== 'park').length;
+  const prosperity = st => { const n = counted(st); let lv = 1; for (let i = 1; i < LEVELS.length; i++) if (n >= LEVELS[i]) lv = i + 1;
+    if (lv >= 5 && st && (st.lv6 | 0) > 0 && st.built && st.built.park) lv = 6; return lv; };
+  const nextLevelAt = st => { const n = counted(st); const nx = LEVELS.find(t => t > n); return nx === undefined ? null : { need: nx - n }; };
 
   // ---------- the people: 镇长 from the day the town opens, one family per house from the morning after it is done ----------
   const SPOTS = { hall: P(HALL.door.x + 5, HALL.door.y + 4), board: P(BOARD.x + 3, BOARD.y + 5), plaza2: P(TN.PLAZA.x - 14, TN.PLAZA.y - 6),
@@ -130,6 +134,7 @@
     return { at: P(at.x + (i % 2 ? 0.3 : -0.3), at.y), out: true, spot: 'feast' }; }
   const siteSpot = id => { const l = LOT[id]; if (l) return P(l.x + l.hw + 3, l.y - l.hd + 2);
     if (id === 'market') return P(TN.PLAZA.x - 20, TN.PLAZA.y + 4);
+    if (id === 'park' && PK) return P(PK.GATE.x + 8, PK.GATE.y + 5); // v5.12.3: 阿松 works by the park gate
     const b = TN.BY_ID[id]; return b ? P(b.x + b.hw + 3, b.door.y) : null; };
 
   // ---------- the board: start a project, finish it the next morning ----------
@@ -139,7 +144,7 @@
     if (!(ctx && ctx.open)) return '先把镇子买下来';
     if (st.built[id]) return '已经盖好了';
     if (st.job) return st.job.id === id ? '正在盖' : '一次只盖一座，等' + PROJ[st.job.id].name + '盖好';
-    if (p.lv && prosperity(st) < p.lv) return `繁荣度到 ${p.lv} 才能盖（${p.lv <= 2 ? '先把三座二层房盖好' : p.lv <= 3 ? '先把集市和面包房盖好' : '先把学校和书屋盖好'}）`;
+    if (p.lv && prosperity(st) < p.lv) return `繁荣度到 ${p.lv} 才能盖（${p.lv <= 2 ? '先把三座二层房盖好' : p.lv <= 3 ? '先把集市和面包房盖好' : p.lv <= 4 ? '先把学校和书屋盖好' : '先把诊所盖好、五座老房翻成二层'}）`;
     if ((ctx.coins | 0) < p.cost) return '金币不够';
     if ((ctx.wood | 0) < p.wood) return '木材不够';
     return null;
@@ -181,6 +186,7 @@
     if (st.built.smithy && SM) { // v5.10.5: the forge stays warm; brighter after dark
       const glow = t >= 18 * 60 || t < 6 * 60; out.push({ x: SM.LOT.x, y: SM.LOT.y + 2, z: 4, r: glow ? 22 : 14, s: glow ? 0.95 : 0.55, col: '#e06a2c' }); }
     if (st.built.clinic && CL && homes) out.push({ x: CL.LOT.door.x, y: CL.LOT.door.y + 1, z: 6, r: 16, s: 0.6 });
+    if (PK) out.push(...PK.lightsAt(st, T)); // v5.12.3: the park's two gate lamps
     if (lamps && CAT) { const gp = giftPos(st); st.gifts.forEach((id, i) => { const c = CAT[id]; if (c && c.light && gp[i]) out.push({ x: gp[i].x, y: gp[i].y, z: 12, r: c.light, s: 0.85 }); }); }
     return out;
   }
@@ -204,6 +210,7 @@
     if (o.job && typeof o.job === 'object' && PROJ[o.job.id] && !out.built[o.job.id]) out.job = { id: o.job.id, day: int(o.job.day, 0, 1e6) };
     if (Array.isArray(o.gifts)) { const g = []; for (const id of o.gifts) if (typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id) && SL.townRoom(g, id)) g.push(id); out.gifts = g; }
     out.paper = int(o.paper, 0, 1e6);
+    if (o.lv6 && out.built.park) out.lv6 = int(o.lv6, 1, 1e6); // v5.12.3: the day 繁荣度 6 was reached (append-only; absent = not yet)
     if (MK) out.market = MK.valid(o.market);
     if (BK) out.bakery = BK.valid(o.bakery);
     if (WS) out.woodshop = WS.valid(o.woodshop);

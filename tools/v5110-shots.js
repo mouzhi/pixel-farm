@@ -71,7 +71,7 @@ fs.mkdirSync(OUT, { recursive: true });
         houseH: M.houses[0].h, twoH: M.two[0].h, twoHouseH: M.twoHouse[0].h, schoolH: M.school.h }; })()`;
   // 1. wide overview of the whole new town, everything built
   await shot('v5110_overview.png', `(() => { ${setup} ${toLv4} ${allHouses} at(15 * 60); look(792, 60, 0); hide(); return ${facts}; })()`,
-    r => r.ver !== '5.12.2' ? 'ver ' + r.ver : r.world[1] !== 1328 ? 'world ' + r.world : !r.open ? 'town shut' : r.lv < 5 ? 'lv ' + r.lv : null, null, { viewport: { width: 1600, height: 1000 }, query: '&view=800x500' });
+    r => r.ver !== '5.12.3' ? 'ver ' + r.ver : r.world[1] !== 1328 ? 'world ' + r.world : !r.open ? 'town shut' : r.lv < 5 ? 'lv ' + r.lv : null, null, { viewport: { width: 1600, height: 1000 }, query: '&view=800x500' });
   // 2. a house beside the farmer, for scale (old one-storey and a two-storey side by side)
   await shot('v5110_scale.png', `(() => { ${setup} openTown(); at(9 * 60); start('L11'); nextMorning(); at(10 * 60);
     f.FARMER.x = 947; f.FARMER.y = 52; f.FARMER.task = null; look(944, 34, 0); hide(); const r = ${facts};
@@ -124,11 +124,11 @@ fs.mkdirSync(OUT, { recursive: true });
       const end = pts[pts.length - 1]; if (Math.hypot(end.x - q.door.x, end.y - q.door.y) > 4) far.push(q.id); }
     // a school morning: the kid walks from the farm to the school door; sample the walk
     S.family.kids[0].floor = 'school'; f.syncFamily(); day(S.day + 1); at(6 * 60); dry(); wake(); const hits = [], seen = { pack: 0, hat: 0, hold: 0, walk: 0 }; let maxX = 0, leftAt = null, arrived = null; const kinds = {};
-    for (let i = 0; i < 900; i++) { f.advance(1 / 3, 10); const k = S.members.find(m => m.id === 'kid0'); if (!k) break; maxX = Math.max(maxX, k.x); const kk = (k.task && k.task.kind) || '-'; kinds[kk] = (kinds[kk] || 0) + 1;
+    for (let i = 0; i < 1400; i++) { f.advance(1 / 3, 10); const k = S.members.find(m => m.id === 'kid0'); if (!k) break; maxX = Math.max(maxX, k.x); const kk = (k.task && k.task.kind) || '-'; kinds[kk] = (kinds[kk] || 0) + 1;
       const h = inside(k.x, k.y); if (h && !k.away && !(k.task && /school/.test(k.task.kind) && Math.hypot(k.x - TN.SCHOOL_DOOR.x, k.y - TN.SCHOOL_DOOR.y) < 6)) hits.push(h.id + '@' + Math.round(k.x) + ',' + Math.round(k.y));
       if (f.schoolWalk(k) && k.x > 300) { seen.walk++; const [look] = f.lookOf(k), held = f.carryFields(k); if (look === 'kid0_school') seen.pack++; if (held.basket || held.carry) seen.hold++; }
       if (k.task && k.task.kind === 'school-go' && leftAt === null) leftAt = S.t % 1440; if (k.away === 'school' && arrived === null) arrived = S.t % 1440;
-      if (k.away || (S.t % 1440) > 11 * 60) break; }
+      if (k.away || (S.t % 1440) > 12 * 60) break; } // v5.12.3: till 12:00 (a kid that played until 9:24 was still on the road at 11:00 on run 45362449575)
     look(700, 60, 0); hide(); return { bad, far, hits: hits.slice(0, 6), seen, maxX: Math.round(maxX), T: S.t % 1440, kinds, leftAt, arrived, walkMin: arrived !== null && leftAt !== null ? Math.round(arrived - leftAt) : null }; })()`,
     r => r.bad.length ? 'through ' + r.bad.join(' ') : r.far.length ? 'unreached ' + r.far.join(' ') : r.hits.length ? 'kid inside ' + r.hits.join(' ') : !r.seen.walk ? 'no school walk seen' : r.seen.pack !== r.seen.walk ? 'school look ' + JSON.stringify(r.seen) : r.seen.hold ? 'holding on the walk' : r.arrived === null ? 'never reached school' : null);
   // 9. fixtures and (locally) the real saves: they load, keep v15 and draw the new town
@@ -143,7 +143,7 @@ fs.mkdirSync(OUT, { recursive: true });
       let stuck = 0; for (let i = 0; i < 40; i++) { f.advance(0.5, 10); stuck += (f.actors ? f.actors() : []).filter(a => a && !a.away && !a.home && inB(a)).length; }
       if (town) look(780, 60, 0); else look(96, 60, 0); hide(); const s2 = f.snapshot();
       return { day: s.clock.day, sv: s2.saveVersion, ver: f.version, town, stuck, built: town ? Object.keys(S.town.hall.built).filter(k => S.town.hall.built[k]).length : 0 }; })()`,
-      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.2' ? 'ver ' + r.ver : r.stuck ? 'someone inside a building x' + r.stuck : null, save);
+      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.3' ? 'ver ' + r.ver : r.stuck ? 'someone inside a building x' + r.stuck : null, save);
   }
 
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();
