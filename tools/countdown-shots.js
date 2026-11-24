@@ -128,7 +128,7 @@ fs.mkdirSync(OUT, { recursive: true });
   // 6. mobile 390x844, collapsed
   await shot('countdown_mobile.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : r.ov.jumps !== 4 ? 'jump n ' + r.ov.jumps : r.ov.vw !== 390 || r.ov.vh !== 844 ? 'viewport ' + r.ov.vw + 'x' + r.ov.vh : null,
+    r => !r.ov.diaryBtn ? 'no 日记 button' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.hidden ? 'hidden' : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : r.ov.jumpWrap ? 'jump wrap' : r.ov.jumpOff ? 'jump off screen' : r.ov.jumps !== 6 ? 'jump n ' + r.ov.jumps : r.ov.vw !== 390 || r.ov.vh !== 844 ? 'viewport ' + r.ov.vw + 'x' + r.ov.vh : null,
     save, { width: 390, height: 844 });
 
   // 7. mobile expanded: the list stays inside the HUD and does not cover the right-side buttons
