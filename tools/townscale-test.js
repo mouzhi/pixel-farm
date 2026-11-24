@@ -14,8 +14,8 @@ const streets = Object.assign({}, TN.STREETS, CR.STREETS || {});
 const streetD = (x, y) => { let d = 1e9; for (const k in streets) { const L = streets[k]; for (let i = 0; i < L.length - 1; i++) d = Math.min(d, segD(x, y, L[i], L[i + 1])); } return d; };
 
 // the map
-ok(WD.WORLD.x1 === 1008 && WD.WORLD.x0 === -256, 'map runs -256..1008');
-ok((WD.WORLD.x1 - WD.WORLD.x0) / 8 === 158 && (WD.WORLD.y1 - WD.WORLD.y0) / 8 === 74, '158 x 74 tiles');
+ok(WD.WORLD.x1 === 1328 && WD.WORLD.x0 === -256, 'map runs -256..1328');
+ok((WD.WORLD.x1 - WD.WORLD.x0) / 8 === 198 && (WD.WORLD.y1 - WD.WORLD.y0) / 8 === 74, '198 x 74 tiles');
 ok(TN.RECT[2] - TN.RECT[0] === 384 && TN.RECT[3] - TN.RECT[1] === 308, 'town 384 x 308');
 for (let x = TN.RECT[0]; x <= TN.RECT[2]; x += 4) ok(TN.RECT[1] > PL.ridgeY(x) + 10, 'town north edge clear of the cliff at ' + x);
 ok(TN.GATE.x < TN.RECT[0] && TN.GATE.y === 66, 'gate at the west edge on the main street');

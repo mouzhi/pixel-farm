@@ -10,6 +10,7 @@
   const HM = root.PFHome || (typeof require === 'function' ? require('./home.js') : null); // v5.9.0 phase 11: the new house
   const YD = root.PFYard || (typeof require === 'function' ? require('./yard.js') : null); // v5.10.3: yard, stall and animal-care things
   const DC = root.PFDecor || (typeof require === 'function' ? require('./decor.js') : null); // v5.7.0 phase 9: the decoration shop
+  const EA = root.PFEast || (typeof require === 'function' ? require('./east.js') : null); // v5.12.2: 东门大道 and 度假沙滩
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
   const SLEEP_MULT = 6;           // the night runs 6x faster while the farmer sleeps
   const WAKE = 6 * 60, BEDTIME = 20 * 60;
@@ -114,6 +115,9 @@
       levels: Array.from({ length: c.shop.max }, (_, i) => ({ cost: c.shop.cost, wood: c.shop.wood, label: c.shop.max > 1 ? `第 ${i + 1} 个` : c.name, desc: c.desc })) }; }) : []),
     // v5.8.0 phase 10 (rules in town.js): the town east of 东大道; its gate opens once the road is bought and a child has been to school
     ...(TN ? [{ id: 'town', p10: 1, name: '隔壁镇子', icon: 'town', levels: [{ cost: TN.PRICE.cost, wood: TN.PRICE.wood, label: '打开镇门', desc: '东大道尽头的镇子：学校、小店（工坊货、蜂蜜和鱼多卖两成）、几户人家；孩子改去镇上的学校' }] }] : []),
+    // v5.12.2: 东门大道 and 度假沙滩 are two separate purchases (rules in east.js)
+    ...(EA ? [{ id: 'eastave', p12: 1, name: '东门大道', icon: 'eastave', levels: [{ cost: EA.PRICE_AVE.cost, wood: EA.PRICE_AVE.wood, label: '东门大道', desc: '从东门再往东修一条石板大道，南侧是停车场。平时有私家车来回，一部分车会停进场，游客走进镇子；买了度假沙滩以后也能从停车场下到东段沙滩。要先开镇门，并且繁荣度到 5。不附赠沙滩' }] }] : []),
+    ...(EA ? [{ id: 'vacbeach', p12: 1, name: '度假沙滩', icon: 'vacbeach', levels: [{ cost: EA.PRICE_BEACH.cost, wood: EA.PRICE_BEACH.wood, label: '度假沙滩', desc: '把栈桥以东的南海岸清出来做成公共沙滩：加宽沙带，摆上遮阳伞和躺椅、一座救生塔、木栈道和两处落日台。要先开镇门并买下海边，不必先买东门大道。没修大道时沙滩先开到现在的地图东缘，修了大道以后同一条滩会接到停车场' }] }] : []),
     // v5.9.0 phase 11 (rules in home.js): a smaller house on a bought 花甸 / 农田 plot, for a grown child who marries
     ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i ? '第二座新房子' : '新房子',
       desc: (i ? '给第二个孩子成家用。' : '') + '家人在宅园房基、花甸或农田里盖一座小一号的房子，旁边带 6 格小田和两只母鸡。孩子长成少年、和同学走得很近以后，会在这里成家' })) }] : []),
@@ -126,7 +130,7 @@
   const SHOP_TABS = [
     { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
-    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : [])] },
+    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : []), ...(EA ? ['eastave', 'vacbeach'] : [])] },
     { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
     { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'feeder', 'feedset', 'chute', 'milker', 'tray'] }, // v5.6.0; v5.10.9 pie; v5.11.0.29 machines
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
@@ -154,6 +158,7 @@
       house: lv('house'), fence: lv('fence') > 0,
       sprinkler: lv('sprinkler'), mill: lv('mill') > 0, jam: lv('jam') > 0, cheese: lv('cheese') > 0, pie: lv('pie') > 0, wheel: lv('wheel'), hive: lv('hive'), // v5.6.0; v5.10.9 pie
       town: TN ? lv('town') > 0 : false, // v5.8.0
+      eastave: EA ? lv('eastave') > 0 : false, vacbeach: EA ? lv('vacbeach') > 0 : false, // v5.12.2
       cottage: HM ? lv('cottage') : 0, // v5.9.0
       coop2: lv('coop2') > 0, sty2: lv('sty2') > 0, fold2: lv('fold2') > 0, shed2: lv('shed2') > 0,
     };

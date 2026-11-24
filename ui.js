@@ -30,6 +30,10 @@
       { k: ink, g: gr[2], s: '#9a9a92', w: wd[4], b: '#4fa3cf', d: gr[1], y: gr[3] }), // v5.9.0 the new house
     town: pixIcon(['', '      kk', '     krrk', '    krrrrk   kk', '   krrrrrrk krrk', '  kkkkkkkkkkrrrrk', '   kwwwwwwkkkkkkk', '   kwbwwbwk kwwk', '   kwwwwwwk kwdk', '   kwwddwwk kwdk', '   kkkddkkkkkkkk', '  gggg  gggg'],
       { k: ink, r: rf[2], w: wd[5] || wd[4], b: '#4fa3cf', d: wd[1], g: gr[3] }), // v5.8.0 the town
+    eastave: pixIcon(['', '', '                ', '     kkkkkkkkkk', '    ksssssssssk', '    ksssssssssk', 'kkkkkkkkkkkkkkkk', 'kwwkwwkwwkwwkwwk', 'kkkkkkkkkkkkkkkk', '    ksskk  kssk', '    ksskk  kssk', '    kkkkk  kkkk'],
+      { k: ink, s: st[3] || '#9a9a92', w: wd[5] || wd[4] }), // v5.12.2 东门大道
+    vacbeach: pixIcon(['', '', '      rr  rr', '     r  rr  r', '      y  y', '       y', '   ssssssssss', '  ssysysysyss', ' ssssssssssss', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbb', 'bbbbbbbbbbbbbb'],
+      { k: ink, r: rf[2], y: '#c9a85a', s: wd[4], b: wt[2] }), // v5.12.2 度假沙滩
     shoe: pixIcon(['', '', '', '    kkkk', '   kbbbbk', '   kbttbk', '   kbbbbk', '   kbbbbkk', '   kbbbbbbkkk', '  kbbbbbbbbbbk', '  kbtttbbbbbbbk', '  kkkkkkkkkkkkk', '  kdddddddddddk', '   kkkkkkkkkkk'].map(r => r.padEnd(16)),
       { k: ink, b: wd[2], t: wd[4], d: wd[1] }),
     hoe: pixIcon(['', '            kk', '           kbk', '          kbk', '         kbk', '        kbk', '       kbk', '      kbk', '     kbk', '  kkkbk', ' kssskk', ' kseeek', ' kseek', '  kkk'].map(r => r.padEnd(16)),
