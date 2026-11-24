@@ -132,8 +132,12 @@ jobs:
             scripts: rain-shots.js married-shots.js water-shots.js wedding-shots.js wedding-load-test.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
+          # v5.12.3: school-shots on its own leg (townscale hit 25m30s on run 45358420743 on a slow runner: v5110 18.8m, school 6.6m;
+          # the same scripts took 14.4m on run 45353460574)
           - group: townscale
-            scripts: v5110-shots.js school-shots.js
+            scripts: v5110-shots.js
+          - group: school
+            scripts: school-shots.js
           # v5.11.0.5 农家乐区: its own leg (~11m on CI: recent-b went 11m -> 22m16s with it on run 44703708506; with rain-shots there too it would pass 25m)
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           # v5.11.0.7: + hotbar-shots (~1m); agrilot was the lightest leg (5–9m on runs 44727901332 / 44729908140)
