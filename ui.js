@@ -514,8 +514,20 @@
   }
   function hallHtml() {
     const v = G.hallView(); if (!v) return '';
-    const stars = '★'.repeat(v.lv) + '☆'.repeat(Math.max(0, 5 - v.lv));
+    const stars = '★'.repeat(v.lv) + '☆'.repeat(Math.max(0, (v.lv >= 5 ? 6 : 5) - v.lv)); // v5.12.3: a sixth star once the town reaches 5
     let h = `<div class="sec">繁荣度 <span class="stars" title="繁荣度 ${v.lv}">${stars}</span> ${esc(v.lvName)} · 镇上住着 ${v.people} 位邻居${v.next ? ` · 再盖 ${v.next.need} 座升到 ${v.lv + 1}` : ''}</div>`;
+    const tv = v.tour; // v5.12.3 繁荣度 6「旅游小镇」
+    if (tv && (v.lv >= 5 || tv.ok)) {
+      const T = tv.T, row = (ok, t) => `<span class="lv">${ok ? '✓' : '·'} ${esc(t)}</span>`;
+      h += `<div class="card${tv.ok ? ' max' : ''}" data-item="tour">${icon('town')}<div class="ct"><div><b>${tv.ok ? `繁荣度 6：旅游小镇（第 ${tv.lv6} 天升级）` : '繁荣度 6：旅游小镇'}</b></div><div class="d">` +
+        (tv.ok ? '公园里放学后有镇上的小孩玩，阿梅、阿川和秋姨三家慢慢成家、添了孩子。' : '升到 6 级要：') +
+        (tv.ok ? '' : [row(tv.park, '建好镇公园'), row(tv.avenue || tv.beach, '买下东门大道或度假沙滩'), row(tv.stars >= T.stars || tv.visitors >= T.visitors, `度假村 ${T.stars} 星（${+tv.stars ? '现在 ' + (+tv.stars).toFixed(1) : '还没有住客'}）或近 ${T.days} 天游客 ${T.visitors} 人（现在 ${tv.visitors}）`)].join(' ')) +
+        `</div></div></div>`;
+      for (const f of (tv.families || [])) {
+        const kids = f.kids.concat(f.babies.map(n => n + '（婴儿）'));
+        h += `<div class="card" data-item="tourfam">${icon('town')}<div class="ct"><div><b>${esc(f.host)}和${esc(f.spouse)}</b> <span class="lv">${kids.length ? '孩子：' + esc(kids.join('、')) : '刚成家'}</span></div><div class="d">${f.kids.length ? '放学后去镇公园玩，17:30 回家。不进家里的任务板。' : f.babies.length ? '上午推着婴儿车在公园绕圈。' : '上午会去公园走走。'}</div></div></div>`;
+      }
+    }
     h += `<div class="sec">建设项目（一次盖一座：付钱后木匠阿松搭脚手架，第二天一早盖好，新邻居搬进来）</div>`;
     for (const p of v.projects) {
       const st = p.built ? '已盖好' : p.building ? '正在盖' : '未开工', can = !p.why;
