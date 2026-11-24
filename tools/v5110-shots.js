@@ -124,11 +124,11 @@ fs.mkdirSync(OUT, { recursive: true });
       const end = pts[pts.length - 1]; if (Math.hypot(end.x - q.door.x, end.y - q.door.y) > 4) far.push(q.id); }
     // a school morning: the kid walks from the farm to the school door; sample the walk
     S.family.kids[0].floor = 'school'; f.syncFamily(); day(S.day + 1); at(6 * 60); dry(); wake(); const hits = [], seen = { pack: 0, hat: 0, hold: 0, walk: 0 }; let maxX = 0, leftAt = null, arrived = null; const kinds = {};
-    for (let i = 0; i < 900; i++) { f.advance(1 / 3, 10); const k = S.members.find(m => m.id === 'kid0'); if (!k) break; maxX = Math.max(maxX, k.x); const kk = (k.task && k.task.kind) || '-'; kinds[kk] = (kinds[kk] || 0) + 1;
+    for (let i = 0; i < 1400; i++) { f.advance(1 / 3, 10); const k = S.members.find(m => m.id === 'kid0'); if (!k) break; maxX = Math.max(maxX, k.x); const kk = (k.task && k.task.kind) || '-'; kinds[kk] = (kinds[kk] || 0) + 1;
       const h = inside(k.x, k.y); if (h && !k.away && !(k.task && /school/.test(k.task.kind) && Math.hypot(k.x - TN.SCHOOL_DOOR.x, k.y - TN.SCHOOL_DOOR.y) < 6)) hits.push(h.id + '@' + Math.round(k.x) + ',' + Math.round(k.y));
       if (f.schoolWalk(k) && k.x > 300) { seen.walk++; const [look] = f.lookOf(k), held = f.carryFields(k); if (look === 'kid0_school') seen.pack++; if (held.basket || held.carry) seen.hold++; }
       if (k.task && k.task.kind === 'school-go' && leftAt === null) leftAt = S.t % 1440; if (k.away === 'school' && arrived === null) arrived = S.t % 1440;
-      if (k.away || (S.t % 1440) > 11 * 60) break; }
+      if (k.away || (S.t % 1440) > 12 * 60) break; } // v5.12.3: till 12:00 (a kid that played until 9:24 was still on the road at 11:00 on run 45362449575)
     look(700, 60, 0); hide(); return { bad, far, hits: hits.slice(0, 6), seen, maxX: Math.round(maxX), T: S.t % 1440, kinds, leftAt, arrived, walkMin: arrived !== null && leftAt !== null ? Math.round(arrived - leftAt) : null }; })()`,
     r => r.bad.length ? 'through ' + r.bad.join(' ') : r.far.length ? 'unreached ' + r.far.join(' ') : r.hits.length ? 'kid inside ' + r.hits.join(' ') : !r.seen.walk ? 'no school walk seen' : r.seen.pack !== r.seen.walk ? 'school look ' + JSON.stringify(r.seen) : r.seen.hold ? 'holding on the walk' : r.arrived === null ? 'never reached school' : null);
   // 9. fixtures and (locally) the real saves: they load, keep v15 and draw the new town
