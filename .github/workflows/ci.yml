@@ -202,6 +202,9 @@ jobs:
           # v5.12.5 第三代: its own leg (~7m locally); do not load home / park / wedding
           - group: gen3
             scripts: gen3-shots.js
+          # v5.12.6 旅游大巴: its own leg (~5.5m locally)
+          - group: bus
+            scripts: bus-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

@@ -83,19 +83,26 @@
       }
       return null;
     });
-    // v5.12.6 旅游大巴: a coach 30 long, nose along +x: two-tone body, a long window band, a door on the flank that faces the lot, roof racks
-    const coach = (c1, c2, dy) => B(30, 12, 15, (px, py, z) => {
-      const inX = px >= 0 && px <= 29, inY = py >= 1 && py <= 10;
-      if ((px >= 3 && px <= 6 || px >= 22 && px <= 25) && (py <= 1 || py >= 10) && z <= 3) return z === 2 ? ink : '#2a2a32'; // wheels
-      if (!inX || !inY) return null;
-      if (z === 0) return px >= 2 && px <= 27 ? '#2a2a32' : null;
-      if (z >= 13) return z === 14 ? (px >= 8 && px <= 20 && py >= 3 && py <= 8 ? '#d8d2c4' : null) : '#f2ede0'; // roof + a luggage box
-      if (px === 29 && z >= 6 && z <= 11 && py >= 2 && py <= 9) return Wt[3];               // windscreen
-      if (px === 29 && z >= 2 && z <= 3 && (py <= 3 || py >= 8)) return '#f2cf55';            // headlights
-      if (px === 0 && z >= 2 && z <= 3 && (py <= 3 || py >= 8)) return '#c8402e';             // tail lights
-      if (py === dy && px >= 23 && px <= 26 && z >= 1 && z <= 11) return z >= 6 ? Wt[2] : St[2]; // the door, front left
-      if (z >= 7 && z <= 11 && (py === 1 || py === 10) && px >= 2 && px <= 27 && px % 4 !== 1) return Wt[3]; // window band
-      if (z >= 4 && z <= 5) return c2;                                                        // the stripe
+    // v5.12.6 旅游大巴: a coach (voxels are half a world unit: 52 x 20 = 26 x 10 in its 32 x 20 bay), nose along +x: two-tone body,
+    // a long window band, a door on the flank that faces the lot, a luggage box on the roof
+    const coach = (c1, c2, dy) => B(52, 20, 24, (px, py, z) => {
+      const L = 51, Wd2 = 19;
+      if ((px >= 6 && px <= 11 || px >= 39 && px <= 44) && (py <= 1 || py >= Wd2 - 1) && z <= 5) { const c = Math.hypot((px - (px < 20 ? 8.5 : 41.5)), z - 2.5); return c < 1.4 ? St[2] : c < 3.2 ? '#2a2a32' : null; } // wheels
+      if (py < 2 || py > Wd2 - 2) { if (!(py === 1 || py === Wd2 - 1)) return null; }
+      if (px < 0 || px > L) return null;
+      if (z === 0) return px >= 3 && px <= L - 3 && py >= 3 && py <= Wd2 - 3 ? '#2a2a32' : null;
+      if (z <= 1) return null;
+      if (z >= 22) return z === 23 ? (px >= 14 && px <= 36 && py >= 5 && py <= Wd2 - 5 ? '#d8d2c4' : null) : '#f2ede0'; // roof + luggage box
+      const shell = px === 0 || px === L || py === 1 || py === Wd2 - 1;
+      if (!shell) return null;
+      if (px === L && z >= 11 && z <= 19 && py >= 3 && py <= Wd2 - 3) return Wt[3];                 // windscreen
+      if (px === L && z >= 4 && z <= 5 && (py <= 5 || py >= Wd2 - 5)) return '#f2cf55';             // headlights
+      if (px === 0 && z >= 4 && z <= 5 && (py <= 5 || py >= Wd2 - 5)) return '#c8402e';             // tail lights
+      if (px === 0 && z >= 13 && z <= 19 && py >= 4 && py <= Wd2 - 4) return Wt[2];                 // rear window
+      if (py === dy && px >= 44 && px <= 49 && z >= 2 && z <= 19) return z >= 10 ? Wt[2] : St[2];  // the door, front
+      if ((py === 1 || py === Wd2 - 1) && z >= 13 && z <= 19 && px >= 3 && px <= 42) return px % 7 === 3 ? c1 : Wt[3]; // window band, pillars
+      if (z >= 8 && z <= 10) return c2;                                                             // the stripe
+      if (z <= 3) return St[1];                                                                     // skirt
       return c1;
     });
     // a bus-stop pole with a lamp head (lit at dusk by east.js / bus.js lights)
@@ -106,7 +113,7 @@
       return null;
     });
     return {
-      coach0: coach('#f2ede0', '#3a7a5a', 1), coach1: coach('#f2ede0', '#3a5a8c', 10) /* bay 1 parks nose west: its door is on the other flank so it still faces the lot */, busstop,
+      coach0: coach('#f2ede0', '#3a7a5a', 1), coach1: coach('#f2ede0', '#3a5a8c', 18) /* bay 1 parks nose west: its door is on the other flank so it still faces the lot */, busstop,
       parasolA: parasol(Rf[2], Ac[0]), parasolB: parasol(Wt[3], Ac[0]),
       parasolC: parasol(G[2], Ac[0]), parasolD: parasol('#3a5a8c', Ac[0]),
       chairA: chair(Rf[2]), chairB: chair('#3a5a8c'), chairC: chair(G[2]), chairD: chair('#c9a85a'),
