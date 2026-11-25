@@ -541,6 +541,14 @@
         h += `<div class="card" data-item="tourfam">${icon('town')}<div class="ct"><div><b>${esc(f.host)}和${esc(f.spouse)}</b> <span class="lv">${kids.length ? '孩子：' + esc(kids.join('、')) : '刚成家'}</span></div><div class="d">${f.kids.length ? '放学后去镇公园玩，17:30 回家。不进家里的任务板。' : f.babies.length ? '上午推着婴儿车在公园绕圈。' : '上午会去公园走走。'}</div></div></div>`;
       }
     }
+    const bv = G.busView && G.busView(); // v5.12.6 旅游大巴
+    if (bv && (v.lv >= 5 || bv.total)) {
+      const hm = m => `${(m / 60) | 0}:${String(m % 60).padStart(2, '0')}`, DN = { town: '节庆广场', agri: '农家乐', park: '镇公园', beach: '东段沙滩' };
+      const runs = bv.runs.map(r => `${hm(r.arrive)} 到 ${hm(r.leave)} 走，${r.n} 人（${Object.keys(r.dest).map(k => DN[k] + ' ' + r.dest[k]).join('、')}）`);
+      h += `<div class="card${bv.why ? '' : ' max'}" data-item="bus">${icon('town')}<div class="ct"><div><b>旅游大巴</b> <span class="lv">${bv.why ? '还没来' : `今天 ${bv.runs.length} 辆 · ${bv.today} 人`}</span></div><div class="d">` +
+        (bv.why ? esc(bv.why) + '。' : esc(runs.join('；')) + `。每辆车走时付停车费 ${bv.fee} 金；去农家乐的游客会去玩那里的农场体验（各项每天的人数上限不变）。`) +
+        (bv.six ? '' : '繁荣度到 6「旅游小镇」后每天多来一辆，车上人也更多。') + (bv.total ? `大巴一共带来 ${bv.total} 位游客。` : '') + `</div></div></div>`;
+    }
     h += `<div class="sec">建设项目（一次盖一座：付钱后木匠阿松搭脚手架，第二天一早盖好，新邻居搬进来）</div>`;
     for (const p of v.projects) {
       const st = p.built ? '已盖好' : p.building ? '正在盖' : '未开工', can = !p.why;

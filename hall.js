@@ -211,6 +211,7 @@
     if (Array.isArray(o.gifts)) { const g = []; for (const id of o.gifts) if (typeof id === 'string' && DECOR_ID.test(id) && GIFT_OK(id) && SL.townRoom(g, id)) g.push(id); out.gifts = g; }
     out.paper = int(o.paper, 0, 1e6);
     if (o.lv6 && out.built.park) out.lv6 = int(o.lv6, 1, 1e6); // v5.12.3: the day 繁荣度 6 was reached (append-only; absent = not yet)
+    if (o.bus > 0) out.bus = int(o.bus, 1, 1e7); // v5.12.6: tourists the tour buses have brought in all (append-only; absent = 0)
     if (MK) out.market = MK.valid(o.market);
     if (BK) out.bakery = BK.valid(o.bakery);
     if (WS) out.woodshop = WS.valid(o.woodshop);

@@ -1,8 +1,9 @@
-// 像素农场 · v5.12.2：东门大道、停车场和度假沙滩的体素（规则在 east.js）。
+// 像素农场 · v5.12.2：东门大道、停车场和度假沙滩的体素（规则在 east.js）。v5.12.6：旅游大巴和站牌灯（规则在 bus.js）。
 // game.js 在模型就绪后调用 mount(X)，买下或钟点变化时 sync()（按 key 决定，不必每帧重建）。
 'use strict';
 (function (root) {
   const EA = root.PFEast || (typeof require === 'function' ? require('./east.js') : null);
+  const BUS = root.PFBus || null; // v5.12.6 旅游大巴 (bus.js)
   const PAL = root.PF_PALETTE, R = PAL ? PAL.ramps : null;
   const Wd = R && R.wood, St = R && R.stone, Wt = R && R.water, Rf = R && R.roof, Ac = R && R.accent, G = R && R.green, ink = R && R.ink && R.ink[0];
   let X = null, S = null, MD = null, lastKey = '', mounted = false;
@@ -82,7 +83,30 @@
       }
       return null;
     });
+    // v5.12.6 旅游大巴: a coach 30 long, nose along +x: two-tone body, a long window band, a door on the flank that faces the lot, roof racks
+    const coach = (c1, c2, dy) => B(30, 12, 15, (px, py, z) => {
+      const inX = px >= 0 && px <= 29, inY = py >= 1 && py <= 10;
+      if ((px >= 3 && px <= 6 || px >= 22 && px <= 25) && (py <= 1 || py >= 10) && z <= 3) return z === 2 ? ink : '#2a2a32'; // wheels
+      if (!inX || !inY) return null;
+      if (z === 0) return px >= 2 && px <= 27 ? '#2a2a32' : null;
+      if (z >= 13) return z === 14 ? (px >= 8 && px <= 20 && py >= 3 && py <= 8 ? '#d8d2c4' : null) : '#f2ede0'; // roof + a luggage box
+      if (px === 29 && z >= 6 && z <= 11 && py >= 2 && py <= 9) return Wt[3];               // windscreen
+      if (px === 29 && z >= 2 && z <= 3 && (py <= 3 || py >= 8)) return '#f2cf55';            // headlights
+      if (px === 0 && z >= 2 && z <= 3 && (py <= 3 || py >= 8)) return '#c8402e';             // tail lights
+      if (py === dy && px >= 23 && px <= 26 && z >= 1 && z <= 11) return z >= 6 ? Wt[2] : St[2]; // the door, front left
+      if (z >= 7 && z <= 11 && (py === 1 || py === 10) && px >= 2 && px <= 27 && px % 4 !== 1) return Wt[3]; // window band
+      if (z >= 4 && z <= 5) return c2;                                                        // the stripe
+      return c1;
+    });
+    // a bus-stop pole with a lamp head (lit at dusk by east.js / bus.js lights)
+    const busstop = B(6, 4, 22, (px, py, z) => {
+      if (px >= 2 && px <= 3 && py >= 1 && py <= 2 && z <= 17) return St[1];
+      if (z >= 12 && z <= 16 && px >= 0 && px <= 5 && py >= 1 && py <= 2) return z === 12 || z === 16 ? St[1] : '#3a7a5a';
+      if (z >= 18 && z <= 20 && px >= 1 && px <= 4 && py >= 0 && py <= 3) return z === 18 ? '#fff2a8' : St[1];
+      return null;
+    });
     return {
+      coach0: coach('#f2ede0', '#3a7a5a', 1), coach1: coach('#f2ede0', '#3a5a8c', 10) /* bay 1 parks nose west: its door is on the other flank so it still faces the lot */, busstop,
       parasolA: parasol(Rf[2], Ac[0]), parasolB: parasol(Wt[3], Ac[0]),
       parasolC: parasol(G[2], Ac[0]), parasolD: parasol('#3a5a8c', Ac[0]),
       chairA: chair(Rf[2]), chairB: chair('#3a5a8c'), chairC: chair(G[2]), chairD: chair('#c9a85a'),
@@ -121,6 +145,7 @@
       add(MD.sign, EA.PARK.x0 + 10, EA.PARK.y0 + 8, 0, { parkSign: 1, big: 0 });
       // reserved bus bays: a nameplate on the south row, no bus body
       for (const s of EA.BUS_SLOTS) add(MD.sign, s.x, s.y - 10, 0, { busBay: 1, big: 0 });
+      if (BUS) for (const q of BUS.LAMPS) add(MD.busstop, q.x, q.y, 0, { busStop: 1, big: 0 }); // v5.12.6
     }
     if (o.vacbeach) {
       const umb = umbOf(), ch = chairOf();
@@ -140,6 +165,7 @@
     const body = carsOf();
     for (const c of (tr.parked || [])) add(body[c.color % 4], c.x, c.y, c.rot || 0, { eastCar: c.id, parked: 1, big: 1 }, CAR_OWN);
     for (const c of (tr.moving || [])) add(body[c.color % 4], c.x, c.y, c.rot || 0, { eastCar: c.id, moving: 1, big: 1 }, CAR_OWN);
+    for (const b of (tr.buses || [])) add(b.color ? MD.coach1 : MD.coach0, b.x, b.y, b.rot || 0, { eastBus: b.id, busState: b.state, big: 1 }, CAR_OWN); // v5.12.6
   }
 
   function sync(force) {
@@ -155,6 +181,7 @@
     if (!mounted || !EA) return;
     const o = flags();
     for (const l of EA.lightsAt(T, { beach: o.vacbeach, avenue: o.eastave })) hz(l.x, l.y, l.r, l.z, l.a);
+    if (BUS) for (const l of BUS.lightsAt(T, o.eastave)) hz(l.x, l.y, l.r, l.z, l.a); // v5.12.6: the two bus-stop lamps
   }
 
   function mount(x) { X = x; S = x.S; MD = makeModels(x); mounted = true; lastKey = ''; sync(true); return api; }
