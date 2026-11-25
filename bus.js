@@ -24,7 +24,7 @@
   const DRIVE = 3;              // minutes from the map edge to the bay (and out again)
   const BACK = 0.3;             // of the time out: reversing out of the bay
   const SPEED = 7;              // tourists stroll at the farm's walk (world units a game minute)
-  const STEP = 0.6;             // minutes between two people stepping off (or on)
+  const STEP = 1.2;             // minutes between two people stepping off (about 8 units apart on the walk)
   const BOARD = 6;              // everybody is back this long before the bus leaves
   const LAST = H(17);           // no bus is still in the lot after 17:00
   const LAMP_ON = [H(17) + 30, H(22)];
@@ -33,7 +33,7 @@
   const AVE_Y = EA ? EA.AVENUE.y : 66, GATE = EA ? EA.PARK_GATE : P(1170, 66);
   const EDGE_X = EA ? EA.NEW_X1 + 12 : 1340;
   const NORTH_Y = 88;           // a strip between the lot's north kerb (80) and the first car row (96..112)
-  const AISLE = [1087, 1240];   // west aisle (left of the car rows) / east aisle (right of them)
+  const AISLE = [1089, 1240];   // west aisle (left of the car rows) / east aisle (right of them)
   const busPath = bay => { const s = BAYS[bay], ax = AISLE[bay];
     return [P(EDGE_X, AVE_Y), P(GATE.x, AVE_Y), P(GATE.x, NORTH_Y), P(ax, NORTH_Y), P(ax, s.y), P(s.x, s.y)]; };
   // out: reverse out of the bay to the aisle (nose still in the bay), then forward up the aisle, along the north strip and off east

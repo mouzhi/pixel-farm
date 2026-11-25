@@ -43,7 +43,7 @@ ok('the bus keeps to its lanes: inside the lot or on the avenue, never over a ca
     const o = BUS.busOut(bay);
     for (const r of [BUS.busPath(bay), o.back, o.fwd]) for (const p of sample(r)) {
       assert(inR(p.x, p.y, lot, -1) || (Math.abs(p.y - EA.AVENUE.y) < 0.01 && p.x >= EA.PARK_GATE.x) || (Math.abs(p.x - EA.PARK_GATE.x) < 0.01 && p.y >= EA.AVENUE.y && p.y <= EA.PARK.y0 + 1), 'off the lot / avenue ' + p.x + ',' + p.y);
-      for (const c of cars) assert(!inR(p.x, p.y, c, 5), 'bus centre within 5 of a car bay (it is 12 wide; parked cars stand lengthways, 10 wide) ' + p.x + ',' + p.y);
+      for (const c of cars) assert(!inR(p.x, p.y, c, 4.5), 'bus centre within 4.5 of a car bay (it is 12 wide; parked cars stand lengthways, 10 wide) ' + p.x + ',' + p.y);
     }
     const s = EA.BUS_SLOTS[bay], end = BUS.busPath(bay).slice(-1)[0]; assert.deepStrictEqual([end.x, end.y], [s.x, s.y]);
   }

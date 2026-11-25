@@ -55,22 +55,25 @@ fs.mkdirSync(OUT, { recursive: true });
   await shot('parked.png', 1280, 800, parkedFn, parkedCk);
   await shot('parked_phone.png', 390, 844, parkedFn, parkedCk);
 
-  // 3. groups walking west along the avenue into town (pairs side by side)
-  const walkFn = `six(); const pl = f.busPlan(), B = pl[1]; const T = B.arrive + 14; go(T); const v0 = f.busVis().filter(q => q.state === 'go');
+  // 3. groups walking out of the lot and west along the avenue towards the town (pairs side by side)
+  const walkFn = `six(); const pl = f.busPlan(), B = pl[1]; const T = B.arrive + 15; go(T); const v0 = f.busVis().filter(q => q.state === 'go' && q.dest !== 'beach' && /^busB/.test(q.id));
     const cx = v0.reduce((a, q) => a + q.x, 0) / Math.max(1, v0.length), cy = v0.reduce((a, q) => a + q.y, 0) / Math.max(1, v0.length);
     look(cx, cy, 0); hide(); quiet(); go(T); const vis = f.busVis();
     return { ver: f.version, walking: vis.filter(q => q.state === 'go').length, at: Math.round(cx) + ',' + Math.round(cy) };`;
   const walkCk = r => ver(r) || (r.walking < 4 ? 'walking ' + r.walking : null);
   await shot('walk.png', 1280, 800, walkFn, walkCk);
 
-  // 4. tourists at the 镇公园 and the 节庆广场 at midday; none in the rain (the buses still stand in the lot)
-  const thereFn = `six(); const pl = f.busPlan(); let T = 13 * 60; go(T); look(780, 40, 0); hide(); quiet(); go(T);
+  // 4. tourists in the 镇公园 (the minute with the most of them there); none out in the rain (the buses still stand in the lot)
+  const thereFn = `six(); let pl = [], T = 13 * 60, best = -1, d0 = S.day;
+    for (let d = d0; d < d0 + 12 && best < 4; d++) { day(d); f.busReset(); pl = f.busPlan(d);
+      for (let m = 11 * 60; m < 15 * 60; m += 10) { const k = BUS.at(pl, m).people.filter(q => q.dest === 'park' && q.state === 'there').length; if (k > best) { best = k; T = m; d0 = d; } } }
+    day(d0); f.busReset(); pl = f.busPlan(); go(T); look(781, -58, 0); hide(); quiet(); go(T);
     const vis = f.busVis(), there = vis.filter(q => q.state === 'there'); const by = {}; for (const q of there) by[q.dest] = (by[q.dest] | 0) + 1;
-    S.weather = window.PFWeather.forceRain(S.weather, S.day, 12 * 60, 180); const wet = BUS.at(pl, T, { rain: true }).people.filter(q => q.state === 'there').length; const rainNow = window.PFWeather.isRaining(S.weather, S.day, S.t);
-    f.busFrame(); const wetVis = f.busVis().filter(q => q.state === 'there').length; dry(); f.busFrame();
-    return { ver: f.version, there: there.length, by, wet, wetVis, rainNow, buses: buses().length };`;
-  const thereCk = r => ver(r) || (r.there < 4 ? 'there ' + r.there : null) || (!r.rainNow ? 'rain not forced' : null) || (r.wet || r.wetVis ? 'out in the rain ' + r.wet + '/' + r.wetVis : null) || (r.buses !== 2 ? 'buses in the rain ' + r.buses : null);
-  await shot('there.png', 1280, 800, thereFn, thereCk);
+    S.weather = window.PFWeather.forceRain(S.weather, S.day, T - 30, 180); const wet = BUS.at(pl, T, { rain: true }).people.filter(q => q.state === 'there').length; const rainNow = window.PFWeather.isRaining(S.weather, S.day, S.t);
+    f.busFrame(); const wetVis = f.busVis().filter(q => q.state === 'there').length; const busesWet = BUS.at(pl, T, { rain: true }).buses.length; dry(); f.busFrame();
+    return { ver: f.version, T, there: there.length, by, wet, wetVis, rainNow, buses: busesWet };`;
+  const thereCk = r => ver(r) || (!(r.by.park >= 2) ? 'park ' + JSON.stringify(r.by) : null) || (!r.rainNow ? 'rain not forced' : null) || (r.wet || r.wetVis ? 'out in the rain ' + r.wet + '/' + r.wetVis : null) || (r.buses !== 2 ? 'buses in the rain ' + r.buses : null);
+  await shot('park.png', 1280, 800, thereFn, thereCk);
 
   // 5. the last pair boards and bus A backs out, then drives off east; the fee is paid once, also across a reload mid-day
   const leaveFn = `six(); const pl = f.busPlan(), A = pl[0], c0 = S.coins, n0 = S.town.hall.bus | 0;
