@@ -4528,9 +4528,12 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
   if (fest && path && path.way === 'shop' && CR.shopReady(path, S.day) && T >= 10 * 60 && T < 16 * 60) {
     const d = CR.doorOf(path.at); if (d) return { kind: 'shop-fest', label: '节日在店门口和家人聚', to: { x: d.x + (sp ? 2 : -2), y: d.y + 3 }, dur: 16, rest: true }; }
   const help = S.home.help[kid];
-  if (!sp && help && help.day === S.day && T < help.until) return null;     // an hour on the main farm
-  if (!sp && F.crops.length - worksKeepN(F) > 0 && shopOpen(T)) return sellTask(); // what they picked up there goes to market first
-  if (!sp && F.gathered > 0) return storeTask();
+  // v5.12.7: once they already walked home from a job, stay (a basket of leftover crops used to send them to the stall past the new house)
+  if (F._backDay !== S.day) {
+    if (!sp && help && help.day === S.day && T < help.until) return null;     // an hour on the main farm
+    if (!sp && F.crops.length - worksKeepN(F) > 0 && shopOpen(T)) return sellTask(); // what they picked up there goes to market first
+    if (!sp && F.gathered > 0) return storeTask();
+  }
   const jobs = homeJobs(h);
   // when they work or keep a shop, the spouse tends the little farm in the morning and evening; chickens are still kept
   const tendOk = !work && !shop && !inn || (sp && (T < 9 * 60 || T >= 17 * 60)) || (!sp && !work && !shop && !inn);
