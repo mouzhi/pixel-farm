@@ -59,15 +59,23 @@
   display: flex;
   flex-direction: column;
   align-self: flex-start;
-  margin: 8px 12px 0;
-  padding: 4px 8px;
-  background: rgba(0, 0, 0, 0.6);
+  align-self: stretch;
+  margin: 4px 6px 0;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.85);
   border-radius: 4px;
 }
 
+.farm-perf-big {
+  color: #ffffff;
+  font-weight: 700;
+  line-height: 30px;
+  font-family: Menlo, Consolas, monospace;
+}
+
 .farm-perf-line {
-  color: #bff0a0;
-  line-height: 16px;
+  color: #ffe98a;
+  line-height: 22px;
   font-family: Menlo, Consolas, monospace;
 }
 

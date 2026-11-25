@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CustomNavSpace } from '@/components/custom-nav-space'
 import bootFarm from '@/game/farm-engine'
-import { createFarmEnv, type FrameStats } from '@/game/farm-env'
+import { createFarmEnv, type PerfReport } from '@/game/farm-env'
+import { Network } from '@/network'
 import { DEMO_SAVE, DEMO_SAVE_KEY } from '@/game/demo-save'
 
 import './index.css'
@@ -18,6 +19,26 @@ const pageT0 = Date.now()
 const DEMO_MARK_KEY = 'pf-douyin-trial-demo'
 const DEMO_VERSION = 'e2c8d83-day31-r2'
 type Phase = 'loading' | 'ready' | 'error'
+type QualityLevel = 'high' | 'mid' | 'low'
+type QualityChoice = 'auto' | QualityLevel
+const LEVEL_TEXT: Record<QualityLevel, string> = { high: '高', mid: '中', low: '低' }
+const r1 = (v: number) => Math.round(v * 10) / 10
+function roundPerf(p: PerfReport) {
+  const parts: Record<string, number> = {}
+  for (const k in p.parts) parts[k] = r1(p.parts[k])
+  return { fps: r1(p.fps), avg: r1(p.avgMs), max: r1(p.maxMs), sim: r1(p.sim), render: r1(p.render), hud: r1(p.hud), present: r1(p.present), getN: r1(p.getN), getMs: r1(p.getMs), putN: r1(p.putN), putMs: r1(p.putMs), drawN: Math.round(p.drawN), fb: `${p.fbW}x${p.fbH}`, back: `${p.backW}x${p.backH}`, parts }
+}
+/** 把游戏自带的渲染分段归成几类：地面水面 / 物件(叠层精灵) / 阴影 / 雾 / 特效+夜间光照 */
+function renderGroups(parts: Record<string, number>) {
+  const g = (keys: string[]) => keys.reduce((a, k) => a + (parts[k] || 0), 0)
+  return {
+    ground: g(['ground', 'water', 'flow', 'soil+decals']),
+    objects: g(['list+shadowmask', 'o.tree', 'objects']),
+    shadow: g(['applyShadows']),
+    fog: g(['fog']),
+    fx: g(['marks', 'fx+light']),
+  }
+}
 type FarmEnv = ReturnType<typeof createFarmEnv>
 type Hud = { day: string; clock: string; coins: string }
 
@@ -81,14 +102,17 @@ export default function Index() {
   const [phase, setPhase] = useState<Phase>('loading')
   const [errorText, setErrorText] = useState('')
   const [bootMs, setBootMs] = useState(0)
+  const bootMsRef = useRef(0)
   const [step, setStep] = useState('准备中')
-  const [stats, setStats] = useState<FrameStats>({ fps: 0, avgMs: 0, p95Ms: 0, frames: 0 })
+  const [perf, setPerf] = useState<PerfReport | null>(null)
+  const [quality, setQuality] = useState<QualityChoice>('auto')
+  const [level, setLevel] = useState<QualityLevel>('mid')
+  const levelRef = useRef<QualityLevel>('mid')
+  const qualityRef = useRef<QualityChoice>('auto')
+  const sysRef = useRef<Record<string, unknown>>({})
   const [hud, setHud] = useState<Hud>({ day: '', clock: '', coins: '' })
-  const [fogOn, setFogOn] = useState(true)
-  const [lightOn, setLightOn] = useState(true)
   const [fastForward, setFastForward] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
-  const [diag, setDiag] = useState('')
   const [prevLog, setPrevLog] = useState<string[]>([])
 
   // 启动诊断：每一步都写到屏幕上，并存一份到本地；手机上卡住时，下次打开能看到上次停在哪一步
@@ -192,6 +216,7 @@ export default function Index() {
     let env: FarmEnv
     try {
       const info = Taro.getSystemInfoSync()
+      sysRef.current = { brand: info.brand, model: info.model, platform: info.platform, system: info.system, version: info.version, sdk: info.SDKVersion, pixelRatio: info.pixelRatio, ww: info.windowWidth, wh: info.windowHeight, offscreen: typeof OffscreenCanvas === 'function' ? 'native' : 'tt' }
       log(`系统 ${info.platform || ''} ${info.system || ''} 宿主 ${info.version || ''} SDK ${info.SDKVersion || ''} 窗口 ${info.windowWidth}x${info.windowHeight}`)
       // 离屏画布：原生 OffscreenCanvas → Taro.createOffscreenCanvas → tt.createOffscreenCanvas
       const ttApi = typeof tt !== 'undefined' ? (tt as any) : null
@@ -209,9 +234,6 @@ export default function Index() {
         Taro.setStorageSync(DEMO_SAVE_KEY, DEMO_SAVE)
         Taro.setStorageSync(DEMO_MARK_KEY, DEMO_VERSION)
       }
-      // 屏幕画布只在这里定一次尺寸（约 2 倍 CSS 像素），之后每帧把游戏画面缩放上屏
-      node.width = Math.round(rectRef.current.width * 2)
-      node.height = Math.round(rectRef.current.height * 2)
       const testCtx = node.getContext('2d')
       log(`画布 ${node.width}x${node.height} ctx:${testCtx ? 'ok' : '无'} 离屏:${typeof OffscreenCanvas === 'function' ? '原生' : typeof runtime.createOffscreenCanvas === 'function' ? 'tt' : '无'} createImage:${typeof node.createImage} rAF:${typeof node.requestAnimationFrame} ImageData:${typeof ImageData}`)
       env = createFarmEnv({
@@ -243,11 +265,6 @@ export default function Index() {
         framebuffer: true,
       })
       envRef.current = env
-      setDiag([
-        `离屏 ${typeof OffscreenCanvas === 'function' ? '原生' : 'tt'}`,
-        `ImageData ${typeof ImageData === 'function' ? '有' : '无'}`,
-        `图片 ${canDecodeLocally() ? '本地解码' : '画布图片'}`,
-      ].join(' · '))
     } catch (err) {
       fail('准备运行环境', err)
       return
@@ -279,12 +296,14 @@ export default function Index() {
       }
       const ms = Math.round(nowMs() - t0)
       setBootMs(ms)
+      bootMsRef.current = ms
       log(`引擎启动完成 ${ms}ms`)
       try {
         Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: true, lines: logRef.current }))
       } catch {
         // ignore
       }
+      applyLevel(typeof OffscreenCanvas === 'function' ? 'high' : 'mid', '自动起始')
       setPhase('ready')
     }, 60)
   }
@@ -328,16 +347,32 @@ export default function Index() {
 
   useEffect(() => {
     if (phase !== 'ready') return undefined
+    let ticks = 0
     const timer = setInterval(() => {
       const env = envRef.current
       if (!env) return
-      setStats(env.stats())
+      ticks++
+      const report = env.perf()
+      setPerf(report)
       setProblems(env.problems())
       setHud({
         day: env.element('day')?.textContent || '',
         clock: env.element('clock')?.textContent || '',
         coins: env.element('coins')?.textContent || '',
       })
+      // 自动画质：攒够约 45 帧后，低于 30 FPS 就降一档（只降不升，避免来回跳）
+      if (qualityRef.current === 'auto' && ticks % 4 === 0 && report.frames >= 45 && report.fps < 30) {
+        const next = levelRef.current === 'high' ? 'mid' : levelRef.current === 'mid' ? 'low' : null
+        if (next) applyLevel(next, `自动：${report.fps.toFixed(1)} FPS < 30`)
+      }
+      // 测速版：每 3 秒把分段耗时发到服务端日志，方便对照真机（只有性能数字和机型）
+      if (ticks % 6 === 0) {
+        Network.request({
+          url: '/api/farm/perf',
+          method: 'POST',
+          data: { sys: sysRef.current, quality: qualityRef.current, level: levelRef.current, bootMs: bootMsRef.current, perf: roundPerf(report) },
+        }).catch(() => undefined)
+      }
     }, 500)
     return () => clearInterval(timer)
   }, [phase])
@@ -357,19 +392,27 @@ export default function Index() {
     return () => clearInterval(timer)
   }, [fastForward])
 
-  const toggleFog = () => {
-    const hooks = envRef.current?.G.__trialHooks
-    if (!hooks) return
-    hooks.FOG.on = !fogOn
-    setFogOn(!fogOn)
-    envRef.current?.resetStats()
-  }
-  const toggleLight = () => {
+  // 画质：高 = 屏幕画布 2 倍 + 精确阴影（逐像素读回）；中 = 1 倍 + GPU 阴影（不读回）；低 = 1 倍、不画阴影、雾和夜间光照关
+  const applyLevel = (next: QualityLevel, why: string) => {
     const env = envRef.current
     if (!env) return
-    env.G.__trialNoLight = lightOn
-    setLightOn(!lightOn)
+    env.setPresentScale(next === 'high' ? 2 : 1)
+    env.G.__gpuShadow = next !== 'high'
+    env.G.__trialNoShadow = next === 'low'
+    env.G.__trialNoLight = next === 'low'
+    const hooks = env.G.__trialHooks
+    if (hooks) hooks.FOG.on = next !== 'low'
+    levelRef.current = next
+    setLevel(next)
     env.resetStats()
+    log(`画质 ${LEVEL_TEXT[next]}（${why}）`)
+  }
+  const cycleQuality = () => {
+    const order: QualityChoice[] = ['auto', 'high', 'mid', 'low']
+    const next = order[(order.indexOf(qualityRef.current) + 1) % order.length]
+    qualityRef.current = next
+    setQuality(next)
+    applyLevel(next === 'auto' ? (typeof OffscreenCanvas === 'function' ? 'high' : 'mid') : next, next === 'auto' ? '自动' : '手动')
   }
   const goNight = () => {
     const farm = envRef.current?.G.__farm
@@ -426,17 +469,19 @@ export default function Index() {
             </View>
           ) : null}
         </View>
-        {phase === 'ready' ? (
+        {phase === 'ready' && perf ? (
           <View className="farm-perf">
-            <Text className="farm-perf-line text-xs">{`FPS ${stats.fps.toFixed(1)}`}</Text>
-            <Text className="farm-perf-line text-xs">{`帧耗时 均 ${stats.avgMs.toFixed(1)} / p95 ${stats.p95Ms.toFixed(1)} ms`}</Text>
-            <Text className="farm-perf-line text-xs">{`启动 ${bootMs} ms · 雾${fogOn ? '开' : '关'} · 光照${lightOn ? '开' : '关'}`}</Text>
-            {diag ? <Text className="farm-perf-line text-xs">{diag}</Text> : null}
-            {bootLog.filter((line) => /回调|系统|画布 \d/.test(line)).slice(-3).map((line, i) => (
-              <Text key={`b-${i}`} className="farm-perf-line text-xs">{line.slice(0, 120)}</Text>
-            ))}
-            {problems.slice(-3).map((line, i) => (
-              <Text key={`p-${i}`} className="farm-perf-warn text-xs">{line}</Text>
+            <Text className="farm-perf-big text-xl">{`FPS ${perf.fps.toFixed(1)}  均${perf.avgMs.toFixed(0)} 最大${perf.maxMs.toFixed(0)}ms`}</Text>
+            <Text className="farm-perf-line text-base">{`模拟${perf.sim.toFixed(1)} 渲染${perf.render.toFixed(1)} 上屏${perf.present.toFixed(1)} 界面${perf.hud.toFixed(1)}`}</Text>
+            {(() => {
+              const gr = renderGroups(perf.parts)
+              return <Text className="farm-perf-line text-base">{`地面${gr.ground.toFixed(1)} 物件${gr.objects.toFixed(1)} 阴影${gr.shadow.toFixed(1)} 雾${gr.fog.toFixed(1)} 光效${gr.fx.toFixed(1)}`}</Text>
+            })()}
+            <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
+            <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
+            <Text className="farm-perf-line text-base">{`画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            {problems.slice(-2).map((line, i) => (
+              <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
           </View>
         ) : null}
@@ -458,11 +503,8 @@ export default function Index() {
         ) : null}
         {phase === 'ready' ? (
           <View className="farm-controls">
-            <View className={fogOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleFog}>
-              <Text className="farm-btn-text text-sm">{fogOn ? '雾 开' : '雾 关'}</Text>
-            </View>
-            <View className={lightOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleLight}>
-              <Text className="farm-btn-text text-sm">{lightOn ? '光照 开' : '光照 关'}</Text>
+            <View className="farm-btn is-on" onClick={cycleQuality}>
+              <Text className="farm-btn-text text-sm">{`画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={fastForward ? 'farm-btn is-on' : 'farm-btn'} onClick={goNight}>
               <Text className="farm-btn-text text-sm">{fastForward ? '快进中…' : '到夜晚'}</Text>

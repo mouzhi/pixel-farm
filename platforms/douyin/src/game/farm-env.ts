@@ -22,6 +22,43 @@ export interface FarmPlatform {
   framebuffer?: boolean
 }
 
+export interface FrameSample {
+  t: number
+  total: number
+  sim: number
+  render: number
+  hud: number
+  present: number
+  getN: number
+  getMs: number
+  putN: number
+  putMs: number
+  drawN: number
+  parts: Record<string, number>
+}
+
+/** 最近约 1.5 秒的平均值，给真机上的性能面板用 */
+export interface PerfReport {
+  fps: number
+  avgMs: number
+  maxMs: number
+  sim: number
+  render: number
+  hud: number
+  present: number
+  getN: number
+  getMs: number
+  putN: number
+  putMs: number
+  drawN: number
+  parts: Record<string, number>
+  fbW: number
+  fbH: number
+  backW: number
+  backH: number
+  frames: number
+}
+
 export interface FrameStats {
   fps: number
   avgMs: number
@@ -86,18 +123,40 @@ function fakeImageData(this: any, a: any, b: number, c?: number) {
   return { __fake: true, data: a, width: b, height: c ?? a.length / 4 / b }
 }
 
+/** 每帧的画布调用计数（所有经过 wrapCanvas 的画布共用），用于真机上看清时间花在哪 */
+const calls = { getN: 0, getMs: 0, putN: 0, putMs: 0, drawN: 0 }
+let clock: () => number = () => Date.now()
+
 function patchContext(ctx: any) {
   if (!ctx || ctx.__pfPatched) return ctx
   const put = ctx.putImageData
+  const get = ctx.getImageData
+  const draw = ctx.drawImage
   // 不用展开参数：Taro 的宽松转译会把它编坏（预览里报 putImageData 收到 0 个参数）
   ctx.putImageData = function (img: any, x: number, y: number, dx?: number, dy?: number, dw?: number, dh?: number) {
+    const t0 = clock()
     let target = img
     if (img && img.__fake) {
       target = ctx.createImageData(img.width, img.height)
       target.data.set(img.data)
     }
-    if (dw === undefined) return put.call(ctx, target, x, y)
-    return put.call(ctx, target, x, y, dx, dy, dw, dh)
+    const r = dw === undefined ? put.call(ctx, target, x, y) : put.call(ctx, target, x, y, dx, dy, dw, dh)
+    calls.putN++
+    calls.putMs += clock() - t0
+    return r
+  }
+  ctx.getImageData = function (x: number, y: number, w: number, h: number) {
+    const t0 = clock()
+    const r = get.call(ctx, x, y, w, h)
+    calls.getN++
+    calls.getMs += clock() - t0
+    return r
+  }
+  ctx.drawImage = function (a: any, b: number, c: number, d?: number, e?: number, f?: number, g?: number, h?: number, i?: number) {
+    calls.drawN++
+    if (d === undefined) return draw.call(ctx, a, b, c)
+    if (f === undefined) return draw.call(ctx, a, b, c, d, e)
+    return draw.call(ctx, a, b, c, d, e, f, g, h, i)
   }
   ctx.__pfPatched = true
   return ctx
@@ -134,6 +193,7 @@ function atobPoly(input: string) {
 }
 
 export function createFarmEnv(p: FarmPlatform) {
+  clock = p.now
   const winListeners = new Map<string, Listener[]>()
   const docListeners = new Map<string, Listener[]>()
   const canvasListeners = new Map<string, Listener[]>()
@@ -160,25 +220,32 @@ export function createFarmEnv(p: FarmPlatform) {
   const fb = p.framebuffer ? wrapCanvas(p.createOffscreenCanvas(main.width || 300, main.height || 150)) : main
   let mainCtx: any = null
   let presentMode = "drawImage"
+  // 屏幕画布的像素 = 游戏画面 × presentScale（整数倍，像素画不糊）；画质「高」用 2，「中/低」用 1
+  let presentScale = 2
   const present = () => {
     if (fb === main) return
+    const bw = fb.width * presentScale
+    const bh = fb.height * presentScale
+    if (main.width !== bw || main.height !== bh) {
+      main.width = bw
+      main.height = bh
+      mainCtx = null
+    }
     if (!mainCtx) {
       mainCtx = main.getContext("2d")
       mainCtx.imageSmoothingEnabled = false
     }
     if (presentMode === "drawImage") {
       try {
-        // 屏幕画布尺寸在启动时定好、之后不改（改尺寸会让预览器的画布代理报错），这里按比例铺满
-        mainCtx.drawImage(fb, 0, 0, fb.width, fb.height, 0, 0, main.width, main.height)
+        mainCtx.drawImage(fb, 0, 0, fb.width, fb.height, 0, 0, bw, bh)
         return
       } catch (err) {
         presentMode = "pixels"
         note("warn", ["[farm-env] drawImage(offscreen) failed, using putImageData", String(err)])
       }
     }
+    presentScale = 1
     const fctx = fb.getContext("2d")
-    if (main.width !== fb.width) main.width = fb.width
-    if (main.height !== fb.height) main.height = fb.height
     mainCtx.putImageData(fctx.getImageData(0, 0, fb.width, fb.height), 0, 0)
   }
   const canvasEl: any = makeStubElement("game")
@@ -233,20 +300,53 @@ export function createFarmEnv(p: FarmPlatform) {
   let paused = false
   const workMs: number[] = []
   const stamps: number[] = []
+  const samples: FrameSample[] = []
+  let frameSplit = { sim: 0, render: 0, hud: 0 }
+  let lastProf: Record<string, number> = {}
   const tick = (now: number) => {
     scheduled = false
     if (paused || !pending) return
     const cb = pending
     pending = null
+    calls.getN = 0
+    calls.getMs = 0
+    calls.putN = 0
+    calls.putMs = 0
+    calls.drawN = 0
+    frameSplit = { sim: 0, render: 0, hud: 0 }
     const t0 = p.now()
     cb(t0)
+    const t1 = p.now()
+    const drawGame = calls.drawN
     try {
       present()
     } catch (err) {
       note("error", ["[farm-env] present", String(err)])
     }
-    const t1 = p.now()
-    workMs.push(t1 - t0)
+    const t2 = p.now()
+    // 游戏自带的分段计时（?prof）：累计值，取与上一帧的差
+    const prof: Record<string, number> = G.__prof || {}
+    const parts: Record<string, number> = {}
+    for (const k in prof) {
+      parts[k] = prof[k] - (lastProf[k] || 0)
+    }
+    lastProf = Object.assign({}, prof)
+    samples.push({
+      t: t0,
+      total: t2 - t0,
+      sim: frameSplit.sim,
+      render: frameSplit.render,
+      hud: frameSplit.hud,
+      present: t2 - t1,
+      getN: calls.getN,
+      getMs: calls.getMs,
+      putN: calls.putN,
+      putMs: calls.putMs,
+      drawN: drawGame,
+      parts,
+    })
+    if (samples.length > 90) samples.shift()
+    workMs.push(t2 - t0)
     stamps.push(t0)
     if (workMs.length > 240) workMs.shift()
     if (stamps.length > 240) stamps.shift()
@@ -313,7 +413,7 @@ export function createFarmEnv(p: FarmPlatform) {
     console: gameConsole,
     document: doc,
     localStorage: storage,
-    location: { search: "", hostname: "douyin-miniapp", protocol: "https:", href: "", reload: () => undefined },
+    location: { search: "?prof=1", hostname: "douyin-miniapp", protocol: "https:", href: "", reload: () => undefined },
     navigator: { userAgent: "douyin-miniapp", language: "zh-CN", maxTouchPoints: 5 },
     performance: { now: () => p.now() },
     Image: function ImageShim() { return p.createImage() },
@@ -340,6 +440,9 @@ export function createFarmEnv(p: FarmPlatform) {
     getComputedStyle: () => ({ getPropertyValue: () => "" }),
     atob: atobPoly,
     btoa: btoaPoly,
+  }
+  G.__frameProf = (sim: number, render: number, hud: number) => {
+    frameSplit = { sim, render, hud }
   }
   Object.defineProperties(G, {
     innerWidth: { get: () => p.viewport().width },
@@ -380,6 +483,52 @@ export function createFarmEnv(p: FarmPlatform) {
       }
     },
     problems: () => problems.slice(),
-    resetStats: () => { workMs.length = 0; stamps.length = 0 },
+    perf: (): PerfReport => {
+      const n = samples.length
+      const sum = { total: 0, sim: 0, render: 0, hud: 0, present: 0, getN: 0, getMs: 0, putN: 0, putMs: 0, drawN: 0 }
+      const parts: Record<string, number> = {}
+      let maxMs = 0
+      for (const f of samples) {
+        sum.total += f.total
+        sum.sim += f.sim
+        sum.render += f.render
+        sum.hud += f.hud
+        sum.present += f.present
+        sum.getN += f.getN
+        sum.getMs += f.getMs
+        sum.putN += f.putN
+        sum.putMs += f.putMs
+        sum.drawN += f.drawN
+        if (f.total > maxMs) maxMs = f.total
+        for (const k in f.parts) parts[k] = (parts[k] || 0) + f.parts[k]
+      }
+      const d = n || 1
+      for (const k in parts) parts[k] /= d
+      const span = n > 1 ? samples[n - 1].t - samples[0].t : 0
+      return {
+        fps: span > 0 ? ((n - 1) * 1000) / span : 0,
+        avgMs: sum.total / d,
+        maxMs,
+        sim: sum.sim / d,
+        render: sum.render / d,
+        hud: sum.hud / d,
+        present: sum.present / d,
+        getN: sum.getN / d,
+        getMs: sum.getMs / d,
+        putN: sum.putN / d,
+        putMs: sum.putMs / d,
+        drawN: sum.drawN / d,
+        parts,
+        fbW: fb.width,
+        fbH: fb.height,
+        backW: main.width,
+        backH: main.height,
+        frames: n,
+      }
+    },
+    setPresentScale: (scale: number) => {
+      presentScale = scale
+    },
+    resetStats: () => { workMs.length = 0; stamps.length = 0; samples.length = 0 },
   }
 }
