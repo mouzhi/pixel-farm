@@ -100,7 +100,7 @@ fs.mkdirSync(OUT, { recursive: true });
     }
     at(9 * 60 + 20);
     const raw = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
-    const msgs = [...new Set(raw.map(m => String(m).replace(/^\d{1,2}:\d{2}\s+/, '')))]; // S.log is a 4-line ring of the same events with a clock prefix; concat alone double-counts a notice still sitting in the ring
+    const msgs = [...new Set(raw.map(m => String(m).replace(/^[0-9]{1,2}:[0-9]{2} +/, '')))]; // S.log is a 4-line ring of the same events with a clock prefix; concat alone double-counts a notice still sitting in the ring. [0-9] not \d: this source is a template literal
     const door = msgs.filter(m => /送到门口才发现原料不够/.test(m));
     const short = msgs.filter(m => /还缺/.test(m) && /再送/.test(m));
     const v = f.bakeryView();
@@ -140,7 +140,7 @@ fs.mkdirSync(OUT, { recursive: true });
     }
     at(8 * 60 + 40);
     const raw = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
-    const msgs = [...new Set(raw.map(m => String(m).replace(/^\d{1,2}:\d{2}\s+/, '')))]; // S.log is a 4-line ring of the same events with a clock prefix; concat alone double-counts a notice still sitting in the ring
+    const msgs = [...new Set(raw.map(m => String(m).replace(/^[0-9]{1,2}:[0-9]{2} +/, '')))]; // S.log is a 4-line ring of the same events with a clock prefix; concat alone double-counts a notice still sitting in the ring. [0-9] not \d: this source is a template literal
     const door = msgs.filter(m => /送到门口才发现原料不够/.test(m));
     const short = msgs.filter(m => /还缺/.test(m) && /再送/.test(m));
     const v = f.bakeryView();
