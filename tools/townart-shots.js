@@ -43,7 +43,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.context().close(); };
   const facts = `({ v: f.version, life: f.townLife ? f.townLife().length : null, want: f.lifeWant ? f.lifeWant() : null, dress: f.props.filter(q => /^dress:/.test(q.town || '')).length, play: f.props.filter(q => /^play:/.test(q.town || '')).length, t: Math.round(S.t % 1440), day: S.day, lv: f.townLv() })`;
   const NEW = VERSION !== '5.11.0.39'; // the same script takes the 'before' pictures on the old main
-  const dayCheck = r => !NEW ? null : r.v !== '5.12.3' ? 'ver ' + r.v : r.dress < 24 ? 'dressing ' + r.dress : r.play < 6 ? 'playground ' + r.play : r.want < 4 ? 'walkers wanted ' + r.want : r.life < r.want - 1 ? 'walkers ' + r.life + '/' + r.want : null;
+  const dayCheck = r => !NEW ? null : r.v !== '5.12.4' ? 'ver ' + r.v : r.dress < 24 ? 'dressing ' + r.dress : r.play < 6 ? 'playground ' + r.play : r.want < 4 ? 'walkers wanted ' + r.want : r.life < r.want - 1 ? 'walkers ' + r.life + '/' + r.want : null;
   const scenes = phone => [
     [`street${phone}.png`, `at(11 * 60); dry(); f.advance(4, 10); look(${phone ? 760 : 740}, 66, 0); hide(); return ${facts};`, dayCheck],
     [`east${phone}.png`, `at(15 * 60); dry(); f.advance(3, 10); look(880, 40, 0); hide(); return ${facts};`, dayCheck],
@@ -61,6 +61,6 @@ fs.mkdirSync(OUT, { recursive: true });
   if (!only || 'fixture'.includes(only)) { const file = path.join(__dirname, 'fixtures', 'save-v15-day72-cottage.json');
     if (fs.existsSync(file)) { const save = readSave(file), p = await page(save); let r;
       try { r = await p.evaluate(`(() => { ${helpers} const s = f.snapshot(); f.advance(2, 10); return { day: s.clock.day, sv: s.saveVersion, v: f.version, town: !!(S.eff && S.eff.town), life: f.townLife().length }; })()`); } catch (e) { r = { error: String(e).slice(0, 300) }; }
-      const bad = r.error || (r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : NEW && r.v !== '5.12.3' ? 'ver ' + r.v : (!r.town && r.life) ? 'walkers in a shut town' : null);
+      const bad = r.error || (r.day !== save.clock.day ? 'day' : r.sv !== 15 ? 'saveVersion ' + r.sv : NEW && r.v !== '5.12.4' ? 'ver ' + r.v : (!r.town && r.life) ? 'walkers in a shut town' : null);
       console.log(bad ? 'FAIL' : 'ok  ', 'fixture day72', JSON.stringify(r)); if (bad) fails.push('fixture: ' + bad); await p.context().close(); } }
   console.log('errors', errs); console.log('fails', fails); if (errs.length || fails.length) process.exitCode = 1; await b.close(); server.close(); })();

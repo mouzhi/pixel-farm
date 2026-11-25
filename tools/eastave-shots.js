@@ -45,7 +45,7 @@ fs.mkdirSync(path.join(OUT, 'after'), { recursive: true });
     if (folder) copy(name, folder);
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 1000)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
 
-  const ver = r => r.ver !== '5.12.3' ? 'ver ' + r.ver : r.sv && r.sv !== 15 ? 'saveVersion ' + r.sv : null;
+  const ver = r => r.ver !== '5.12.4' ? 'ver ' + r.ver : r.sv && r.sv !== 15 ? 'saveVersion ' + r.sv : null;
 
   // 1. town + 海边 open, neither purchase yet: east shore is still a wood, 沙滩 / 东门 dimmed
   const lockedFn = `openTown(); at(12 * 60); look(680, 236, 0); hide(); f.fogUpdate && f.fogUpdate(true); f.refreshUI && f.refreshUI();

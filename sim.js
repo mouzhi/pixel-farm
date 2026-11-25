@@ -11,6 +11,7 @@
   const YD = root.PFYard || (typeof require === 'function' ? require('./yard.js') : null); // v5.10.3: yard, stall and animal-care things
   const DC = root.PFDecor || (typeof require === 'function' ? require('./decor.js') : null); // v5.7.0 phase 9: the decoration shop
   const EA = root.PFEast || (typeof require === 'function' ? require('./east.js') : null); // v5.12.2: 东门大道 and 度假沙滩
+  const FXP = root.PFFarmXp || (typeof require === 'function' ? require('./farmxp.js') : null); // v5.12.4: 农场体验
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
   const SLEEP_MULT = 6;           // the night runs 6x faster while the farmer sleeps
   const WAKE = 6 * 60, BEDTIME = 20 * 60;
@@ -124,6 +125,8 @@
     // v5.10.3 (rules in yard.js): small early things for the yard, 阿禾's stall and the animals; the family sets each one up on its own spot
     ...(YD ? YD.ITEMS.map(t => ({ id: t.id, name: t.name, icon: 'y_' + t.id, yard: 1, flat: t.max > 1 && !t.costs ? 1 : 0, ...(t.needs ? { needs: t.needs } : {}),
       levels: Array.from({ length: t.max }, (_, i) => ({ cost: YD.costAt(t, i), ...(t.wood ? { wood: t.wood } : {}), label: t.max > 1 ? (t.id === 'roof' ? ['绿屋顶', '蓝屋顶', '青灰屋顶'][i] : `第 ${i + 1} ${t.id === 'gravel' || t.id === 'flag' || t.id === 'vegfence' ? '段' : '个'}`) : t.name, desc: t.desc })) })) : []),
+    // v5.12.4 农场体验 (rules in farmxp.js): five things tourists pay to do; bought by the player only (never in AUTO_BUY)
+    ...(FXP ? FXP.ITEMS.map(t => ({ id: t.id, p124: 1, name: t.name, icon: t.id, levels: [{ cost: t.cost, wood: t.wood, label: t.name, desc: `${t.desc}。每人 ${t.fee} 金，每天最多 ${t.cap} 人` }] })) : []),
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
@@ -136,6 +139,7 @@
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
     ...(YD ? [{ id: 'yard', name: '院子', title: '院子、阿禾的小摊和动物照护', ids: YD.IDS.slice() }] : []), // v5.10.3
     ...(DC ? [{ id: 'decor', name: '装饰', title: '装饰、夜灯和派对区', ids: DC.SHOP_IDS.slice() }] : []), // v5.7.0
+    ...(FXP ? [{ id: 'farmxp', name: '体验', title: '农场体验（住客和自驾游客来玩，按人收费）', ids: FXP.IDS.slice() }] : []), // v5.12.4
   ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.filter(k => !SHOP.find(s => s.id === k).mach).map(k => [k, 0])); // v5.11.0.29: machines live in works.mach, not upgrades
   const shopItem = id => SHOP.find(s => s.id === id);
@@ -159,6 +163,7 @@
       sprinkler: lv('sprinkler'), mill: lv('mill') > 0, jam: lv('jam') > 0, cheese: lv('cheese') > 0, pie: lv('pie') > 0, wheel: lv('wheel'), hive: lv('hive'), // v5.6.0; v5.10.9 pie
       town: TN ? lv('town') > 0 : false, // v5.8.0
       eastave: EA ? lv('eastave') > 0 : false, vacbeach: EA ? lv('vacbeach') > 0 : false, // v5.12.2
+      ...(FXP ? Object.fromEntries(FXP.IDS.map(k => [k, lv(k) > 0])) : {}), // v5.12.4 农场体验
       cottage: HM ? lv('cottage') : 0, // v5.9.0
       coop2: lv('coop2') > 0, sty2: lv('sty2') > 0, fold2: lv('fold2') > 0, shed2: lv('shed2') > 0,
     };
