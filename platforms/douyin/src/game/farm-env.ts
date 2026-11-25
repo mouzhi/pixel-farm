@@ -57,6 +57,9 @@ export interface PerfReport {
   backW: number
   backH: number
   frames: number
+  /** 每秒新建的离屏画布数（Krypton 上每个都是一个 GL 画布） */
+  canvasPerSec: number
+  canvasTotal: number
 }
 
 export interface FrameStats {
@@ -216,6 +219,8 @@ export function createFarmEnv(p: FarmPlatform) {
     }
   }
 
+  let canvasCount = 0
+  let lastCount = { at: 0, n: 0, rate: 0 }
   const main = wrapCanvas(p.mainCanvas)
   const fb = p.framebuffer ? wrapCanvas(p.createOffscreenCanvas(main.width || 300, main.height || 150)) : main
   let mainCtx: any = null
@@ -278,7 +283,11 @@ export function createFarmEnv(p: FarmPlatform) {
       }
       return el
     },
-    createElement: (tag: string) => (String(tag).toLowerCase() === "canvas" ? wrapCanvas(p.createOffscreenCanvas(300, 150)) : makeStubElement("")),
+    createElement: (tag: string) => {
+      if (String(tag).toLowerCase() !== "canvas") return makeStubElement("")
+      canvasCount++
+      return wrapCanvas(p.createOffscreenCanvas(300, 150))
+    },
     querySelector: () => null,
     querySelectorAll: () => [],
     addEventListener: add(docListeners),
@@ -505,7 +514,13 @@ export function createFarmEnv(p: FarmPlatform) {
       const d = n || 1
       for (const k in parts) parts[k] /= d
       const span = n > 1 ? samples[n - 1].t - samples[0].t : 0
+      const now = p.now()
+      if (now - lastCount.at >= 1000) {
+        lastCount = { at: now, n: canvasCount, rate: lastCount.at ? ((canvasCount - lastCount.n) * 1000) / (now - lastCount.at) : 0 }
+      }
       return {
+        canvasPerSec: lastCount.rate,
+        canvasTotal: canvasCount,
         fps: span > 0 ? ((n - 1) * 1000) / span : 0,
         avgMs: sum.total / d,
         maxMs,

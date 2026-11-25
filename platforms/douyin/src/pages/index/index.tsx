@@ -5,7 +5,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { CustomNavSpace } from '@/components/custom-nav-space'
 import bootFarm from '@/game/farm-engine'
 import { createFarmEnv, type PerfReport } from '@/game/farm-env'
-import { Network } from '@/network'
 import { DEMO_SAVE, DEMO_SAVE_KEY } from '@/game/demo-save'
 
 import './index.css'
@@ -22,18 +21,21 @@ type Phase = 'loading' | 'ready' | 'error'
 type QualityLevel = 'high' | 'mid' | 'low'
 type QualityChoice = 'auto' | QualityLevel
 const LEVEL_TEXT: Record<QualityLevel, string> = { high: '高', mid: '中', low: '低' }
-const r1 = (v: number) => Math.round(v * 10) / 10
-function roundPerf(p: PerfReport) {
-  const parts: Record<string, number> = {}
-  for (const k in p.parts) parts[k] = r1(p.parts[k])
-  return { fps: r1(p.fps), avg: r1(p.avgMs), max: r1(p.maxMs), sim: r1(p.sim), render: r1(p.render), hud: r1(p.hud), present: r1(p.present), getN: r1(p.getN), getMs: r1(p.getMs), putN: r1(p.putN), putMs: r1(p.putMs), drawN: Math.round(p.drawN), fb: `${p.fbW}x${p.fbH}`, back: `${p.backW}x${p.backH}`, parts }
+/** 渲染里最耗时的 5 段（游戏自带分段名） */
+function topParts(parts: Record<string, number>) {
+  return Object.keys(parts)
+    .map((k) => [k, parts[k]] as const)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([k, v]) => `${k}${v.toFixed(1)}`)
+    .join(' ')
 }
 /** 把游戏自带的渲染分段归成几类：地面水面 / 物件(叠层精灵) / 阴影 / 雾 / 特效+夜间光照 */
 function renderGroups(parts: Record<string, number>) {
   const g = (keys: string[]) => keys.reduce((a, k) => a + (parts[k] || 0), 0)
   return {
     ground: g(['ground', 'water', 'flow', 'soil+decals']),
-    objects: g(['list+shadowmask', 'o.tree', 'objects']),
+    objects: g(['list+shadowmask', 'o.tree', 'o.small', 'o.big', 'objects']),
     shadow: g(['applyShadows']),
     fog: g(['fog']),
     fx: g(['marks', 'fx+light']),
@@ -102,7 +104,6 @@ export default function Index() {
   const [phase, setPhase] = useState<Phase>('loading')
   const [errorText, setErrorText] = useState('')
   const [bootMs, setBootMs] = useState(0)
-  const bootMsRef = useRef(0)
   const [step, setStep] = useState('准备中')
   const [perf, setPerf] = useState<PerfReport | null>(null)
   const [quality, setQuality] = useState<QualityChoice>('auto')
@@ -288,6 +289,8 @@ export default function Index() {
           }
         }
       }
+      // Krypton（离屏tt）上每个预热角度都是新的 GL 画布，跳过空闲预热
+      env.G.__noWarm = typeof OffscreenCanvas !== 'function'
       try {
         bootFarm(env.G)
       } catch (err) {
@@ -296,7 +299,6 @@ export default function Index() {
       }
       const ms = Math.round(nowMs() - t0)
       setBootMs(ms)
-      bootMsRef.current = ms
       log(`引擎启动完成 ${ms}ms`)
       try {
         Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: true, lines: logRef.current }))
@@ -364,14 +366,6 @@ export default function Index() {
       if (qualityRef.current === 'auto' && ticks % 4 === 0 && report.frames >= 45 && report.fps < 30) {
         const next = levelRef.current === 'high' ? 'mid' : levelRef.current === 'mid' ? 'low' : null
         if (next) applyLevel(next, `自动：${report.fps.toFixed(1)} FPS < 30`)
-      }
-      // 测速版：每 3 秒把分段耗时发到服务端日志，方便对照真机（只有性能数字和机型）
-      if (ticks % 6 === 0) {
-        Network.request({
-          url: '/api/farm/perf',
-          method: 'POST',
-          data: { sys: sysRef.current, quality: qualityRef.current, level: levelRef.current, bootMs: bootMsRef.current, perf: roundPerf(report) },
-        }).catch(() => undefined)
       }
     }, 500)
     return () => clearInterval(timer)
@@ -477,9 +471,11 @@ export default function Index() {
               const gr = renderGroups(perf.parts)
               return <Text className="farm-perf-line text-base">{`地面${gr.ground.toFixed(1)} 物件${gr.objects.toFixed(1)} 阴影${gr.shadow.toFixed(1)} 雾${gr.fog.toFixed(1)} 光效${gr.fx.toFixed(1)}`}</Text>
             })()}
+            <Text className="farm-perf-line text-base">{topParts(perf.parts)}</Text>
+            <Text className="farm-perf-line text-base">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
             <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
             <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            <Text className="farm-perf-line text-base">{`v2无预热 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
             {problems.slice(-2).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
@@ -504,7 +500,7 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v2无预热 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={fastForward ? 'farm-btn is-on' : 'farm-btn'} onClick={goNight}>
               <Text className="farm-btn-text text-sm">{fastForward ? '快进中…' : '到夜晚'}</Text>

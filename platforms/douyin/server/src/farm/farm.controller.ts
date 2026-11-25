@@ -40,14 +40,6 @@ export interface FarmStateResponse {
 export class FarmController {
   constructor(private readonly store: FarmStoreService) {}
 
-  /** 落地页测速：真机把帧耗时分段发上来，只打日志，不存储（排查用，只含性能数字和机型） */
-  @Post('farm/perf')
-  @HttpCode(200)
-  perf(@Body() body: Record<string, unknown>): { success: boolean } {
-    console.log('[farm-perf]', JSON.stringify(body ?? {}).slice(0, 1500));
-    return { success: true };
-  }
-
   /** 卡面收获一次：只写记录，不返回渲染字段 */
   @Post('farm/card-harvest')
   @HttpCode(200)
