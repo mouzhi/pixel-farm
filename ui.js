@@ -30,6 +30,21 @@
       { k: ink, g: gr[2], s: '#9a9a92', w: wd[4], b: '#4fa3cf', d: gr[1], y: gr[3] }), // v5.9.0 the new house
     town: pixIcon(['', '      kk', '     krrk', '    krrrrk   kk', '   krrrrrrk krrk', '  kkkkkkkkkkrrrrk', '   kwwwwwwkkkkkkk', '   kwbwwbwk kwwk', '   kwwwwwwk kwdk', '   kwwddwwk kwdk', '   kkkddkkkkkkkk', '  gggg  gggg'],
       { k: ink, r: rf[2], w: wd[5] || wd[4], b: '#4fa3cf', d: wd[1], g: gr[3] }), // v5.8.0 the town
+    eastave: pixIcon(['', '', '                ', '     kkkkkkkkkk', '    ksssssssssk', '    ksssssssssk', 'kkkkkkkkkkkkkkkk', 'kwwkwwkwwkwwkwwk', 'kkkkkkkkkkkkkkkk', '    ksskk  kssk', '    ksskk  kssk', '    kkkkk  kkkk'],
+      { k: ink, s: st[3] || '#9a9a92', w: wd[5] || wd[4] }), // v5.12.2 东门大道
+    vacbeach: pixIcon(['', '', '      rr  rr', '     r  rr  r', '      y  y', '       y', '   ssssssssss', '  ssysysysyss', ' ssssssssssss', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbb', 'bbbbbbbbbbbbbb'],
+      { k: ink, r: rf[2], y: '#c9a85a', s: wd[4], b: wt[2] }), // v5.12.2 度假沙滩
+    // v5.12.4 农场体验
+    xppick: pixIcon(['', '      ggg', '     ggggg', '    ggrgggg', '    gggggrg', '     ggggg', '       k', '   kkkkkkkkkk', '   kbrbobrbok', '    kbbbbbbk', '    kbbbbbbk', '     kkkkkk'],
+      { k: ink, g: gr[3], r: '#d8483a', o: '#e89a3a', b: wd[3] }),
+    xppet: pixIcon(['', '', '   kk    www', '  kyyk  wwwww', '  kyoyk kwwwwwk', '  kyyyk  wkwkw', 'k k k k k k k k', 'bbbbbbbbbbbbbbb', 'k k k k k k k k', 'bbbbbbbbbbbbbbb', 'k k k k k k k k'],
+      { k: ink, y: '#f2cf55', o: '#e89a3a', w: '#f0ece0', b: wd[3] }),
+    xptour: pixIcon(['', '', '', '          kkkk', '          kggk', ' kkkkkkkkkkbbkk', ' kwwwwwwwwkggggk', ' kwwwwwwwwkggggk', ' kkkkkkkkkkkkkkk', '   kk      kk', '  kddk    kddk', '   kk      kk'],
+      { k: ink, w: wd[3], g: gr[3], b: '#8cc6dc', d: '#2a2a32' }),
+    xpcraft: pixIcon(['', ' rwrwrwrwrwrwrw', ' rwrwrwrwrwrwrw', ' k            k', ' k  jj  oo jj k', ' k kjjk koo   k', ' kkkkkkkkkkkkkk', ' kttttttttttttk', ' k k        k k', ' k k        k k'],
+      { k: ink, r: rf[2], w: '#f0e6d0', j: '#a83250', o: '#e89a3a', t: wd[4] }),
+    xpphoto: pixIcon(['', '    grgygrg', '   g       g', '  y         r', '  g         g', '  r         y', '  g         g', '  y         r', '  g         g', '  g         g', ' kkk       kkk'],
+      { k: ink, g: gr[3], r: '#d8483a', y: '#f2cf55' }),
     shoe: pixIcon(['', '', '', '    kkkk', '   kbbbbk', '   kbttbk', '   kbbbbk', '   kbbbbkk', '   kbbbbbbkkk', '  kbbbbbbbbbbk', '  kbtttbbbbbbbk', '  kkkkkkkkkkkkk', '  kdddddddddddk', '   kkkkkkkkkkk'].map(r => r.padEnd(16)),
       { k: ink, b: wd[2], t: wd[4], d: wd[1] }),
     hoe: pixIcon(['', '            kk', '           kbk', '          kbk', '         kbk', '        kbk', '       kbk', '      kbk', '     kbk', '  kkkbk', ' kssskk', ' kseeek', ' kseek', '  kkk'].map(r => r.padEnd(16)),
@@ -248,9 +263,11 @@
         // v5.11.0.19: a married child's husband or wife counts as family (they live in the new house, not the manor)
         const inl = G.spousesIn ? G.spousesIn() : [], spA = G.SPOUSES || [];
         for (const q of inl) { const a = spA.find(x => x._spouse === q.kid); lines.push(`${q.name}（${(fam.kids.find(k => k.id === q.kid) || {}).name || '孩子'}的爱人）：${jobOf(a)}`); }
+        const GR = (G.homeStatus && G.homeStatus().grand) || []; // v5.12.5 第三代: the grandchildren live in their parents' (or their own) new house
+        for (const q of GR) lines.push(`${q.name}（${q.short}）：${q.note}`);
         const busy = S.members.filter(m => !m.home && !m.away && m.task).length + spA.filter(a => !a.home && a.task && inl.some(q => q.kid === a._spouse)).length;
         const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length + inl.length, room = tier.pop + inl.length;
-        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
+        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}${GR.length ? `，孙辈 ${GR.length} 个（${GR.map(q => q.name).join('、')}）` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
@@ -511,8 +528,28 @@
   }
   function hallHtml() {
     const v = G.hallView(); if (!v) return '';
-    const stars = '★'.repeat(v.lv) + '☆'.repeat(Math.max(0, 5 - v.lv));
+    const stars = '★'.repeat(v.lv) + '☆'.repeat(Math.max(0, (v.lv >= 5 ? 6 : 5) - v.lv)); // v5.12.3: a sixth star once the town reaches 5
     let h = `<div class="sec">繁荣度 <span class="stars" title="繁荣度 ${v.lv}">${stars}</span> ${esc(v.lvName)} · 镇上住着 ${v.people} 位邻居${v.next ? ` · 再盖 ${v.next.need} 座升到 ${v.lv + 1}` : ''}</div>`;
+    const tv = v.tour; // v5.12.3 繁荣度 6「旅游小镇」
+    if (tv && (v.lv >= 5 || tv.ok)) {
+      const T = tv.T, row = (ok, t) => `<span class="lv">${ok ? '✓' : '·'} ${esc(t)}</span>`;
+      h += `<div class="card${tv.ok ? ' max' : ''}" data-item="tour">${icon('town')}<div class="ct"><div><b>${tv.ok ? `繁荣度 6：旅游小镇（第 ${tv.lv6} 天升级）` : '繁荣度 6：旅游小镇'}</b></div><div class="d">` +
+        (tv.ok ? '公园里放学后有镇上的小孩玩，阿梅、阿川和秋姨三家慢慢成家、添了孩子。' : '升到 6 级要：') +
+        (tv.ok ? '' : [row(tv.park, '建好镇公园'), row(tv.avenue || tv.beach, '买下东门大道或度假沙滩'), row(tv.stars >= T.stars || tv.visitors >= T.visitors, `度假村 ${T.stars} 星（${+tv.stars ? '现在 ' + (+tv.stars).toFixed(1) : '还没有住客'}）或近 ${T.days} 天游客 ${T.visitors} 人（现在 ${tv.visitors}）`)].join(' ')) +
+        `</div></div></div>`;
+      for (const f of (tv.families || [])) {
+        const kids = f.kids.concat(f.babies.map(n => n + '（婴儿）'));
+        h += `<div class="card" data-item="tourfam">${icon('town')}<div class="ct"><div><b>${esc(f.host)}和${esc(f.spouse)}</b> <span class="lv">${kids.length ? '孩子：' + esc(kids.join('、')) : '刚成家'}</span></div><div class="d">${f.kids.length ? '放学后去镇公园玩，17:30 回家。不进家里的任务板。' : f.babies.length ? '上午推着婴儿车在公园绕圈。' : '上午会去公园走走。'}</div></div></div>`;
+      }
+    }
+    const bv = G.busView && G.busView(); // v5.12.6 旅游大巴
+    if (bv && (v.lv >= 5 || bv.total)) {
+      const hm = m => `${(m / 60) | 0}:${String(m % 60).padStart(2, '0')}`, DN = { town: '节庆广场', agri: '农家乐', park: '镇公园', beach: '东段沙滩' };
+      const runs = bv.runs.map(r => `${hm(r.arrive)} 到 ${hm(r.leave)} 走，${r.n} 人（${Object.keys(r.dest).map(k => DN[k] + ' ' + r.dest[k]).join('、')}）`);
+      h += `<div class="card${bv.why ? '' : ' max'}" data-item="bus">${icon('town')}<div class="ct"><div><b>旅游大巴</b> <span class="lv">${bv.why ? '还没来' : `今天 ${bv.runs.length} 辆 · ${bv.today} 人`}</span></div><div class="d">` +
+        (bv.why ? esc(bv.why) + '。' : esc(runs.join('；')) + `。每辆车走时付停车费 ${bv.fee} 金；去农家乐的游客会去玩那里的农场体验（各项每天的人数上限不变）。`) +
+        (bv.six ? '' : '繁荣度到 6「旅游小镇」后每天多来一辆，车上人也更多。') + (bv.total ? `大巴一共带来 ${bv.total} 位游客。` : '') + `</div></div></div>`;
+    }
     h += `<div class="sec">建设项目（一次盖一座：付钱后木匠阿松搭脚手架，第二天一早盖好，新邻居搬进来）</div>`;
     for (const p of v.projects) {
       const st = p.built ? '已盖好' : p.building ? '正在盖' : '未开工', can = !p.why;

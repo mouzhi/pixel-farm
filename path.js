@@ -6,6 +6,7 @@
 (function (root) {
   const WD = root.PFWorld || (typeof require === 'function' ? require('./world.js') : null);
   const PL = root.PFPlots || (typeof require === 'function' ? require('./plots.js') : null); // v5.5.0: river, cliff, the new plots' fences
+  const EA = root.PFEast || (typeof require === 'function' ? require('./east.js') : null); // v5.12.2: 东门大道 and 度假沙滩
   const CELL = 4;                               // world units per nav cell (half a farm tile; fences sit on cell centres)
   const BLOCKED = 0;
   const DIRT = 5;
@@ -168,6 +169,8 @@
       const openings = [r.gate, r.pier].filter(Boolean);
       // a 度假村 on 东南滩 also opens the east fence of the beach
       if (r.id === 'coast' && PL && PL.resortOpen && PL.resortOpen(plots) && PL.RESORT_JOIN) openings.push(PL.RESORT_JOIN.beach);
+      // v5.12.1: 宅园's south path opens the north fence of 海边
+      if (r.id === 'coast' && PL && PL.homesteadOpen && PL.homesteadOpen(plots) && PL.HOME_JOIN) openings.push(PL.HOME_JOIN.beach);
       // the guest pier mouth: the south fence would otherwise run across the boards
       let guestMouth = null;
       if (r.id === 'coast' && opts && opts.guestPier) {
@@ -257,6 +260,10 @@
       if (PL && PL.resortOpen && PL.resortOpen(opts && opts.plots) && open.includes('eshore') && open.includes('coast') && PL.RESORT_JOIN) {
         spots.push(PL.RESORT_JOIN.lot, PL.RESORT_JOIN.beach);
       }
+      if (PL && PL.homesteadOpen && PL.homesteadOpen(opts && opts.plots) && open.includes('nhome') && PL.HOME_JOIN) {
+        spots.push(PL.HOME_JOIN.lot, PL.plot('nhome').gate);
+        if (open.includes('coast')) spots.push(PL.HOME_JOIN.beach);
+      }
       for (const r of WD.REGIONS) {
         if (open.includes(r.id)) spots.push(r.gate);
         if (r.barrel && open.includes(r.id)) spots.push({ x: r.barrel.x, y: r.barrel.y + 8 });
@@ -277,10 +284,12 @@
     regionFences(g, o.regions || [], o.plots, o);
     penFences(g, o);
     if (PL) PL.navPaint(g, HELP, o);
+    if (EA) { EA.navBlockUnbought(g, HELP, o); EA.navPaint(g, HELP, o); }
     paintTreesAndRocks(g, o);
     paintDirt(g, o.regions || [], o.plots);
     carveEntries(g, o);
     if (PL) PL.navCarve(g, HELP, o);
+    if (EA) EA.navCarve(g, HELP, o);
     g.opts = o;
     return g;
   }

@@ -110,7 +110,7 @@ fs.mkdirSync(OUT, { recursive: true });
       await p.evaluate(() => { if (window.PFDiaryUI) PFDiaryUI.open(); });
       await p.waitForTimeout(200);
       return p.evaluate(`(() => { const f = __farm, S = f.S; ${gather} })()`);
-    }, r => r.ver !== '5.12.0' ? 'ver ' + r.ver
+    }, r => r.ver !== '5.12.6' ? 'ver ' + r.ver
       : !r.ledger || !r.ledger.day.total ? 'no today ledger ' + JSON.stringify(r.ledger)
       : r.ledger.day.total !== r.gained ? 'ledger ' + r.ledger.day.total + ' != coins gained ' + r.gained
       : r.ledger.day.total !== (r.rs.cabin + r.rs.hut + r.rs.villa + r.rs.camp + r.rs.diner + r.rs.stall) ? 'rows != total'
@@ -134,7 +134,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return p.evaluate(`(() => { const f = __farm, S = f.S; ${gather} })()`);
   }, r => {
     const want = `开业以来：房费 ${r.rooms} 金、菜钱 ${r.meals} 金；今天 ${r.ledger && r.ledger.day.total} 金`;
-    if (r.ver !== '5.12.0') return 'ver ' + r.ver;
+    if (r.ver !== '5.12.6') return 'ver ' + r.ver;
     if (!r.ledger || !r.ledger.day.total) return 'no ledger';
     if (r.rooms !== r.rooms0 + (r.rs.cabin + r.rs.hut + r.rs.villa + r.rs.camp)) return 'rooms lifetime ' + r.rooms;
     if (r.meals !== r.meals0 + (r.rs.diner + r.rs.stall)) return 'meals lifetime ' + r.meals;
@@ -185,13 +185,13 @@ fs.mkdirSync(OUT, { recursive: true });
           onScreen: !!(br && br.width > 0 && br.right <= innerWidth + 1), vw: innerWidth };
       });
     }, r => {
-      if (r.ver && r.ver !== '5.12.0') return 'ver ' + r.ver;
+      if (r.ver && r.ver !== '5.12.6') return 'ver ' + r.ver;
       if (after) {
         if (r.shown) return 'badge still visible after click';
         if (!r.seen || !r.saved) return 'flag not saved ' + JSON.stringify(r);
         if (!r.tip) return 'panel did not open';
         if (!r.reload || r.reload.shown || !r.reload.seen) return 'badge came back after reload ' + JSON.stringify(r.reload);
-        if (r.reload.ver !== '5.12.0') return 'reload ver ' + (r.reload && r.reload.ver);
+        if (r.reload.ver !== '5.12.6') return 'reload ver ' + (r.reload && r.reload.ver);
         return null;
       }
       return !r.shown ? 'badge hidden before click'

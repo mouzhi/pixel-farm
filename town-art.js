@@ -12,7 +12,9 @@
   // ---------- ground (called for every ground pixel inside the strip; null: not ours) ----------
   function ground(x, y) {
     if (!TN.inTown(x, y)) return null;
-    const P = TN.PLAZA, d = Math.hypot(x - P.x, y - P.y), H = S && S.town && S.town.hall, r = root.PFMarket && root.PFMarket.built(H) ? root.PFMarket.PLAZA_R : P.r; // v5.10.3: the market square is bigger
+    const PK = root.PFPark, H0 = S && S.town && S.town.hall; // v5.12.3 镇公园 on R1 (and its gravel link to 东街)
+    if (PK && PK.built(H0) && (PK.inPark(x, y) || PK.onLink(x, y))) { const o = PK.ground(x, y, { G, Wd, St, Ac }); if (o) return o; }
+    const P = TN.PLAZA, d = Math.hypot(x - P.x, y - P.y), H = H0, r = root.PFMarket && root.PFMarket.built(H) ? root.PFMarket.PLAZA_R : P.r; // v5.10.3: the market square is bigger
     if (d < r) { const cx = Math.floor((x + 400) / 3), cy = Math.floor((y + 400) / 3), k = hash(cx, cy, 5); // cobbles, a ring of darker stones at the edge
       if (d > r - 1.4) return [St[1], 'dirt']; // v5.11.0: concentric rings of setts round the fountain (the checkerboard was loud at r 36)
       const ring = Math.floor(d / 3), ang = Math.atan2(y - P.y, x - P.x), per = Math.max(6, Math.round(ring * 2 * Math.PI)), seg = (ang / (2 * Math.PI) + 1) * per + (ring & 1) * 0.5;
@@ -210,8 +212,25 @@
     const aframes = Object.fromEntries(Object.keys(AFACE).map(k => [k, aframe(AFACE[k])])), blades = Object.fromEntries(Object.keys(EMB).map(k => [k, blade(k)]));
     const awnings = [0, 1, 2].map(c => awning(14, c));
     const play = { goal, hoop, stand, slide: xm && xm.slide, swing: xm && xm.swing, sandbox: xm && xm.sandbox };
+    // ---------- v5.12.3 镇公园: a pergola (廊架) with climbing roses, a kennel for the park dog, short pickets round the pet corner ----------
+    const pergola = B(30, 18, 34, (x, y, z) => {
+      const post = (x <= 1 || x >= 28) && (y <= 1 || y >= 16);
+      if (post && z <= 27) return z <= 1 ? St[2] : (z % 7 === 0 ? Wd[1] : Wd[2]);
+      if ((y <= 1 || y >= 16) && z >= 26 && z <= 27) return z === 27 ? Wd[3] : Wd[2];                                 // the long beams
+      if (z === 29 && x % 4 === 1) return Wd[3];                                                                        // slats across
+      const vine = (z >= 28 && z <= 31 && hash(x, y, 51) > 0.38) || ((y <= 1 || y >= 16) && z >= 6 && z < 26 && (x <= 2 || x >= 27) && hash(x, z, 53) > 0.45);
+      if (vine) { const k = hash(x + z, y, 57); return k > 0.86 ? Ac[3] : k > 0.78 ? Ac[0] : (k > 0.4 ? G[3] : G[2]); }
+      if (y >= 7 && y <= 10 && x >= 8 && x <= 21 && z >= 6 && z <= 7) return z === 7 ? Wd[4] : Wd[2];                // a long bench in its shade
+      if (y >= 7 && y <= 10 && (x === 9 || x === 20) && z <= 5) return Wd[1];
+      return null; });
+    const kennel = B(12, 12, 14, (x, y, z) => {
+      if (z <= 7 && x >= 1 && x <= 10 && y >= 1 && y <= 10) { if (y === 10 && x >= 4 && x <= 7 && z >= 1 && z <= 5) return z === 5 ? Wd[1] : null; // the door hole faces south
+        return (x === 1 || x === 10 || y === 1 || y === 10) ? ((z + x) % 3 ? Wd[3] : Wd[2]) : null; }
+      const roofW = 6 - (z - 8); if (z >= 8 && z <= 13 && Math.abs(x - 5.5) <= roofW && y <= 11) return Math.abs(Math.abs(x - 5.5) - roofW) < 1 ? Rf[1] : Rf[2];
+      return null; });
+    const picket = B(8, 2, 8, (x, y, z) => ((x % 4 === 1 || x % 4 === 2) && z <= 6 ? (z === 6 ? Wd[4] : Wd[3]) : (z === 4 ? Wd[2] : null)));
     return Object.assign(NB, { fountain, gateOpen, flowers, board, mailbox, cart, crates, parasol, stalls, stallFrame, orderBoard, timber, anvil, yardFlag, yardPost, lantern,
-      planter, aframes, blades, barrel, awnings, cafe, play, flagHigh });
+      planter, aframes, blades, barrel, awnings, cafe, play, flagHigh, pergola, kennel, picket });
   }
 
   // ---------- mount: the town is always there to look at; the gate and the walk-in depend on it being bought ----------
@@ -233,8 +252,8 @@
     if (FS0 && FS0.RING && MD.lantern) for (const q of FS0.RING) own.always.push(add(MD.lantern, q.x, q.y, 0, { xp: 1, town: 'lantern' }));
     if (TN.SQUARE) { const q = TN.SQUARE; for (const [px, py] of [[q[0] + 12, q[1] + 6], [q[2] - 12, q[1] + 6], [q[0] + 12, q[3] - 6], [q[2] - 12, q[3] - 6]]) own.always.push(add(MD.flowers, px, py, 0, { xp: 1, town: 'flowers' })); }
     if (MD.lotSign) for (const r of TN.RESERVED) { const cx = (r.rect[0] + r.rect[2]) / 2; // v5.11.0: 待开发 — a signpost and four stakes; the ground stays empty for later
-      own.always.push(add(MD.lotSign, cx, r.rect[3] - 3, 0, { xp: 1, town: 'reserved' }));
-      for (const [sx, sy] of [[r.rect[0] + 1, r.rect[1] + 1], [r.rect[2] - 1, r.rect[1] + 1], [r.rect[0] + 1, r.rect[3] - 1], [r.rect[2] - 1, r.rect[3] - 1]]) own.always.push(add(MD.stake, sx, sy, 0, { xp: 1, town: 'stake' })); }
+      own.always.push(add(MD.lotSign, cx, r.rect[3] - 3, 0, { xp: 1, town: 'reserved', lot: r.id }));
+      for (const [sx, sy] of [[r.rect[0] + 1, r.rect[1] + 1], [r.rect[2] - 1, r.rect[1] + 1], [r.rect[0] + 1, r.rect[3] - 1], [r.rect[2] - 1, r.rect[3] - 1]]) own.always.push(add(MD.stake, sx, sy, 0, { xp: 1, town: 'stake', lot: r.id })); }
     if (x.lampModel) for (const l of TN.LAMPS) own.always.push(add(x.lampModel(), l.x, l.y, 0, { xp: 1, town: 'lamp' }));
     // the town's fence: all round, with the west gap at the gate
     const R0 = TN.RECT, fence = x.models.fence;
@@ -290,6 +309,14 @@
       const T = SC.TRACK, top = T.cy - T.ry - ((SC.LANES && SC.LANES[2]) || 0) - 2; // sports-day flags just outside the outer lane
       if (sports && MD.yardFlag) { own.hall.push(X.addProp(MD.yardFlag, T.cx - 6, top, 0, { xp: 1, town: 'flag' })); own.hall.push(X.addProp(MD.yardFlag, T.cx + 6, top, 0, { xp: 1, town: 'flag' })); }
     }
+    const PK = root.PFPark; // v5.12.3 镇公园: R1's signpost and stakes go once the park is built; its props in fixed slots
+    if (PK) { const park = PK.built(H);
+      for (const q of own.always) if (q.lot === 'R1') { const i = X.props.indexOf(q); if (park && i >= 0) X.props.splice(i, 1); else if (!park && i < 0) X.props.push(q); }
+      if (park) { const DM = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models(), lampM = X.lampModel && X.lampModel();
+        for (const q of PK.PROPS) { const m = q.k === 'bench' ? DM && DM.bench : q.k === 'sandbox' ? MD.play && MD.play.sandbox : q.k === 'lamp' ? lampM : MD[q.k];
+          if (m) own.hall.push(X.addProp(m, q.x, q.y, q.rot || 0, { xp: 1, town: 'park:' + q.k })); }
+        if (MD.picket) for (const f of PK.FENCE) own.hall.push(X.addProp(MD.picket, f.x, f.y, f.rot, { xp: 1, town: 'park:fence' })); }
+      else if (H.job && H.job.id === 'park' && MD.timber) own.hall.push(X.addProp(MD.timber, PK.GATE.x + 10, PK.GATE.y - 6, 0, { xp: 1, town: 'park:timber' })); }
     const TL = root.PFTownLife; // v5.12.0 小镇美术升级: planters, sandwich boards, hanging signs, barrels, awnings and café tables in fixed slots
     if (TL) for (const d of TL.dressFor(H.built)) { const m = d.k === 'aframe' ? MD.aframes && MD.aframes[d.sign] : d.k === 'blade' ? MD.blades && MD.blades[d.sign] : d.k === 'awning' ? MD.awnings && MD.awnings[d.c | 0] : MD[d.k];
       if (!m) continue; const host = d.k === 'awning' && HL.LOTS.find(l => l.id === d.need); own.dress.push(X.addProp(m, d.x, d.y, host ? host.rot : 0, { xp: 1, town: 'dress:' + d.k })); }

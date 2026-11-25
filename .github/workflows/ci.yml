@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fog.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js gen3.js fog.js east.js bus.js east-art.js farmxp.js farmxp-art.js park.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -70,6 +70,11 @@ jobs:
           node tools/fog-test.js
           node tools/kids-test.js
           node tools/townart-test.js
+          node tools/east-test.js
+          node tools/park-test.js
+          node tools/farmxp-test.js
+          node tools/gen3-test.js
+          node tools/bus-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -82,23 +87,26 @@ jobs:
           # ~7.5m on run 44622565450 (save-smoke alone was 5.0m)
           - group: smoke
             # v5.11.0.22: + sync-shots (~15s; the reauth button + toast). smoke stays well under 25m.
-            scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js sync-shots.js clinic-shots.js fill-shots.js
+            scripts: smoke.js save-smoke.js surprise-smoke.js audio-smoke.js codex-smoke.js plots-smoke.js playlog-smoke.js sync-shots.js
           # ~13.5m (works 5.0m, decor 4.1m, town 3.6m, school-walk 0.8m)
           - group: works-town
             # v5.11.0.15: party-shots (~1.5m locally); works-town 14m01s on main run 44800040270, ample headroom
             # v5.11.0.22: party-shots -> hall-market (works-town was 22m23s on run 44888658203, over the 22m cap)
             # v5.11.0.26: workshop-shots tried here (works-town was 11m09s on run 44916066351) then got its own leg
             # (works-town hit 25m01s on run 44918453900, over the 22m cap)
-            scripts: works-shots.js decor-shots.js town-shots.js school-walk-shots.js
-          # ~7.3m (home 4.4m, polish 1.2m, cottage 1.7m)
+            scripts: works-shots.js decor-shots.js
+          # v5.12.3: home split in two (home was 25m37s on run 45353460574 on a slow runner: home 7.9m, polish 2.3m, cottage 3.0m,
+          # fixroad 2.3m, fixws 5.3m, fishdiary 2.0m, touchhooks 1.7m, coast/pine/kidslove 1.1m)
           - group: home
-            scripts: home-shots.js polish-shots.js cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
+            scripts: home-shots.js polish-shots.js touchhooks-shots.js coast-shots.js pine-shots.js kidslove-shots.js
+          - group: home-fix
+            scripts: cottage-shots.js fixroad-shots.js fixws-shots.js fishdiary-shots.js
           # ~10.9m (hall 3.8m, econ 1.1m, nospeed 0.5m, market 5.5m)
           - group: hall-market
           # v5.11.0.8: + rain-shots from recent-b (recent-b ran 24m39s, hall-market 9m44s on run 44743060653)
           # v5.11.0.10: rain-shots back to recent-b (hall-market reached ~24.5m with it; recent-b ~12m on run 44752013174)
           # v5.11.0.22: + party-shots from works-town (hall-market was 12m13s on run 44888658203)
-            scripts: hall-shots.js econ-shots.js nospeed-shots.js market-shots.js countdown-shots.js party-shots.js
+            scripts: hall-shots.js econ-shots.js nospeed-shots.js countdown-shots.js
           # v5.10.10: split `recent` (it ran 29m04s of a 30m limit on #56). Keep the aggregator job named `check`.
           - group: recent-a
             # v5.11.0.26: workshop-shots -> works-town, festival-shots -> agrilot
@@ -110,7 +118,7 @@ jobs:
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
           # v5.11.0.12: rain-shots -> agrilot (recent-b was 24m43s with rain on album run 44777224060; inn+resort stay here)
-            scripts: inn-shots.js resort-shots.js
+            scripts: inn-shots.js
           # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s) and the district / town / farm / seaside
           # shots with door routes and perf (~5m on CI)
           # v5.11.0.11: + offline-shots and album-shots from townscale (townscale hit 25m13s with them on run 44772874375: v5110 15m, school 5m,
@@ -119,17 +127,27 @@ jobs:
           # v5.11.0.13: + rain-shots from agrilot (scale was 9m41s on run 44782373476; rain ~7m → ~17m)
           # v5.11.0.14: + housemove-shots (~1–2m locally; expected ~18–19m, >=3m headroom under 25m)
           # v5.11.0.15: scale exceeded 22m on run 44815889988; isolate rain instead of passing the overload to another leg.
-            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js housemove-shots.js
+          # v5.12.4: scale was 23.0m on run 45365567118 (scale-shots 11.8m, album 4.2m, offline 3.6m, housemove 3.0m): offline + album move to their own leg
+            scripts: scale-audit.js scale-shots.js housemove-shots.js
+          - group: offline-album
+            scripts: offline-shots.js album-shots.js
           - group: weather
           # v5.11.0.19: + married-shots (three wedding set-ups, ~3–5m locally); weather was the lightest leg with rain alone (~7m)
           # v5.11.0.20: + water-shots (河口 / flowing water / wheels, ~1.5–2m locally; weather was 10m27s with rain+water on run 44880021944)
           # v5.11.0.21: + wedding-shots (~4.7m on CI; weather was 15m32s with rain+married+wedding on run 44882574583, ~17.5m expected with water)
             # v5.11.0.23: + wedding-load-test (reload a wedding-evening save; ~15s)
-            scripts: rain-shots.js married-shots.js water-shots.js wedding-shots.js wedding-load-test.js
+          # v5.12.4: weather was 24.1m on run 45365567118 (rain 10.2m, wedding 5.1m, married 4.7m, water 3.1m, wedding-load 0.9m): the wedding scripts get their own leg
+            scripts: rain-shots.js water-shots.js
+          - group: wedding
+            scripts: married-shots.js wedding-shots.js wedding-load-test.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
+          # v5.12.3: school-shots on its own leg (townscale hit 25m30s on run 45358420743 on a slow runner: v5110 18.8m, school 6.6m;
+          # the same scripts took 14.4m on run 45353460574)
           - group: townscale
-            scripts: v5110-shots.js school-shots.js
+            scripts: v5110-shots.js
+          - group: school
+            scripts: school-shots.js
           # v5.11.0.5 农家乐区: its own leg (~11m on CI: recent-b went 11m -> 22m16s with it on run 44703708506; with rain-shots there too it would pass 25m)
           # v5.11.0.6: fog-shots (~4m) here, not in home (home hit 23m00s with it on run 44715831725; agrilot alone was 7m)
           # v5.11.0.7: + hotbar-shots (~1m); agrilot was the lightest leg (5–9m on runs 44727901332 / 44729908140)
@@ -140,7 +158,10 @@ jobs:
             #  expected agrilot ~19–20m with rain+restaurant, >=3m headroom under 25m)
             # v5.11.0.13: fog-shots -> fog2-shots (~3m more than the old one), so rain-shots (~7m) goes on to scale (9m41s on run 44782373476)
             # v5.11.0.26: festival-shots tried here then got its own leg (agrilot hit 21m34s on run 44918453900)
-            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js
+            # v5.12.4: agrilot was 23.9m on run 45365567118 (agrilot 10.2m, fog2 7.6m, hotbar 4.7m, restaurant 1.4m): fog2 + hotbar get their own leg
+            scripts: agrilot-shots.js restaurant-shots.js
+          - group: fog-hotbar
+            scripts: fog2-shots.js hotbar-shots.js
           # v5.11.0.26: workshop-shots and festival-shots each get their own leg. recent-a was 23m12s
           # with both plus the new bakery shot (run 44916066351); parking them on works-town / agrilot
           # then made those groups 25m01s and 21m34s (run 44918453900).
@@ -150,7 +171,7 @@ jobs:
             # xhs 1.3.1: + shedmove-shots (second pens move / rezone; keep this leg under 22m)
             # v5.11.0.34: + beehive-shots (~50s locally; workshop was 13m on run 45038948300)
             # v5.11.0.38: + newhouse-shots (新房入伙 load backfill, ~20s locally)
-            scripts: workshop-shots.js workprio-test.js mach-shots.js shedmove-shots.js beehive-shots.js riverbank-test.js orchard-test.js newhouse-shots.js
+            scripts: workshop-shots.js workprio-test.js mach-shots.js shedmove-shots.js beehive-shots.js newhouse-shots.js
           - group: festival
             # v5.11.0.31 前几天的节奏: + day1-pacing (~10s, fresh farm days 1-7 milestones) and day1-shots (~35s locally)
             scripts: festival-shots.js day1-pacing.js day1-shots.js
@@ -163,8 +184,37 @@ jobs:
             # xhs 1.3.2: + xhs-beehive-shots (hives to another 花甸 by touch, honey/tray kept, reload, old lot -> 动力坝; ~35s locally)
             scripts: xhs-touch-shots.js xhs-shedmove-shots.js xhs-beehive-shots.js xhs-riverbank-shots.js xhs-orchard-shots.js
           # v5.12.0 小镇美术升级: its own leg (street / playground / square / night, desktop + phone, ~3m locally)
+          # v5.12.1 宅园·度假村北: + homestead-shots (locked/bought/old houses/move/shop, desktop + phone; light leg)
           - group: townart
-            scripts: townart-shots.js
+            scripts: townart-shots.js homestead-shots.js
+          # v5.12.2: 东门大道 + 度假沙滩 in its own leg (do not load hall-market / townscale)
+          - group: eastave
+            scripts: eastave-shots.js
+          # v5.12.3: split by measured costs from 45336075680, not extra waits or missing coverage.
+          # smoke was 26m25: save-smoke ~12m + clinic ~6m + fill ~2.5m. hall-market was 26m56: market ~10m + party ~3m.
+          # recent-b was 22m22; works-town 20m45; workshop 20m08 (within the hard cap, but little headroom).
+          # Every script still appears exactly once; new park leg is ~5m locally. Target <=22m per leg (hard cap 25m; the job timeout stays 30m as a backstop).
+          - group: clinic-fill
+            scripts: clinic-shots.js fill-shots.js
+          - group: market-party
+            scripts: market-shots.js party-shots.js
+          - group: resort
+            scripts: resort-shots.js
+          - group: town-walk
+            scripts: town-shots.js school-walk-shots.js
+          - group: orchard-river
+            scripts: riverbank-test.js orchard-test.js
+          - group: park
+            scripts: park-shots.js
+          # v5.12.4 农场体验: its own leg (~5m locally)
+          - group: farmxp
+            scripts: farmxp-shots.js
+          # v5.12.5 第三代: its own leg (~7m locally); do not load home / park / wedding
+          - group: gen3
+            scripts: gen3-shots.js
+          # v5.12.6 旅游大巴: its own leg (~5.5m locally)
+          - group: bus
+            scripts: bus-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

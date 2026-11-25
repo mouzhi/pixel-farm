@@ -10,6 +10,8 @@
   const HM = root.PFHome || (typeof require === 'function' ? require('./home.js') : null); // v5.9.0 phase 11: the new house
   const YD = root.PFYard || (typeof require === 'function' ? require('./yard.js') : null); // v5.10.3: yard, stall and animal-care things
   const DC = root.PFDecor || (typeof require === 'function' ? require('./decor.js') : null); // v5.7.0 phase 9: the decoration shop
+  const EA = root.PFEast || (typeof require === 'function' ? require('./east.js') : null); // v5.12.2: 东门大道 and 度假沙滩
+  const FXP = root.PFFarmXp || (typeof require === 'function' ? require('./farmxp.js') : null); // v5.12.4: 农场体验
   const MIN_PER_SEC = 3;          // game minutes per real second at 1x (v3 was 5): a day is about 5.2 real minutes
   const SLEEP_MULT = 6;           // the night runs 6x faster while the farmer sleeps
   const WAKE = 6 * 60, BEDTIME = 20 * 60;
@@ -114,24 +116,31 @@
       levels: Array.from({ length: c.shop.max }, (_, i) => ({ cost: c.shop.cost, wood: c.shop.wood, label: c.shop.max > 1 ? `第 ${i + 1} 个` : c.name, desc: c.desc })) }; }) : []),
     // v5.8.0 phase 10 (rules in town.js): the town east of 东大道; its gate opens once the road is bought and a child has been to school
     ...(TN ? [{ id: 'town', p10: 1, name: '隔壁镇子', icon: 'town', levels: [{ cost: TN.PRICE.cost, wood: TN.PRICE.wood, label: '打开镇门', desc: '东大道尽头的镇子：学校、小店（工坊货、蜂蜜和鱼多卖两成）、几户人家；孩子改去镇上的学校' }] }] : []),
+    // v5.12.2: 东门大道 and 度假沙滩 are two separate purchases (rules in east.js)
+    ...(EA ? [{ id: 'eastave', p12: 1, name: '东门大道', icon: 'eastave', levels: [{ cost: EA.PRICE_AVE.cost, wood: EA.PRICE_AVE.wood, label: '东门大道', desc: '从东门再往东修一条石板大道，南侧是停车场。平时有私家车来回，一部分车会停进场，游客走进镇子；盖好民宿以后每天还有一辆旅游大巴停进南排的大巴位（繁荣度 6 时两辆）；买了度假沙滩以后也能从停车场下到东段沙滩。要先开镇门，并且繁荣度到 5。不附赠沙滩' }] }] : []),
+    ...(EA ? [{ id: 'vacbeach', p12: 1, name: '度假沙滩', icon: 'vacbeach', levels: [{ cost: EA.PRICE_BEACH.cost, wood: EA.PRICE_BEACH.wood, label: '度假沙滩', desc: '把栈桥以东的南海岸清出来做成公共沙滩：加宽沙带，摆上遮阳伞和躺椅、一座救生塔、木栈道和两处落日台。要先开镇门并买下海边，不必先买东门大道。没修大道时沙滩先开到现在的地图东缘，修了大道以后同一条滩会接到停车场' }] }] : []),
     // v5.9.0 phase 11 (rules in home.js): a smaller house on a bought 花甸 / 农田 plot, for a grown child who marries
-    ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i ? '第二座新房子' : '新房子',
-      desc: (i ? '给第二个孩子成家用。' : '') + '家人在花甸或农田里盖一座小一号的房子，旁边带 6 格小田和两只母鸡。孩子长成少年、和同学走得很近以后，会在这里成家' })) }] : []),
+    ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i >= 2 ? `第${'三四五六'[i - 2]}座新房子` : i ? '第二座新房子' : '新房子',
+      desc: i >= 2 ? '给孙辈搬出去住（v5.12.5）：先盖在宅园·度假村北的空房基上，没有空房基才用花甸或农田。孙辈长成少年十天后搬进来，和同学走得很近以后在门前成家，自己种那 6 格小田、养两只母鸡'
+        : (i ? '给第二个孩子成家用。' : '') + '家人在宅园房基、花甸或农田里盖一座小一号的房子，旁边带 6 格小田和两只母鸡。孩子长成少年、和同学走得很近以后，会在这里成家' })) }] : []),
     // v5.10.3 (rules in yard.js): small early things for the yard, 阿禾's stall and the animals; the family sets each one up on its own spot
     ...(YD ? YD.ITEMS.map(t => ({ id: t.id, name: t.name, icon: 'y_' + t.id, yard: 1, flat: t.max > 1 && !t.costs ? 1 : 0, ...(t.needs ? { needs: t.needs } : {}),
       levels: Array.from({ length: t.max }, (_, i) => ({ cost: YD.costAt(t, i), ...(t.wood ? { wood: t.wood } : {}), label: t.max > 1 ? (t.id === 'roof' ? ['绿屋顶', '蓝屋顶', '青灰屋顶'][i] : `第 ${i + 1} ${t.id === 'gravel' || t.id === 'flag' || t.id === 'vegfence' ? '段' : '个'}`) : t.name, desc: t.desc })) })) : []),
+    // v5.12.4 农场体验 (rules in farmxp.js): five things tourists pay to do; bought by the player only (never in AUTO_BUY)
+    ...(FXP ? FXP.ITEMS.map(t => ({ id: t.id, p124: 1, name: t.name, icon: t.id, levels: [{ cost: t.cost, wood: t.wood, label: t.name, desc: `${t.desc}。每人 ${t.fee} 金，每天最多 ${t.cap} 人` }] })) : []),
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
   const SHOP_TABS = [
     { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
-    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : [])] },
+    { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : []), ...(EA ? ['eastave', 'vacbeach'] : [])] },
     { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
     { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'feeder', 'feedset', 'chute', 'milker', 'tray'] }, // v5.6.0; v5.10.9 pie; v5.11.0.29 machines
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
     ...(YD ? [{ id: 'yard', name: '院子', title: '院子、阿禾的小摊和动物照护', ids: YD.IDS.slice() }] : []), // v5.10.3
     ...(DC ? [{ id: 'decor', name: '装饰', title: '装饰、夜灯和派对区', ids: DC.SHOP_IDS.slice() }] : []), // v5.7.0
+    ...(FXP ? [{ id: 'farmxp', name: '体验', title: '农场体验（住客和自驾游客来玩，按人收费）', ids: FXP.IDS.slice() }] : []), // v5.12.4
   ];
   const emptyUpgrades = () => Object.fromEntries(SHOP_IDS.filter(k => !SHOP.find(s => s.id === k).mach).map(k => [k, 0])); // v5.11.0.29: machines live in works.mach, not upgrades
   const shopItem = id => SHOP.find(s => s.id === id);
@@ -154,6 +163,8 @@
       house: lv('house'), fence: lv('fence') > 0,
       sprinkler: lv('sprinkler'), mill: lv('mill') > 0, jam: lv('jam') > 0, cheese: lv('cheese') > 0, pie: lv('pie') > 0, wheel: lv('wheel'), hive: lv('hive'), // v5.6.0; v5.10.9 pie
       town: TN ? lv('town') > 0 : false, // v5.8.0
+      eastave: EA ? lv('eastave') > 0 : false, vacbeach: EA ? lv('vacbeach') > 0 : false, // v5.12.2
+      ...(FXP ? Object.fromEntries(FXP.IDS.map(k => [k, lv(k) > 0])) : {}), // v5.12.4 农场体验
       cottage: HM ? lv('cottage') : 0, // v5.9.0
       coop2: lv('coop2') > 0, sty2: lv('sty2') > 0, fold2: lv('fold2') > 0, shed2: lv('shed2') > 0,
     };

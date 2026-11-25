@@ -9,8 +9,8 @@ const ov = (a, b) => a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
 const MOVED = { moved: 12 }, SINGLE = { moved: 0 };
 const allOpen = () => SIM.SHOP.filter(s => s.region).map(s => s.id);
 
-ok('map: 158x74 tiles (v5.8.0: +24 east for the town; v5.11.0: +46 more); old coordinates unchanged, the ring only adds bounds', () => {
-  const w = WD.WORLD; assert.strictEqual((w.x1 - w.x0) / 8 + 'x' + (w.y1 - w.y0) / 8, '158x74');
+ok('map: 198x74 tiles (v5.8.0: +24 east for the town; v5.11.0: +46 more; v5.12.2: +40 for 东门大道); old coordinates unchanged, the ring only adds bounds', () => {
+  const w = WD.WORLD; assert.strictEqual((w.x1 - w.x0) / 8 + 'x' + (w.y1 - w.y0) / 8, '198x74');
   assert(w.x0 < PL.OLD.x0 && w.y0 < PL.OLD.y0 && w.x1 > PL.OLD.x1 && w.y1 > PL.OLD.y1);
   assert.deepStrictEqual(WD.HOME, { x0: 0, y0: 0, x1: 192, y1: 128 });
   assert.strictEqual(WD.REGIONS.length, 6); assert.deepStrictEqual(WD.region('forest').rect, WD.region('forest').rect);
@@ -28,10 +28,12 @@ ok('layout: plots inside the world, apart from each other, the farm, the old reg
     if (p.field) { const f = p.field; assert(f.c0 * 8 >= r[0] && (f.c0 + f.cols) * 8 <= r[2] && f.r0 * 8 >= r[1] && (f.r0 + f.rows) * 8 <= r[3], 'field inside ' + p.id); assert(p.mods.includes('field')); assert(p.barrel, 'barrel ' + p.id); }
     if (p.special !== 'bridge') for (let x = r[0] + 2; x < r[2]; x += 4) for (let y = r[1] + 2; y < r[3]; y += 4) assert(PL.terrainAt(x, y) !== 'river', p.id + ' has river inside at ' + x + ',' + y);
   }
-  assert.strictEqual(PL.PLOTS.length, 16);
+  assert.strictEqual(PL.PLOTS.length, 17); // v5.12.1: + 宅园·度假村北
   const area = r => (r[2] - r[0]) * (r[3] - r[1]), small = Math.min(...WD.REGIONS.map(q => area(q.rect)));
-  assert(PL.PLOTS.every(p => area(p.rect) < 7800), 'small and medium: none as big as the old regions'); assert(PL.PLOTS.filter(p => area(p.rect) <= small * 0.75).length >= 8, 'at least half are small');
-  for (const id of ['field', 'pasture', 'orchard', 'meadow', 'woodland', 'workshop', 'dam', 'road', 'playground', 'resort']) assert(PL.PLOTS.some(p => p.mods.includes(id)), 'some plot offers ' + id);
+  assert(PL.PLOTS.filter(p => p.id !== 'nhome').every(p => area(p.rect) < 7800), 'small and medium: none as big as the old regions');
+  assert(area(PL.plot('nhome').rect) === 120 * 76, '宅园 is the planned 120×76');
+  assert(area(PL.plot('nhome').rect) < area(WD.region('east').rect), '宅园 is still smaller than 东田'); assert(PL.PLOTS.filter(p => area(p.rect) <= small * 0.75).length >= 8, 'at least half are small');
+  for (const id of ['field', 'pasture', 'orchard', 'meadow', 'woodland', 'workshop', 'dam', 'road', 'playground', 'resort', 'homestead']) assert(PL.PLOTS.some(p => p.mods.includes(id)), 'some plot offers ' + id);
   assert(!PL.PLOTS.some(p => p.mods.includes('inn')), 'v5.11.0.5: no plot offers 民宿院 any more (the 农家乐区 is its own ground)');
   assert.deepStrictEqual(PL.LEGACY_MODS, ['inn']);
   assert.deepStrictEqual(PL.PLOTS.find(p => p.id === 'play').mods, ['playground', 'meadow']);
@@ -167,11 +169,68 @@ ok('playground: kids who are not working can play on the slide, sandbox and swin
   assert(!KIDS.playTargets(Object.assign({}, ctx, { regions: [] })).some(t => t.kind === 'play-slide'), 'not bought: not played on');
   assert(!KIDS.playTargets(Object.assign({}, ctx, { playSpots: [] })).some(t => /slide|swing|sandbox/.test(t.kind)));
 });
-ok('homestead stub: only bought flat 花甸 / 农田 plots can later host a married child\'s house and small field', () => {
+ok('homestead: bought 花甸 / 农田 still host a house; a bought 宅园 adds its 4 pads', () => {
   assert.deepStrictEqual(PL.homesteadSites({}), []);
   const sites = PL.homesteadSites({ glade: { mod: 'meadow' }, eslope: { mod: 'field' }, play: { mod: 'playground' }, bridge: { mod: 'bridge' }, swbank: { mod: 'dam' } });
   assert.deepStrictEqual(sites.sort(), ['eslope', 'glade']);
   assert(PL.HOMESTEAD.tiles >= 6 && PL.HOMESTEAD.helpPerDay <= 2);
+  const pads = PL.homesteadSites({ nhome: { mod: 'homestead', day: 40 }, glade: { mod: 'meadow' } });
+  assert.deepStrictEqual(pads.filter(id => PL.isPadId(id)).sort(), ['nhome0', 'nhome1', 'nhome2', 'nhome3']);
+  assert(pads.includes('glade'));
+  assert(!pads.includes('nhome'), 'the plot itself is not a house site');
+});
+ok('v5.12.1 宅园·度假村北: measured rect occupies no existing lot, only 宅地, cannot rezone, 4 pads fit', () => {
+  const p = PL.plot('nhome');
+  assert(p); assert.deepStrictEqual(p.rect, [220, 124, 340, 200]);
+  assert.deepStrictEqual(p.mods, ['homestead']);
+  assert.strictEqual(p.gate.x, 340); assert.strictEqual(p.gate.y, 162);
+  for (const q of WD.REGIONS) assert(!ov(p.rect, q.rect), 'overlaps region ' + q.id);
+  for (const q of PL.PLOTS) if (q !== p) assert(!ov(p.rect, q.rect), 'overlaps plot ' + q.id);
+  assert.strictEqual(p.rect[1] - WD.region('east').rect[3], 8, 'gap south of 东田');
+  assert.strictEqual(WD.region('coast').rect[1] - p.rect[3], 12, 'south path down to 海边');
+  assert(p.rect[0] > WD.region('south').rect[2], 'east of 南坡');
+  assert(p.rect[2] < PL.plot('eshore').rect[0], 'west of 东南滩');
+  const o = PL.offer({}, 'nhome', 'homestead', 1e6, 999, MOVED);
+  assert(o.ok); assert.strictEqual(o.cost, 4800); assert.strictEqual(o.wood, 50);
+  assert.strictEqual(PL.offer({}, 'nhome', 'homestead', 1e6, 999, SINGLE).reason, 'gate');
+  assert.strictEqual(PL.offer({}, 'nhome', 'field', 1e6, 999, MOVED).reason, 'module');
+  const own = { nhome: { mod: 'homestead', day: 40 } };
+  assert.strictEqual(PL.rezoneOffer(own, 'nhome', 'field', 1e6, 999).reason, 'fixed');
+  assert.strictEqual(PL.rezoneOffer(own, 'nhome', 'meadow', 1e6, 999).reason, 'fixed');
+  assert.strictEqual(PL.rezoneOffer(own, 'nhome', 'homestead', 1e6, 999).reason, 'fixed');
+  const v = PL.validPlots({ nhome: { mod: 'homestead', day: 40 }, glade: { mod: 'field', day: 4 } });
+  assert.deepStrictEqual(v.nhome, { mod: 'homestead', day: 40 });
+  const HM = require('../home.js');
+  const feet = PL.HOME_PADS.map(pad => { const L = HM.layout(pad); assert(L.foot[0] >= p.rect[0] && L.foot[2] <= p.rect[2] && L.foot[1] >= p.rect[1] && L.foot[3] <= p.rect[3], pad.id + ' inside ' + L.foot); return L.foot; });
+  for (let i = 0; i < feet.length; i++) for (let j = i + 1; j < feet.length; j++) {
+    const a = feet[i], b = feet[j], overlap = a[0] < b[2] && b[0] < a[2] && a[1] < b[3] && b[1] < a[3];
+    // west/east feet may share the x=280 line; they must not overlap in area
+    assert(!(a[0] < b[2] - 0.01 && b[0] < a[2] - 0.01 && a[1] < b[3] - 0.01 && b[1] < a[3] - 0.01), 'pads overlap ' + PL.HOME_PADS[i].id + ' ' + PL.HOME_PADS[j].id);
+  }
+});
+ok('v5.12.1 path: locked 宅园 is fenced; bought, the east road and south path to 海边 open; a house on a pad still leaves the middle road', () => {
+  const mid = { x: 280, y: 163 }, fromRoad = { x: 352, y: 150 }, beach = { x: 280, y: 220 };
+  const locked = NAV.build({ trees: [], regions: allOpen(), pens: {}, fence: false, houseTier: 0, graze: false, plots: {} });
+  assert(!NAV.route(locked, fromRoad, mid).reached, 'locked: cannot enter');
+  const plots = { nhome: { mod: 'homestead', day: 40 } };
+  const noCoastRegs = allOpen().filter(id => id !== 'coast').concat(['nhome']);
+  const bought = NAV.build({ trees: [], regions: noCoastRegs, pens: {}, fence: false, houseTier: 0, graze: false, plots });
+  const inLot = NAV.route(bought, fromRoad, mid);
+  assert(inLot.reached, 'bought: east gate opens from the existing road');
+  assert(inLot.length < 80, 'short spur from the road ' + inLot.length);
+  const noCoast = NAV.route(bought, mid, beach);
+  assert(!noCoast.reached, '海边 not bought: south fence of 海边 stays shut');
+  const both = NAV.build({ trees: [], regions: noCoastRegs.concat(['coast']), pens: {}, fence: false, houseTier: 0, graze: false, plots });
+  const down = NAV.route(both, mid, beach);
+  assert(down.reached, 'both bought: walk down to 海边');
+  assert(down.length < 80, 'south path is the short way ' + down.length);
+  const HM = require('../home.js');
+  const pad = PL.padOf('nhome0'), L = HM.layout(pad);
+  const withHouse = NAV.build({ trees: [], regions: noCoastRegs.concat(['coast']), pens: {}, fence: false, houseTier: 0, graze: false, plots, blocks: [L.block] });
+  const past = NAV.route(withHouse, fromRoad, { x: 302, y: 163 });
+  assert(past.reached, 'a house on the NW pad does not cut the middle road');
+  const door = NAV.route(withHouse, fromRoad, L.door);
+  assert(door.reached, 'door of the NW pad is reachable from the east road');
 });
 ok('achievement: the first play in the playground unlocks 童年 DNA 动了', () => {
   const CX = require('../codex.js');

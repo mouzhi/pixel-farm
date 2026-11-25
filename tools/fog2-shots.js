@@ -6,7 +6,7 @@ const ROOT = path.join(__dirname, '..'), OUT = process.env.PF_SHOTS || '/workspa
 const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.png': 'image/png', '.json': 'application/json' };
 const server = http.createServer((req, res) => { const p = path.join(ROOT, decodeURIComponent(req.url.split('?')[0]).replace(/^\/+/, '') || 'index.html'); if (!fs.existsSync(p) || fs.statSync(p).isDirectory()) { res.writeHead(404); return res.end(); } res.writeHead(200, { 'content-type': TYPES[path.extname(p)] || 'application/octet-stream' }); fs.createReadStream(p).pipe(res); });
 const only = process.argv[2] || null;
-const VER = '5.12.0';
+const VER = '5.12.6';
 const FIX = path.join(__dirname, 'fixtures', 'save-v15-day72-cottage.json');
 const readSave = f => { const t = fs.readFileSync(f, 'utf8'); const s = JSON.parse(t); return s.save || s; };
 fs.mkdirSync(OUT, { recursive: true });
@@ -121,7 +121,7 @@ fs.mkdirSync(OUT, { recursive: true });
     r => or(!r.opened ? 'town not bought' : null, !r.fading ? 'no reveal' : null, r.s0 < 0.9 ? 'town not solid before ' + r.s0 : null, !(r.sMid > 0.1 && r.sMid < 0.85) ? 'mid-reveal solid share ' + r.sMid : null,
       r.agri.some(q => q < 1) ? 'the 农家乐区 opened up mid reveal ' + r.agri : null, !(r.hMid < r.h0) ? 'nothing came out mid reveal ' + r.h0 + '>' + r.hMid : null, blindBad(r.blind, 100)), null, wide);
   await shot('fog2_town_open.png', `(() => { ${helpers} at(10 * 60); dry(); look(640, 40, 0); f.render(); const h0 = f.fogHidden(); openTown(); f.advance(2.2, 10); hide(); f.render();
-      const r = fog(); r.h0 = h0; r.h1 = f.fogHidden(); r.sEnd = ${townCells}; r.town = [f.fogAlpha(792, 40), f.fogAlpha(700, 200), f.fogAlpha(950, -150), f.fogAlpha(1100, -300)]; r.road = [f.fogAlpha(520, 66), f.fogAlpha(570, 66)]; r.blind = blind(); r.jumps = jumps(); r.hint = f.fogHint('agri'); return r; })()`,
+      const r = fog(); r.h0 = h0; r.h1 = f.fogHidden(); r.sEnd = ${townCells}; r.town = [f.fogAlpha(792, 40), f.fogAlpha(700, 200), f.fogAlpha(950, -150), f.fogAlpha(990, -300)]; r.road = [f.fogAlpha(520, 66), f.fogAlpha(570, 66)]; r.blind = blind(); r.jumps = jumps(); r.hint = f.fogHint('agri'); return r; /* v5.12.2: 1100,-300 is now the eastave bank */ })()`,
     r => or(r.fading ? 'still revealing' : null, r.shut.town || !r.shut.agri ? 'shut ' + JSON.stringify(r.shut) : null, r.sEnd !== 0 || r.town.some(q => q) ? 'town still clouded ' + r.sEnd + ' ' + r.town : null,
       r.road.some(q => q) ? 'the road through the 农家乐区 is clouded ' + r.road : null, !(r.h1 < r.h0) ? 'town objects not drawn ' + r.h0 + '>' + r.h1 : null, blindBad(r.blind),
       r.jumps.town !== 'open' || !/^locked:/.test(r.jumps.agri) ? 'jumps ' + JSON.stringify(r.jumps) : null, !/现在 1/.test(r.hint || '') ? 'hint ' + r.hint : null), null, wide);

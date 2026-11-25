@@ -34,6 +34,10 @@
     { id: 'inn', t: '民宿迎来第一组客人', line: '远道而来的客人住进了小木屋。', hint: '在农家乐区盖一间小木屋', who: ['farmer'], at: 'inn' },
     { id: 'wedding', t: '孩子的婚礼', line: '{kid}和{mate}走到了一起，今晚办婚礼。', hint: '孩子长大以后', who: ['farmer', 'partner'], at: 'wedding' },
     { id: 'newhouse', t: '搬进新房', line: '新房子的灯第一次亮了，小两口住了进去。', hint: '孩子成家以后', who: [], at: 'newhouse' },
+    { id: 'xpphoto', t: '留影角的第一张合影', line: '游客站在稻草人和花架前比了个手势，咔嚓。', hint: '在农家乐搭一个留影角', who: [], at: 'photo' }, // v5.12.4
+    { id: 'g3born', t: '第一个孙辈', line: '新房子里添了个小娃娃，农场有了第三代。', hint: '成家的孩子也会有孩子', who: [], at: 'newhouse' }, // v5.12.5
+    { id: 'g3wed', t: '孙辈的婚礼', line: '第三代也在新房子门前成了家。', hint: '孙辈长大以后', who: [], at: 'newhouse' }, // v5.12.5
+    { id: 'tourbus', t: '第一辆旅游大巴', line: '大巴稳稳停进东门停车场，游客一个接一个下了车。', hint: '修好东门大道，再盖一间民宿', who: [], at: 'bus' }, // v5.12.6
   ];
   const BY = Object.fromEntries(MOMENTS.map((m, i) => [m.id, Object.assign({ i }, m)]));
   const ID = /^[a-z][a-z0-9]{0,11}$/, WHO = /^[a-z][a-z0-9]{0,9}$/;
