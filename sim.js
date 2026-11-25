@@ -117,7 +117,7 @@
     // v5.8.0 phase 10 (rules in town.js): the town east of 东大道; its gate opens once the road is bought and a child has been to school
     ...(TN ? [{ id: 'town', p10: 1, name: '隔壁镇子', icon: 'town', levels: [{ cost: TN.PRICE.cost, wood: TN.PRICE.wood, label: '打开镇门', desc: '东大道尽头的镇子：学校、小店（工坊货、蜂蜜和鱼多卖两成）、几户人家；孩子改去镇上的学校' }] }] : []),
     // v5.12.2: 东门大道 and 度假沙滩 are two separate purchases (rules in east.js)
-    ...(EA ? [{ id: 'eastave', p12: 1, name: '东门大道', icon: 'eastave', levels: [{ cost: EA.PRICE_AVE.cost, wood: EA.PRICE_AVE.wood, label: '东门大道', desc: '从东门再往东修一条石板大道，南侧是停车场。平时有私家车来回，一部分车会停进场，游客走进镇子；买了度假沙滩以后也能从停车场下到东段沙滩。要先开镇门，并且繁荣度到 5。不附赠沙滩' }] }] : []),
+    ...(EA ? [{ id: 'eastave', p12: 1, name: '东门大道', icon: 'eastave', levels: [{ cost: EA.PRICE_AVE.cost, wood: EA.PRICE_AVE.wood, label: '东门大道', desc: '从东门再往东修一条石板大道，南侧是停车场。平时有私家车来回，一部分车会停进场，游客走进镇子；盖好民宿以后每天还有一辆旅游大巴停进南排的大巴位（繁荣度 6 时两辆）；买了度假沙滩以后也能从停车场下到东段沙滩。要先开镇门，并且繁荣度到 5。不附赠沙滩' }] }] : []),
     ...(EA ? [{ id: 'vacbeach', p12: 1, name: '度假沙滩', icon: 'vacbeach', levels: [{ cost: EA.PRICE_BEACH.cost, wood: EA.PRICE_BEACH.wood, label: '度假沙滩', desc: '把栈桥以东的南海岸清出来做成公共沙滩：加宽沙带，摆上遮阳伞和躺椅、一座救生塔、木栈道和两处落日台。要先开镇门并买下海边，不必先买东门大道。没修大道时沙滩先开到现在的地图东缘，修了大道以后同一条滩会接到停车场' }] }] : []),
     // v5.9.0 phase 11 (rules in home.js): a smaller house on a bought 花甸 / 农田 plot, for a grown child who marries
     ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i >= 2 ? `第${'三四五六'[i - 2]}座新房子` : i ? '第二座新房子' : '新房子',
