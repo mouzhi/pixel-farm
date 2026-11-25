@@ -40,6 +40,8 @@ fs.mkdirSync(OUT, { recursive: true });
     return { cls: inv.className, w: Math.round(r.width), h: Math.round(r.height), y: Math.round(r.y), vh: innerHeight, slots, tog: !!inv.querySelector('.invtog'), pref: localStorage.getItem('mouzhi/pixel-farm:ui:inv') }; })()`;
   // every icon is one picture drawn at an integer scale (32px for 16px art) and not a strip of the sprite sheet
   const icoBad = r => { for (const s of r.slots) { if (!s.ico) return 'no icon ' + s.name; if (!s.ico.bg) return 'blank icon ' + s.name; if (/px 0px|^-/.test(s.ico.pos) && !/^0px|50%/.test(s.ico.pos)) return 'sheet offset ' + s.name + ' ' + s.ico.pos; if (/\d+px \d+px/.test(s.ico.size) && parseInt(s.ico.size) > 48) return 'sheet size ' + s.name + ' ' + s.ico.size; } return null; };
+  // v5.12.3: the bar re-renders on a timer, so a slot can be swapped out between locating it and reading its box (run 45358420743): retry
+  const slotBox = async (p, i) => { for (let k = 0; k < 10; k++) { const b = await p.locator('#inv .slot').nth(i < 0 ? (await p.locator('#inv .slot').count()) + i : i).boundingBox(); if (b) return b; await p.waitForTimeout(60); } throw new Error('slot ' + i + ' has no box'); };
   const run = async (name, fn) => { if (only && !name.includes(only)) return; try { await fn(); } catch (e) { fails.push(name + ': ' + e.message); console.log('FAIL', name, e.stack); } };
 
   // 1. a new player: every seed kind in the bag, labels under the icons, the can meter
@@ -51,7 +53,7 @@ fs.mkdirSync(OUT, { recursive: true });
     check('early', icoBad(r) || (seeds.length < 5 ? 'seed slots ' + seeds.length : null) || (!/full/.test(r.cls) ? 'mode ' + r.cls : null) || (seeds.some(s => !s.label) ? 'labels hidden early' : null) || (!r.slots[0].meter ? 'no can meter' : null) || (new Set(r.slots.map(s => s.top)).size !== 1 ? 'rows' : null), { cls: r.cls, w: r.w, h: r.h, slots: r.slots.map(s => s.name + ' ' + s.n + ' ' + s.ico.size) });
     // tooltip on hover: name + count + the long text
     const tipSlot = r.slots.findIndex(s => s.name === '胡萝卜种');
-    if (CHECK) { const box = await p.locator('#inv .slot').nth(tipSlot).boundingBox(); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(250);
+    if (CHECK) { const box = await slotBox(p, tipSlot); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(250);
       const t = await p.evaluate(() => { const e = document.getElementById('invTip'); if (!e || e.hidden) return null; const q = e.getBoundingClientRect(), s = document.querySelector('#inv').getBoundingClientRect(); return { text: e.textContent, above: q.bottom <= s.top + 2, inView: q.left >= 0 && q.right <= innerWidth && q.top >= 0 }; });
       await shot(p, 'early_tooltip', 110);
       check('early_tooltip', !t ? 'no tooltip' : !/胡萝卜/.test(t.text) || !/天成熟/.test(t.text) ? 'text ' + t.text : !t.above ? 'not above the bar' : !t.inView ? 'off screen' : null, t);
@@ -70,7 +72,7 @@ fs.mkdirSync(OUT, { recursive: true });
       const fam = o.slots.filter(s => s.name === '家人'), kidSlots = o.slots.filter(s => /小豆|小米/.test(s.name));
       check('late_open (compact)', !/compact/.test(o.cls) ? 'mode ' + o.cls : o.pref !== 'open' ? 'pref ' + o.pref : o.slots.some(s => s.w > 48 || s.h > 48) ? 'slots big' : o.slots.some(s => s.label) ? 'labels shown' : fam.length !== 1 ? 'family slots ' + fam.length : kidSlots.length ? 'kid slots ' + kidSlots.length : !o.slots.some(s => s.name === '仓库') ? 'no storehouse slot' : !o.slots[0].meter ? 'no meter' : icoBad(o), { w: o.w, h: o.h, slots: o.slots.map(s => s.name + ' ' + s.n) });
       // hover the family slot: kids and jobs are in the tooltip
-      const fi = o.slots.findIndex(s => s.name === '家人'); const box = await p.locator('#inv .slot').nth(fi).boundingBox(); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(250);
+      const fi = o.slots.findIndex(s => s.name === '家人'); const box = await slotBox(p, fi); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(250);
       const t = await p.evaluate(() => { const e = document.getElementById('invTip'); return e && !e.hidden ? e.textContent : ''; }); await shot(p, 'late_tooltip', 140);
       check('late_tooltip (family)', /小豆/.test(t) && /小米/.test(t) ? null : 'text ' + t, { t: t.slice(0, 120) });
       // the storehouse slot opens the storehouse
@@ -114,7 +116,7 @@ fs.mkdirSync(OUT, { recursive: true });
         if (!save) await p.evaluate(() => { const F = __farm.FARMER; F.bag.carrot = 7; F.bag.cabbage = 3; F.bag.pumpkin = 1; F.bag.strawberry = 2; F.bag.watermelon = 27; __farm.refreshUI(); });
         const r = await p.evaluate(layout);
         let tip = null;
-        if (CHECK && nm !== 'late_slim') { const n = await p.locator('#inv .slot').count(), box = await p.locator('#inv .slot').nth(n - 1).boundingBox(); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(200);
+        if (CHECK && nm !== 'late_slim') { const box = await slotBox(p, -1); await p.mouse.move(box.x + box.width / 2, box.y + box.height / 2); await p.waitForTimeout(200);
           tip = await p.evaluate(() => { const e = document.getElementById('invTip'); if (!e || e.hidden) return null; const q = e.getBoundingClientRect(); return q.left >= 0 && q.right <= innerWidth && q.top >= 0; }); }
         await shot(p, 'size_' + tag + '_' + nm, nm === 'late_slim' ? 30 : 120);
         check('size ' + tag + ' ' + nm, !r.inView ? 'bar off screen' : r.rows !== 1 ? 'rows ' + r.rows : r.hit.length ? 'overlaps ' + r.hit.join('/') : (tip === false ? 'tooltip off screen' : tip === null && nm !== 'late_slim' && CHECK ? 'no tooltip' : null), Object.assign(r, { tip }));

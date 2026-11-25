@@ -94,7 +94,8 @@
     for (const id of Object.keys(o)) { const p = path[o[id]]; if (shopReady(p, day == null ? (p && p.ready) || 1 : day)) return 1; }
     return 0;
   };
-  const townLv = (hall, lots, path, day) => prosperity(hall) + lvBonus(lots, path, day);
+  // v5.12.3: a child's shop lifts the town once but not past 5; 6 (旅游小镇) only comes with the park and the tourists (hall.js)
+  const townLv = (hall, lots, path, day) => { const p = prosperity(hall); return p >= 6 ? 6 : Math.min(5, p + lvBonus(lots, path, day)); };
 
   // ---------- path records ----------
   // { way, at, kind, day, ready, pending, free, chg }

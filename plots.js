@@ -28,6 +28,7 @@
     trail: { name: '山道', icon: 'trail', desc: '一条弯弯的上山小路，通向山顶的两块地', now: '路障拆掉，能上山了' },
     inn: { name: '空院子', icon: 'inn', desc: '以前的民宿院。民宿已经搬到镇门口的农家乐区，这块地空出来了，可以免费改建一次', now: '一片空院子' }, // v5.11.0.5: legacy only (no plot offers it any more)
     resort: { name: '度假村', icon: 'resort', desc: '东南滩改成度假村后，这块地上能盖度假小别墅和帐篷露营地，并且小路通到海边；海边还能盖沙滩小屋、遮阳伞、海鲜摊、游客栈桥和日落观景台（商店「农家乐」里买，要先买下海边，繁荣度 3）', now: '一条通向沙滩的小路，能盖度假小别墅和帐篷营地' },
+    homestead: { name: '宅地', icon: 'homestead', desc: '专给成家的孩子盖新房子。买下后地上有 4 个固定房基，中间一条短土路，南边小路通到海边。不能改成农田或花甸', now: '4 个房基、中间一条土路，南边小路通到海边' },
   };
   const MODULE_IDS = Object.keys(MODULES);
   // v5.11.0.5: modules no plot offers any more but an old save may still hold. validPlots keeps them (it would otherwise turn
@@ -113,6 +114,12 @@
       mods: ['orchard', 'woodland'], desc: '山顶上的高地，风大，只适合果园或林地' },
     { id: 'alp', name: '高山牧场', terrain: 'high', rect: [228, -202, 350, -168], gate: P(228, -184), sign: P(236, -168), price: 3600, needs: 'trail',
       mods: ['pasture', 'meadow', 'woodland'], desc: '山上的一片缓坡草地' },
+    // v5.12.1: 宅园·度假村北. 220..340, 124..200 sits in the unclaimed wood between 东田 (south fence y 116),
+    // 海边 (north fence y 212), 南坡梯田 (east edge x 184) and 东南滩 (west edge x 362). Measured so it occupies
+    // no existing lot. 4 fixed house pads (existing cottage footprint, two rows of two) plus a short middle
+    // dirt road; the south strip y 200..212 stays a path down to the old beach, with no houses on it.
+    { id: 'nhome', name: '宅园·度假村北', terrain: 'flat', rect: [220, 124, 340, 200], gate: P(340, 162), sign: P(348, 154), price: 4800, wood: 50,
+      mods: ['homestead'], desc: '度假村正北的空林，专做宅地：4 个固定房基给成家的孩子盖新房子，不能改成农田或花甸。东门连上已有的土路，南边小路下到海边' },
   ];
   // a 农田 gets a tile block centred in the plot, and a water barrel in the corner farthest from its gate
   for (const p of PLOTS) if (p.field) { const [x0, y0, x1, y1] = p.rect, f = p.field;
@@ -142,6 +149,7 @@
     x_north: [P(-20, 22), P(-20, -130), P(-30, -130)],
     x_trail0: [P(200, -40), P(204, -110)],
     x_neslope: [P(204, -106), P(240, -106), P(240, -112)],
+    x_nhome: [P(352, 150), P(352, 162), P(340, 162)], // v5.12.1: spur from the existing east road to the 宅园 east gate
   };
   // inside a bought road plot the road runs on to the town gate at the map edge
   const TOWN = { gate: P(596, 66), lane: [P(362, 66), P(596, 66)], roofs: [] }; // v5.8.0: the town is real now (town.js / town-art.js); no far-off roofs
@@ -151,16 +159,26 @@
   // The map does not grow. The west gate stays the road in; this is only the beach connection.
   const RESORT_JOIN = { lot: P(376, 200), beach: P(344, 220), path: [P(376, 200), P(360, 208), P(344, 220), P(332, 236)] };
   const resortOpen = plots => !!(plots && plots.eshore && plots.eshore.mod === 'resort');
+  // v5.12.1: south opening of 宅园 and a short path down to the north fence of 海边 (y 200..212, no houses)
+  const HOME_JOIN = { lot: P(280, 200), beach: P(280, 212), path: [P(280, 200), P(280, 212)] };
+  // internal dirt: east-west spine between the two rows, and a thin south lane along the doors of the south pair
+  const HOME_LANES = [[P(228, 163), P(340, 163)], [P(228, 196), P(332, 196)], [P(280, 196), P(280, 200)]];
+  const homesteadOpen = plots => !!(plots && plots.nhome && plots.nhome.mod === 'homestead');
   const plotOpenings = (p, plots) => {
     const out = [p.gate];
     if (p && p.id === 'eshore' && resortOpen(plots)) out.push(RESORT_JOIN.lot);
+    if (p && p.id === 'nhome' && homesteadOpen(plots)) out.push(HOME_JOIN.lot);
     return out;
   };
   const nearJoin = (x, y, pt, r) => Math.hypot(x - pt.x, y - pt.y) < (r == null ? 12 : r);
-  const joinDist = (x, y) => {
-    let d = 1e9; const line = RESORT_JOIN.path;
+  const joinDist = (x, y, which) => {
+    const line = which === 'home' ? HOME_JOIN.path : RESORT_JOIN.path;
+    let d = 1e9;
     for (let i = 0; i < line.length - 1; i++) d = Math.min(d, segDist(x, y, line[i].x, line[i].y, line[i + 1].x, line[i + 1].y));
     return d;
+  };
+  const homeLaneDist = (x, y) => {
+    let d = 1e9; for (const line of HOME_LANES) d = Math.min(d, polyDist(x, y, line)); return d;
   };
 
   // ---------- the grazing meadow behind the sheep fold (a fold upgrade, not a plot) ----------
@@ -258,14 +276,28 @@
     return out;
   }
 
-  // ---------- phase 11 hook (stub): a married child's homestead ----------
-  // Not playable yet: marriage needs the new house (placeables, phase 8/9) and a partner from the party / town (phases 9-10).
-  // What phase 7 fixes now is WHERE such a household can go: a bought flat plot left as 花甸 or 农田 next to the farm, where the new
-  // house plus 6-8 field tiles fit. The rules below are the roadmap's draft numbers so phase 11 can build on them unchanged.
-  const HOMESTEAD = { tiles: 6, helpPerDay: 2, helpMinutes: 60, mods: ['meadow', 'field'], terrains: ['flat', 'across', 'slope'] };
+  // ---------- a married child's homestead ----------
+  // Houses still go on a bought 花甸 / 农田 plot (one house a plot). v5.12.1 adds a dedicated 宅地 plot with 4 fixed
+  // pads: existing gen-2 houses stay where they are; new or moved houses snap onto a free pad. Pad ids (nhome0..)
+  // are home sites, not plot ids. The numbers (6 tiles, help at most twice a day) are unchanged.
+  // Pad anchors: two rows of two, gardens to the outside, a 16-unit dirt road between the rows. Feet stay inside
+  // 220..340, 124..200 (west pair mirrored).
+  const HOME_PADS = [
+    { id: 'nhome0', name: '西北', x: 258, y: 142, m: 1 },
+    { id: 'nhome1', name: '东北', x: 302, y: 142, m: 0 },
+    { id: 'nhome2', name: '西南', x: 258, y: 180, m: 1 },
+    { id: 'nhome3', name: '东南', x: 302, y: 180, m: 0 },
+  ];
+  const isPadId = id => /^nhome[0-3]$/.test(id);
+  const padOf = id => HOME_PADS.find(p => p.id === id) || null;
+  const padPlot = id => isPadId(id) ? 'nhome' : id;
+  const HOMESTEAD = { tiles: 6, helpPerDay: 2, helpMinutes: 60, mods: ['meadow', 'field', 'homestead'], terrains: ['flat', 'across', 'slope'],
+    plot: 'nhome', pads: HOME_PADS, maxPads: 4, maxHouses: 6 };
+  function homesteadPads(plots) { return homesteadOpen(plots) ? HOME_PADS.map(p => p.id) : []; }
   function homesteadSites(plots) {
-    return Object.keys(plots || {}).filter(id => { const p = plot(id), q = plots[id];
-      return !!(p && q && !p.special && HOMESTEAD.mods.includes(q.mod) && HOMESTEAD.terrains.includes(p.terrain)); });
+    const out = Object.keys(plots || {}).filter(id => { const p = plot(id), q = plots[id];
+      return !!(p && q && !p.special && p.id !== 'nhome' && HOMESTEAD.mods.includes(q.mod) && HOMESTEAD.terrains.includes(p.terrain)); });
+    return out.concat(homesteadPads(plots));
   }
 
   // ---------- navigation: paints on a path.js grid (H: the grid helpers, so this file does not depend on path.js) ----------
@@ -310,10 +342,20 @@
       H.carveDisc(g, RESORT_JOIN.lot.x, RESORT_JOIN.lot.y, 5, H.DIRT);
       H.carveDisc(g, RESORT_JOIN.beach.x, RESORT_JOIN.beach.y, 5, H.DIRT);
     }
+    // v5.12.1: inside 宅园, the middle road and the south lane; the path down to 海边 opens when both lots are bought
+    if (homesteadOpen(o.plots) && open.includes('nhome')) {
+      for (const line of HOME_LANES) for (let i = 0; i < line.length - 1; i++) H.paintSeg(g, line[i].x, line[i].y, line[i + 1].x, line[i + 1].y, 3.2, H.DIRT);
+      H.carveDisc(g, HOME_JOIN.lot.x, HOME_JOIN.lot.y, 5, H.DIRT);
+      if (open.includes('coast')) {
+        const line = HOME_JOIN.path;
+        for (let i = 0; i < line.length - 1; i++) H.paintSeg(g, line[i].x, line[i].y, line[i + 1].x, line[i + 1].y, 3.2, H.DIRT);
+        H.carveDisc(g, HOME_JOIN.beach.x, HOME_JOIN.beach.y, 5, H.DIRT);
+      }
+    }
   }
 
   const api = { MODULES, MODULE_IDS, TERRAIN, RIVER, RIVER_HW, BANK, BRIDGE, TRAIL, TRAIL_TOP, TRAIL_EAST, TOWN, GRAZE, PLOTS, PLOT_IDS, FIELD_PLOT_IDS, ROUTES, OLD, CLIFF,
     plot, isPlotId, plotAt, terrainAt, clearAt, outer, riverDist, riverHW, riverNear, riverAt, RIVER_LEN, wheelSite, WHEEL_IN, ridgeY, onTrail, polyDist, grazeHours,
-    gateOpen, workers, offer, rezoneOffer, LEGACY_MODS, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, navPaint, navCarve, RESORT_JOIN, resortOpen, plotOpenings, nearJoin, joinDist };
+    gateOpen, workers, offer, rezoneOffer, LEGACY_MODS, setupOf, emptyPlots, validPlots, modsText, plotsOfMod, woodlandTrees, woodlandOf, playSpots, HOMESTEAD, homesteadSites, homesteadPads, homesteadOpen, isPadId, padOf, padPlot, HOME_PADS, HOME_JOIN, HOME_LANES, homeLaneDist, navPaint, navCarve, RESORT_JOIN, resortOpen, plotOpenings, nearJoin, joinDist };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFPlots = api;
 })(typeof window !== 'undefined' ? window : globalThis);

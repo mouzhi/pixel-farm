@@ -7,6 +7,8 @@
 //   小镇    open once the town is bought (S.eff.town, the shop item `town`, gated by town.js gate()),
 //   农家乐区 open once the town is open and its prosperity reaches the inn's PROSPERITY (3), or as soon as any lodging exists
 //           (an old 民宿院 plot, a cabin or the diner), so saves that already run an inn never see a shade.
+//   东门大道 open once the shop item `eastave` is bought (town open + prosperity 5).
+//   度假沙滩 is not a fog bank (the shore stays a dense wood until bought); the jump button uses locked().vacbeach.
 // The starting farm and the bought / buyable farm regions and ring plots are never shaded (they keep their padlock signs).
 // game.js owns the canvas and the fade; this file builds the cell field and the hint text.
 'use strict';
@@ -16,13 +18,15 @@
   const WD = root.PFWorld || (typeof require === 'function' ? require('./world.js') : null);
   const IN = root.PFInn || (typeof require === 'function' && typeof document === 'undefined' ? require('./inn.js') : null);
   // the shaded grid: world units, one cell per world unit (2 screen px), covering the east strip and a little west of it
-  const CELL = 1, BOUNDS = [440, -208, 1008, 384];
+  const CELL = 1, BOUNDS = [440, -208, 1328, 384]; // v5.12.2: +40 tiles east (the new 东门大道 sits under its own lock)
   const GW = (BOUNDS[2] - BOUNDS[0]) / CELL, GH = (BOUNDS[3] - BOUNDS[1]) / CELL;
   const SPLIT = TN ? TN.GATE.x : 596;                          // the town gate: 农家乐区 to the west, the town to the east
   const STRIP_X0 = TN ? TN.STRIP[0] : 448;                     // the old map edge; nothing west of it is ever shaded
+  const OLD_X1 = 1008; // the v5.11.0 east edge: the town's fog still ends here, so opening the town does not reveal 东门大道
   const ZONES = [
     { id: 'agri', name: '农家乐区', rect: [STRIP_X0, BOUNDS[1], SPLIT, BOUNDS[3]], label: P(520, 26) },
-    { id: 'town', name: '小镇', rect: [SPLIT, BOUNDS[1], BOUNDS[2], BOUNDS[3]], label: P(792, 8) },
+    { id: 'town', name: '小镇', rect: [SPLIT, BOUNDS[1], OLD_X1, BOUNDS[3]], label: P(792, 8) },
+    { id: 'eastave', name: '东门大道', rect: [OLD_X1, BOUNDS[1], BOUNDS[2], BOUNDS[3]], label: P(1160, 40) },
   ];
   const ZONE_IDS = ZONES.map(z => z.id);
   const FEATHER = 20;           // world units of dithered edge
@@ -41,7 +45,8 @@
   //        road: 东大道 bought as a road, schoolDays, plots }
   function locked(ctx) {
     const c = ctx || {}, town = !!c.town;
-    return { town: !town, agri: !(c.inn || (town && (c.lv | 0) >= PROSPERITY)), beach: !c.coast };
+    return { town: !town, agri: !(c.inn || (town && (c.lv | 0) >= PROSPERITY)), beach: !c.coast,
+      eastave: !c.eastave, vacbeach: !c.vacbeach }; // v5.12.2: 东门大道 and 度假沙滩 are bought separately
   }
   // one line saying what opens the district (shown on tap, on hover and on the dimmed jump button)
   function hint(id, ctx) {
@@ -58,6 +63,18 @@
         : `农家乐区还没开放：小镇繁荣度到 ${PROSPERITY} 就开放（现在 ${c.lv | 0}，先把集市和面包房盖好）`;
     }
     if (id === 'beach') return L.beach ? '海边还没买下：在商店买「海边」' : null;
+    if (id === 'eastave') {
+      if (!L.eastave) return null;
+      if (!c.town) return '东门大道还没开放：先打开镇门，繁荣度到 5 后再到商店买「东门大道」（25000 金 + 150 木）';
+      if ((c.lv | 0) < 5) return '东门大道还没开放：繁荣度到 5 后再到商店买「东门大道」（25000 金 + 150 木；现在繁荣度 ' + (c.lv | 0) + '）';
+      return '东门大道还没买下：到商店买「东门大道」（25000 金 + 150 木）';
+    }
+    if (id === 'vacbeach') {
+      if (!L.vacbeach) return null;
+      if (!c.town) return '度假沙滩还没开放：先打开镇门，并买下「海边」，再到商店买「度假沙滩」（20000 金 + 100 木）';
+      if (!c.coast) return '度假沙滩还没开放：先在商店买下「海边」，再买「度假沙滩」（20000 金 + 100 木）';
+      return '度假沙滩还没买下：到商店买「度假沙滩」（20000 金 + 100 木；不必先买东门大道）';
+    }
     return null;
   }
   const inRect = (x, y, r) => x >= r[0] && x < r[2] && y >= r[1] && y < r[3];

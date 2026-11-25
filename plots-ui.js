@@ -24,6 +24,7 @@
     trail: pixIcon(pad(['        ss', '       sssss', '      sss d s', '     sss dd ss', '    sss dd  sss', '   sss  dd  ssss', '  sss    dd sssss', ' sss     dd ssss', 'gggggggggddggggg']), { s: st[1], d: wd[4], g: gr[3] }),
     inn: pixIcon(pad(['', '   rrrr    rrrr', '  rwwwwr  rwwwwr', '  rwbwwr  rwbwwr', '  rwwwwr  rwwwwr', '  rwwdwr  rwwdwr', '  rwwwwr  rwwwwr', ' sssssssssssssss']), { r: rf[2], w: wd[4], b: wt[4], d: wd[1], s: wd[3] }),
     resort: pixIcon(pad(['', ' u    u    u', ' uuu  uuu  uuu', '  s    s    s', '  s    s    s', 'ssssssssssssssss', ' s  ss  ss  ss', ' wwwwwwwwwwwwww', ' WwWwWwWwWwWwWw']), { u: ac[1], s: wd[4], w: wt[3], W: wt[4] }),
+    homestead: pixIcon(pad(['', '     rrrr', '    rwwwwr', '    rwbwwr', '    rwwdwr', '    rwwwwr', '   ssssssss', '  ssssssssss', ' gggggggggggggg']), { r: rf[2], w: wd[4], b: wt[4], d: wd[1], s: st[2], g: gr[3] }),
   };
   const icon = mod => `<i style="background:url(${ICON[mod] || ICON.field});background-size:32px;image-rendering:pixelated"></i>`;
   const nameOf = id => (PL.plot(id) || {}).name || id;
@@ -59,7 +60,7 @@
     }
     const cur = PL.MODULES[own.mod];
     out += `<div class="card max">${icon(own.mod)}<div class="ct"><div><b>现在：${esc(cur.name)}</b> <span class="lv">第 ${own.day} 天买下</span></div><div class="d">${esc(cur.desc)}</div></div><div class="cb"><span class="done">✓</span></div></div>`;
-    if (p.mods.length < 2) return out + `<div class="d">这块地只有一种用途</div>`;
+    if (p.mods.length < 2) return out + `<div class="d">${p.id === 'nhome' ? '这块地只能做宅地，预留了 4 个房基，不能改成农田或花甸' : '这块地只有一种用途'}</div>`;
     const busy = G.plotBusy && G.plotBusy(id); if (busy) return out + `<div class="d">${esc(busy)}</div>`; // v5.6.0
     const crops = G.tiles.filter(t => t.f === id && t.crop).length, trees = G.S.trees.filter(t => t.id.startsWith('x' + id) && t.stage === 'tree').length;
     const wsNote = G.worksVacateNote && G.worksVacateNote(id); if (wsNote) out += `<div class="d ws-note">${esc(wsNote)}</div>`; // v5.10.12
