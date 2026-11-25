@@ -24,6 +24,7 @@ function makeSave() {
   for (let i = 0; i < 9; i++) { const a = i / 9 * Math.PI * 2; add(RING.x + Math.cos(a) * 10, RING.y + Math.sin(a) * 8, 'ring' + i); }
   add(BOX.x, BOX.y, 'boxed'); for (let i = 0; i < 8; i++) { const a = i / 8 * Math.PI * 2; add(BOX.x + Math.cos(a) * 10, BOX.y + Math.sin(a) * 8, 'box' + i); }
   for (const y of [-96, -84, -48]) add(5, y, 'west' + y); // hard against the west fence: the old stand spot (8 west of the trunk) is outside it
+  add(184, -62, 'huttree'); // east end beside the lumber hut (170, -61): old stand (176, -60) is inside the hut block
   s.farmer.x = RING.x; s.farmer.y = RING.y; s.farmer.sleeping = false; s.farmer.home = false;
   s.clock.t = Math.floor(s.clock.t / 1440) * 1440 + 9 * 60;
   s.orders = ['west-96', 'west-84', 'west-48', 'ring0', 'ring2', 'ring4', 'boxed', 'box0', 'box4'].map(id => ({ type: 'chop', id }));
@@ -102,17 +103,34 @@ fs.mkdirSync(OUT, { recursive: true });
     check(felled.length >= 5 && felled.includes('west-48'), `the reachable marks are felled, west-48 too (${felled.join(', ')})`);
     check(stuckMin < 70, `nobody stands still short of their target for an hour (longest ${Math.round(stuckMin)} min)`);
   }
-  // 3. a tree felled by someone else ends the other person's job at once; a walk that gets nowhere is dropped
+  // 3. day-2 regression cases: (a) worker outside the top-left west fence steps back inside on load/idle;
+  //    (b) tree near the east-end lumber hut has a valid stand outside the hut block;
+  //    (c) worker in '正在砍树' next to a fresh stump drops the job at once and moves on;
+  //    (d) a walk that gets nowhere is dropped after STUCK_MIN walking minutes
   if (!BEFORE) {
-    const gone = await p.evaluate(() => { const f = __farm, S = f.S, F = f.FARMER, m = S.members.find(q => q.id === 'partner');
-      const t = S.trees.find(q => q.kind === 'wild' && q.stage === 'tree' && q.x > 80 && q.y < -40 && q.y > -100 && f.treeStand(q));
-      m.task = Object.assign(f.chopTaskFor ? f.chopTaskFor(t) : { label: '正在砍树', to: f.treeStand(t), tile: t, tree: t, dur: 20, kind: 'chop' }, { work: 0 });
-      t.stage = 'stump'; f.advance(0.1, 10); const ended = !m.task || m.task.tree !== t;
-      // the stuck watch: a walk that cannot move (speed 0) is given up after STUCK_MIN game minutes
+    const day2 = await p.evaluate(() => { const f = __farm, S = f.S, F = f.FARMER, N = PFPath, WD = PFWorld, m = S.members.find(q => q.id === 'partner');
+      // (a) place partner outside 林场's top-left west fence (wrong side of fence, in wild rim where areaOf === doorArea)
+      m.x = -8; m.y = -92; m.task = null; m.home = false; m.sleeping = false;
+      f.advance(0.1, 10);
+      const backIn = f.validStand(m.x, m.y) && WD.areaAt(m.x, m.y) === 'forest';
+      const backPos = [Math.round(m.x * 10) / 10, Math.round(m.y * 10) / 10];
+      // (b) huttree beside the east-end lumber hut: stand must be walkable & outside hut block [159,-68,181,-54]
+      const ht = S.trees.find(t => t.id === 'huttree');
+      const hst = ht && f.treeStand(ht), g = f.nav();
+      const hutOk = !!(hst && N.areaOf(g, hst.x, hst.y) === N.areaOf(g, 36, 40) && !(hst.x >= 159 && hst.x <= 181 && hst.y >= -68 && hst.y <= -54));
+      // (c) partner standing next to ht with '正在砍树' when ht turns into a fresh stump
+      const st = hst || { x: 184, y: -54 };
+      m.x = st.x; m.y = st.y; m.task = { label: '正在砍树', to: st, tile: ht, tree: ht, dur: 20, kind: 'chop', work: 5 };
+      ht.stage = 'stump'; f.advance(0.2, 10);
+      const ended = !m.task || m.task.tree !== ht;
+      const nextLabel = m.task && m.task.label;
+      // (d) the stuck watch: a walk that cannot move (speed ~0) is given up after STUCK_MIN game minutes
       const g0 = f.stuckStats ? f.stuckStats().giveup : 0, spd = F.spd; F.spd = 1e-9; F.task = { kind: 'test', label: '测试走路', to: { x: F.x + 60, y: F.y }, dur: 1, work: 0 }; f.advance((f.STUCK_MIN + 10) / 3, 10); F.spd = spd;
-      return { ended, gaveUp: f.stuckStats().giveup - g0, label: F.task && F.task.label }; });
-    check(gone.ended, 'a chop job ends at once when its tree is already a stump');
-    check(gone.gaveUp >= 1 && gone.label !== '测试走路', `a walk that gets no closer is dropped after ${'STUCK_MIN'} (now: ${gone.label})`);
+      return { backIn, backPos, hutOk, hst, ended, nextLabel, gaveUp: f.stuckStats().giveup - g0, label: F.task && F.task.label }; });
+    check(day2.backIn, `worker outside top-left west fence steps back inside 林场 (${JSON.stringify(day2.backPos)})`);
+    check(day2.hutOk, `tree near east-end lumber hut picks a stand outside hut block (${JSON.stringify(day2.hst)})`);
+    check(day2.ended, `worker in '正在砍树' next to a fresh stump drops it immediately (next: ${day2.nextLabel})`);
+    check(day2.gaveUp >= 1 && day2.label !== '测试走路', `a walk that gets no closer is dropped after STUCK_MIN (now: ${day2.label})`);
   }
   // 4. evening: everyone walks home through the gate, not round the outside of the fence
   const walk = await p.evaluate(() => { const f = __farm, F = f.FARMER; let w = null;

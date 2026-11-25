@@ -1852,13 +1852,18 @@ const STUCK_MIN = 60, UNSTICK_R = 4; // game minutes without getting 1 unit clos
 const TREE_SKIP = new Map(); // tree id -> day it was given up on
 const STUCK_STATS = { unstick: 0, giveup: 0 }; // test hook counters
 const treeSkipped = t => TREE_SKIP.get(t.id) === S.day;
-function unstick(a) { // step a person who stands off the farm's walkable area back onto it; true if they moved
+const inFarmOrTown = (x, y) => ownGround(x, y)
+  || (TN && (TN.inTown(x, y, 16) || TN.inStrip(x, y, 16)))
+  || (x >= 340 && y >= -40 && y <= 265); // inside the farm, bought regions/plots, town, east avenue, or beach
+const validStand = (x, y, g) => { if (inFarmOrTown(x, y)) return true; const G = g || ensureNav(), [i, j] = NAV.cellOf(G, x, y); return NAV.cellCost(G, i, j) === NAV.DIRT; };
+function unstick(a) { // step a person who stands off the farm's walkable area (or outside its fences in the wild rim) back onto it; true if they moved
   if (!a || a.home || a.sleeping || a.away) return false;
   const g = ensureNav(), home = NAV.areaOf(g, DOOR.x, DOOR.y), here = NAV.areaOf(g, a.x, a.y);
-  if (here === home) return false;
-  if (here < 0) { const w = NAV.nearestWalkable(g, a.x, a.y, 6); if (w && NAV.areaOf(g, w.x, w.y) === home) return false; } // on a trunk's or a rock's edge: the route snaps out onto the farm side, fine
+  const offRim = !a.task && !validStand(a.x, a.y, g);
+  if (here === home && !offRim) return false;
+  if (here < 0 && !offRim) { const w = NAV.nearestWalkable(g, a.x, a.y, 6); if (w && NAV.areaOf(g, w.x, w.y) === home && validStand(w.x, w.y, g)) return false; } // on a trunk's or a rock's edge: the route snaps out onto the farm side, fine
   a._was = [Math.round(a.x * 10) / 10, Math.round(a.y * 10) / 10];
-  const q = NAV.nearestInArea(g, a.x, a.y, home, UNSTICK_R); if (!q) return false;
+  const q = NAV.nearestInArea(g, a.x, a.y, home, offRim ? 12 : UNSTICK_R, inFarmOrTown); if (!q) return false;
   a.x = q.x; a.y = q.y; if (a.task) a.task.via = null; a._nav = -1; STUCK_STATS.unstick++; (STUCK_STATS.last || (STUCK_STATS.last = [])).push([a.id || 'farmer', a._was, Math.round(q.x), Math.round(q.y), a.task ? a.task.label : null]); if (STUCK_STATS.last.length > 20) STUCK_STATS.last.shift(); noteLog('event', { type: 'unstick', who: a.id || 'farmer', x: Math.round(q.x), y: Math.round(q.y) }); return true;
 }
 function giveUp(k, why) { // drop the current job; a tree job skips that tree for today
@@ -1875,12 +1880,13 @@ function stepActorInner(dm) {
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   if (k && k.kind === 'play-chase') followInsect(k);
+  const via0 = k.via ? k.via.length : 0;
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
   const dx = tgt.x - F.x, dy = tgt.y - F.y, dist = Math.hypot(dx, dy);
   if (dist > 0.5 && k.to && !k.rest) { const left = Math.hypot(k.to.x - F.x, k.to.y - F.y); // v5.12.7: the stuck watch
-    if (k._best == null || left < k._best - 1) { k._best = left; k._bestT = S.t; }
-    else if (S.t - k._bestT > STUCK_MIN) { giveUp(k, 'no-progress'); return; } }
+    if (k._best == null || left < k._best - 1 || (via0 > 0 && k.via.length < via0)) { k._best = left; k._stuck = 0; }
+    else if ((k._stuck = (k._stuck || 0) + dm) > STUCK_MIN) { giveUp(k, 'no-progress'); return; } } // walking minutes only: a clock jump (tests, catch-up) is not being stuck
   if (dist > 0.5) { const st = Math.min(dist, WALK * S.eff.walk * (F.spd || 1) * yardWalk(F.x, F.y) * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
@@ -6642,6 +6648,7 @@ function restore(s) { // s has been migrated and validated by PFSave
   if (YARD_ON) { YA.sync(true, clothesOut()); if (groundReady) buildGroundBase([20, 30, 170, 66]); }
   S.decor = DC.valid(s.decor); for (const a of actors()) a._carry = null; GUESTS.length = 0; partyBegun = 0; partyReg = { day: -1, keys: [], kid: {} }; partyLawnC.key = ''; partyPlanC.key = ''; if (DECOR_ON) DA.sync(true); if (INN_ON) IA.sync(true); markNavDirty(); // v5.7.0; v5.10.7 inn
   if (HM) homeRestore(s); // v5.9.0 (after the family: a married child wakes at the new house)
+  if (!FARMER.sleeping && !FARMER.home) unstick(FARMER); // v5.12.7: step back inside if saved off-farm / between trunks
   S.log = s.log.slice(); S.label = FARMER.sleeping ? '睡觉中 Zzz' : '继续干活'; groundDirty = true;
   refundSpeed();
 }
@@ -6867,7 +6874,7 @@ Object.assign(window.__farm, { FXP, FXA, xpfView: () => xpfView(), xpfVis: () =>
 Object.assign(window.__farm, { BUS, busPlan: d => busPlan(d == null ? S.day : d), busView: () => busView(), busVis: () => BUS_VIS.slice(), busFrame: () => busFrame(), busReset: () => { busPrevT = null; busPlanC = null; busFirst = 0; } }); // v5.12.6
 Object.assign(window.__farm, { EA, EAA, eastHideAt, eastTraffic: () => EA && S.eff ? EA.trafficAt(S.day, S.t, { avenue: !!S.eff.eastave, beach: !!S.eff.vacbeach }) : null, eastVis: () => EAST_VIS.slice() });
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
-Object.assign(window.__farm, { nav: () => ensureNav(), navVer: () => navVer, pathTo: (a, b) => pathTo(a, b), treeStand: t => treeStand(t), unstick: a => unstick(a), treeSkipped: t => treeSkipped(t), STUCK_MIN, stuckStats: () => Object.assign({}, STUCK_STATS) }); // v5.12.7 test hooks
+Object.assign(window.__farm, { nav: () => ensureNav(), navVer: () => navVer, pathTo: (a, b) => pathTo(a, b), treeStand: t => treeStand(t), unstick: a => unstick(a), validStand: (x, y) => validStand(x, y), treeSkipped: t => treeSkipped(t), STUCK_MIN, stuckStats: () => Object.assign({}, STUCK_STATS) }); // v5.12.7 test hooks
 window.__farm.art = { models, pasture: pastureModels, props, stackCanvas, SPR, ALLM }; // v5.11.0.9 test hook: tools/scale-audit.js renders every building beside a grown-up
 Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); MM.base = null; }, fogHid: (x, y) => fogHid(x, y), fogVeil: on => { FOG.veil = !!on; MM.base = null; }, fogPeek: on => { FOG.peek = !!on; FOG.scrKey = ''; }, fogClock: t => { FOG.clock = t == null ? null : +t; }, fogHidden: () => FOG.hidN | 0,
   fogScribble: () => { const g = groundBase.getContext('2d'), B = FG.BOUNDS; if (!FOG.unscr) FOG.unscr = g.getImageData(0, 0, GW, GH); g.save(); for (let i = 0; i < 40; i++) { g.fillStyle = i % 2 ? '#ff00ff' : '#00ffff'; g.fillRect((B[0] - GX0) * RS + i * 30, (B[1] - GY0) * RS, 14, (B[3] - B[1]) * RS); } g.restore(); MM.base = null; }, fogUnscribble: () => { if (FOG.unscr) { groundBase.getContext('2d').putImageData(FOG.unscr, 0, 0); FOG.unscr = null; MM.base = null; } }, fogAlpha: (x, y) => { if (!FOG.A) return 0; const B = FG.BOUNDS, i = Math.min(FG.GW - 1, Math.floor((x - B[0]) / FG.CELL)), j = Math.max(0, Math.floor((y - B[1]) / FG.CELL)); return i < 0 || j >= FG.GH ? 0 : FOG.A[j * FG.GW + i] / 255; }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); if (i < 0 || j >= FG.GH) return 0; return FOG.F[Math.max(j, 0) * FG.GW + Math.min(i, FG.GW - 1)]; } /* past the north / east edge the shade carries on, as drawn */ }); // v5.11.0.6 test hooks
