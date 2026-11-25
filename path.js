@@ -482,6 +482,37 @@
     return best;
   }
 
+  // v5.12.7: connected walkable areas. Labels every walkable cell with the id of its 8-connected area (the same step rule
+  // as A*), once per grid build. A spot is reachable from another only when both cells carry the same label, so a stand
+  // spot squeezed between tree trunks or on the far side of a fence is known to be unreachable without running A*.
+  function areas(g) {
+    if (g._areas) return g._areas;
+    const n = g.w * g.h, lab = new Int32Array(n).fill(-1), q = new Int32Array(n); let next = 0;
+    for (let s = 0; s < n; s++) {
+      if (lab[s] >= 0 || g.cost[s] === BLOCKED) continue;
+      let h = 0, t = 0; q[t++] = s; lab[s] = next;
+      while (h < t) { const k = q[h++], i = k % g.w, j = (k - i) / g.w;
+        for (const [di, dj] of N8) { if (!canStep(g, i, j, di, dj, null)) continue; const nk = (j + dj) * g.w + i + di; if (lab[nk] < 0) { lab[nk] = next; q[t++] = nk; } } }
+      next++;
+    }
+    return (g._areas = lab);
+  }
+  // the area label of a world point (-1: blocked or off the map)
+  function areaOf(g, x, y) { const [i, j] = cellOf(g, x, y); return inGrid(g, i, j) ? areas(g)[idx(g, i, j)] : -1; }
+  // can someone standing at a walk from there to b? (both on walkable cells of one connected area)
+  function connected(g, a, b) { const la = areaOf(g, a.x, a.y); return la >= 0 && la === areaOf(g, b.x, b.y); }
+  // the walkable cell of area `lab` nearest to (x, y), as a world point (null if none within maxR cells)
+  function nearestInArea(g, x, y, lab, maxR, ok) { // ok(x, y): an optional extra test (e.g. the same side of a fence)
+    const L = areas(g), [si, sj] = cellOf(g, x, y), R = maxR == null ? 64 : maxR;
+    for (let r = 0; r <= R; r++) { let best = null, bd = 1e9;
+      for (let dj = -r; dj <= r; dj++) for (let di = -r; di <= r; di++) {
+        if (Math.abs(di) !== r && Math.abs(dj) !== r) continue;
+        const i = si + di, j = sj + dj; if (!inGrid(g, i, j) || L[idx(g, i, j)] !== lab) continue;
+        const [wx, wy] = worldOf(g, i, j); if (ok && !ok(wx, wy)) continue; const d = Math.hypot(wx - x, wy - y); if (d < bd) { bd = d; best = { x: wx, y: wy }; } }
+      if (best) return best; }
+    return null;
+  }
+
   function draw(ctx, g, proj, routes, opt) {
     const o = opt || {}, pad = o.pad || 20, W = ctx.canvas.width, H = ctx.canvas.height;
     ctx.save();
@@ -515,7 +546,7 @@
   const api = {
     CELL, BLOCKED, DIRT, GRASS, LAYOUT, houseShape, housePlace, houseBox,
     makeGrid, build, cellOf, worldOf, walkable, cellCost, setCell, paintBox, paintDisc, paintEllipse, paintSeg, carveDisc,
-    pathDist, nearestWalkable, astar, los, smooth, route, pathLength, blockedAlong, clearCache, draw, nearestReachable
+    pathDist, nearestWalkable, astar, los, smooth, route, pathLength, blockedAlong, clearCache, draw, nearestReachable, areas, areaOf, connected, nearestInArea
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFPath = api;
 })(typeof window !== 'undefined' ? window : globalThis);

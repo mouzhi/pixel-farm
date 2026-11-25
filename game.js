@@ -943,7 +943,7 @@ const DEMAND_TILES = { wheat: 8, cabbage: 4, carrot: 4 }; // the mill's wheat ru
 // v5.11.0.35: a grown fruit tree on the farm's own ground can be marked too (it always leaves a sapling, so it can be moved)
 const fruitChoppable = t => !!(t && WD.FRUIT[t.kind] && t.stage === 'tree' && ownGround(t.x, t.y));
 const canChop = t => !!t && (WD.choppable(t, S.eff.regions) || fruitChoppable(t));
-const orderedChop = () => S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && S.eff.axe && canChop(t));
+const orderedChop = () => S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && S.eff.axe && canChop(t) && standOk(t) && !treeSkipped(t));
 function chopNext() { // the marked tree beside the one just felled (chopTask leaves it in F._chopNext)
   const t0 = F._chopNext; F._chopNext = null; if (!t0 || F.crops.length >= BASK() || F._helpWin) return null;
   const T = S.t % 1440; if (T >= sleepAt() - 20) return null;
@@ -1050,9 +1050,9 @@ function board() {
     const t = E.till3 ? tillable.reduce((b, u) => { const v = tillable.filter(w => w.f === u.f && Math.abs(w.c - u.c) <= 1 && Math.abs(w.r - u.r) <= 1).length * 100 - Math.hypot(u.x - F.x, u.y - F.y); return v > b.v ? { t: u, v } : b; }, { t: null, v: -1e9 }).t : rngNear(tillable);
     post('till', 35, t, () => tillTask(t)); }
   // v4.3: fruit to pick, and the player's orders (chop a marked tree, transplant a sapling where he pointed)
-  const ripeTrees = S.trees.filter(t => t.stage === 'tree' && t.ripe && WD.FRUIT[t.kind] && treeReachable(t));
+  const ripeTrees = S.trees.filter(t => t.stage === 'tree' && t.ripe && WD.FRUIT[t.kind] && treeReachable(t) && standOk(t));
   if (ripeTrees.length && F.crops.length + WD.FRUIT.apple.n <= BASK()) { const t = rngNear(ripeTrees); post('pick', 75, t, () => pickTask(t)); }
-  const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && canChop(t));
+  const chop = S.orders.filter(o => o.type === 'chop').map(o => S.trees.find(t => t.id === o.id)).filter(t => t && E.axe && canChop(t) && standOk(t) && !treeSkipped(t));
   if (chop.length) { const t = rngNear(chop); post('chop', CHOP_ORDER_BASE + travel(F, t) / 8, t, () => chopTask(t), undefined, undefined, true); } // v5.11.0.28: the player's mark comes first (was 64, under every chore); an errand, the walk to the wood is not held against it
   postAutoChop(post, chop); // v5.3.1: short of wood, a free hand walks to 林场 by themselves
   const plant = S.orders.filter(o => o.type === 'plant' && FARMER.saplings[o.kind] > 0 && plantAccess(o.x, o.y));
@@ -1272,17 +1272,34 @@ function tillTask(t) { // tilled soil is permanent; the wide hoe turns the 3x3 a
   } };
 }
 const treeReachable = t => ownGround(t.x, t.y); // v5.11.0.36: bought plot fruit belongs to the farm too
-const treeStand = t => ({ x: t.x - 8, y: t.y + 2 });
+// v5.12.7: where to stand to chop or pick a tree. It used to be always 8 units west of the trunk, even when that spot was
+// another trunk, a fence, or the wrong side of the fence: the route then ended as close as it could get and the last
+// straight step went through trunks and fences (day 3xx save: two people wedged in 林场, one left outside the west fence).
+// Now the spot must be a walkable cell joined to the farm (the front door's walkable area); the west spot is tried first,
+// then the east, south and north ones, then the nearest joined cell within a step of the trunk, always on the tree's own
+// side of its fence (the wild strip round the map joins the farm too, so being joined alone let them chop from outside).
+// null: nobody can get there.
+const STAND_TRY = [[-8, 2], [8, 2], [0, 8], [-8, -3], [8, -3], [-6, 7], [6, 7], [0, -8]];
+const standCache = { ver: -1, m: new Map() };
+function treeStand(t) {
+  const g = ensureNav(); if (standCache.ver !== navVer) { standCache.ver = navVer; standCache.m.clear(); }
+  const key = t.id + ':' + t.x + ',' + t.y; if (standCache.m.has(key)) return standCache.m.get(key);
+  const home = NAV.areaOf(g, DOOR.x, DOOR.y), side = WD.areaAt(t.x, t.y), same = (x, y) => WD.areaAt(x, y) === side; let st = null; // same: inside the tree's own fence
+  for (const [dx, dy] of STAND_TRY) { const x = t.x + dx, y = t.y + dy; if (NAV.areaOf(g, x, y) === home && same(x, y)) { st = { x, y }; break; } }
+  if (!st) { const q = NAV.nearestInArea(g, t.x - 8, t.y + 2, home, 3, same); if (q && Math.hypot(q.x - t.x, q.y - t.y) <= 13) st = q; }
+  standCache.m.set(key, st); return st;
+}
+const standOk = t => !!treeStand(t);
 function pickTask(t) {
   const fr = WD.FRUIT[t.kind];
-  return { label: `正在摘${fr.name}`, to: treeStand(t), tile: t, dur: 8, fx: 'leaf', pose: 'pull', done: () => {
+  return { label: `正在摘${fr.name}`, to: treeStand(t) || { x: t.x - 8, y: t.y + 2 }, tile: t, tree: t, dur: 8, fx: 'leaf', pose: 'pull', done: () => {
     const n = Math.min(WD.pickFruit(t), BASK() - F.crops.length); if (!n) return;
     for (let i = 0; i < n; i++) F.crops.push(t.kind); treeChanged(t); diary('h', t.kind, n);
     burst(t.x, t.y, 20, t.kind === 'apple' ? [Rf[2], Rf[3]] : [Ac[2], Ac[1]], 8, 'harvest'); popText(t.x, t.y, 30, '+' + n, '#ffffff'); log(`摘了 ${n} 个${fr.name}`);
   } };
 }
 function chopTask(t) {
-  return { label: '正在砍树', to: treeStand(t), tile: t, dur: WA.chopMinutes(S.eff), fx: 'wood', pose: 'hoe', done: () => {
+  return { label: '正在砍树', to: treeStand(t) || { x: t.x - 8, y: t.y + 2 }, tile: t, tree: t, dur: WA.chopMinutes(S.eff), fx: 'wood', pose: 'hoe', done: () => {
     S.orders = S.orders.filter(o => !(o.type === 'chop' && o.id === t.id));
     if (fruitChoppable(t)) { // v5.11.0.35: a fruit tree comes out whole (no stump), always 1 sapling of its kind, half the usual wood
       const name = WD.FRUIT[t.kind].name, wood = Math.max(1, Math.round(WA.perTree(S.eff, false) / 2)), i = S.trees.indexOf(t);
@@ -1376,8 +1393,9 @@ const woodTarget = () => WA.target(SIM.SHOP, S.up, woodCap());
 function postAutoChop(post, marked) {
   if (!FAM.areasOf(whoId(F), F.role).includes('wood')) return; // v5.3.2: the trip to 林场 is the wood owner's (the farmer), not 阿禾's or the children's
   if (S.t % 1440 >= WA.AUTO_END || !WA.wants(S.eff, FARMER.wood, woodTarget())) return;
-  const free = WA.autoTrees(S.trees, S.eff).filter(t => !CLAIM.has(t) && !marked.includes(t));
-  if (free.length <= WA.KEEP) return;
+  const left = WA.autoTrees(S.trees, S.eff).filter(t => !CLAIM.has(t) && !marked.includes(t));
+  if (left.length <= WA.KEEP) return;
+  const free = left.filter(t => standOk(t) && !treeSkipped(t)); // v5.12.7: only trees someone can walk up to
   const t = rngNear(free); if (t) post('chop', WA.autoBase(SIM.SHOP, S.up), t, () => Object.assign(chopTask(t), { label: '自己去林场砍树' }));
 }
 function woodNight() {
@@ -1826,16 +1844,43 @@ function stepActor(dm) { // one person's step: pick a job from the board (claims
     if (F) { F.task = idleHold(); F.task.work = 0; }
   }
 }
+// ---- v5.12.7 nobody stays stuck (the chop marks in a thick 林场 left two people wedged between trunks, one outside the fence) ----
+// A tree someone gave up on is skipped for the rest of the day. A walk that gets no closer for STUCK_MIN game minutes is
+// dropped, and whoever stands off the farm's walkable area (between trunks, on the wrong side of a fence) steps back onto
+// the nearest joined cell before picking the next job. A chop or pick whose tree is gone (felled, a stump) ends at once.
+const STUCK_MIN = 60, UNSTICK_R = 4; // game minutes without getting 1 unit closer; nav cells (16 units) searched for a way back
+const TREE_SKIP = new Map(); // tree id -> day it was given up on
+const STUCK_STATS = { unstick: 0, giveup: 0 }; // test hook counters
+const treeSkipped = t => TREE_SKIP.get(t.id) === S.day;
+function unstick(a) { // step a person who stands off the farm's walkable area back onto it; true if they moved
+  if (!a || a.home || a.sleeping || a.away) return false;
+  const g = ensureNav(), home = NAV.areaOf(g, DOOR.x, DOOR.y), here = NAV.areaOf(g, a.x, a.y);
+  if (here === home) return false;
+  if (here < 0) { const w = NAV.nearestWalkable(g, a.x, a.y, 6); if (w && NAV.areaOf(g, w.x, w.y) === home) return false; } // on a trunk's or a rock's edge: the route snaps out onto the farm side, fine
+  a._was = [Math.round(a.x * 10) / 10, Math.round(a.y * 10) / 10];
+  const q = NAV.nearestInArea(g, a.x, a.y, home, UNSTICK_R); if (!q) return false;
+  a.x = q.x; a.y = q.y; if (a.task) a.task.via = null; a._nav = -1; STUCK_STATS.unstick++; (STUCK_STATS.last || (STUCK_STATS.last = [])).push([a.id || 'farmer', a._was, Math.round(q.x), Math.round(q.y), a.task ? a.task.label : null]); if (STUCK_STATS.last.length > 20) STUCK_STATS.last.shift(); noteLog('event', { type: 'unstick', who: a.id || 'farmer', x: Math.round(q.x), y: Math.round(q.y) }); return true;
+}
+function giveUp(k, why) { // drop the current job; a tree job skips that tree for today
+  if (k.tree) TREE_SKIP.set(k.tree.id, S.day); STUCK_STATS.giveup++;
+  noteLog('event', { type: 'giveup', who: F.id || 'farmer', kind: k.kind || null, why, tree: k.tree ? k.tree.id : null });
+  F.task = null; F.moving = false; unstick(F);
+}
+const treeGone = t => !t || t.stage !== 'tree' || !S.trees.includes(t);
 function stepActorInner(dm) {
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
-  if (!F.task) { F.task = nextTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
+  if (F.task && F.task.tree && treeGone(F.task.tree)) { F.task = null; F.moving = false; } // v5.12.7: someone else felled it, or it was cleared
+  if (!F.task) { unstick(F); F.task = nextTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
   if (k && k.kind === 'play-chase') followInsect(k);
   while (k.via && k.via.length && Math.hypot(k.via[0].x - F.x, k.via[0].y - F.y) <= 0.5) k.via.shift();
   const tgt = (k.via && k.via.length) ? k.via[0] : k.to;
   const dx = tgt.x - F.x, dy = tgt.y - F.y, dist = Math.hypot(dx, dy);
+  if (dist > 0.5 && k.to && !k.rest) { const left = Math.hypot(k.to.x - F.x, k.to.y - F.y); // v5.12.7: the stuck watch
+    if (k._best == null || left < k._best - 1) { k._best = left; k._bestT = S.t; }
+    else if (S.t - k._bestT > STUCK_MIN) { giveUp(k, 'no-progress'); return; } }
   if (dist > 0.5) { const st = Math.min(dist, WALK * S.eff.walk * (F.spd || 1) * yardWalk(F.x, F.y) * dm); F.x += dx / dist * st; F.y += dy / dist * st; F.fx = dx / dist; F.fy = dy / dist; F.walkPhase += st; F.act = 0; F.home = false; F.moving = true; }
   else {
     if (k.tile) { const ex = k.tile.x - F.x, ey = k.tile.y - F.y, el = Math.hypot(ex, ey) || 1; F.fx = ex / el; F.fy = ey / el; }
@@ -6305,6 +6350,7 @@ function orderChop(id) {
     INPUT.fruitChop = null;
   } else if (!WD.choppable(t, S.eff.regions)) return { ok: false, why: t.stage !== 'tree' ? '这棵还没长大' : '这片区域还没买下' };
   if (S.orders.length >= WD.MAX_ORDERS) return { ok: false, why: '指令太多了，先等农夫做完一些' };
+  if (!standOk(t)) return { ok: false, why: '这棵树四周被树干或篱笆挡住了，人走不过去：先砍掉它旁边的树' }; // v5.12.7
   S.orders.push({ type: 'chop', id }); noteLog('event', { type: 'chop', id, day: S.day, t: S.t }); return { ok: true };
 }
 
@@ -6470,7 +6516,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.6';
+const GAME_VERSION = '5.12.7';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6821,6 +6867,7 @@ Object.assign(window.__farm, { FXP, FXA, xpfView: () => xpfView(), xpfVis: () =>
 Object.assign(window.__farm, { BUS, busPlan: d => busPlan(d == null ? S.day : d), busView: () => busView(), busVis: () => BUS_VIS.slice(), busFrame: () => busFrame(), busReset: () => { busPrevT = null; busPlanC = null; busFirst = 0; } }); // v5.12.6
 Object.assign(window.__farm, { EA, EAA, eastHideAt, eastTraffic: () => EA && S.eff ? EA.trafficAt(S.day, S.t, { avenue: !!S.eff.eastave, beach: !!S.eff.vacbeach }) : null, eastVis: () => EAST_VIS.slice() });
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
+Object.assign(window.__farm, { nav: () => ensureNav(), navVer: () => navVer, pathTo: (a, b) => pathTo(a, b), treeStand: t => treeStand(t), unstick: a => unstick(a), treeSkipped: t => treeSkipped(t), STUCK_MIN, stuckStats: () => Object.assign({}, STUCK_STATS) }); // v5.12.7 test hooks
 window.__farm.art = { models, pasture: pastureModels, props, stackCanvas, SPR, ALLM }; // v5.11.0.9 test hook: tools/scale-audit.js renders every building beside a grown-up
 Object.assign(window.__farm, { FG, fog: () => ({ on: FOG.on, init: FOG.init, shut: FOG.shut && Object.assign({}, FOG.shut), locked: FOG.L && Object.assign({}, FOG.L), road: FOG.road, fading: FOG.fading, empty: FOG.empty, lockA: Object.assign({}, FOG.lockA), key: FOG.key }), fogUpdate: f => fogUpdate(f), fogZone, fogHint, fogTap: (x, y) => fogTap({ x, y }), fogSet: on => { FOG.on = !!on && !!FG; fogReset(); MM.base = null; }, fogHid: (x, y) => fogHid(x, y), fogVeil: on => { FOG.veil = !!on; MM.base = null; }, fogPeek: on => { FOG.peek = !!on; FOG.scrKey = ''; }, fogClock: t => { FOG.clock = t == null ? null : +t; }, fogHidden: () => FOG.hidN | 0,
   fogScribble: () => { const g = groundBase.getContext('2d'), B = FG.BOUNDS; if (!FOG.unscr) FOG.unscr = g.getImageData(0, 0, GW, GH); g.save(); for (let i = 0; i < 40; i++) { g.fillStyle = i % 2 ? '#ff00ff' : '#00ffff'; g.fillRect((B[0] - GX0) * RS + i * 30, (B[1] - GY0) * RS, 14, (B[3] - B[1]) * RS); } g.restore(); MM.base = null; }, fogUnscribble: () => { if (FOG.unscr) { groundBase.getContext('2d').putImageData(FOG.unscr, 0, 0); FOG.unscr = null; MM.base = null; } }, fogAlpha: (x, y) => { if (!FOG.A) return 0; const B = FG.BOUNDS, i = Math.min(FG.GW - 1, Math.floor((x - B[0]) / FG.CELL)), j = Math.max(0, Math.floor((y - B[1]) / FG.CELL)); return i < 0 || j >= FG.GH ? 0 : FOG.A[j * FG.GW + i] / 255; }, fogCell: (x, y) => { if (!FOG.F) return 0; const B = FG.BOUNDS, i = Math.floor((x - B[0]) / FG.CELL), j = Math.floor((y - B[1]) / FG.CELL); if (i < 0 || j >= FG.GH) return 0; return FOG.F[Math.max(j, 0) * FG.GW + Math.min(i, FG.GW - 1)]; } /* past the north / east edge the shade carries on, as drawn */ }); // v5.11.0.6 test hooks
