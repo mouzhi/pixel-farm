@@ -99,7 +99,8 @@ fs.mkdirSync(OUT, { recursive: true });
       for (const a of bakers) if (!seen.includes(a === f.FARMER ? 'farmer' : a.id)) seen.push(a === f.FARMER ? 'farmer' : a.id);
     }
     at(9 * 60 + 20);
-    const msgs = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
+    const raw = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
+    const msgs = [...new Set(raw.map(m => String(m).replace(/^\d{1,2}:\d{2}\s+/, '')))]; // S.log is a 4-line ring of the same events with a clock prefix; concat alone double-counts a notice still sitting in the ring
     const door = msgs.filter(m => /送到门口才发现原料不够/.test(m));
     const short = msgs.filter(m => /还缺/.test(m) && /再送/.test(m));
     const v = f.bakeryView();
@@ -138,7 +139,8 @@ fs.mkdirSync(OUT, { recursive: true });
       walkers.push(f.actors().filter(a => a.task && a.task.kind === 'bakery' && a.task.label && /送到小桃/.test(a.task.label)).length);
     }
     at(8 * 60 + 40);
-    const msgs = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
+    const raw = ((S.events || []).map(e => e.msg)).concat(Array.isArray(S.log) ? S.log : []);
+    const msgs = [...new Set(raw.map(m => String(m).replace(/^\d{1,2}:\d{2}\s+/, '')))]; // S.log is a 4-line ring of the same events with a clock prefix; concat alone double-counts a notice still sitting in the ring
     const door = msgs.filter(m => /送到门口才发现原料不够/.test(m));
     const short = msgs.filter(m => /还缺/.test(m) && /再送/.test(m));
     const v = f.bakeryView();

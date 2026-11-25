@@ -1876,6 +1876,8 @@ function stepActorInner(dm) {
   const me = F === FARMER;
   if (F.sleeping) { if (me) { S.label = '睡觉中 Zzz'; noteLog('tick', dm, 'sleep'); } return; }
   if (F.task && F.task.tree && treeGone(F.task.tree)) { F.task = null; F.moving = false; } // v5.12.7: someone else felled it, or it was cleared
+  // v5.12.7: at 17:30 drop a long fish or a long walk and go (chooseTask only runs when the current job ends; walking over can start from 16:30 once free)
+  if (F.task && F.task.kind !== 'party' && HM && (S.t % 1440) >= HM.WED.from) { const wt = weddingTask(); if (wt) { F.task = null; F.moving = false; } }
   if (!F.task) { unstick(F); F.task = nextTask(); F.task.work = 0; if (!(F.task.keepVia && F.task.via && F.task.via.length)) F.task.via = routeVia(F, F.task.to); F._nav = navVer; if (me) S.label = F.task.label; if (F.task.label !== '回家睡觉' || !F.home) F.home = false; }
   else if (F._nav !== navVer && !F.task.keepVia) { F.task.via = routeVia(F, F.task.to); F._nav = navVer; }
   const k = F.task;
@@ -4455,7 +4457,8 @@ function weddingSpot() { const area = partyArea(); if (area) return null; const 
 function weddingSeat(i) { const d = weddingSpot(); if (!d) return null; if (i < 0) return { x: d.x + (i === -1 ? -2 : 2), y: d.y + 2 };
   return { x: d.x - 9 + 4.5 * (i % 5), y: d.y + 7 + 4 * Math.floor(i / 5) }; }
 function weddingTask() { // no party area: everyone gathers in front of the new house
-  const T = S.t % 1440, w = weddingTonight(); if (!w || T < HM.WED.from || T >= HM.WED.to || F.away || F.sleeping || partyArea()) return null;
+  // v5.12.7: start walking an hour early (same lead as the spouse arriving from town); a long fish started at 17:00 used to run past the 17:30 start
+  const T = S.t % 1440, w = weddingTonight(); if (!w || T < HM.WED.from - 60 || T >= HM.WED.to || F.away || F.sleeping || partyArea()) return null;
   const couple = F.id === w.kid || F._spouse === w.kid, seat = couple ? weddingSeat(F._spouse ? -2 : -1) : weddingSeat(partyIndex(F)); if (!seat) return null;
   return { kind: 'party', label: couple ? '在新房子门前办婚礼' : '在新房子门前参加婚礼', to: { x: seat.x + R(-0.4, 0.4), y: seat.y + R(-0.3, 0.3) }, dur: Math.max(5, Math.min(30, HM.WED.to - T)), rest: true };
 }
@@ -4490,9 +4493,6 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     if (seat) return { kind: 'party', label: '在派对区和大家聚会', to: { x: seat.x, y: seat.y }, dur: partyDur(T), rest: true }; }
   if (T >= sleepAt() || T < WAKE - 30) { if (!sp && ((F.crops.length && shopOpen(T)) || (F.gathered && T < sleepAt() + 60))) return null; const me = F;
     return { kind: 'home', label: '回新房子睡觉', to: L.door, dur: 5, done: () => { me.home = true; me.sleeping = true; } }; }
-  { const win = helpWinNow(T); // v5.11.0.28: 6–8 and 17–19 the married ones come over for the main farm's harvest and collecting
-    if (win && F._helpOff !== win && (F._helpWin === win || farmHands() >= HM.HELP.backlog)) { if (F._helpWin !== win) { F._helpWin = win; log(`${F.name}从新房子过来帮忙收菜捡蛋`); } return null; }
-    if (F._helpWin && F._helpWin !== win) helpEnd(); }
   const path = CR ? CR.pathOf(S.home, kid) : null;
   const fest = !!(MK && S.town && S.town.hall && MK.isDay(S.town.hall, S.day));
   const work = !!(CR && CR.worksToday(S.home, kid, fest));
@@ -4521,6 +4521,10 @@ function homeChoose() { // null: not one of the couple (or helping on the main f
     if (F._backDay !== S.day && Math.hypot(F.x - L.door.x, F.y - L.door.y) < 40) F._backDay = S.day;
     if (F._backDay !== S.day) { const me = F; return { kind: 'work-back', label: inn ? '从民宿回家' : '下班回家', to: L.door, via: careerVia(F, L.door, true), keepVia: true, dur: 4, done: () => { me._backDay = S.day; } }; }
   }
+  { const win = helpWinNow(T); // v5.11.0.28: 6–8 and 17–19 the married ones come over for the main farm's harvest and collecting
+    // v5.12.7: after a job they already walked home, stay (the 17–19 window used to send them back out past the new house)
+    if (win && F._backDay !== S.day && F._helpOff !== win && (F._helpWin === win || farmHands() >= HM.HELP.backlog)) { if (F._helpWin !== win) { F._helpWin = win; log(`${F.name}从新房子过来帮忙收菜捡蛋`); } return null; }
+    if (F._helpWin && F._helpWin !== win) helpEnd(); }
   if (fest && path && path.way === 'shop' && CR.shopReady(path, S.day) && T >= 10 * 60 && T < 16 * 60) {
     const d = CR.doorOf(path.at); if (d) return { kind: 'shop-fest', label: '节日在店门口和家人聚', to: { x: d.x + (sp ? 2 : -2), y: d.y + 3 }, dur: 16, rest: true }; }
   const help = S.home.help[kid];
