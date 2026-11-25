@@ -122,3 +122,15 @@
   color: #fff6dc;
   font-weight: 600;
 }
+
+.farm-bootlog {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(10, 16, 12, 0.72);
+}

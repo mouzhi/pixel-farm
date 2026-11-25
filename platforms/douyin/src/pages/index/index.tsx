@@ -9,7 +9,12 @@ import { DEMO_SAVE, DEMO_SAVE_KEY } from '@/game/demo-save'
 
 import './index.css'
 
+declare const tt: unknown
+
 const CANVAS_ID = 'farm-canvas'
+const BOOT_LOG_KEY = 'pf-douyin-boot-log'
+const MAX_QUERY_ATTEMPTS = 12
+const pageT0 = Date.now()
 const DEMO_MARK_KEY = 'pf-douyin-trial-demo'
 const DEMO_VERSION = 'e2c8d83-day31-r2'
 type Phase = 'loading' | 'ready' | 'error'
@@ -84,41 +89,121 @@ export default function Index() {
   const [fastForward, setFastForward] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
   const [diag, setDiag] = useState('')
+  const [prevLog, setPrevLog] = useState<string[]>([])
 
-  const boot = useCallback((attempt = 0) => {
+  // 启动诊断：每一步都写到屏幕上，并存一份到本地；手机上卡住时，下次打开能看到上次停在哪一步
+  const logRef = useRef<string[]>([])
+  const attemptRef = useRef(0)
+  const startedRef = useRef(false)
+  const [bootLog, setBootLog] = useState<string[]>([])
+  const log = (line: string) => {
+    const t = Date.now() - pageT0
+    logRef.current = logRef.current.concat(`${t}ms ${line}`).slice(-14)
+    setBootLog(logRef.current)
+    try {
+      Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: false, lines: logRef.current }))
+    } catch {
+      // ignore
+    }
+  }
+
+  const describeRes = (res: any) => {
+    if (!Array.isArray(res)) return `res=${res === null ? 'null' : typeof res}`
+    const part = (x: any) => {
+      if (x == null) return String(x)
+      const keys = Object.keys(x).slice(0, 6).join(',')
+      const size = typeof x.width === 'number' ? ` ${Math.round(x.width)}x${Math.round(x.height)}` : ''
+      return `{${keys}}${size}${x.node ? ` node:${typeof x.node}` : ''}`
+    }
+    return `res[${res.length}] [0]=${part(res[0])} [1]=${part(res[1])}`
+  }
+
+  const queryCanvas = (attempt: number) => {
     if (bootedRef.current) return
-    const query = Taro.createSelectorQuery()
-    query.select(`#${CANVAS_ID}`).fields({ node: true, size: true })
-    query.select(`#${CANVAS_ID}`).boundingClientRect()
-    setStep(`查找画布 ${attempt + 1}`)
-    query.exec((res: any[]) => {
-      try {
-        bootWith(res, attempt)
-      } catch (err) {
-        console.error('[farm] boot failed', err)
-        setErrorText(String((err as Error)?.message || err))
-        setPhase('error')
+    attemptRef.current = attempt
+    // 先按页面查；没有回调或拿不到节点时，换成 .in(当前页面) 再查
+    const scoped = attempt % 2 === 1
+    const how = scoped ? 'in(page)' : 'page'
+    setStep(`查找画布 第${attempt + 1}次 ${how}`)
+    let answered = false
+    const watchdog = setTimeout(() => {
+      if (answered || bootedRef.current || attemptRef.current !== attempt) return
+      log(`第${attempt + 1}次查询 ${how} 1.5秒无回调`)
+      retry(attempt)
+    }, 1500)
+    try {
+      let query: any = Taro.createSelectorQuery()
+      if (scoped) {
+        const page = Taro.getCurrentInstance()?.page
+        if (page) query = query.in(page as any)
+        else log('getCurrentInstance().page 为空，按页面查')
       }
-    })
-  }, [])
-
-  const bootWith = (res: any[], attempt: number) => {
-    {
-      const node = res?.[0]?.node
-      const rect = res?.[1]
-      if (!node) {
-        if (attempt < 10) setTimeout(() => boot(attempt + 1), 150)
-        else {
-          setErrorText('画布没有准备好')
-          setPhase('error')
+      query.select(`#${CANVAS_ID}`).fields({ node: true, size: true })
+      query.select(`#${CANVAS_ID}`).boundingClientRect()
+      query.exec((res: any[]) => {
+        answered = true
+        clearTimeout(watchdog)
+        if (bootedRef.current) return
+        log(`第${attempt + 1}次 ${how} 回调 ${describeRes(res)}`)
+        const node = res?.[0]?.node
+        if (!node) {
+          retry(attempt)
+          return
         }
-        return
-      }
-      bootedRef.current = true
-      setStep('启动游戏')
-      rectRef.current = { left: rect?.left || 0, top: rect?.top || 0, width: rect?.width || 375, height: rect?.height || 760 }
+        bootedRef.current = true
+        const rect = res?.[1] || {}
+        const size = res?.[0] || {}
+        rectRef.current = {
+          left: rect.left || 0,
+          top: rect.top || 0,
+          width: rect.width || size.width || 375,
+          height: rect.height || size.height || 760,
+        }
+        setStep('拿到画布，准备引擎')
+        // 先让界面刷新出当前步骤，再进入耗时的启动
+        setTimeout(() => startGame(node), 60)
+      })
+    } catch (err) {
+      clearTimeout(watchdog)
+      log(`第${attempt + 1}次查询出错 ${String((err as Error)?.message || err)}`)
+      retry(attempt)
+    }
+  }
+
+  const retry = (attempt: number) => {
+    if (bootedRef.current) return
+    if (attempt + 1 >= MAX_QUERY_ATTEMPTS) {
+      setErrorText(`查了 ${MAX_QUERY_ATTEMPTS} 次都没拿到画布节点`)
+      setPhase('error')
+      return
+    }
+    setTimeout(() => queryCanvas(attempt + 1), 200)
+  }
+
+  const fail = (where: string, err: unknown) => {
+    const msg = String((err as Error)?.message || err)
+    log(`${where} 出错：${msg}`)
+    console.error('[farm]', where, err)
+    setErrorText(`${where}：${msg}`)
+    setPhase('error')
+  }
+
+  const startGame = (node: any) => {
+    let env: FarmEnv
+    try {
       const info = Taro.getSystemInfoSync()
-      const runtime = Taro as unknown as { createOffscreenCanvas: (opts: Record<string, unknown>) => any }
+      log(`系统 ${info.platform || ''} ${info.system || ''} 宿主 ${info.version || ''} SDK ${info.SDKVersion || ''} 窗口 ${info.windowWidth}x${info.windowHeight}`)
+      // 离屏画布：原生 OffscreenCanvas → Taro.createOffscreenCanvas → tt.createOffscreenCanvas
+      const ttApi = typeof tt !== 'undefined' ? (tt as any) : null
+      const taroApi = Taro as unknown as { createOffscreenCanvas?: (opts: Record<string, unknown>) => any }
+      const runtime = {
+        createOffscreenCanvas:
+          typeof taroApi.createOffscreenCanvas === 'function'
+            ? taroApi.createOffscreenCanvas
+            : ttApi && typeof ttApi.createOffscreenCanvas === 'function'
+              ? (opts: Record<string, unknown>) => ttApi.createOffscreenCanvas(opts)
+              : undefined,
+      }
       // 测速版：演示存档版本变了（或还没有存档）就换成这份演示存档
       if (!readStorage(DEMO_SAVE_KEY) || readStorage(DEMO_MARK_KEY) !== DEMO_VERSION) {
         Taro.setStorageSync(DEMO_SAVE_KEY, DEMO_SAVE)
@@ -127,11 +212,13 @@ export default function Index() {
       // 屏幕画布只在这里定一次尺寸（约 2 倍 CSS 像素），之后每帧把游戏画面缩放上屏
       node.width = Math.round(rectRef.current.width * 2)
       node.height = Math.round(rectRef.current.height * 2)
-      const env = createFarmEnv({
+      const testCtx = node.getContext('2d')
+      log(`画布 ${node.width}x${node.height} ctx:${testCtx ? 'ok' : '无'} 离屏:${typeof OffscreenCanvas === 'function' ? '原生' : typeof runtime.createOffscreenCanvas === 'function' ? 'tt' : '无'} createImage:${typeof node.createImage} rAF:${typeof node.requestAnimationFrame} ImageData:${typeof ImageData}`)
+      env = createFarmEnv({
         mainCanvas: node,
         createOffscreenCanvas: (width, height) => {
           // 有原生 OffscreenCanvas 的环境直接用；抖音端走 tt.createOffscreenCanvas
-          const c = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(width, height) : runtime.createOffscreenCanvas({ type: '2d', width, height })
+          const c = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(width, height) : runtime.createOffscreenCanvas!({ type: '2d', width, height })
           c.width = width
           c.height = height
           return c
@@ -159,23 +246,82 @@ export default function Index() {
       setDiag([
         `离屏 ${typeof OffscreenCanvas === 'function' ? '原生' : 'tt'}`,
         `ImageData ${typeof ImageData === 'function' ? '有' : '无'}`,
-        `画布 ${node?.constructor?.name || typeof node}`,
         `图片 ${canDecodeLocally() ? '本地解码' : '画布图片'}`,
       ].join(' · '))
+    } catch (err) {
+      fail('准备运行环境', err)
+      return
+    }
+    setStep('运行游戏引擎（手机上可能要十几秒）')
+    log('开始运行游戏引擎')
+    setTimeout(() => {
       const t0 = nowMs()
+      let stage = '开始'
+      let lastSaved = 0
+      env.G.__bootMark = (file: string) => {
+        stage = file
+        const t = nowMs()
+        // 引擎是同步跑完的，界面刷新不了；把进度存起来，万一卡死，下次打开能看到停在哪个文件
+        if (t - lastSaved > 300) {
+          lastSaved = t
+          try {
+            Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: false, lines: logRef.current.concat(`引擎进行到 ${file}（${Math.round(t - t0)}ms）`) }))
+          } catch {
+            // ignore
+          }
+        }
+      }
       try {
         bootFarm(env.G)
-        setBootMs(Math.round(nowMs() - t0))
-        setPhase('ready')
       } catch (err) {
-        console.error('[farm] boot failed', err)
-        setErrorText(String((err as Error)?.message || err))
-        setPhase('error')
+        fail(`游戏引擎（${stage}）`, err)
+        return
       }
-    }
+      const ms = Math.round(nowMs() - t0)
+      setBootMs(ms)
+      log(`引擎启动完成 ${ms}ms`)
+      try {
+        Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: true, lines: logRef.current }))
+      } catch {
+        // ignore
+      }
+      setPhase('ready')
+    }, 60)
   }
 
-  useReady(() => boot())
+  const kick = (from: string) => {
+    if (startedRef.current) return
+    startedRef.current = true
+    log(`开始查找画布（${from}）`)
+    queryCanvas(0)
+  }
+
+  useEffect(() => {
+    // 上一次启动没走完：把它停下的位置显示出来
+    try {
+      const prev = readStorage(BOOT_LOG_KEY)
+      const last = prev ? JSON.parse(prev) : null
+      if (last && !last.done && Array.isArray(last.lines) && last.lines.length) {
+        setPrevLog([`上次启动没完成（${new Date(last.at).toLocaleTimeString()}），最后几步：`].concat(last.lines.slice(-4)))
+      }
+    } catch {
+      // ignore
+    }
+    log('页面已渲染')
+    // useReady 是首选；万一真机没触发，1.2 秒后用 nextTick 兜底
+    const timer = setTimeout(() => {
+      if (!startedRef.current) {
+        log('useReady 1.2秒未触发，改用 nextTick')
+        Taro.nextTick(() => kick('nextTick'))
+      }
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [])
+
+  useReady(() => {
+    log('useReady')
+    Taro.nextTick(() => kick('useReady'))
+  })
   useDidShow(() => envRef.current?.setHidden(false))
   useDidHide(() => envRef.current?.setHidden(true))
   useUnload(() => envRef.current?.setHidden(true))
@@ -286,6 +432,9 @@ export default function Index() {
             <Text className="farm-perf-line text-xs">{`帧耗时 均 ${stats.avgMs.toFixed(1)} / p95 ${stats.p95Ms.toFixed(1)} ms`}</Text>
             <Text className="farm-perf-line text-xs">{`启动 ${bootMs} ms · 雾${fogOn ? '开' : '关'} · 光照${lightOn ? '开' : '关'}`}</Text>
             {diag ? <Text className="farm-perf-line text-xs">{diag}</Text> : null}
+            {bootLog.filter((line) => /回调|系统|画布 \d/.test(line)).slice(-3).map((line, i) => (
+              <Text key={`b-${i}`} className="farm-perf-line text-xs">{line.slice(0, 120)}</Text>
+            ))}
             {problems.slice(-3).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-xs">{line}</Text>
             ))}
@@ -295,6 +444,16 @@ export default function Index() {
         {phase === 'error' ? (
           <View className="farm-error">
             <Text className="farm-state text-base">{`农场没能打开：${errorText}`}</Text>
+          </View>
+        ) : null}
+        {phase !== 'ready' ? (
+          <View className="farm-bootlog">
+            {prevLog.map((line, i) => (
+              <Text key={`prev-${i}`} className="farm-perf-warn text-xs">{line}</Text>
+            ))}
+            {bootLog.map((line, i) => (
+              <Text key={`log-${i}`} className="farm-perf-line text-xs">{line}</Text>
+            ))}
           </View>
         ) : null}
         {phase === 'ready' ? (

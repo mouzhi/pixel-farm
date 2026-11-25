@@ -19,12 +19,13 @@ const PATCHES = { // exact, asserted source patches (trial toggles only)
   'game.js': [['if (night > 0) lighting(night, T);', 'if (night > 0 && !window.__trialNoLight) lighting(night, T);'],
     ['const base = Math.max(1, Math.floor(Math.min(vw / BW, vh / BH))), s = base + zoom;', 'const base = Math.max(1, Math.floor(vh > vw ? Math.min(vw / BH, vh / BW) : Math.min(vw / BW, vh / BH))), s = base + zoom; // douyin: portrait uses the reference frame turned upright (same as the xhs build)'],
     ['if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);', 'window.__trialHooks = { FOG, cam, zoomBy: d => { zoom = clamp(zoom + d, 0, 3); fit(); }, fit };\nif (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);']],
+  // (each script is preceded by window.__bootMark(file) so a phone that hangs during boot can report where)
 };
 let src = '';
 for (const f of files) {
   let s = git('show', `${rev}:${f}`);
   for (const [a, b] of PATCHES[f] || []) { if (!s.includes(a)) throw new Error('patch miss ' + f); s = s.replace(a, b); }
-  src += `\n;// ---- ${f}\n` + s + '\n';
+  src += `\n;// ---- ${f}\n;if (window.__bootMark) window.__bootMark(${JSON.stringify(f)});\n` + s + '\n';
 }
 const BUILTIN = new Set(('Math JSON Object Array Number String Boolean Symbol Map Set WeakMap WeakSet WeakRef Promise Date RegExp Error TypeError RangeError SyntaxError ReferenceError EvalError URIError AggregateError ' +
   'parseInt parseFloat isNaN isFinite Infinity NaN undefined ArrayBuffer SharedArrayBuffer DataView Int8Array Uint8Array Uint8ClampedArray Int16Array Uint16Array Int32Array Uint32Array Float32Array Float64Array BigInt64Array BigUint64Array ' +
