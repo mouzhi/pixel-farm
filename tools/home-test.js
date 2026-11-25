@@ -60,7 +60,13 @@ ok('help: about every other day, never while their own tiles need them, 09:00-16
 });
 ok('shop: 新房子 is a build, two levels (5000+200 wood, 6500+240), gated on 阿禾, a site and room', () => {
   const it = SIM.shopItem('cottage'); assert(it && it.p11);
-  assert.deepStrictEqual(it.levels.map(l => [l.cost, l.wood]), [[5000, 200], [6500, 240]]);
+  assert.deepStrictEqual(it.levels.slice(0, 2).map(l => [l.cost, l.wood]), [[5000, 200], [6500, 240]]);
+  // v5.12.5: four more for the grandchildren, sold only when one will soon need a house
+  assert.deepStrictEqual(it.levels.slice(2).map(l => [l.cost, l.wood]), [[8000, 280], [9500, 320], [11000, 360], [12500, 400]]);
+  assert(/孙辈/.test(HM.houseGate({ moved: 1, have: 2, sites: 1, room: 1, want: 0, free: 0 })));
+  assert(/孙辈/.test(HM.houseGate({ moved: 1, have: 2, sites: 1, room: 1, want: 1, free: 1 })));
+  assert.strictEqual(HM.houseGate({ moved: 1, have: 2, sites: 1, room: 1, want: 1, free: 0 }), null);
+  assert.strictEqual(HM.houseGate({ moved: 1, have: 6, want: 3 }), null);
   assert(SIM.SHOP_TABS.find(t => t.id === 'build').ids.includes('cottage'));
   assert.strictEqual(HM.houseGate({ moved: 0 }), '阿禾搬来以后才盖新房子');
   assert.strictEqual(HM.houseGate({ moved: 1, have: 0, sites: 0 }), HM.SITE_HINT);
@@ -187,7 +193,7 @@ ok('moveOk + pathing: a house in 东田 keeps the farm door, well and warehouse 
   assert(DC.keepsPaths(NAV.build({ trees: trees.filter(t => t.stage === 'tree'), regions: ['east', 'forest', 'orchard', 'south', 'pasture', 'coast'], pens: {}, fence: true, houseTier: 3 }), L.block, [farm, well, barn, gate], farm), 'placing it does not cut the farm paths');
 });
 ok('v5.12.1: 宅园 pads are home sites; 4 houses fit; old houses elsewhere are kept; shop still sells two', () => {
-  assert.strictEqual(HM.HOUSE.max, 6); assert.strictEqual(HM.HOUSE.levels.length, 2);
+  assert.strictEqual(HM.HOUSE.max, 6); assert.strictEqual(HM.HOUSE.levels.length, 6); assert.strictEqual(HM.HOUSE.gen2, 2); // v5.12.5: levels 3–6 for the grandchildren
   assert.strictEqual(HM.siteAt(258, 142), 'nhome0'); assert.strictEqual(HM.siteAt(302, 180), 'nhome3');
   assert.strictEqual(HM.siteName('nhome0'), '宅园·度假村北（西北）');
   assert.strictEqual(HM.padPlot('nhome2'), 'nhome');

@@ -120,8 +120,9 @@
     ...(EA ? [{ id: 'eastave', p12: 1, name: '东门大道', icon: 'eastave', levels: [{ cost: EA.PRICE_AVE.cost, wood: EA.PRICE_AVE.wood, label: '东门大道', desc: '从东门再往东修一条石板大道，南侧是停车场。平时有私家车来回，一部分车会停进场，游客走进镇子；买了度假沙滩以后也能从停车场下到东段沙滩。要先开镇门，并且繁荣度到 5。不附赠沙滩' }] }] : []),
     ...(EA ? [{ id: 'vacbeach', p12: 1, name: '度假沙滩', icon: 'vacbeach', levels: [{ cost: EA.PRICE_BEACH.cost, wood: EA.PRICE_BEACH.wood, label: '度假沙滩', desc: '把栈桥以东的南海岸清出来做成公共沙滩：加宽沙带，摆上遮阳伞和躺椅、一座救生塔、木栈道和两处落日台。要先开镇门并买下海边，不必先买东门大道。没修大道时沙滩先开到现在的地图东缘，修了大道以后同一条滩会接到停车场' }] }] : []),
     // v5.9.0 phase 11 (rules in home.js): a smaller house on a bought 花甸 / 农田 plot, for a grown child who marries
-    ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i ? '第二座新房子' : '新房子',
-      desc: (i ? '给第二个孩子成家用。' : '') + '家人在宅园房基、花甸或农田里盖一座小一号的房子，旁边带 6 格小田和两只母鸡。孩子长成少年、和同学走得很近以后，会在这里成家' })) }] : []),
+    ...(HM ? [{ id: 'cottage', p11: 1, name: '新房子', icon: 'cottage', levels: HM.HOUSE.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: i >= 2 ? `第${'三四五六'[i - 2]}座新房子` : i ? '第二座新房子' : '新房子',
+      desc: i >= 2 ? '给孙辈搬出去住（v5.12.5）：先盖在宅园·度假村北的空房基上，没有空房基才用花甸或农田。孙辈长成少年十天后搬进来，和同学走得很近以后在门前成家，自己种那 6 格小田、养两只母鸡'
+        : (i ? '给第二个孩子成家用。' : '') + '家人在宅园房基、花甸或农田里盖一座小一号的房子，旁边带 6 格小田和两只母鸡。孩子长成少年、和同学走得很近以后，会在这里成家' })) }] : []),
     // v5.10.3 (rules in yard.js): small early things for the yard, 阿禾's stall and the animals; the family sets each one up on its own spot
     ...(YD ? YD.ITEMS.map(t => ({ id: t.id, name: t.name, icon: 'y_' + t.id, yard: 1, flat: t.max > 1 && !t.costs ? 1 : 0, ...(t.needs ? { needs: t.needs } : {}),
       levels: Array.from({ length: t.max }, (_, i) => ({ cost: YD.costAt(t, i), ...(t.wood ? { wood: t.wood } : {}), label: t.max > 1 ? (t.id === 'roof' ? ['绿屋顶', '蓝屋顶', '青灰屋顶'][i] : `第 ${i + 1} ${t.id === 'gravel' || t.id === 'flag' || t.id === 'vegfence' ? '段' : '个'}`) : t.name, desc: t.desc })) })) : []),

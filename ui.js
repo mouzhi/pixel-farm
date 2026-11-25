@@ -263,9 +263,11 @@
         // v5.11.0.19: a married child's husband or wife counts as family (they live in the new house, not the manor)
         const inl = G.spousesIn ? G.spousesIn() : [], spA = G.SPOUSES || [];
         for (const q of inl) { const a = spA.find(x => x._spouse === q.kid); lines.push(`${q.name}（${(fam.kids.find(k => k.id === q.kid) || {}).name || '孩子'}的爱人）：${jobOf(a)}`); }
+        const GR = (G.homeStatus && G.homeStatus().grand) || []; // v5.12.5 第三代: the grandchildren live in their parents' (or their own) new house
+        for (const q of GR) lines.push(`${q.name}（${q.short}）：${q.note}`);
         const busy = S.members.filter(m => !m.home && !m.away && m.task).length + spA.filter(a => !a.home && a.task && inl.some(q => q.kid === a._spouse)).length;
         const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length + inl.length, room = tier.pop + inl.length;
-        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
+        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}${GR.length ? `，孙辈 ${GR.length} 个（${GR.map(q => q.name).join('、')}）` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }

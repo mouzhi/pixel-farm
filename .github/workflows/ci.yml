@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fog.js east.js east-art.js farmxp.js farmxp-art.js park.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js gen3.js fog.js east.js east-art.js farmxp.js farmxp-art.js park.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -72,6 +72,7 @@ jobs:
           node tools/east-test.js
           node tools/park-test.js
           node tools/farmxp-test.js
+          node tools/gen3-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -197,6 +198,9 @@ jobs:
           # v5.12.4 农场体验: its own leg (~5m locally)
           - group: farmxp
             scripts: farmxp-shots.js
+          # v5.12.5 第三代: its own leg (~7m locally); do not load home / park / wedding
+          - group: gen3
+            scripts: gen3-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

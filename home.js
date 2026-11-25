@@ -16,6 +16,7 @@
   const NAV = new Proxy({}, { get: (_, k) => pathApi()[k] });
   const TN = root.PFTown || (NODE ? require('./town.js') : null);
   const careers = () => root.PFCareers || (NODE ? require('./careers.js') : null);
+  const gen3 = () => root.PFGen3 || (NODE ? require('./gen3.js') : null); // v5.12.5 第三代 (home.g3 + a house's g)
   const hallNb = () => (root.PFHall || (NODE ? require('./hall.js') : null) || {}).NEIGHBOURS || [];
   const HS = { tiles: 6, helpPerDay: 2, helpMinutes: 60 }; // = PL.HOMESTEAD (the phase 7 stub; tools/home-test.js checks they agree)
   const MATES = TN.MATES, NEIGHBOURS = TN.NEIGHBOURS;
@@ -66,7 +67,8 @@
   // the shop still sells up to two (one for each child); the second costs a little more ("按人口再加一档").
   // v5.12.1: a save can hold up to 6 houses (the two gen-2 cottages plus 4 pads on 宅园·度假村北). The shop does not
   // sell the extra four yet (that waits on the third generation); moving and loading already allow them.
-  const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }], max: 6, hw: 10, hd: 7, build: 40 }; // walls 20 x 14 (2.5 x 1.75 tiles)
+  // v5.12.5: the four more for the grandchildren (levels 3–6) are sold once a grandchild is old enough to need one soon.
+  const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }, { cost: 8000, wood: 280 }, { cost: 9500, wood: 320 }, { cost: 11000, wood: 360 }, { cost: 12500, wood: 400 }], gen2: 2, max: 6, hw: 10, hd: 7, build: 40 }; // walls 20 x 14 (2.5 x 1.75 tiles)
   // the layout round the anchor (the house's centre, door to the south): the house, six tiles to one side (mirror: the other),
   // a little hen house on the far side of the house, a bench by the door. World units, 8 = one farm tile.
   const TILE_AT = [[17, -4], [25, -4], [33, -4], [17, 4], [25, 4], [33, 4]]; // v5.9.x: one unit further out for the bigger house
@@ -187,7 +189,9 @@
     if (isPadId(id)) {
       const pad = PL.padOf(id); if (!pad) return [];
       const L = layout(pad), f = L.foot;
-      if ((avoid || []).some(b => boxHit(f, b, 1))) return [];
+      // v5.12.5: the pads' yards touch edge to edge (x 280 between the west and east pairs), so no extra margin here: with the
+      // 1-unit margin a house on 西北 blocked 东北 and the third / fourth house never fitted
+      if ((avoid || []).some(b => boxHit(f, b, 0))) return [];
       if (wetAt(pad.x, pad.y)) return [];
       return [{ x: pad.x, y: pad.y, m: pad.m, d: 0 }];
     }
@@ -239,6 +243,7 @@
   function houseGate(ctx) {
     if (!(ctx.moved > 0)) return '阿禾搬来以后才盖新房子';
     if ((ctx.have | 0) >= HOUSE.levels.length) return null;
+    if ((ctx.have | 0) >= HOUSE.gen2 && !((ctx.want | 0) > (ctx.free | 0))) return '第三座起是给孙辈的：等孙辈长到帮工的年纪、快要搬出去住了再盖'; // v5.12.5
     if (!(ctx.sites | 0)) return SITE_HINT;
     if (!(ctx.room | 0)) return '花甸、农田或宅园里放不下新房子了（要一块空一点的地，或一个空房基）';
     return null;
@@ -299,7 +304,8 @@
         const r = siteRect(h.site);
         const tiles = (Array.isArray(h.tiles) ? h.tiles : []).slice(0, HS.tiles).map(validTile); while (tiles.length < HS.tiles) tiles.push(emptyTile());
         return { site: h.site, x: num(h.x, (r[0] + r[2]) / 2, r[0], r[2]), y: num(h.y, (r[1] + r[3]) / 2, r[1], r[3]), m: h.m ? 1 : 0, d: int(h.d, 1, 1, 1e6), built: int(h.built, 0, 0, 1e6),
-          kid: KID_IDS.includes(h.kid) ? h.kid : null, tiles, eggs: int(h.eggs, 0, 0, 1e6), hens: int(h.hens, HENS, 0, HENS) }; });
+          kid: KID_IDS.includes(h.kid) ? h.kid : null, tiles, eggs: int(h.eggs, 0, 0, 1e6), hens: int(h.hens, HENS, 0, HENS),
+          ...(gen3() && gen3().IDS.includes(h.g) && !KID_IDS.includes(h.kid) ? { g: h.g } : {}) }; }); // v5.12.5: a grandchild's house
     const rel = obj(o.rel); for (const k of KID_IDS) { const m = obj(rel[k]), r = {}; for (const id of MATE_IDS) { const n = int(m[id], 0, 0, REL.max); if (n) r[id] = n; } if (Object.keys(r).length) out.rel[k] = r; }
     const nb = obj(o.nb); for (const id of NB_IDS) { const n = int(nb[id], 0, 0, REL.max); if (n) out.nb[id] = n; }
     const wed = obj(o.wed); for (const k of KID_IDS) { const w = obj(wed[k]); if (!MATE_IDS.includes(w.mate)) continue;
@@ -308,12 +314,21 @@
     // two children never marry the same classmate; a wedding needs its house
     const seen = new Set(); for (const k of KID_IDS) { const w = out.wed[k]; if (!w) continue; if (seen.has(w.mate) || !out.houses.length) { delete out.wed[k]; continue; } seen.add(w.mate); }
     for (const h of out.houses) if (h.kid && !(out.wed[h.kid] && out.wed[h.kid].moved)) h.kid = null;
-    for (const k of KID_IDS) { const w = out.wed[k]; if (w && w.moved && !out.houses.some(h => h.kid === k)) { const h = out.houses[w.house]; if (h && !h.kid) h.kid = k; else w.moved = 0; } }
+    for (const k of KID_IDS) { const w = out.wed[k]; if (w && w.moved && !out.houses.some(h => h.kid === k)) { const h = out.houses[w.house]; if (h && !h.kid && !h.g) h.kid = k; else w.moved = 0; } }
     const help = obj(o.help); for (const k of KID_IDS) { const h = obj(help[k]); if (h.day) out.help[k] = { day: int(h.day, 0, 0, 1e6), n: int(h.n, 0, 0, HELP.perDay), last: int(h.last, 0, 0, 1440), until: int(h.until, 0, 0, 1440) }; }
     const teen = obj(o.teen); for (const k of KID_IDS) { const n = int(teen[k], 0, 0, 1e6); if (n) out.teen[k] = n; }
     out.earn = int(o.earn, 0, 0, 1e12);
     const CR = careers();
     if (CR) { const c = CR.valid({ path: o.path, wage: o.wage }); out.path = c.path; out.wage = c.wage; }
+    // v5.12.5 append-only: the grandchildren (only once there are any to count); a house and its grandchild point at each other
+    const G3 = gen3();
+    if (G3 && o.g3 && typeof o.g3 === 'object') {
+      const g3 = out.g3 = G3.valid(o.g3, out.houses.length);
+      out.houses.forEach((h, i) => { if (h.g && !(g3.k[h.g] && g3.k[h.g].h === i)) delete h.g; });
+      for (const id of G3.IDS) { const g = g3.k[id]; if (!g || !g.mv) continue; const h = out.houses[g.h];
+        if (h && h.g === id) continue;
+        if (h && !h.kid && !h.g) h.g = id; else { delete g.h; delete g.mv; delete g.w; delete g.wd; } }
+    } else out.houses.forEach(h => { delete h.g; });
     return out;
   }
 

@@ -124,6 +124,9 @@ LOOKS = {  # body colours (same as the old runtime swap); the head keeps its col
     'partner': {'#4fa3cf': '#52af3a', '#2f6ea0': '#358a3c', '#1f3d68': '#24603a', '#a8432e': '#f6ecd0', '#7a2c24': '#ecc27c', '#8a5530': '#cf6a3c', '#5e3524': '#a8432e'},
     'kid0': {'#a8432e': '#f2cf55', '#7a2c24': '#d3984c'},
     'kid1': {'#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524'},
+    # v5.12.5 第三代: the granddaughters. A cream blouse under a pink pinafore dress; no straw hat, the school mop of hair with two
+    # pigtails tied with pink bows (girl() below). 小芽 and the girl classmates are runtime recolours of this sheet (game.js FAM_DERIVE).
+    'g3girl': {'#4fa3cf': '#e57fa0', '#2f6ea0': '#c45a7a', '#1f3d68': '#8a3a54', '#a8432e': '#f6ecd0', '#7a2c24': '#ecc27c'},
 }
 HAT_ROWS = 5  # children keep the straw hat; its band (template rows 0-4) takes the shirt colour like before
 
@@ -170,6 +173,29 @@ def school(put, f, d, dx, dy, occ, pack=True):
         y = fy - CUT if fy < 24 else fy
         for x, ch in enumerate(r):
             if ch != '.': put(x + ox, y + oy, rgba(KC[ch]))
+
+
+# v5.12.5 the granddaughters' pigtails: frame coordinates for the template head (like KHAIR), drawn only on empty pixels so the face,
+# the body and a tool in front stay. E hair  G hair shade  A ink  P bow
+GTAIL = {
+ 'front': {9: [(5, 'A'), (6, 'P'), (21, 'P'), (22, 'A')], 10: [(5, 'A'), (6, 'P'), (21, 'P'), (22, 'A')],
+           11: [(5, 'A'), (6, 'E'), (21, 'E'), (22, 'A')], 12: [(5, 'A'), (6, 'E'), (21, 'E'), (22, 'A')],
+           13: [(5, 'A'), (6, 'G'), (21, 'G'), (22, 'A')], 14: [(6, 'A'), (21, 'A')]},
+ 'side':  {8: [(7, 'A'), (6, 'A')], 9: [(6, 'A'), (7, 'P')], 10: [(5, 'A'), (6, 'P'), (7, 'E')], 11: [(5, 'A'), (6, 'E'), (7, 'E')],
+           12: [(5, 'A'), (6, 'E'), (7, 'G')], 13: [(5, 'A'), (6, 'G')], 14: [(5, 'A'), (6, 'A')]},
+ 'back':  {9: [(5, 'A'), (6, 'P'), (21, 'P'), (22, 'A')], 10: [(5, 'A'), (6, 'P'), (21, 'P'), (22, 'A')],
+           11: [(5, 'A'), (6, 'E'), (21, 'E'), (22, 'A')], 12: [(5, 'A'), (6, 'E'), (21, 'E'), (22, 'A')],
+           13: [(5, 'A'), (6, 'G'), (21, 'G'), (22, 'A')], 14: [(6, 'A'), (21, 'A')]},
+}
+GC = {'A': '#1c1626', 'E': '#8a5530', 'G': '#5e3524', 'P': '#e57fa0'}
+
+def girl(put, get, d, dx, dy, occ):
+    ox, oy = dx, dy - 4
+    for y, cells in GTAIL[d].items():
+        for x, ch in cells:
+            p = (x + ox, y + oy)
+            if p in occ or get(*p)[3]: continue
+            put(p[0], p[1], rgba(GC[ch]))
 
 
 # v5.11.0.18 婚礼: the couple's wedding clothes (only on the wedding evening; game.js picks the sheet). Both start from the
@@ -287,10 +313,14 @@ def build(look):
             for (x, y), v in f.items():
                 h = hexc(v); head = not body((x, y))
                 if look == 'partner' and head: continue
-                if (look.endswith('_school') or wed) and head and (y - dy) < 3: continue  # the hat's crown (its band rows go below)  # her own head goes in below
+                if (look.endswith('_school') or wed or base.startswith('g3girl')) and head and (y - dy) < 3: continue  # the hat's crown (its band rows go below)  # her own head goes in below
                 if head and look != 'partner' and (y - dy) >= HAT_ROWS: put(x, y, v); continue  # face and hair: untouched
                 put(x, y, rgba(m[h]) if h in m else v)
             if look.endswith('_school'): school(put, f, d, dx, dy, occ)
+            elif base.startswith('g3girl'): school(put, f, d, dx, dy, occ, pack=False)
+            if base.startswith('g3girl'):
+                get = lambda x, y: px[fr * FW + x, ri * FH + y] if 0 <= x < FW and 0 <= y < FH else (0, 0, 0, 0)
+                girl(put, get, d, dx, dy, occ)
             if wed:
                 school(put, f, d, dx, dy, occ, pack=False)
                 get = lambda x, y: px[fr * FW + x, ri * FH + y] if 0 <= x < FW and 0 <= y < FH else (0, 0, 0, 0)
@@ -305,7 +335,7 @@ def build(look):
     return out
 
 def main():
-    sheets = {k: build(k) for k in list(LOOKS) + ['kid0_school', 'kid1_school'] + list(WED_LOOKS)}
+    sheets = {k: build(k) for k in list(LOOKS) + ['kid0_school', 'kid1_school', 'g3girl_school'] + list(WED_LOOKS)}
     js = ['// v5.3 family sheets (阿禾 with her own head, children recoloured body-only), built by tools/build_family.py from assets/sprites.js. Do not edit by hand.',
           'window.PF_FAMILY_SPRITES = {']
     for k, im in sheets.items():
