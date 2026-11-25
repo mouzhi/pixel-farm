@@ -177,7 +177,7 @@ jobs:
             scripts: festival-shots.js day1-pacing.js day1-shots.js
           # 小红书小工具: pack the zip (ES2017 check + official audit), then phone shots on the packed tree (~4m)
           - group: xhs
-            scripts: xhs-shots.js xhs130-shots.js
+            scripts: xhs-shots.js xhs130-shots.js xhs140-shots.js
           # 小红书 触屏工具模式 (touch.js): ⚒ toolbox, crosshair + ✖/✔ bar, tap-to-aim, 砍树, long-press 移动/收回, 撤销 confirm (~1m)
           - group: xhs-touch
             # xhs 1.3.1: + xhs-shedmove-shots (packaged touch path: toolbox → 挪东西 → second shed → other pasture → reload)
