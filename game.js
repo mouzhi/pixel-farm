@@ -23,6 +23,7 @@ const MK = window.PFMarket; // v5.10.3: 集市 (market.js rules; art in town-art
 const BK = window.PFBakery; // v5.10.4: 面包房 + 订单板 (bakery.js rules; art in town-art.js)
 const WS = window.PFWoodshop; // v5.10.5: 木工坊 (woodshop.js rules; art in town-art.js)
 const SM = window.PFSmithy; // v5.10.5: 铁匠铺 (smithy.js rules; art in town-art.js)
+const FXP = window.PFFarmXp, FXA = window.PFFarmXpArt; // v5.12.4: 农场体验 (farmxp.js rules, farmxp-art.js voxels; only the shop levels are saved)
 const PK = window.PFPark; // v5.12.3: 镇公园, 繁荣度 6, the three town families (park.js; never saved beyond hall.built.park / hall.lv6)
 const HL = window.PFHall; // v5.10.0: 镇公所, the board's projects, gifts to the town (hall.js rules; art in town-art.js)
 const TN = window.PFTown, TA = window.PFTownArt, WORLD55 = WD.WORLD55 || WORLD; // v5.8.0 phase 10: the town east of 东大道 (town.js rules, town-art.js art)
@@ -912,6 +913,7 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
   if (id === 'town' && TN) { if (TOWN_ON) TA.sync(true); markNavDirty(); log('镇门打开了：孩子们以后去镇上的学校，镇上的小店收工坊货、蜂蜜和鱼（多给两成）'); burst(TN.GATE.x, TN.GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); albumSnap('towngate', TN.GATE.x, TN.GATE.y + 6, { wait: 0 }); }
   if (id === 'eastave' && EA) { log('东门大道修好了：镇东有了停车场，私家车会在大道上来回'); burst(EA.PARK_GATE.x, EA.PARK_GATE.y, 20, [Wd[3], Wd[4], '#fff2a8'], 12, 'wood'); albumSnap('eastave', EA.PARK_GATE.x, EA.AVENUE.y + 8, { wait: 0 }); if (typeof syncEast === 'function') syncEast(true); }
   if (id === 'vacbeach' && EA) { log('度假沙滩开放了：栈桥以东清出了沙滩，摆上了伞、躺椅、救生塔和落日台'); burst(680, 236, 20, [Wd[4], Wd[5], '#fff2a8'], 12, 'wood'); albumSnap('vacbeach', 680, 236, { wait: 0 }); if (typeof syncEast === 'function') syncEast(true); }
+  if (FXP && FXP.BY[id]) xpfBought(id); // v5.12.4 农场体验
   if (DC.CATALOG[id]) log(id === 'party' ? '派对区的桌椅和串灯买好了，家人会找一块空地搭起来' : `${o.item.name}放进了仓库，家人会找地方摆上（也可以用「摆${o.item.name}」自己选地方）`); // v5.7.0
   if (AN.PETS[id]) log(`${o.level.label}来到了农场`);
   if (PENS[id]) for (let i = yard.length - 1; i >= 0; i--) { const c = yard[i], P = PENS[id]; if (Math.hypot(c.x - P.bld.x, c.y - P.bld.y) < 16 || Math.hypot(c.x - P.trough.x, c.y - P.trough.y) < 10) yard.splice(i, 1); } // builders tidy the spot
@@ -1681,6 +1683,7 @@ function overnight() {
   noteLog('closeDay', logSnap());
   noteProgress(); // catch a 2,000-gold day before todayEarn is cleared
   machShip(); // v5.11.0.29: the produce cart takes the bin's extra eggs, milk and honey
+  if (FXP && xpfTally.day === S.day && xpfTally.n) log(`今天的农场体验接待了 ${xpfTally.n} 位游客，收了 ${xpfTally.gold} 金`); // v5.12.4
   if (DY && S.diary && S.todayEarn > 0) DY.entry(S.diary, S.day).in = S.todayEarn; // v5.10.13: the day's takings go in the diary
   S.day++; try { albumBackfill(); } catch (e) {} S.dayEarn.push(S.todayEarn); if (S.dayEarn.length > 7) S.dayEarn.shift(); S.todayEarn = 0; S.soldToday = 0;
   let grew = 0; const justRipe = [];
@@ -2018,6 +2021,10 @@ function groundAt(x, y) { // -> [palette colour, kind]
     const bw = EA.boardwalk(!!S.eff.eastave);
     if (Math.abs(y - bw.y) <= bw.hw + 0.4 && x >= bw.x0 && x <= bw.x1) return [vnoise(x / 2, y / 2, 13) > 0.5 ? Wd[2] : Wd[3], 'dirt'];
     const v = vnoise(x / 5, y / 5, 17); return [v > 0.66 ? Wd[5] : v > 0.33 ? Wd[4] : Wd[3], 'sand']; }
+  if (FXP && S && S.eff && x > -160 && x < 590 && y > -110 && y < 150) { const gk = FXP.ground(x, y, S.eff); if (gk) { // v5.12.4 农场体验: pen earth, the truck's gravel stand, flagstones under the arch
+    if (gk === 'stand') { const v = vnoise(x * 1.7, y * 1.7, 23); return [v > 0.7 ? St[3] : v > 0.4 ? St[2] : v > 0.2 ? Wd[3] : St[1], 'dirt']; }
+    if (gk === 'photo') { const u = Math.floor((x + (Math.floor(y / 2.5) % 2) * 1.5) / 3), gx = (x + (Math.floor(y / 2.5) % 2) * 1.5) % 3, gy = y % 2.5; return [gx < 0.5 || gy < 0.5 ? St[1] : (u + Math.floor(y / 2.5)) % 3 ? St[2] : St[3], 'dirt']; }
+    const v = vnoise(x / 3, y / 3, 29); return [gk === 'pen' ? (v > 0.6 ? Wd[3] : v > 0.25 ? Wd[2] : G[1]) : (v > 0.5 ? Wd[3] : Wd[2]), 'dirt']; } }
   if (pd < pw || yd < 0) {
     if (yd >= 0 && x >= 446 && TN && TN.inTown(x, y) && HL && HL.paved && S.town && HL.paved(S.town.hall)) { // v5.10.10: 路面铺石板
       const u = x + 400 + (Math.floor((y + 400) / 3) & 1) * 1.5, cx = Math.floor(u / 3), cy = Math.floor((y + 400) / 3), k = vnoise(cx, cy, 5);
@@ -2305,6 +2312,7 @@ SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the sh
   if (id === 'cottage' && HM) return homeGate(have); // v5.9.0
   if (id === 'town' && TN) return have ? null : TN.gate({ plots: S.plots, schoolDays: TN.schoolDays(S.town) }); // v5.8.0
   if (id === 'eastave' && EA) return have ? null : EA.gateAve({ town: townOpen(), lv: townLv() });
+  if (FXP && FXP.BY[id]) return have ? null : FXP.gate(id, xpfGateCtx()); // v5.12.4
   if (id === 'vacbeach' && EA) return have ? null : EA.gateBeach({ town: townOpen(), coast: !!(S.eff && S.eff.regions && S.eff.regions.includes('coast')) });
   if (id === 'sprinkler') return PW.sprinklerGate(S.up, workersNow()) ? null : '先买花洒水壶，或等家里有 3 个能干活的人';
   if (PW.WORKS[id]) return PW.workGate(id, worksCtx());
@@ -2325,6 +2333,7 @@ const revealSteps = id => { // the outside conditions behind a gate, in order; e
   const moved = !!S.family.moved;
   if (id === 'town') return [moved, !!(S.plots.eroad && S.plots.eroad.mod === 'road'), TN ? TN.schoolDays(S.town) > 0 || S.family.kids.length > 0 : true];
   if (id === 'cottage') return [moved, plotMod('meadow', 'field'), S.family.kids.length > 0];
+  if (FXP && FXP.BY[id]) { const c = xpfGateCtx(); return [c.inn, id === 'xppick' ? c.orchard : id === 'xppet' ? c.coop || c.fold : id === 'xptour' ? c.avenue : id === 'xpcraft' ? c.diner : c.any]; } // v5.12.4
   if (PW.WORKS[id]) return [moved, plotMod('workshop')];
   if (id === 'wheel') return [moved, plotMod('dam')];
   if (id === 'hive') return [moved, plotMod('meadow', 'orchard')];
@@ -3496,7 +3505,7 @@ function townLife(dm) {
     if (--g.left < 0) { g.leaving = true; lifeGo(g, lifeEdge()); continue; }
     lifeGo(g, lifePick(g)); g.wait = 6 + lifeR() * 20; }
 }
-function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); townLife(dm); if (typeof eastTick === 'function') eastTick(); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
+function townTick(dm) { if (!TN) return; visitorTick(dm); hallTick(); neighbourTick(dm); townLife(dm); if (typeof eastTick === 'function') eastTick(); if (FXP) xpfTick(); if (MK && HL) { marketMorning(); marketCrowd(dm); } if (BK && HL) bakeryMorning(); if (WS && HL) woodshopMorning(); if (SC && HL) { sportsMorning(); sportsCrowd(dm); } if (FV && HL) festivalMorning(); if (IN) innTick(dm); if (TOWN_ON) TA.sync(); festivalBegin(); }
 function townDraw(list) {
   for (const g of VISITORS) { const sh = famSheet(g.look, 6); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
   for (const g of NEIGH) if (g.out) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); }
@@ -3504,6 +3513,7 @@ function townDraw(list) {
   for (const g of TLF) { const sh = famSheet(g.look, /^mate/.test(g.look) ? 6 : 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.12.0: 路人
   for (const g of EAST_VIS) { const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh, fx: g.fx || 0, fy: g.fy || 1 })); } // v5.12.2: parking / beach visitors
   if (PK) parkDraw(list); // v5.12.3: the town families and the park pets
+  if (FXP) xpfDraw(list); // v5.12.4: 农场体验 visitors and the pen animals
   for (const g of SPT) { const sh = famSheet(g.look, g.race ? 6 : 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.9: sports day
 }
 // v5.12.3: the town families walk fixed routes (park.js, pure); a pram in front of a parent with a baby; the park dog and cat
@@ -3515,6 +3525,92 @@ function parkDraw(list) {
     if (g.pram) { const fx = Math.abs(g.fx) > 0.2 ? Math.sign(g.fx) : 1; list.push({ spr: (fx * CA - g.fy * SA) < 0 ? PRAM_L : PRAM, x: g.x + g.fx * 4, y: g.y + g.fy * 4 + 0.5, w: 1, park: 'pram' }); } }
   for (const p of parkPets()) { const sp = petSprite(p), fr = p.pose === 'walk' ? (Math.floor(realT * 6) & 1) : p.pose === 'sleep' ? 3 : 2; list.push({ spr: (p.flip ? sp.l : sp.r)[fr], x: p.x, y: p.y, w: 1, park: p.id }); }
 }
+// ---------- v5.12.4 农场体验 (rules in farmxp.js, art in farmxp-art.js). Only the five shop levels are saved. ----------
+// Tourists are today's overnight guests plus the 东门大道 day-trippers; who comes, when and where is a pure function of the day.
+// Each visitor pays when the visit ends (the clock passing that minute while the game runs), so a reload never pays twice.
+var XPF_ON = false; const XPF_VIS = []; let xpfPrevT = null, xpfPlanC = null, xpfTruckKey = '', xpfTally = { day: -1, n: 0, gold: 0 };
+const xpfRoutes = new Map();
+const xpfBuilt = () => { const o = {}; if (FXP && S.eff) for (const id of FXP.IDS) if (S.eff[id]) o[id] = 1; return o; };
+const xpfAny = () => !!(FXP && S.eff && FXP.IDS.some(id => S.eff[id]));
+function xpfGateCtx() { const I = S.inn, rg = (S.eff && S.eff.regions) || [];
+  return { inn: !!(IN && I && IN.cabinsUp(I) > 0), orchard: rg.includes('orchard'), coop: !!S.eff.coop, fold: !!S.eff.fold, avenue: !!S.eff.eastave, diner: !!(IN && I && IN.dinerUp(I)), any: xpfAny() }; }
+function xpfPoolCtx(d) {
+  const I = S.inn, stay = I && Array.isArray(I.guests) ? I.guests.filter(g => (g.from | 0) < d && (g.until | 0) > d).reduce((a, g) => a + (g.n | 0), 0) : 0;
+  let parkAgri = 0, parkOther = 0;
+  if (EA && S.eff && S.eff.eastave) for (const c of EA.dayPlan(d, { avenue: true, beach: !!S.eff.vacbeach }).cars) { if (c.dest === 'agri') parkAgri += c.people | 0; else parkOther += c.people | 0; }
+  return { stay, parkAgri, parkOther };
+}
+function xpfRoute(a, b) { // entry -> spot over the walk grid, cached per nav version
+  ensureNav(); const key = (a.x | 0) + ',' + (a.y | 0) + '>' + (b.x | 0) + ',' + (b.y | 0) + '@' + navVer; let r = xpfRoutes.get(key);
+  if (!r) { if (xpfRoutes.size > 200) xpfRoutes.clear(); r = [{ x: a.x, y: a.y }].concat(routeVia(a, b).map(p => ({ x: p.x, y: p.y })));
+    const e = r[r.length - 1]; if (Math.hypot(e.x - b.x, e.y - b.y) > 0.5) r.push({ x: b.x, y: b.y }); xpfRoutes.set(key, r); }
+  return r;
+}
+function xpfLegs() { const T = FXP.TOUR, s = T.stand; return [xpfRoute(s, T.stops[0]), xpfRoute(T.stops[0], T.stops[1]), xpfRoute(T.stops[1], s)]; }
+function xpfPlan(d) {
+  const built = xpfBuilt(), key = d + '|' + Object.keys(built).join() + '|' + navVer;
+  if (xpfPlanC && xpfPlanC.key === key) return xpfPlanC;
+  const ctx = xpfPoolCtx(d), cnt = FXP.counts(d, ctx, built);
+  const trees = built.xppick ? S.trees.filter(t => t.stage === 'tree' && WD.FRUIT[t.kind]) : [];
+  const legs = built.xptour ? xpfLegs() : null, dur = legs ? FXP.truckDur(legs) : 0;
+  xpfPlanC = { key, day: d, pool: FXP.pool(ctx), ctx, counts: cnt, visits: FXP.visits(d, cnt, { trees }), tours: built.xptour ? FXP.tours(d, cnt.xptour, dur) : [], legs, dur };
+  return xpfPlanC;
+}
+const xpfFace = { xppick: [-0.6, -0.8], xppet: [0, 1], xpcraft: [0, -1], xpphoto: [0, 1] };
+function xpfPay(k, n, x, y) {
+  const it = FXP.BY[k]; if (!it || !(n > 0)) return; const g = it.fee * n;
+  S.coins += g; S.earned += g; S.todayEarn += g; emit('income', { gold: g, source: 'farmxp', who: k, n });
+  if (xpfTally.day !== S.day) xpfTally = { day: S.day, n: 0, gold: 0 }; xpfTally.n += n; xpfTally.gold += g;
+  if (x != null) popText(x, y, 14, '+' + g, '#ffd76a');
+}
+function xpfTick() {
+  XPF_VIS.length = 0;
+  if (!FXP || !S.eff || !xpfAny()) { if (XPF_ON && xpfTruckKey) { xpfTruckKey = ''; FXA.syncTruck(null); } xpfPrevT = S.t; return; }
+  const T = S.t % 1440, plan = xpfPlan(S.day), rain = parkRain(), prev = xpfPrevT, now = S.t, base = S.day * 1440;
+  const crossed = m => prev != null && now > prev && now - prev < 720 && base + m > prev && base + m <= now; // paid / snapped once, while the game runs
+  for (const v of plan.visits) {
+    const out = !(rain && v.k !== 'xpcraft'); // the 手作坊 is under its awning; everyone else waits out the rain inside
+    if (out && crossed(v.end)) xpfPay(v.k, 1, v.spot.x, v.spot.y - 10);
+    if (out && v.k === 'xpphoto' && crossed(v.at)) albumSnap('xpphoto', v.spot.x, v.spot.y, { wait: 1 });
+    if (!out) continue;
+    const q = FXP.stroll(xpfRoute(FXP.ENTRY, v.spot), v.at, v.stay, T); if (!q) continue;
+    if (q.state === 'at') { const f = xpfFace[v.k] || [0, 1]; q.fx = f[0]; q.fy = f[1]; }
+    XPF_VIS.push({ id: v.id, k: v.k, look: v.look, x: q.x, y: q.y, fx: q.fx, fy: q.fy, moving: q.moving, phase: q.phase, state: q.state });
+  }
+  let truck = { x: FXP.TOUR.stand.x, y: FXP.TOUR.stand.y, rot: 0, riders: 0, moving: false };
+  if (plan.legs && !rain) for (const run of plan.tours) {
+    if (crossed(run.t1)) xpfPay('xptour', run.riders, FXP.TOUR.stand.x, FXP.TOUR.stand.y - 12);
+    const p = FXP.truckAt(plan.legs, run.t0, T); if (p) truck = Object.assign(p, { riders: run.riders });
+    for (let q = 0; q < run.riders; q++) { // riders walk to the booth queue before the run and back to the guest houses after it
+      const spot = FXP.TOUR.queue[q], r = xpfRoute(FXP.ENTRY, spot), w = FXP.lenOf(r) / FXP.SPEED;
+      let s = null; if (T >= run.t0 - 12 - w && T < run.t0) s = FXP.stroll(r, run.t0 - 12, 12, T); else if (T >= run.t1 && T < run.t1 + w) s = FXP.stroll(r, run.t1 - 0.01, 0.01, T);
+      if (s) { if (s.state === 'at') { s.fx = 0; s.fy = -1; } XPF_VIS.push({ id: 'tour' + run.i + ':' + q, k: 'xptour', look: run.looks[q], x: s.x, y: s.y, fx: s.fx, fy: s.fy, moving: s.moving, phase: s.phase, state: s.state }); } }
+  }
+  xpfPrevT = now;
+  const tk = (truck.x | 0) + ',' + (truck.y | 0) + ',' + (truck.rot || 0).toFixed(1) + ',' + truck.riders;
+  if (XPF_ON && tk !== xpfTruckKey) { xpfTruckKey = tk; FXA.syncTruck(truck); }
+}
+function xpfDraw(list) {
+  for (const g of XPF_VIS) { const sh = famSheet(g.look, 0); if (!sh) continue;
+    const q = { x: g.x, y: g.y, fx: g.fx, fy: g.fy, moving: g.moving, walkPhase: g.phase, task: null };
+    list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh, xp: g.id }, farmerPose(q))); }
+  if (S.eff && S.eff.xppet && FXP) { const kinds = []; if (S.eff.coop) kinds.push('chicken'); if (S.eff.fold) kinds.push('sheep');
+    for (const a of FXP.penAnimals(S.day, S.t % 1440, kinds)) { const sp = ANIMAL_SPR[a.kind]; if (!sp) continue; if (!onScreen(a.x, a.y, 30)) continue;
+      list.push({ spr: (a.flip ? sp.l : sp.r)[a.moving ? Math.floor(realT * 6) % 2 : a.graze ? 2 : 0], x: a.x, y: a.y, w: 1, xp: a.id }); } }
+}
+function xpfBought(id) { // after applyUpgrades
+  const it = FXP.BY[id]; if (!it) return;
+  const r = FXP.RECTS[id]; if (r && groundReady) buildGroundBase([r[0] - 4, r[1] - 4, r[2] + 4, r[3] + 4]);
+  if (XPF_ON) FXA.sync(true); xpfPlanC = null; xpfTruckKey = '';
+  const say = { xppick: '果园采摘开张了：果园坡门口摆好了采摘篮，住客会挎着篮子来摘果子', xppet: '摸动物圈围好了：农家乐东边住进两只小鸡和一只小羊，游客可以进圈喂一喂',
+    xptour: '农场游览车备好了：售票小棚旁停着小货车，每天 10:30 和 14:30 各开一趟', xpcraft: '手作坊搭好了：菜馆西边的凉棚下摆了长桌，游客可以坐下做果酱和南瓜饼',
+    xpphoto: '留影角搭好了：稻草人和花架就在摸动物圈北边、大路旁，游客会来拍照' }[id];
+  log(say + `（每人 ${it.fee} 金）`); const c = r ? { x: (r[0] + r[2]) / 2, y: (r[1] + r[3]) / 2 } : FXP.ENTRY; burst(c.x, c.y, 16, [Wd[3], Wd[4], '#fff2a8'], 10, 'wood');
+}
+function xpfView() { // the shop / test view of today
+  if (!FXP) return null; const p = xpAnyPlan(); return p ? { pool: p.pool, ctx: p.ctx, counts: p.counts, earn: FXP.earnOf(p.counts), tours: p.tours.map(t => ({ t0: t.t0, t1: t.t1, riders: t.riders })), dur: p.dur, tally: xpfTally.day === S.day ? Object.assign({}, xpfTally) : { day: S.day, n: 0, gold: 0 } } : null;
+}
+const xpAnyPlan = () => (xpfAny() ? xpfPlan(S.day) : null);
 // ---------- v5.9.0 phase 11: 好感, the new house, the wedding, the couple's little farm (rules in home.js, art in home-art.js) ----------
 var HOME_ON = false;
 const homeRngS = mulberry32(0x40E5A11); // its own stream (the farm's RNG stays where it was)
@@ -4684,6 +4780,7 @@ if (TA) { TA.mount({ S, buildModel, gableY, addProp, props, models, treeDefs, ad
 if (HA && HM) { HA.mount({ S, buildModel, gableY, addProp, props, markNavDirty: () => markNavDirty(), repaint: r => { if (groundReady) buildGroundBase(r); } }); HOME_ON = true; } // v5.9.0
 if (IA && IN) { IA.mount({ S, buildModel, gableY, addProp, props, innLay: () => innLay() }); INN_ON = true; } // v5.10.7; v5.11.0.5 the 农家乐区 layout
 if (EAA && EA) { EAA.mount({ S, buildModel, gableY, addProp, props }); EAST_ON = true; } // v5.12.2
+if (FXA && FXP) { FXA.mount({ S, buildModel, addProp, props }); XPF_ON = true; } // v5.12.4
 
 // animal sprites face right; frames: [step A, step B, head down]. Same palette and outline as the rest of style A.
 const lowerHead = (rows, col, dy) => rows.map((r, y) => r.slice(0, col) + (y - dy >= 0 ? rows[y - dy].slice(col) : '.'.repeat(r.length - col)));
@@ -5940,6 +6037,7 @@ function albumPlace(at) { // a world spot for a moment's place (old saves, re-st
     // v5.11.0.9 bigger diner / taller kid cottages: aim a little higher so the roofs fit in the 160×110 frame
     if (at === 'inn') { const L = innLay(); if (L && L.diner) return P2(L.diner.x, L.diner.y + 4); if (TN && TN.AGRI) return P2((TN.AGRI[0] + TN.AGRI[2]) / 2, 70); }
     if (at === 'wedding') { const s = weddingSpot(); if (s) return P2(s.x, s.y + 4); return albumPlace('party'); }
+    if (at === 'photo' && FXP) return P2(FXP.PHOTO.pose[0].x, FXP.PHOTO.pose[0].y); // v5.12.4
     if (at === 'newhouse' && HM) { const h = S.home.houses.find(q => q.built && q.kid) || S.home.houses.find(q => q.built); if (h) { const d = HM.layout(h).door; return P2(d.x, d.y - 2); } }
   } catch (e) {}
   return P2(DOOR.x + 6, DOOR.y + 8);
@@ -6225,7 +6323,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.3';
+const GAME_VERSION = '5.12.4';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6571,6 +6669,7 @@ function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === '
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
 Object.assign(window.__farm, { PK, parkPeople: () => parkPeople(), parkPets: () => parkPets(), tourView: () => tourView(), tourCtx: () => tourCtx(), parkMorning: () => { parkDay = S.day - 1; parkMorning(S.town.hall); } });
+Object.assign(window.__farm, { FXP, FXA, xpfView: () => xpfView(), xpfVis: () => XPF_VIS.slice(), xpfTick: () => xpfTick(), xpfPlan: () => xpAnyPlan(), xpfGateCtx: () => xpfGateCtx(), xpfReset: () => { xpfPrevT = null; xpfPlanC = null; xpfTruckKey = ''; } }); // v5.12.4
 Object.assign(window.__farm, { EA, EAA, eastHideAt, eastTraffic: () => EA && S.eff ? EA.trafficAt(S.day, S.t, { avenue: !!S.eff.eastave, beach: !!S.eff.vacbeach }) : null, eastVis: () => EAST_VIS.slice() });
 Object.assign(window.__farm, { aimAt, commitAt, canStore, storeThing, movableAt: (x, y) => movableAt(x, y), keptOf: id => keptOf(id), setTouch: o => { if (o && typeof o.slop === 'number') TOUCH.slop = Math.max(1, o.slop); if (o && typeof o.pickCss === 'number') TOUCH.pickCss = Math.max(0, o.pickCss); if (o && 'onTap' in o) TOUCH.onTap = typeof o.onTap === 'function' ? o.onTap : null; return { slop: TOUCH.slop, pickCss: TOUCH.pickCss, onTap: !!TOUCH.onTap }; } }); // v5.11.0.2
 window.__farm.art = { models, pasture: pastureModels, props, stackCanvas, SPR, ALLM }; // v5.11.0.9 test hook: tools/scale-audit.js renders every building beside a grown-up

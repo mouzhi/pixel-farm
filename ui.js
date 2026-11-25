@@ -34,6 +34,17 @@
       { k: ink, s: st[3] || '#9a9a92', w: wd[5] || wd[4] }), // v5.12.2 东门大道
     vacbeach: pixIcon(['', '', '      rr  rr', '     r  rr  r', '      y  y', '       y', '   ssssssssss', '  ssysysysyss', ' ssssssssssss', 'kkkkkkkkkkkkkk', 'bbbbbbbbbbbbbb', 'bbbbbbbbbbbbbb'],
       { k: ink, r: rf[2], y: '#c9a85a', s: wd[4], b: wt[2] }), // v5.12.2 度假沙滩
+    // v5.12.4 农场体验
+    xppick: pixIcon(['', '      ggg', '     ggggg', '    ggrgggg', '    gggggrg', '     ggggg', '       k', '   kkkkkkkkkk', '   kbrbobrbok', '    kbbbbbbk', '    kbbbbbbk', '     kkkkkk'],
+      { k: ink, g: gr[3], r: '#d8483a', o: '#e89a3a', b: wd[3] }),
+    xppet: pixIcon(['', '', '   kk    www', '  kyyk  wwwww', '  kyoyk kwwwwwk', '  kyyyk  wkwkw', 'k k k k k k k k', 'bbbbbbbbbbbbbbb', 'k k k k k k k k', 'bbbbbbbbbbbbbbb', 'k k k k k k k k'],
+      { k: ink, y: '#f2cf55', o: '#e89a3a', w: '#f0ece0', b: wd[3] }),
+    xptour: pixIcon(['', '', '', '          kkkk', '          kggk', ' kkkkkkkkkkbbkk', ' kwwwwwwwwkggggk', ' kwwwwwwwwkggggk', ' kkkkkkkkkkkkkkk', '   kk      kk', '  kddk    kddk', '   kk      kk'],
+      { k: ink, w: wd[3], g: gr[3], b: '#8cc6dc', d: '#2a2a32' }),
+    xpcraft: pixIcon(['', ' rwrwrwrwrwrwrw', ' rwrwrwrwrwrwrw', ' k            k', ' k  jj  oo jj k', ' k kjjk koo   k', ' kkkkkkkkkkkkkk', ' kttttttttttttk', ' k k        k k', ' k k        k k'],
+      { k: ink, r: rf[2], w: '#f0e6d0', j: '#a83250', o: '#e89a3a', t: wd[4] }),
+    xpphoto: pixIcon(['', '    grgygrg', '   g       g', '  y         r', '  g         g', '  r         y', '  g         g', '  y         r', '  g         g', '  g         g', ' kkk       kkk'],
+      { k: ink, g: gr[3], r: '#d8483a', y: '#f2cf55' }),
     shoe: pixIcon(['', '', '', '    kkkk', '   kbbbbk', '   kbttbk', '   kbbbbk', '   kbbbbkk', '   kbbbbbbkkk', '  kbbbbbbbbbbk', '  kbtttbbbbbbbk', '  kkkkkkkkkkkkk', '  kdddddddddddk', '   kkkkkkkkkkk'].map(r => r.padEnd(16)),
       { k: ink, b: wd[2], t: wd[4], d: wd[1] }),
     hoe: pixIcon(['', '            kk', '           kbk', '          kbk', '         kbk', '        kbk', '       kbk', '      kbk', '     kbk', '  kkkbk', ' kssskk', ' kseeek', ' kseek', '  kkk'].map(r => r.padEnd(16)),

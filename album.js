@@ -34,6 +34,7 @@
     { id: 'inn', t: '民宿迎来第一组客人', line: '远道而来的客人住进了小木屋。', hint: '在农家乐区盖一间小木屋', who: ['farmer'], at: 'inn' },
     { id: 'wedding', t: '孩子的婚礼', line: '{kid}和{mate}走到了一起，今晚办婚礼。', hint: '孩子长大以后', who: ['farmer', 'partner'], at: 'wedding' },
     { id: 'newhouse', t: '搬进新房', line: '新房子的灯第一次亮了，小两口住了进去。', hint: '孩子成家以后', who: [], at: 'newhouse' },
+    { id: 'xpphoto', t: '留影角的第一张合影', line: '游客站在稻草人和花架前比了个手势，咔嚓。', hint: '在农家乐搭一个留影角', who: [], at: 'photo' }, // v5.12.4
   ];
   const BY = Object.fromEntries(MOMENTS.map((m, i) => [m.id, Object.assign({ i }, m)]));
   const ID = /^[a-z][a-z0-9]{0,11}$/, WHO = /^[a-z][a-z0-9]{0,9}$/;

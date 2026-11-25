@@ -29,7 +29,7 @@ jobs:
           cache-dependency-path: tools/package-lock.json
       - name: Syntax check (node --check)
         run: |
-          for f in game.js fog.js east.js east-art.js park.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
+          for f in game.js fog.js east.js east-art.js farmxp.js farmxp-art.js park.js diary.js diary-ui.js album.js album-ui.js fx.js sim.js save.js world.js plots.js expansion.js plots-ui.js wood.js path.js animals.js fish.js family.js kids.js surprise.js weather.js insects.js codex.js codex_icons.js playlog.js ui.js events-ui.js audio.js home.js home-art.js bakery.js woodshop.js smithy.js school.js library.js clinic.js festival.js events.js hall.js careers.js inn.js inn-art.js market.js slots.js yard.js town.js town-life.js town-bldg.js town-art.js assets/*.js tools/*.js; do echo "check $f"; node --check "$f"; done
       - name: Unit tests
         run: |
           set -e
@@ -71,6 +71,7 @@ jobs:
           node tools/townart-test.js
           node tools/east-test.js
           node tools/park-test.js
+          node tools/farmxp-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -123,13 +124,19 @@ jobs:
           # v5.11.0.13: + rain-shots from agrilot (scale was 9m41s on run 44782373476; rain ~7m → ~17m)
           # v5.11.0.14: + housemove-shots (~1–2m locally; expected ~18–19m, >=3m headroom under 25m)
           # v5.11.0.15: scale exceeded 22m on run 44815889988; isolate rain instead of passing the overload to another leg.
-            scripts: scale-audit.js scale-shots.js offline-shots.js album-shots.js housemove-shots.js
+          # v5.12.4: scale was 23.0m on run 45365567118 (scale-shots 11.8m, album 4.2m, offline 3.6m, housemove 3.0m): offline + album move to their own leg
+            scripts: scale-audit.js scale-shots.js housemove-shots.js
+          - group: offline-album
+            scripts: offline-shots.js album-shots.js
           - group: weather
           # v5.11.0.19: + married-shots (three wedding set-ups, ~3–5m locally); weather was the lightest leg with rain alone (~7m)
           # v5.11.0.20: + water-shots (河口 / flowing water / wheels, ~1.5–2m locally; weather was 10m27s with rain+water on run 44880021944)
           # v5.11.0.21: + wedding-shots (~4.7m on CI; weather was 15m32s with rain+married+wedding on run 44882574583, ~17.5m expected with water)
             # v5.11.0.23: + wedding-load-test (reload a wedding-evening save; ~15s)
-            scripts: rain-shots.js married-shots.js water-shots.js wedding-shots.js wedding-load-test.js
+          # v5.12.4: weather was 24.1m on run 45365567118 (rain 10.2m, wedding 5.1m, married 4.7m, water 3.1m, wedding-load 0.9m): the wedding scripts get their own leg
+            scripts: rain-shots.js water-shots.js
+          - group: wedding
+            scripts: married-shots.js wedding-shots.js wedding-load-test.js
           # v5.11.0 小镇放大: its own leg (overview, scale, feast square, market, two-storey street, minimap, mobile, fixtures, routes)
           # v5.11.0.8: + offline-shots (~1.5m; home was 19m40s with it on run 44730151787, townscale 14m)
           # v5.12.3: school-shots on its own leg (townscale hit 25m30s on run 45358420743 on a slow runner: v5110 18.8m, school 6.6m;
@@ -148,7 +155,10 @@ jobs:
             #  expected agrilot ~19–20m with rain+restaurant, >=3m headroom under 25m)
             # v5.11.0.13: fog-shots -> fog2-shots (~3m more than the old one), so rain-shots (~7m) goes on to scale (9m41s on run 44782373476)
             # v5.11.0.26: festival-shots tried here then got its own leg (agrilot hit 21m34s on run 44918453900)
-            scripts: agrilot-shots.js fog2-shots.js hotbar-shots.js restaurant-shots.js
+            # v5.12.4: agrilot was 23.9m on run 45365567118 (agrilot 10.2m, fog2 7.6m, hotbar 4.7m, restaurant 1.4m): fog2 + hotbar get their own leg
+            scripts: agrilot-shots.js restaurant-shots.js
+          - group: fog-hotbar
+            scripts: fog2-shots.js hotbar-shots.js
           # v5.11.0.26: workshop-shots and festival-shots each get their own leg. recent-a was 23m12s
           # with both plus the new bakery shot (run 44916066351); parking them on works-town / agrilot
           # then made those groups 25m01s and 21m34s (run 44918453900).
@@ -184,6 +194,9 @@ jobs:
             scripts: riverbank-test.js orchard-test.js
           - group: park
             scripts: park-shots.js
+          # v5.12.4 农场体验: its own leg (~5m locally)
+          - group: farmxp
+            scripts: farmxp-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
