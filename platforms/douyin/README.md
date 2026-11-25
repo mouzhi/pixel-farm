@@ -9,3 +9,11 @@
 - 素材：所有图片和音乐地址都来自抖音平台上传；像素风格与网页版「像素放置农场」一致。
 
 同步方式：在本机工程里改好并 `interest-card-cli push` / `verify` 后，把源码复制到本目录再提交。依赖装在平台沙箱里，这里不需要 `pnpm install`。
+
+## 落地页：完整游戏（Phase 1 测速版）
+
+- 落地页 `src/pages/index` 直接跑网页版的模拟和渲染（main e2c8d83 / v5.12.5），画在一块 `<Canvas type="2d">` 上，没有 DOM。
+- `src/game/farm-engine.js` 是生成文件：`node scripts/build-game.mjs <pixel-farm 仓库> e2c8d83 farm-engine.min.js` 把 57 个游戏脚本（不含网页 UI 和音频）拼成一个函数，全局变量改走适配层，最后预编译成 ES5（Taro 自带的宽松转译会把游戏弄坏）。需要 @babel/parser/traverse/generator/types、@babel/core、@babel/preset-env 和 terser。
+- `src/game/farm-env.ts` 是适配层：离屏画布、图片、帧循环、存储（`mouzhi/pixel-farm:save`，v15）、ImageData 等。
+- `src/game/demo-save.ts` 是游戏自己的脚本玩家跑 30 天生成的演示存档，不是任何真人存档。
+- 页面上有 FPS / 帧耗时（均值、p95）和雾、光照开关，用来在真机上测速。

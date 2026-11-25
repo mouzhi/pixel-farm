@@ -1,97 +1,124 @@
-/* 落地页少量 Tailwind 难以表达的像素风补丁：文字描边、帧动画、飘字 */
-.pixel-title {
-  text-shadow: 2px 2px 0 #4a2a12, -2px 2px 0 #4a2a12, 2px -2px 0 #4a2a12, -2px -2px 0 #4a2a12, 0 4px 0 rgba(0, 0, 0, 0.35);
-}
-
-.pixel-coin {
-  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12;
-}
-
-.farm-hero-fade {
-  background: linear-gradient(180deg, rgba(47, 74, 31, 0) 0%, rgba(47, 74, 31, 0.92) 100%);
-}
-
-.farm-yard {
-  background-repeat: repeat;
-  background-size: 32px 32px;
-}
-
-.plot-glow {
-  background: radial-gradient(circle, rgba(255, 211, 77, 0.6) 0%, rgba(255, 211, 77, 0) 70%);
-  animation: plotGlow 1.2s ease-in-out infinite;
-}
-
-.plot-bob {
-  animation: plotBob 0.8s ease-in-out infinite;
-}
-
-.plot-tip {
-  animation: plotTip 0.8s ease-out forwards;
-}
-
-.farmer {
-  width: 56px;
-  height: 56px;
-  margin-left: -28px;
-  transition: left 0.35s linear, top 0.35s linear;
-}
-
-.farmer-left {
-  transform: scaleX(-1);
-}
-
-.farmer-frame {
-  width: 56px;
-  height: 56px;
+.farm-page {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
   overflow: hidden;
+  background: #1b2a24;
 }
 
-.farmer-sheet {
-  display: block;
-  width: 224px;
-  height: 56px;
+.farm-canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  image-rendering: pixelated;
 }
 
-.farmer-anim {
-  animation: farmerFrames 0.48s steps(4, end) infinite;
+.farm-overlay {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
 }
 
-@keyframes farmerFrames {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-224px);
-  }
+.farm-top-shade {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+  background: linear-gradient(180deg, rgba(20, 14, 10, 0.72) 0%, rgba(20, 14, 10, 0.35) 70%, rgba(20, 14, 10, 0) 100%);
 }
 
-@keyframes plotGlow {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-  50% {
-    opacity: 1;
-  }
+.farm-hud {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin: 4px 12px 0;
+  padding: 6px 10px;
+  background: rgba(40, 28, 22, 0.82);
+  border: 2px solid #e8c78a;
+  border-radius: 4px;
 }
 
-@keyframes plotBob {
-  0%,
-  100% {
-    transform: translateY(0);
-  }
-  50% {
-    transform: translateY(-3px);
-  }
+.farm-hud-day {
+  color: #fff6dc;
+  font-weight: 600;
 }
 
-@keyframes plotTip {
-  from {
-    opacity: 1;
-    transform: translateY(0);
-  }
-  to {
-    opacity: 0;
-    transform: translateY(-24px);
-  }
+.farm-hud-coins {
+  color: #ffd76a;
+  font-weight: 700;
+}
+
+.farm-perf {
+  display: flex;
+  flex-direction: column;
+  align-self: flex-start;
+  margin: 8px 12px 0;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 4px;
+}
+
+.farm-perf-line {
+  color: #bff0a0;
+  line-height: 16px;
+  font-family: Menlo, Consolas, monospace;
+}
+
+.farm-perf-warn {
+  color: #ffb0a0;
+  line-height: 16px;
+  max-width: 330px;
+}
+
+.farm-state {
+  margin: auto;
+  color: #fff6dc;
+}
+
+.farm-error {
+  display: flex;
+  flex: 1 1 0;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+}
+
+.farm-controls {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  margin-top: auto;
+  padding: 10px 10px 28px;
+  pointer-events: auto;
+  background: linear-gradient(0deg, rgba(20, 14, 10, 0.7) 0%, rgba(20, 14, 10, 0) 100%);
+}
+
+.farm-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 56px;
+  height: 44px;
+  padding: 0 10px;
+  background: rgba(58, 42, 32, 0.92);
+  border: 2px solid #8a6a44;
+  border-radius: 4px;
+}
+
+.farm-btn.is-on {
+  border-color: #ffd76a;
+}
+
+.farm-btn-text {
+  color: #fff6dc;
+  font-weight: 600;
 }

@@ -1,451 +1,322 @@
-import { View, Text } from '@tarojs/components'
-import { useDidHide, useDidShow } from '@tarojs/taro'
+import Taro, { useDidHide, useDidShow, useReady, useUnload } from '@tarojs/taro'
+import { Canvas, Text, View } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
+
 import { CustomNavSpace } from '@/components/custom-nav-space'
-import { PixelImage } from '@/components/pixel-image'
-import { claimCardCoins, fetchFarmState, type FarmCrop, type FarmState } from '@/lib/farm-api'
-import {
-  fertilizerCost,
-  growMs,
-  loadSave,
-  newSave,
-  plotCost,
-  settleOffline,
-  writeSave,
-  type FarmSave,
-} from '@/lib/farm-save'
+import bootFarm from '@/game/farm-engine'
+import { createFarmEnv, type FrameStats } from '@/game/farm-env'
+import { DEMO_SAVE, DEMO_SAVE_KEY } from '@/game/demo-save'
+
 import './index.css'
 
+const CANVAS_ID = 'farm-canvas'
+const DEMO_MARK_KEY = 'pf-douyin-trial-demo'
+const DEMO_VERSION = 'e2c8d83-day31-r2'
 type Phase = 'loading' | 'ready' | 'error'
-type FarmerMode = 'idle' | 'walk' | 'hoe'
+type FarmEnv = ReturnType<typeof createFarmEnv>
+type Hud = { day: string; clock: string; coins: string }
 
-interface Tip {
-  id: number
-  plot: number
-  text: string
+const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
+
+function readStorage(key: string): string | null {
+  const value = Taro.getStorageSync(key)
+  return typeof value === 'string' && value !== '' ? value : null
 }
 
-const COLS = 3
+/** 完整农场第一阶段：在落地页跑网页版的模拟与渲染，并测帧率 */
+// 预览器（逻辑层跑在 Worker 里）：图片在本地解码到离屏画布，不走画布代理，避免代理层报错
+function canDecodeLocally() {
+  return typeof OffscreenCanvas === 'function' && typeof createImageBitmap === 'function' && typeof Blob === 'function' && typeof atob === 'function'
+}
+function createLocalImage() {
+  const c: any = new OffscreenCanvas(1, 1)
+  let src = ''
+  c.complete = false
+  c.naturalWidth = 0
+  c.naturalHeight = 0
+  c.onload = null
+  c.onerror = null
+  Object.defineProperty(c, 'src', {
+    get: () => src,
+    set: (v: string) => {
+      src = String(v)
+      // 游戏的图片都是内嵌 data URL；其它地址（如网页版的 assets/ 小地图图标）这里没有，直接按加载失败处理
+      const m = /^data:([^;,]+)?(;base64)?,(.*)$/.exec(src)
+      Promise.resolve()
+        .then(() => {
+          if (!m) throw new Error(`no local image for ${src.slice(0, 40)}`)
+          const raw = m[2] ? atob(m[3]) : decodeURIComponent(m[3])
+          const bytes = new Uint8Array(raw.length)
+          for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i)
+          return createImageBitmap(new Blob([bytes], { type: m[1] || 'image/png' }))
+        })
+        .then((bmp) => {
+          c.width = bmp.width
+          c.height = bmp.height
+          c.getContext('2d').drawImage(bmp, 0, 0)
+          c.naturalWidth = bmp.width
+          c.naturalHeight = bmp.height
+          c.complete = true
+          if (typeof c.onload === 'function') c.onload({ type: 'load', target: c })
+        })
+        .catch((err) => {
+          c.complete = true
+          if (typeof c.onerror === 'function') c.onerror(err)
+        })
+    },
+  })
+  return c
+}
 
 export default function Index() {
+  const envRef = useRef<FarmEnv | null>(null)
+  const rectRef = useRef({ left: 0, top: 0, width: 375, height: 760 })
+  const touchRef = useRef<{ id: number; x: number; y: number } | null>(null)
+  const bootedRef = useRef(false)
   const [phase, setPhase] = useState<Phase>('loading')
   const [errorText, setErrorText] = useState('')
-  const [farm, setFarm] = useState<FarmState | null>(null)
-  const [save, setSave] = useState<FarmSave | null>(null)
-  const [now, setNow] = useState(() => Date.now())
-  const [active, setActive] = useState(true)
-  const [offline, setOffline] = useState<{ earned: number; harvested: number } | null>(null)
-  const [claiming, setClaiming] = useState(false)
-  const [claimedNote, setClaimedNote] = useState('')
-  const [farmerPlot, setFarmerPlot] = useState(0)
-  const [farmerMode, setFarmerMode] = useState<FarmerMode>('idle')
-  const [facingLeft, setFacingLeft] = useState(false)
-  const [tips, setTips] = useState<Tip[]>([])
-  const [notice, setNotice] = useState('')
-  const tipId = useRef(0)
-  const saveRef = useRef<FarmSave | null>(null)
-  const loadedRef = useRef(false)
+  const [bootMs, setBootMs] = useState(0)
+  const [step, setStep] = useState('准备中')
+  const [stats, setStats] = useState<FrameStats>({ fps: 0, avgMs: 0, p95Ms: 0, frames: 0 })
+  const [hud, setHud] = useState<Hud>({ day: '', clock: '', coins: '' })
+  const [fogOn, setFogOn] = useState(true)
+  const [lightOn, setLightOn] = useState(true)
+  const [fastForward, setFastForward] = useState(false)
+  const [problems, setProblems] = useState<string[]>([])
+  const [diag, setDiag] = useState('')
 
-  saveRef.current = save
-
-  const load = useCallback(async () => {
-    setPhase('loading')
-    const res = await fetchFarmState()
-    if (!res.ok) {
-      setErrorText(res.message)
-      setPhase('error')
-      return
-    }
-    const current = Date.now()
-    const existing = loadSave()
-    let next: FarmSave
-    if (existing) {
-      const settled = settleOffline(existing, res.data.crops, res.data.rules, current)
-      next = settled.save
-      if (settled.earned > 0) setOffline({ earned: settled.earned, harvested: settled.harvested })
-    } else {
-      next = newSave(res.data.rules, current)
-    }
-    setFarm(res.data)
-    setSave(next)
-    writeSave(next)
-    setNow(current)
-    setPhase('ready')
+  const boot = useCallback((attempt = 0) => {
+    if (bootedRef.current) return
+    const query = Taro.createSelectorQuery()
+    query.select(`#${CANVAS_ID}`).fields({ node: true, size: true })
+    query.select(`#${CANVAS_ID}`).boundingClientRect()
+    setStep(`查找画布 ${attempt + 1}`)
+    query.exec((res: any[]) => {
+      try {
+        bootWith(res, attempt)
+      } catch (err) {
+        console.error('[farm] boot failed', err)
+        setErrorText(String((err as Error)?.message || err))
+        setPhase('error')
+      }
+    })
   }, [])
 
-  useDidShow(() => {
-    setActive(true)
-    if (!loadedRef.current) {
-      loadedRef.current = true
-      void load()
-    } else {
-      // 回到页面时刷新卡面带来的金币
-      void fetchFarmState().then((res) => {
-        if (res.ok) setFarm(res.data)
+  const bootWith = (res: any[], attempt: number) => {
+    {
+      const node = res?.[0]?.node
+      const rect = res?.[1]
+      if (!node) {
+        if (attempt < 10) setTimeout(() => boot(attempt + 1), 150)
+        else {
+          setErrorText('画布没有准备好')
+          setPhase('error')
+        }
+        return
+      }
+      bootedRef.current = true
+      setStep('启动游戏')
+      rectRef.current = { left: rect?.left || 0, top: rect?.top || 0, width: rect?.width || 375, height: rect?.height || 760 }
+      const info = Taro.getSystemInfoSync()
+      const runtime = Taro as unknown as { createOffscreenCanvas: (opts: Record<string, unknown>) => any }
+      // 测速版：演示存档版本变了（或还没有存档）就换成这份演示存档
+      if (!readStorage(DEMO_SAVE_KEY) || readStorage(DEMO_MARK_KEY) !== DEMO_VERSION) {
+        Taro.setStorageSync(DEMO_SAVE_KEY, DEMO_SAVE)
+        Taro.setStorageSync(DEMO_MARK_KEY, DEMO_VERSION)
+      }
+      // 屏幕画布只在这里定一次尺寸（约 2 倍 CSS 像素），之后每帧把游戏画面缩放上屏
+      node.width = Math.round(rectRef.current.width * 2)
+      node.height = Math.round(rectRef.current.height * 2)
+      const env = createFarmEnv({
+        mainCanvas: node,
+        createOffscreenCanvas: (width, height) => {
+          // 有原生 OffscreenCanvas 的环境直接用；抖音端走 tt.createOffscreenCanvas
+          const c = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(width, height) : runtime.createOffscreenCanvas({ type: '2d', width, height })
+          c.width = width
+          c.height = height
+          return c
+        },
+        createImage: () => (canDecodeLocally() ? createLocalImage() : typeof node.createImage === 'function' ? node.createImage() : new Image()),
+        requestFrame: (cb) => {
+          if (typeof node.requestAnimationFrame === 'function') node.requestAnimationFrame(cb)
+          else if (typeof requestAnimationFrame === 'function') requestAnimationFrame(cb)
+          else setTimeout(() => cb(nowMs()), 16)
+        },
+        now: nowMs,
+        storage: {
+          get: readStorage,
+          set: (k, v) => Taro.setStorageSync(k, v),
+          remove: (k) => Taro.removeStorageSync(k),
+          keys: () => Taro.getStorageInfoSync().keys || [],
+        },
+        // 画面像素大小按手机竖屏统一（约 280 像素宽的画面放大铺满），不随设备像素比变化
+        viewport: () => ({ width: info.windowWidth, height: info.windowHeight, dpr: 3 }),
+        canvasRect: () => rectRef.current,
+        nativeImageData: typeof ImageData === 'function' ? ImageData : undefined,
+        framebuffer: true,
       })
-    }
-  })
-
-  useDidHide(() => {
-    setActive(false)
-    const current = saveRef.current
-    if (current) writeSave({ ...current, lastSeen: Date.now() })
-  })
-
-  // 定时写存档
-  useEffect(() => {
-    if (!save) return undefined
-    const timer = setTimeout(() => writeSave({ ...save, lastSeen: Date.now() }), 800)
-    return () => clearTimeout(timer)
-  }, [save])
-
-  useEffect(() => {
-    if (!active || phase !== 'ready') return undefined
-    const timer = setInterval(() => setNow(Date.now()), 250)
-    return () => clearInterval(timer)
-  }, [active, phase])
-
-  const cropOf = useCallback(
-    (id: string): FarmCrop | undefined => farm?.crops.find((crop) => crop.id === id) ?? farm?.crops[0],
-    [farm],
-  )
-
-  const addTip = useCallback((plot: number, text: string) => {
-    tipId.current += 1
-    const id = tipId.current
-    setTips((prev) => [...prev, { id, plot, text }])
-    setTimeout(() => setTips((prev) => prev.filter((tip) => tip.id !== id)), 800)
-  }, [])
-
-  const flash = useCallback((text: string) => {
-    setNotice(text)
-    setTimeout(() => setNotice((value) => (value === text ? '' : value)), 1600)
-  }, [])
-
-  const harvestPlot = useCallback(
-    (index: number, byFarmer: boolean) => {
-      const current = saveRef.current
-      if (!farm || !current) return false
-      const plot = current.plots[index]
-      const crop = cropOf(plot.cropId)
-      if (!crop) return false
-      const ms = growMs(crop, current.fertilizer, farm.rules)
-      const t = Date.now()
-      if (t - plot.plantedAt < ms) return false
-      setSave({
-        ...current,
-        coins: current.coins + crop.price,
-        harvests: current.harvests + 1,
-        plots: current.plots.map((p, i) => (i === index ? { cropId: current.selected, plantedAt: t } : p)),
-      })
-      addTip(index, `+${crop.price}`)
-      setFacingLeft(index % COLS < farmerPlot % COLS)
-      setFarmerPlot(index)
-      setFarmerMode(byFarmer ? 'walk' : 'hoe')
-      setTimeout(() => setFarmerMode('hoe'), 380)
-      setTimeout(() => setFarmerMode('idle'), 1000)
-      return true
-    },
-    [farm, cropOf, addTip, farmerPlot],
-  )
-
-  // 农夫自动巡田：每隔一会儿收一块成熟的地
-  useEffect(() => {
-    if (!active || phase !== 'ready' || !farm) return undefined
-    const timer = setInterval(() => {
-      const current = saveRef.current
-      if (!current) return
-      const t = Date.now()
-      const ripe = current.plots.findIndex((plot) => {
-        const crop = cropOf(plot.cropId)
-        return crop ? t - plot.plantedAt >= growMs(crop, current.fertilizer, farm.rules) : false
-      })
-      if (ripe >= 0) harvestPlot(ripe, true)
-    }, farm.rules.farmerStepSeconds * 1000)
-    return () => clearInterval(timer)
-  }, [active, phase, farm, cropOf, harvestPlot])
-
-  const onPlotTap = (index: number) => {
-    if (!harvestPlot(index, false)) {
-      const current = saveRef.current
-      const crop = current ? cropOf(current.plots[index].cropId) : undefined
-      if (farm && current && crop) {
-        const left = growMs(crop, current.fertilizer, farm.rules) - (Date.now() - current.plots[index].plantedAt)
-        flash(`${crop.name}还要 ${Math.ceil(left / 1000)} 秒成熟`)
+      envRef.current = env
+      setDiag([
+        `离屏 ${typeof OffscreenCanvas === 'function' ? '原生' : 'tt'}`,
+        `ImageData ${typeof ImageData === 'function' ? '有' : '无'}`,
+        `画布 ${node?.constructor?.name || typeof node}`,
+        `图片 ${canDecodeLocally() ? '本地解码' : '画布图片'}`,
+      ].join(' · '))
+      const t0 = nowMs()
+      try {
+        bootFarm(env.G)
+        setBootMs(Math.round(nowMs() - t0))
+        setPhase('ready')
+      } catch (err) {
+        console.error('[farm] boot failed', err)
+        setErrorText(String((err as Error)?.message || err))
+        setPhase('error')
       }
     }
   }
 
-  const onClaim = async () => {
-    if (claiming) return
-    setClaiming(true)
-    const claimed = await claimCardCoins()
-    setClaiming(false)
-    if (claimed === null) {
-      flash('没收成功，再点一次试试')
-      return
-    }
-    const current = saveRef.current
-    if (current && claimed > 0) setSave({ ...current, coins: current.coins + claimed })
-    setClaimedNote(claimed > 0 ? `已把卡片里的 ${claimed} 金币收进农场` : '卡片金币已经收过啦')
-    if (farm) setFarm({ ...farm, card: { ...farm.card, claimable: 0 } })
+  useReady(() => boot())
+  useDidShow(() => envRef.current?.setHidden(false))
+  useDidHide(() => envRef.current?.setHidden(true))
+  useUnload(() => envRef.current?.setHidden(true))
+
+  useEffect(() => {
+    if (phase !== 'ready') return undefined
+    const timer = setInterval(() => {
+      const env = envRef.current
+      if (!env) return
+      setStats(env.stats())
+      setProblems(env.problems())
+      setHud({
+        day: env.element('day')?.textContent || '',
+        clock: env.element('clock')?.textContent || '',
+        coins: env.element('coins')?.textContent || '',
+      })
+    }, 500)
+    return () => clearInterval(timer)
+  }, [phase])
+
+  // 到夜晚：加速到晚上 19:30 左右就恢复正常速度（入睡后游戏自己会快进，所以停在入夜前后）
+  useEffect(() => {
+    if (!fastForward) return undefined
+    const timer = setInterval(() => {
+      const farm = envRef.current?.G.__farm
+      if (!farm) return
+      const minute = Math.floor(farm.S.t % 1440)
+      if (minute >= 19 * 60 + 30 || minute < 4 * 60) {
+        farm.setSpeed(1)
+        setFastForward(false)
+      }
+    }, 50)
+    return () => clearInterval(timer)
+  }, [fastForward])
+
+  const toggleFog = () => {
+    const hooks = envRef.current?.G.__trialHooks
+    if (!hooks) return
+    hooks.FOG.on = !fogOn
+    setFogOn(!fogOn)
+    envRef.current?.resetStats()
+  }
+  const toggleLight = () => {
+    const env = envRef.current
+    if (!env) return
+    env.G.__trialNoLight = lightOn
+    setLightOn(!lightOn)
+    env.resetStats()
+  }
+  const goNight = () => {
+    const farm = envRef.current?.G.__farm
+    if (!farm || fastForward) return
+    farm.setSpeed(16)
+    setFastForward(true)
+  }
+  const zoom = (delta: number) => envRef.current?.G.__trialHooks?.zoomBy(delta)
+
+  const point = (e: any) => {
+    const t = e?.changedTouches?.[0] || e?.touches?.[0]
+    if (!t) return null
+    const r = rectRef.current
+    const x = typeof t.clientX === 'number' ? t.clientX : r.left + (t.x || 0)
+    const y = typeof t.clientY === 'number' ? t.clientY : r.top + (t.y || 0)
+    return { id: Number(t.identifier) || 0, x, y }
+  }
+  const onTouchStart = (e: any) => {
+    const p = point(e)
+    if (!p || touchRef.current || (e?.touches?.length || 1) > 1) return
+    touchRef.current = p
+    envRef.current?.pointer('pointerdown', p.x, p.y, p.id)
+  }
+  const onTouchMove = (e: any) => {
+    const p = point(e)
+    if (!p || !touchRef.current) return
+    envRef.current?.pointer('pointermove', p.x, p.y, touchRef.current.id)
+  }
+  const onTouchEnd = (e: any) => {
+    const p = point(e) || touchRef.current
+    if (!p || !touchRef.current) return
+    envRef.current?.pointer('pointerup', p.x, p.y, touchRef.current.id)
+    touchRef.current = null
   }
 
-  const buyPlot = () => {
-    if (!farm || !save) return
-    if (save.plots.length >= farm.rules.maxPlots) return
-    const cost = plotCost(save.plots.length, farm.rules)
-    if (save.coins < cost) {
-      flash(`还差 ${cost - save.coins} 金币`)
-      return
-    }
-    setSave({ ...save, coins: save.coins - cost, plots: [...save.plots, { cropId: save.selected, plantedAt: Date.now() }] })
-    flash('新开了一块地')
-  }
-
-  const buyFertilizer = () => {
-    if (!farm || !save) return
-    if (save.fertilizer >= farm.rules.fertilizerMaxLevel) return
-    const cost = fertilizerCost(save.fertilizer, farm.rules)
-    if (save.coins < cost) {
-      flash(`还差 ${cost - save.coins} 金币`)
-      return
-    }
-    setSave({ ...save, coins: save.coins - cost, fertilizer: save.fertilizer + 1 })
-    flash('施肥成功，长得更快了')
-  }
-
-  const pickCrop = (crop: FarmCrop) => {
-    if (!save) return
-    if (save.unlocked.includes(crop.id)) {
-      setSave({ ...save, selected: crop.id })
-      flash(`下一季种${crop.name}`)
-      return
-    }
-    if (save.coins < crop.unlockCost) {
-      flash(`解锁${crop.name}还差 ${crop.unlockCost - save.coins} 金币`)
-      return
-    }
-    setSave({ ...save, coins: save.coins - crop.unlockCost, unlocked: [...save.unlocked, crop.id], selected: crop.id })
-    flash(`解锁了${crop.name}`)
-  }
-
-  if (phase !== 'ready' || !farm || !save) {
-    return (
-      <View className="flex min-h-screen flex-col bg-[#2f4a1f]">
-        <CustomNavSpace />
-        <View className="flex flex-1 flex-col items-center justify-center px-8">
-          <Text className="text-base text-[#fff3d6]">{phase === 'error' ? errorText : '农场开门中…'}</Text>
-          {phase === 'error' ? (
-            <View className="mt-4 rounded-full bg-[#ffd34d] px-6 py-2" onClick={() => void load()}>
-              <Text className="text-sm font-semibold text-[#4a2a12]">重新打开</Text>
+  return (
+    <View className="farm-page">
+      <Canvas
+        id={CANVAS_ID}
+        type="2d"
+        className="farm-canvas"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchEnd}
+      />
+      <View className="farm-overlay">
+        <View className="farm-top-shade">
+          <CustomNavSpace />
+          {phase === 'ready' ? (
+            <View className="farm-hud">
+              <Text className="farm-hud-day text-sm">{`${hud.day} ${hud.clock}`}</Text>
+              <Text className="farm-hud-coins text-base">{`${hud.coins} 金`}</Text>
             </View>
           ) : null}
         </View>
-      </View>
-    )
-  }
-
-  const perMinute = Math.round(
-    save.plots.reduce((sum, plot) => {
-      const crop = cropOf(plot.cropId)
-      return crop ? sum + (crop.price * 60000) / growMs(crop, save.fertilizer, farm.rules) : sum
-    }, 0),
-  )
-  const rows = Math.ceil(Math.min(save.plots.length + 1, farm.rules.maxPlots) / COLS)
-  const farmerStyle = {
-    left: `${(((farmerPlot % COLS) + 0.5) / COLS) * 100}%`,
-    top: `${((Math.floor(farmerPlot / COLS) + 0.15) / rows) * 100}%`,
-  }
-  const farmerSheet = farmerMode === 'walk' ? farm.assets.farmerWalk : farm.assets.farmerHoe
-  const nextPlotCost = save.plots.length < farm.rules.maxPlots ? plotCost(save.plots.length, farm.rules) : 0
-  const nextFertCost = save.fertilizer < farm.rules.fertilizerMaxLevel ? fertilizerCost(save.fertilizer, farm.rules) : 0
-  const selectedCrop = cropOf(save.selected)
-
-  return (
-    <View className="flex min-h-screen flex-col bg-[#2f4a1f] pb-8">
-      {/* 头图与导航避让属于同一视觉面 */}
-      <View className="relative w-full">
-        <PixelImage className="block h-60 w-full" src={farm.assets.hero} mode="aspectFill" />
-        <View className="absolute left-0 right-0 top-0">
-          <CustomNavSpace />
-        </View>
-        <View className="farm-hero-fade absolute bottom-0 left-0 right-0 flex flex-col px-5 pb-3 pt-10">
-          <Text className="pixel-title text-3xl font-bold text-[#fff3d6]">像素小农场</Text>
-          <Text className="mt-1 text-sm text-[#fff3d6]/80">放着也会自己长，回来就有金币收</Text>
-        </View>
-      </View>
-
-      {/* HUD */}
-      <View className="mx-4 -mt-1 flex flex-row items-center rounded-xl border-2 border-[#2e1c0e] bg-[#5c3a22] px-4 py-3">
-        <PixelImage className="h-8 w-8 shrink-0" src={farm.assets.coin} />
-        <Text className="pixel-coin ml-2 text-2xl font-bold text-[#ffd34d]">{String(save.coins)}</Text>
-        <View className="ml-auto flex flex-col items-end">
-          <Text className="text-xs text-[#ffecbe]/80">{`每分钟约 +${perMinute}`}</Text>
-          <Text className="text-xs text-[#ffecbe]/80">{`施肥 ${save.fertilizer}/${farm.rules.fertilizerMaxLevel} 级 · 已收 ${save.harvests} 次`}</Text>
-        </View>
-      </View>
-
-      {/* 卡面收获承接 */}
-      <View className="mx-4 mt-3 flex flex-row items-center rounded-xl border border-[#ffd34d]/40 bg-[#1f3315] px-4 py-3">
-        <PixelImage className="h-7 w-7 shrink-0" src={farm.assets.seed} />
-        <View className="ml-3 flex min-w-0 flex-1 flex-col">
-          <Text className="text-sm font-semibold text-[#fff3d6]">卡片里种的菜</Text>
-          <Text className="text-xs text-[#fff3d6]/70">
-            {claimedNote ||
-              (farm.card.claimable > 0
-                ? `在卡片上收获了 ${farm.card.harvests} 次，攒下 ${farm.card.claimable} 金币`
-                : farm.card.coins > 0
-                  ? `卡片累计带来 ${farm.card.coins} 金币，已全部收进农场`
-                  : '在卡片上点地种菜，收获的金币会带到这里')}
-          </Text>
-        </View>
-        {farm.card.claimable > 0 ? (
-          <View className="ml-2 shrink-0 rounded-full bg-[#ffd34d] px-4 py-2" onClick={() => void onClaim()}>
-            <Text className="text-sm font-semibold text-[#4a2a12]">{claiming ? '收取中…' : '收进农场'}</Text>
+        {phase === 'ready' ? (
+          <View className="farm-perf">
+            <Text className="farm-perf-line text-xs">{`FPS ${stats.fps.toFixed(1)}`}</Text>
+            <Text className="farm-perf-line text-xs">{`帧耗时 均 ${stats.avgMs.toFixed(1)} / p95 ${stats.p95Ms.toFixed(1)} ms`}</Text>
+            <Text className="farm-perf-line text-xs">{`启动 ${bootMs} ms · 雾${fogOn ? '开' : '关'} · 光照${lightOn ? '开' : '关'}`}</Text>
+            {diag ? <Text className="farm-perf-line text-xs">{diag}</Text> : null}
+            {problems.slice(-3).map((line, i) => (
+              <Text key={`p-${i}`} className="farm-perf-warn text-xs">{line}</Text>
+            ))}
+          </View>
+        ) : null}
+        {phase === 'loading' ? <Text className="farm-state text-base">{`农场加载中…（${step}）`}</Text> : null}
+        {phase === 'error' ? (
+          <View className="farm-error">
+            <Text className="farm-state text-base">{`农场没能打开：${errorText}`}</Text>
+          </View>
+        ) : null}
+        {phase === 'ready' ? (
+          <View className="farm-controls">
+            <View className={fogOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleFog}>
+              <Text className="farm-btn-text text-sm">{fogOn ? '雾 开' : '雾 关'}</Text>
+            </View>
+            <View className={lightOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleLight}>
+              <Text className="farm-btn-text text-sm">{lightOn ? '光照 开' : '光照 关'}</Text>
+            </View>
+            <View className={fastForward ? 'farm-btn is-on' : 'farm-btn'} onClick={goNight}>
+              <Text className="farm-btn-text text-sm">{fastForward ? '快进中…' : '到夜晚'}</Text>
+            </View>
+            <View className="farm-btn" onClick={() => zoom(-1)}>
+              <Text className="farm-btn-text text-sm">缩小</Text>
+            </View>
+            <View className="farm-btn" onClick={() => zoom(1)}>
+              <Text className="farm-btn-text text-sm">放大</Text>
+            </View>
           </View>
         ) : null}
       </View>
-
-      {/* 挂机农场 */}
-      <View className="mx-4 mt-3 overflow-hidden rounded-xl border-2 border-[#2e1c0e]">
-        <View className="farm-yard flex flex-col px-3 pb-4 pt-2" style={{ backgroundImage: `url(${farm.assets.grass})` }}>
-          <View className="flex flex-row items-end">
-            <PixelImage className="h-20 w-20 shrink-0" src={farm.assets.house} />
-            <View className="mb-2 ml-2 flex min-w-0 flex-1 flex-col rounded-lg bg-[#1f3315]/80 px-3 py-2">
-              <Text className="text-sm font-semibold text-[#fff3d6]">{`小农夫正在巡田`}</Text>
-              <Text className="text-xs text-[#fff3d6]/75">
-                {`熟了会自动收，下一季种${selectedCrop?.name ?? ''}；点成熟的地可以马上收`}
-              </Text>
-            </View>
-          </View>
-          <View className="relative mt-2 flex flex-col">
-            {Array.from({ length: rows }, (_, r) => (
-              <View key={`row-${r}`} className="mt-2 flex flex-row gap-2">
-                {Array.from({ length: COLS }, (_, c) => {
-                  const index = r * COLS + c
-                  const plot = save.plots[index]
-                  if (!plot) {
-                    const isNext = index === save.plots.length && nextPlotCost > 0
-                    return (
-                      <View
-                        key={`empty-${index}`}
-                        className="relative flex aspect-square flex-1 flex-col items-center justify-center rounded-md border-2 border-dashed border-[#2e4a1a]/60 bg-[#2e4a1a]/25"
-                        onClick={isNext ? buyPlot : undefined}
-                      >
-                        <Text className="text-2xl font-bold text-[#fff3d6]/70">{isNext ? '+' : '·'}</Text>
-                        {isNext ? <Text className="text-xs text-[#fff3d6]/80">{`扩建 ${nextPlotCost}`}</Text> : null}
-                      </View>
-                    )
-                  }
-                  const crop = cropOf(plot.cropId)
-                  if (!crop) return null
-                  const ms = growMs(crop, save.fertilizer, farm.rules)
-                  const progress = Math.min(1, (now - plot.plantedAt) / ms)
-                  const ripe = progress >= 1
-                  const stage = ripe ? crop.stages.ripe : progress < 0.45 ? crop.stages.seed : crop.stages.growing
-                  return (
-                    <View
-                      key={`plot-${index}`}
-                      className="relative flex aspect-square flex-1 items-center justify-center"
-                      onClick={() => onPlotTap(index)}
-                    >
-                      {ripe ? <View className="plot-glow absolute inset-0 rounded-full" /> : null}
-                      <PixelImage className="absolute inset-0 h-full w-full" src={farm.assets.soil} />
-                      <PixelImage className={ripe ? 'plot-bob absolute left-[12%] top-[6%] h-[76%] w-[76%]' : 'absolute left-[12%] top-[6%] h-[76%] w-[76%]'} src={stage} />
-                      {!ripe ? (
-                        <View className="absolute bottom-2 left-1/4 right-1/4 h-1.5 overflow-hidden rounded-sm border border-[#2e1c0e] bg-[#1e1208]/75">
-                          <View className="h-full bg-[#8fe04f]" style={{ width: `${Math.round(progress * 100)}%` }} />
-                        </View>
-                      ) : null}
-                      {tips
-                        .filter((tip) => tip.plot === index)
-                        .map((tip) => (
-                          <Text key={`tip-${tip.id}`} className="pixel-coin plot-tip absolute top-1 text-xl font-bold text-[#ffd34d]">
-                            {tip.text}
-                          </Text>
-                        ))}
-                    </View>
-                  )
-                })}
-              </View>
-            ))}
-            <View className={facingLeft ? 'farmer farmer-left absolute' : 'farmer absolute'} style={farmerStyle}>
-              <View className="farmer-frame">
-                <PixelImage
-                  key={`farmer-${farmerMode}`}
-                  className={farmerMode === 'idle' ? 'farmer-sheet' : 'farmer-sheet farmer-anim'}
-                  src={farmerSheet}
-                  mode="scaleToFill"
-                />
-              </View>
-            </View>
-          </View>
-        </View>
-      </View>
-
-      {/* 作物 */}
-      <Text className="mx-5 mt-5 text-base font-semibold text-[#fff3d6]">选下一季种什么</Text>
-      <View className="mx-4 mt-2 flex flex-row gap-2">
-        {farm.crops.map((crop) => {
-          const owned = save.unlocked.includes(crop.id)
-          const selected = save.selected === crop.id
-          return (
-            <View
-              key={crop.id}
-              className={`flex flex-1 flex-col items-center rounded-xl px-2 py-3 ${selected ? 'border-2 border-[#ffd34d] bg-[#7c4e28]' : 'border border-[#ffe2aa]/30 bg-[#5c3a22]'}`}
-              onClick={() => pickCrop(crop)}
-            >
-              <PixelImage className="h-12 w-12" src={crop.stages.ripe} />
-              <Text className="mt-1 text-sm font-semibold text-[#fff3d6]">{crop.name}</Text>
-              <Text className="text-xs text-[#ffecbe]/80">
-                {`${Math.round(growMs(crop, save.fertilizer, farm.rules) / 1000)}秒 · +${crop.price}`}
-              </Text>
-              <Text className={`mt-1 text-xs ${owned ? 'text-[#8fe04f]' : 'text-[#ffd34d]'}`}>
-                {owned ? (selected ? '种植中' : '点击换种') : `解锁 ${crop.unlockCost}`}
-              </Text>
-            </View>
-          )
-        })}
-      </View>
-
-      {/* 升级 */}
-      <Text className="mx-5 mt-5 text-base font-semibold text-[#fff3d6]">升级农场</Text>
-      <View className="mx-4 mt-2 flex flex-row gap-2">
-        <View className="flex flex-1 flex-col rounded-xl border border-[#ffe2aa]/30 bg-[#5c3a22] p-3" onClick={buyPlot}>
-          <Text className="text-sm font-semibold text-[#fff3d6]">扩建田地</Text>
-          <Text className="mt-1 text-xs text-[#ffecbe]/80">{`${save.plots.length}/${farm.rules.maxPlots} 块地`}</Text>
-          <Text className="mt-2 text-sm font-semibold text-[#ffd34d]">{nextPlotCost ? `${nextPlotCost} 金币` : '已满'}</Text>
-        </View>
-        <View className="flex flex-1 flex-col rounded-xl border border-[#ffe2aa]/30 bg-[#5c3a22] p-3" onClick={buyFertilizer}>
-          <Text className="text-sm font-semibold text-[#fff3d6]">施肥加速</Text>
-          <Text className="mt-1 text-xs text-[#ffecbe]/80">{`每级生长快 15%`}</Text>
-          <Text className="mt-2 text-sm font-semibold text-[#ffd34d]">{nextFertCost ? `${nextFertCost} 金币` : '已满级'}</Text>
-        </View>
-      </View>
-      <Text className="mx-5 mt-4 text-xs text-[#fff3d6]/50">存档保存在这台手机上，离开后最多结算 8 小时的收成</Text>
-
-      {notice ? (
-        <View className="fixed bottom-10 left-0 right-0 flex flex-row justify-center">
-          <View className="rounded-full bg-[#1e1208]/90 px-5 py-2">
-            <Text className="text-sm text-[#fff3d6]">{notice}</Text>
-          </View>
-        </View>
-      ) : null}
-
-      {offline ? (
-        <View className="fixed inset-0 flex flex-col items-center justify-center bg-black/55 px-10">
-          <View className="flex w-full flex-col items-center rounded-2xl border-2 border-[#2e1c0e] bg-[#5c3a22] px-6 py-6">
-            <PixelImage className="h-14 w-14" src={farm.assets.coin} />
-            <Text className="mt-2 text-base font-semibold text-[#fff3d6]">你不在的时候</Text>
-            <Text className="mt-1 text-sm text-[#ffecbe]/85">{`小农夫收了 ${offline.harvested} 次菜`}</Text>
-            <Text className="pixel-coin mt-2 text-3xl font-bold text-[#ffd34d]">{`+${offline.earned}`}</Text>
-            <View className="mt-4 rounded-full bg-[#ffd34d] px-8 py-2" onClick={() => setOffline(null)}>
-              <Text className="text-sm font-semibold text-[#4a2a12]">收下</Text>
-            </View>
-          </View>
-        </View>
-      ) : null}
     </View>
   )
 }
