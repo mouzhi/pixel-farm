@@ -1,0 +1,26 @@
+{
+  "name": "closed-domain-server",
+  "version": "0.0.1",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build && node scripts/extract-routes.js",
+    "start": "nest start",
+    "start:dev": "bash -c 'port=${NJS_SERVER_PORT:-3001}; lsof -ti:${port} | xargs kill -9 2>/dev/null; if [ -f /home/gem/.bashrc ]; then . /home/gem/.bashrc; fi; exec nest start --watch'",
+    "start:prod": "node dist/main"
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@open-dy/ai_coding_sdk": "^1.0.27",
+    "mysql2": "3.24.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.0",
+    "@types/node": "^22.10.7",
+    "typescript": "^5.9.3"
+  }
+}

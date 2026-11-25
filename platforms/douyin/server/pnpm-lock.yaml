@@ -1,0 +1,22 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    dependencies:
+      '@open-dy/ai_coding_sdk':
+        specifier: ^1.0.27
+        version: 1.0.27
+
+packages:
+
+  '@open-dy/ai_coding_sdk@1.0.27':
+    resolution: {integrity: sha512-Bsx98V0gHZYn+WCMpB3Rbt3Luq5cDeLICdZBr0++Pfs0QVpXWDGP82IYlkWtHV9iLc8of6H0Cm9rGUKxVmPXAw==}
+
+snapshots:
+
+  '@open-dy/ai_coding_sdk@1.0.27': {}

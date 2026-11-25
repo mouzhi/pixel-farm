@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "cardData": {
+    "path": "/api/dy_card/data",
+    "routes": [
+      "/api/dy_card/data"
+    ],
+    "serviceDomain": "open"
+  }
+}

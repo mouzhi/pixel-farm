@@ -1,0 +1,530 @@
+.widget-root {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 3.2vh 4.3vw;
+  background: var(--widget-bg);
+  border: 1px solid var(--widget-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.widget-header,
+.widget-footer {
+  display: flex;
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: auto;
+}
+
+.widget-header {
+  flex-direction: column;
+  width: 100%;
+  margin-bottom: 3.7vh;
+}
+
+.widget-body {
+  box-sizing: border-box;
+  display: flex;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+
+.widget-footer {
+  box-sizing: border-box;
+  flex-direction: column;
+  width: 100%;
+  padding-top: 3.7vh;
+}
+
+.widget-footer .widget-primary-cta {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 10vh;
+  height: 10vh;
+  padding: 0 4.3vw;
+  background: var(--cta-bg, var(--text-primary));
+  border-radius: var(--radius-xl);
+  flex-grow: 0;
+  flex-shrink: 0;
+  flex-basis: 10vh;
+}
+
+.widget-primary-cta .widget-primary-cta-text {
+  color: var(--cta-fg, var(--text-inverse));
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.375rem;
+}
+
+.widget-adaptive {
+  display: flex;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 0;
+}
+
+.widget-state-message {
+  color: var(--text-secondary);
+  font-size: 1rem;
+  font-weight: 500;
+  line-height: 1.5rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+/* ---------- 像素小农场 ---------- */
+
+.pixel-image-fallback {
+  background: rgba(136, 95, 63, 0.6);
+  border-radius: 4px;
+}
+
+.farm-hud {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2vh;
+}
+
+.hud-coins {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.hud-coin-icon {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.hud-coin-icon.is-pop {
+  animation: coinPop 0.3s ease-out;
+}
+
+.hud-coin-value {
+  margin-left: 6px;
+  color: #ffd34d;
+  font-family: "DIN Alternate", "DINAlternate-Bold", sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 28px;
+  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12, 0 3px 0 rgba(0, 0, 0, 0.35);
+  flex-shrink: 0;
+}
+
+.hud-status {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  text-align: right;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-width: 0;
+}
+
+.farm-body {
+  position: relative;
+}
+
+.farm-field {
+  position: relative;
+  z-index: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 0;
+}
+
+.farm-row {
+  display: flex;
+  flex-direction: row;
+  width: 100%;
+  gap: 2.4vw;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-height: 0;
+  margin-bottom: 1vh;
+}
+
+.farm-row-first {
+  align-items: flex-end;
+}
+
+.farm-row-last {
+  align-items: flex-start;
+  margin-bottom: 0;
+}
+
+.farm-plot {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  max-height: 112px;
+  min-width: 0;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+}
+
+.farm-plot.is-shake {
+  animation: plotShake 0.3s linear;
+}
+
+.plot-glow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  border: 3px solid #ffd34d;
+  border-radius: 4px;
+  background: radial-gradient(circle, rgba(255, 220, 110, 0.45) 0%, rgba(255, 220, 110, 0) 72%);
+  animation: glowPulse 1s ease-in-out infinite;
+}
+
+.plot-badge {
+  position: absolute;
+  z-index: 1;
+  top: -8px;
+  right: -6px;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffd34d;
+  border: 2px solid #4a2a12;
+  border-radius: 4px;
+  animation: ripeBob 0.8s ease-in-out infinite;
+}
+
+.plot-badge-text {
+  color: #4a2a12;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.plot-soil {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.plot-crop {
+  position: absolute;
+  top: 8%;
+  left: 11%;
+  width: 78%;
+  height: 78%;
+}
+
+.plot-crop-ripe {
+  animation: ripeBob 0.8s ease-in-out infinite;
+}
+
+.plot-bar {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 52px;
+  height: 6px;
+  margin-top: 28px;
+  margin-left: -26px;
+  background: rgba(30, 18, 8, 0.75);
+  border: 1px solid #2e1c0e;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.plot-bar-fill {
+  height: 100%;
+  background: #8fe04f;
+}
+
+.plot-tip {
+  position: absolute;
+  z-index: 3;
+  top: 50%;
+  left: 0;
+  width: 100%;
+  margin-top: -40px;
+  text-align: center;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.plot-tip-coin {
+  color: #ffd34d;
+  font-size: 26px;
+  line-height: 30px;
+  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12;
+  animation: tipFloat 0.9s ease-out forwards;
+}
+
+.plot-tip-wait {
+  color: #ffffff;
+  font-size: 13px;
+  line-height: 18px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  animation: tipFade 0.9s ease-out forwards;
+}
+
+.farmer {
+  position: absolute;
+  z-index: 2;
+  width: 64px;
+  height: 64px;
+  transform: translateX(-50%);
+  transition: left 0.4s linear, top 0.4s linear;
+}
+
+.farmer.is-left {
+  transform: translateX(-50%) scaleX(-1);
+}
+
+.farmer-frame {
+  width: 64px;
+  height: 64px;
+  overflow: hidden;
+}
+
+.farmer-sheet {
+  width: 256px;
+  height: 64px;
+}
+
+.farmer-sheet.is-anim {
+  animation: farmerFrames 0.48s steps(4, end) infinite;
+}
+
+.farm-seeds {
+  flex-direction: row;
+  padding-top: 1.2vh;
+  gap: 2.4vw;
+}
+
+.seed-chip {
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 40px;
+  padding: 0 6px;
+  min-width: 0;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  background: rgba(92, 58, 34, 0.82);
+  border: 1px solid rgba(255, 226, 170, 0.35);
+  border-radius: 8px;
+}
+
+.seed-chip.is-selected {
+  background: rgba(124, 78, 40, 0.95);
+  border: 2px solid #ffd34d;
+}
+
+.seed-icon {
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+}
+
+.seed-text {
+  display: flex;
+  flex-direction: column;
+  margin-left: 4px;
+  min-width: 0;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+}
+
+.seed-name {
+  color: #fff3d6;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.seed-meta {
+  color: rgba(255, 236, 190, 0.8);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.farm-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.farm-retry {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 1.5vh;
+  height: 32px;
+  padding: 0 20px;
+  background: var(--cta-bg);
+  border-radius: 16px;
+}
+
+.farm-retry-text {
+  color: var(--cta-fg);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 20px;
+}
+
+@keyframes coinPop {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes plotShake {
+  0% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-3px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
+
+@keyframes ripeBob {
+  0% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes glowPulse {
+  0% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes tipFloat {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-18px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-28px);
+  }
+}
+
+@keyframes tipFade {
+  0% {
+    opacity: 0;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes farmerFrames {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-256px);
+  }
+}
+
+.plot-seed-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 30px;
+  height: 30px;
+  margin-top: -15px;
+  margin-left: -15px;
+  opacity: 0.85;
+  animation: seedHint 1.4s ease-in-out infinite;
+}
+
+@keyframes seedHint {
+  0% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.95;
+  }
+  100% {
+    transform: scale(0.9);
+    opacity: 0.55;
+  }
+}

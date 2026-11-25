@@ -1,0 +1,13 @@
+diff --git a/dist/index.js b/dist/index.js
+index 9bcf0f49b0cc5de4518973b67ced58fd1dfe8400..b9f93b9f4e61347f5a2cddc7b8152806cdd3d7e0 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -2352,7 +2352,7 @@ var postcssWeappTailwindcssPrePlugin = (options) => {
+         }
+       } else if (atRule.name === "supports") {
+         if (COLOR_MIX_RE.test(atRule.params)) {
+-          atRule.remove();
++          // atRule.remove();
+         }
+       } else if (atRule.name === "layer") {
+         if (atRule.nodes === void 0 || Array.isArray(atRule.nodes) && atRule.nodes.length === 0) {

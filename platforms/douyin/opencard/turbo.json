@@ -1,0 +1,39 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "cacheDir": "node_modules/.cache/turbo",
+  "tasks": {
+    "build:raw": {
+      "env": [
+        "APP_ID",
+        "OPEN_CARD_ID",
+        "DOUYIN_CLOUD_ENV_ID",
+        "DOUYIN_CLOUD_DEV_ENV_ID",
+        "DOUYIN_CLOUD_SERVICE_ID",
+        "AUDIT_DOUYIN_CLOUD_ENV_ID",
+        "AUDIT_DOUYIN_CLOUD_SERVICE_ID",
+        "DOUYIN_CLOUD_CLOSED_DOMAIN_SERVICE_ID",
+        "AUDIT_DOUYIN_CLOUD_CLOSED_DOMAIN_SERVICE_ID"
+      ],
+      "inputs": [
+        "src/**",
+        "config/**",
+        "types/**",
+        ".cache-inputs/feed-card.json",
+        ".env*",
+        "patches",
+        "package.json",
+        "pnpm-lock.yaml",
+        "pnpm-workspace.yaml",
+        "tsconfig.json",
+        "babel.config.js",
+        "postcss.config.mjs",
+        "project.config.json",
+        "project.tt.json",
+        "project.card.json"
+      ],
+      "outputs": [
+        "dist/**"
+      ]
+    }
+  }
+}

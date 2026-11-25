@@ -1,0 +1,41 @@
+{
+  "name": "server",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build && node scripts/extract-routes.js",
+    "build:prod": "nest build",
+    "start": "nest start",
+    "start:dev": "lsof -ti:3000 | xargs kill -9 2>/dev/null; bash -c 'if [ -f /home/gem/.bashrc ]; then . /home/gem/.bashrc; fi; exec nest start --watch'",
+    "strnvug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "lint": "concurrently -n tsc,eslint \"tsc --noEmit\" \"eslint --cache --cache-location node_modules/.cache/eslint/server-src 'src/**/*.{js,jsx,ts,tsx}'\""
+  },
+  "dependencies": {
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/platform-fastify": "^11.0.1",
+    "@open-dy/ai_coding_sdk": "^1.0.27",
+    "mysql2": "3.24.4",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.7",
+    "concurrently": "^9.2.1",
+    "eslint": "^9.18.0",
+    "globals": "^16.0.0",
+    "source-map-support": "^0.5.21",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.20.0"
+  }
+}

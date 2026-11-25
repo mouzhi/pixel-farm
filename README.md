@@ -4,6 +4,9 @@
 
 v3 把整套美术按「风格 A」重做：参考 16-bit SNES/GBA 农场游戏（Stardew Valley、Fields of Mistria 那种精神）。另外借了 D 的两点：堆叠物体少细节、按面分级着色。
 
+## 抖音兴趣卡版（本分支）
+`platform/douyin` 分支在 [`platforms/douyin/`](platforms/douyin/) 放了一张轻量版像素农场抖音兴趣卡：卡面点地种菜收金币，落地页是可挂机的小农场。说明见该目录的 README。
+
 ## 在线试玩
 https://mouzhi.github.io/pixel-farm/ （`main` 分支即线上版本）
 

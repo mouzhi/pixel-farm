@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta content="text/html; charset=utf-8" http-equiv="Content-Type">
+  <meta content="width=device-width,initial-scale=1,user-scalable=no" name="viewport">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-touch-fullscreen" content="yes">
+  <meta name="format-detection" content="telephone=no,address=no">
+  <meta name="apple-mobile-web-app-status-bar-style" content="white">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+  <title>microapp</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg'/>">
+  <script><%= htmlWebpackPlugin.options.script %></script>
+  <style>
+    /* H5: 内层原生 textarea 透明背景修复。
+       不能用 taro-textarea-core textarea（会被 Taro 构建转成 taro-textarea-core taro-textarea-core），
+       改用 .taro-textarea class 选择器直接命中原生元素。 */
+    .taro-textarea {
+      background-color: transparent !important;
+      color: inherit !important;
+      resize: none !important;
+    }
+
+    vite-error-overlay::part(window) {
+      max-width: 90vw;
+      padding: 10px;
+    }
+
+    vite-error-overlay::part(message),
+    vite-error-overlay::part(file),
+    vite-error-overlay::part(frame) {
+      font-size: .9rem;
+    }
+
+    vite-error-overlay::part(stack) {
+      font-size: .85rem;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app"></div>
+</body>
+
+</html>

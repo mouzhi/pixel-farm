@@ -1,0 +1,97 @@
+/* 落地页少量 Tailwind 难以表达的像素风补丁：文字描边、帧动画、飘字 */
+.pixel-title {
+  text-shadow: 2px 2px 0 #4a2a12, -2px 2px 0 #4a2a12, 2px -2px 0 #4a2a12, -2px -2px 0 #4a2a12, 0 4px 0 rgba(0, 0, 0, 0.35);
+}
+
+.pixel-coin {
+  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12;
+}
+
+.farm-hero-fade {
+  background: linear-gradient(180deg, rgba(47, 74, 31, 0) 0%, rgba(47, 74, 31, 0.92) 100%);
+}
+
+.farm-yard {
+  background-repeat: repeat;
+  background-size: 32px 32px;
+}
+
+.plot-glow {
+  background: radial-gradient(circle, rgba(255, 211, 77, 0.6) 0%, rgba(255, 211, 77, 0) 70%);
+  animation: plotGlow 1.2s ease-in-out infinite;
+}
+
+.plot-bob {
+  animation: plotBob 0.8s ease-in-out infinite;
+}
+
+.plot-tip {
+  animation: plotTip 0.8s ease-out forwards;
+}
+
+.farmer {
+  width: 56px;
+  height: 56px;
+  margin-left: -28px;
+  transition: left 0.35s linear, top 0.35s linear;
+}
+
+.farmer-left {
+  transform: scaleX(-1);
+}
+
+.farmer-frame {
+  width: 56px;
+  height: 56px;
+  overflow: hidden;
+}
+
+.farmer-sheet {
+  display: block;
+  width: 224px;
+  height: 56px;
+}
+
+.farmer-anim {
+  animation: farmerFrames 0.48s steps(4, end) infinite;
+}
+
+@keyframes farmerFrames {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-224px);
+  }
+}
+
+@keyframes plotGlow {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes plotBob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes plotTip {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-24px);
+  }
+}
