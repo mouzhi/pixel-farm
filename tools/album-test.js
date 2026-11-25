@@ -3,8 +3,8 @@ const assert = require('assert'), fs = require('fs'), path = require('path');
 const A = require('../album.js'), Save = require('../save.js');
 let n = 0; const ok = (name, fn) => { try { fn(); n++; console.log('ok  ', name); } catch (e) { console.error('FAIL', name, e.stack); process.exitCode = 1; } };
 const L = { kid0: '小豆', kid1: '小米', kid: '小豆', mate: '阿松' };
-ok('20-25 moments, unique ids, every one has a title, line, hint and a place', () => {
-  assert(A.MOMENTS.length >= 20 && A.MOMENTS.length <= 25, 'count ' + A.MOMENTS.length);
+ok('20-28 moments, unique ids, every one has a title, line, hint and a place', () => {
+  assert(A.MOMENTS.length >= 20 && A.MOMENTS.length <= 28, 'count ' + A.MOMENTS.length);
   assert.equal(new Set(A.MOMENTS.map(m => m.id)).size, A.MOMENTS.length);
   for (const m of A.MOMENTS) { assert(/^[a-z][a-z0-9]{0,11}$/.test(m.id), m.id); assert(m.t && m.line && m.hint && m.at, m.id); assert(Array.isArray(m.who)); }
   for (const id of ['moved', 'born0', 'school', 'classmate', 'party', 'market', 'sports', 'fest', 'wedding']) assert(A.BY[id], id);
@@ -16,10 +16,10 @@ ok('a moment is taken once; packing is one short string each and round-trips', (
   const p = A.pack(a); assert.deepEqual(p, ['classmate|72|965|43|48|kid0.farmer', 'moved|41|-1|42|48|farmer.partner']);
   const b = A.valid(p); assert.deepEqual(b, a); assert.equal(A.get(b, 'moved').t, -1);
 });
-ok('size budget: every moment taken, with four people each, stays under 1.5 KB in the save', () => {
+ok('size budget: every moment taken, with four people each, stays under 1.7 KB in the save', () => {
   const a = A.empty(); for (const m of A.MOMENTS) A.add(a, { id: m.id, d: 99999, t: 1439, x: -1234, y: 1234, w: ['farmer', 'partner', 'kid0', 'kid1'] });
   assert.equal(a.list.length, A.MOMENTS.length); const bytes = JSON.stringify({ album: A.pack(a) }).length;
-  console.log('     all', A.MOMENTS.length, 'moments:', bytes, 'bytes'); assert(bytes < 1500, 'bytes ' + bytes);
+  console.log('     all', A.MOMENTS.length, 'moments:', bytes, 'bytes'); assert(bytes < 1700, 'bytes ' + bytes); // v5.12.5: 27 moments
 });
 ok('hostile save data is bounded and dropped', () => {
   const raw = [null, 7, 'x'.repeat(500), 'open|1|0|0|0', 'open|2|0|0|0', 'bad id|1|1|1|1', 'fest|1e30|99999|1e9|-1e9|a.b.c.d.e.f.<script>', 'party|x|y|z|w'];

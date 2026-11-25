@@ -28,6 +28,7 @@ const PK = window.PFPark; // v5.12.3: 镇公园, 繁荣度 6, the three town fam
 const HL = window.PFHall; // v5.10.0: 镇公所, the board's projects, gifts to the town (hall.js rules; art in town-art.js)
 const TN = window.PFTown, TA = window.PFTownArt, WORLD55 = WD.WORLD55 || WORLD; // v5.8.0 phase 10: the town east of 东大道 (town.js rules, town-art.js art)
 if (TN) for (const k in TN.STREETS) if (!WD.ROUTES[k]) WD.ROUTES[k] = TN.STREETS[k]; // the town's streets are routes like the farm lanes
+const G3 = window.PFGen3; // v5.12.5 第三代: the grandchildren (gen3.js rules; home.g3 + a house's g in the save)
 const HM = window.PFHome, HA = window.PFHomeArt; // v5.9.0 phase 11: closeness, the new house, the married children's little farms (home.js rules, home-art.js art)
 const CR = window.PFCareers; // v5.10.6: 成家后的出路 (careers.js rules; walking here, art in town-art.js)
 const IN = window.PFInn, IA = window.PFInnArt; // v5.10.7: 民宿 + 农家菜馆; v5.10.8: 海边度假村 + 二层客栈
@@ -3135,7 +3136,7 @@ function tourView() {
   return { lv6: H.lv6 | 0, ok: !!(H.lv6 | 0), need: chk.need, stars: c.stars, visitors: c.visitors, park: c.park, avenue: c.avenue, beach: c.beach, T: PK.TOUR,
     families: PK.familiesOn(H.lv6, S.day).map(q => ({ host: q.f.hostName, spouse: q.f.spouse.name, babies: q.babies.map(k => k.name), kids: q.kids.map(k => k.name) })) }; }
 const parkRain = () => !!(WX && WX.isRaining && WX.isRaining(S.weather, S.day, S.t));
-const parkPeople = () => (PK && HL && townOpen() && S.town.hall.lv6 ? PK.peopleAt(S.town.hall.lv6, S.day, S.t % 1440, { rain: parkRain() }) : []);
+const parkPeople = () => (PK && HL && townOpen() && S.town.hall.lv6 ? PK.peopleAt(S.town.hall.lv6, S.day, S.t % 1440, { rain: parkRain(), kids: PK.KIDS_MAX - g3ParkKids().length }) : []); // v5.12.5: the grandchildren take park slots first
 const parkPets = () => (PK && HL && townOpen() ? PK.petsAt(S.town.hall, S.day, S.t % 1440) : []);
 const townPeople = H => TN.NEIGHBOURS.length + HL.residents(H).length + (PK ? PK.extraPeople(H.lv6, S.day) : 0);
 function hallTap(w) { // v5.10.0: a click on the notice board (or the hall's door) opens the board; v5.10.4: the bakery too; v5.10.5: the workshop and the smithy
@@ -3638,7 +3639,7 @@ function homeTilesSync() { // runtime tile views of every built house (state liv
 }
 function homeSave() { // v5.11.0.30: a helping spouse's basket is append-only home.held (omitted when empty)
   const h = HM.valid({ houses: S.home.houses.map(h => Object.assign({}, h, { _tiles: undefined, tiles: h._tiles ? h._tiles.map(t => ({ t: t.tilled ? 1 : 0, w: t.watered ? 1 : 0, c: t.crop ? { type: t.crop.type, age: t.crop.age, stage: t.crop.stage, rot: t.crop.rot } : null })) : h.tiles })),
-    rel: S.home.rel, nb: S.home.nb, wed: S.home.wed, help: S.home.help, teen: S.home.teen, earn: S.home.earn, path: S.home.path, wage: S.home.wage });
+    rel: S.home.rel, nb: S.home.nb, wed: S.home.wed, help: S.home.help, teen: S.home.teen, earn: S.home.earn, path: S.home.path, wage: S.home.wage, ...(S.home.g3 ? { g3: S.home.g3 } : {}) }); // v5.12.5 append-only g3
   const held = SPOUSES.map(sp => sp.crops.length ? { id: sp.id, basket: sp.crops.slice() } : null).filter(Boolean);
   if (held.length) h.held = held;
   return h;
@@ -3657,10 +3658,13 @@ function homeSpot() { const avoid = homeAvoid();
   return null; }
 let homeGateKey = '', homeGateVal = null;
 function homeGate(have) {
-  const key = [have, S.family.moved, JSON.stringify(S.plots), S.home.houses.length, S.decor.placed.length, S.works.hives.length, S.works.sprinklers.length, Object.keys(S.works.works).length].join('|');
+  // v5.12.5: from the third house on, only while the grandchildren (and a child not yet married) want more than stand free
+  const free = S.home.houses.filter(h => !h.kid && !h.g && !HM.KID_IDS.some(id => S.home.wed[id] && !S.home.wed[id].moved && S.home.houses[S.home.wed[id].house] === h)).length;
+  const want = (G3 && S.home.g3 ? G3.houseWant(S.home.g3, S.day) : 0) + S.family.kids.filter(k => !HM.isMarried(S.home, k.id)).length;
+  const key = [have, S.family.moved, JSON.stringify(S.plots), S.home.houses.length, S.decor.placed.length, S.works.hives.length, S.works.sprinklers.length, Object.keys(S.works.works).length, free, want].join('|');
   if (key === homeGateKey) return homeGateVal; homeGateKey = key;
   const sites = HM.freeSites(S.plots, S.home.houses).length;
-  return (homeGateVal = HM.houseGate({ moved: S.family.moved, have, sites, room: sites && homeSpot() ? 1 : 0 }));
+  return (homeGateVal = HM.houseGate({ moved: S.family.moved, have, sites, room: sites && homeSpot() ? 1 : 0, want, free }));
 }
 function homeBought() {
   const s = homeSpot(); if (!s) return;
@@ -3682,7 +3686,7 @@ function homeMoveOk(x, y, ref) {
   if (!r.ok) return r;
   const f = HM.layout(Object.assign({}, h, r.spot)).foot;
   if (S.decor.orders.some(q => !(q.what === 'home' && q.ref === ref) && q.what !== 'home' && HM.inBox(q, f, 2))) return Object.assign({}, r, { ok: false, why: '这里已经约好要放别的了' });
-  if (S.home.houses.some((q, i) => i !== ref && HM.boxHit(f, HM.layout(q).foot, 2))) return Object.assign({}, r, { ok: false, why: '离另一座新房子太近' });
+  if (S.home.houses.some((q, i) => i !== ref && !(HM.isPadId(q.site) && HM.isPadId(r.spot.site)) && HM.boxHit(f, HM.layout(q).foot, 2))) return Object.assign({}, r, { ok: false, why: '离另一座新房子太近' }); // v5.12.5: 宅园 pads sit yard to yard
   const L = HM.layout(Object.assign({}, h, r.spot));
   markNavDirty(); const g = ensureNav(); // a plot just bought in this click must have its gate open
   const gate = (HM.siteOf(r.spot.site) || {}).gate || NAV.LAYOUT.DOOR;
@@ -4324,10 +4328,11 @@ function homeMorning() {
   careerMorning();
   if (IN) innMorning();
   homeTeenDay();
+  if (G3) g3Morning(); // v5.12.5
   if (weddingTonight()) { const w = weddingTonight(); if (CR && w && CR.pathOf(st, w.kid).implied) careerOffer(w.kid); return; }
   const lastWed = Math.max(0, ...HM.KID_IDS.map(k => (st.wed[k] && st.wed[k].day) || 0));
   for (const k of S.family.kids) {
-    const hi = st.houses.findIndex(h => h.built && !h.kid && !HM.KID_IDS.some(id => st.wed[id] && !st.wed[id].moved && st.wed[id].house === st.houses.indexOf(h)));
+    const hi = st.houses.findIndex(h => h.built && !h.kid && !h.g && !HM.KID_IDS.some(id => st.wed[id] && !st.wed[id].moved && st.wed[id].house === st.houses.indexOf(h)));
     const mate = HM.wedReady(st, { kid: k, stage: FAM.kidStage(k, S.day), house: hi >= 0, rain: rainDay(), lastWed, day: S.day });
     if (!mate) continue;
     st.wed[k.id] = { mate, day: S.day, moved: 0, house: hi };
@@ -4339,7 +4344,7 @@ function homeMorning() {
   }
 }
 function homeMoveIn(kid, now) {
-  const w = S.home.wed[kid]; if (!w || w.moved) return; const h = S.home.houses[w.house] || S.home.houses.find(q => q.built && !q.kid); if (!h) return;
+  const w = S.home.wed[kid]; if (!w || w.moved) return; const h = S.home.houses[w.house] || S.home.houses.find(q => q.built && !q.kid && !q.g); if (!h) return;
   w.moved = S.day; h.kid = kid; w.house = S.home.houses.indexOf(h); spouseSync();
   if (now) { for (const id of HM.NB_IDS) if (townOpen() || S.home.nb[id]) HM.clampAdd(S.home.nb, id, HM.NB.wedding);
     log(`${kidName(kid)}和${HM.mateName(w.mate)}住进了${HM.siteName(h.site)}的新房子，以后自己种那 6 格小田，偶尔回来帮忙`); noteProgress({ married: true });
@@ -4458,7 +4463,8 @@ function homeTick(dm) {
   for (const sp of SPOUSES) { if (sp.sleeping && T >= WAKE && T < BEDTIME) { sp.sleeping = false; sp.home = true; } F = sp; stepActor(dm); }
   F = FARMER;
   if (T >= 17 * 60) careerDayPay();
-  if (T >= 18 * 60 && homeLogDay !== S.day) { homeLogDay = S.day; for (const h of S.home.houses) if (h.kid && h._todayDay === S.day && h._today) log(`${kidName(h.kid)}家的小田和小鸡今天挣了 ${h._today} 金，算进家里的收入`); }
+  if (G3) g3Tick(T); // v5.12.5
+  if (T >= 18 * 60 && homeLogDay !== S.day) { homeLogDay = S.day; for (const h of S.home.houses) if ((h.kid || h.g) && h._todayDay === S.day && h._today) log(`${h.kid ? kidName(h.kid) : G3.BY[h.g].name}家的小田和小鸡今天挣了 ${h._today} 金，算进家里的收入`); }
   if (HOME_ON) HA.sync();
 }
 function wedGather(T) { // the ceremony is about to start: whoever is only pottering about (idle, playing) comes over now, not after it
@@ -4491,12 +4497,91 @@ function homeRestore(s) {
   const night = FARMER.sleeping; for (const sp of SPOUSES) { sp.sleeping = night; sp.home = true; }
   // v5.11.0.30: put mid-help cargo back (HM.valid drops held; live state lives on the spouse)
   for (const row of held) { const sp = SPOUSES.find(q => q.id === row.id); if (sp && row.basket && row.basket.length) { sp.crops.length = 0; sp.crops.push(...row.basket); } }
-  homePartyNoted = 0; homeFriendDay = 0; if (HOME_ON) HA.sync(true);
+  homePartyNoted = 0; homeFriendDay = 0; g3PeopleC = null; g3AskDay = {}; if (HOME_ON) HA.sync(true);
 }
 // the panel lines: who each child is close to, and the neighbours the family knows
 function homeStatus() {
   const kids = S.family.kids.map(k => ({ id: k.id, name: k.name, stage: FAM.kidStage(k, S.day), note: HM.kidNote(S.home, k.id, k.name), rel: HM.kidRel(S.home, k.id), married: HM.isMarried(S.home, k.id), wed: S.home.wed[k.id] || null, path: CR ? CR.pathOf(S.home, k.id) : null }));
-  return { kids, nb: HM.nbRel(S.home), houses: S.home.houses.map(h => ({ site: h.site, name: HM.siteName(h.site), built: h.built, kid: h.kid })), earn: S.home.earn, wage: S.home.wage || 0, open: townOpen() };
+  return { kids, nb: HM.nbRel(S.home), houses: S.home.houses.map(h => ({ site: h.site, name: HM.siteName(h.site), built: h.built, kid: h.kid })), earn: S.home.earn, wage: S.home.wage || 0, open: townOpen(), grand: g3Status() };
+}
+// ---------- v5.12.5 第三代 (rules in gen3.js): the grandchildren. Saved: home.g3 and a house's g; their day is a pure function of the clock ----------
+const g3Moved = () => { const o = {}; if (S.home && S.home.wed) for (const k of HM.KID_IDS) { const w = S.home.wed[k]; if (w && w.moved > 0) o[k] = w.moved; } return o; };
+const g3Parent = id => { const d = G3.BY[id]; return { name: kidName(d.p), spouse: S.home.wed[d.p] ? HM.mateName(S.home.wed[d.p].mate) : '' }; };
+const g3House = id => { const g = S.home.g3 && S.home.g3.k[id]; return g && g.mv ? S.home.houses[g.h] || null : null; };
+const g3Free = h => h && h.built && !h.kid && !h.g && !HM.KID_IDS.some(id => S.home.wed[id] && !S.home.wed[id].moved && S.home.houses[S.home.wed[id].house] === h);
+let g3AskDay = {}, g3WedLog = 0, g3WedFxT = 0;
+function g3Morning() {
+  if (!G3 || !HM || !S.home) return; const mv = g3Moved();
+  if (!S.home.g3) { if (!Object.keys(mv).length) return; S.home.g3 = G3.empty(); }
+  const st = S.home.g3, H = S.town && S.town.hall;
+  const evs = G3.catchUp(st, S.day, { moved: mv, mul: (SC && H ? SC.favorMul(H) : 1), park: !!(PK && H && PK.built(H)) });
+  for (const e of evs) if (e.ev === 'born') { const pa = g3Parent(e.id); log(G3.bornLine(e.id, pa.name, pa.spouse)); const h = HM.houseOf(S.home, G3.BY[e.id].p);
+    if (h) { const d = HM.layout(h).door; hearts(d.x, d.y, 18); albumSnap('g3born', d.x, d.y - 2, { wait: 0 }); } }
+  // ten days into 少年: move into a free new house (a 宅园 pad first)
+  for (const g of G3.kidsOf(st)) { if (!G3.wantsHouse(g, S.day)) continue;
+    const order = S.home.houses.map((h, i) => i).filter(i => g3Free(S.home.houses[i])).sort((a, b) => (HM.isPadId(S.home.houses[b].site) - HM.isPadId(S.home.houses[a].site)) || a - b);
+    if (!order.length) { if (!g3AskDay[g.id] || S.day - g3AskDay[g.id] >= 7) { g3AskDay[g.id] = S.day; log(`${g.name}长大了，想搬出去住，可是没有空着的新房子：商店里可以再盖一座（宅园·度假村北的房基优先）`); } continue; }
+    const hi = order[0], h = S.home.houses[hi]; st.k[g.id].h = hi; st.k[g.id].mv = S.day; h.g = g.id; homeGateKey = '';
+    log(`${g.name}搬进了${HM.siteName(h.site)}的新房子，以后自己种那 6 格小田、养两只母鸡`); const d = HM.layout(h).door; hearts(d.x, d.y, 16); }
+  // a wedding tonight? (not on a gen-2 wedding evening, not in the rain, three days after the last one)
+  if (!G3.wedTonight(st, S.day)) for (const g of G3.kidsOf(st)) {
+    const mate = G3.wedReady(st, g.id, S.day, { rain: rainDay(), busy: !!weddingTonight(), lastWed: G3.lastWed(st) }); if (!mate) continue;
+    st.k[g.id].w = mate; st.k[g.id].wd = S.day; const h = g3House(g.id);
+    log(`${g.name}和${G3.mateName(mate)}走得很近了：今晚在${h ? HM.siteName(h.site) : '新房子'}门前办婚礼，之后两人一起住在那里`);
+    if (h) { const d = HM.layout(h).door; albumSnap('g3wed', d.x, d.y - 2, { wait: Math.max(0, G3.WED.from + 30 - Math.floor(S.t % 1440)) }); }
+    break; }
+  g3Tend();
+}
+// the grown grandchildren's six tiles and two hens: done in the morning while they potter about there
+function g3Tend() {
+  const rain = WX && WX.isRaining(S.weather, S.day, S.t);
+  for (const h of S.home.houses) { if (!h.g || !h.built || !h._tiles) continue;
+    for (const t of h._tiles) {
+      if (t.crop && SIM.ripe(t.crop)) { const ty = t.crop.type; t.crop = null; t.watered = false; homeEarn(h, priceOfAny(ty), t.x, t.y); }
+      if (!t.tilled) t.tilled = true;
+      if (!t.crop) t.crop = { type: HM.GARDEN[t.i % HM.GARDEN.length], age: 0, n: 0, stage: 0, rot: (t.i * 1.7) % 6.28 };
+      if (!rain) t.watered = true; }
+    if (h.eggs !== S.day && h.hens > 0) { h.eggs = S.day; const L = HM.layout(h); homeEarn(h, h.hens * priceOfAny('egg'), L.eggs.x, L.eggs.y - 4); } }
+}
+function g3Tick(T) {
+  if (!G3 || !S.home || !S.home.g3) return; const id = G3.wedTonight(S.home.g3, S.day); if (!id) return;
+  const g = S.home.g3.k[id], h = g3House(id), d = h ? HM.layout(h).door : null, name = G3.BY[id].name;
+  if (T >= G3.WED.from && T < G3.WED.to && g3WedLog !== S.day * 2) { g3WedLog = S.day * 2; log(`${name}和${G3.mateName(g.w)}的婚礼开始了：一家人都到了新房子门前`); if (d) burst(d.x, d.y + 3, 24, [Ac[3], Ac[0], '#fff2a8', Rf[3]], 18, 'spark'); }
+  if (d && T >= G3.WED.from && T < G3.WED.to && realT - g3WedFxT > 1.4) { g3WedFxT = realT; hearts(d.x, d.y + 3, 14); }
+  if (T >= G3.WED.to && g3WedLog !== S.day * 2 + 1) { g3WedLog = S.day * 2 + 1; log(`${name}和${G3.mateName(g.w)}成家了，以后两人一起种${h ? HM.siteName(h.site) : '新房子'}的小田`); }
+}
+const g3Places = h => { const L = HM.layout(h); return { door: L.door, bench: L.bench, coop: L.coop, tiles: L.tiles }; };
+function g3SchoolRoute(door) { const sr = schoolRoute(); if (!sr || !sr.via || !sr.via.length) return null;
+  return xpfRoute(door, sr.via[0]).concat(sr.via.slice(1).map(p => ({ x: p.x, y: p.y }))); }
+const g3ParkKids = () => (G3 && PK && S.home && S.home.g3 && S.town && S.town.hall && PK.built(S.town.hall) && townOpen() ? G3.parkKids(S.home.g3, S.day, 2, parkRain()) : []);
+let g3PeopleC = null;
+function g3People() { // -> [{ id, name, look, x, y, ..., cut, cradle, wed }] for drawing (cached per game minute)
+  if (!G3 || !HM || !S.home || !S.home.g3) return [];
+  const T = Math.floor(S.t % 1440), key = S.day + ':' + T + ':' + navVer + ':' + S.home.houses.length; if (g3PeopleC && g3PeopleC.key === key) return g3PeopleC.list;
+  const st = S.home.g3, rain = parkRain(), H = S.town && S.town.hall, park = !!(PK && H && PK.built(H) && townOpen()), inPark = g3ParkKids(), out = [];
+  for (const g of G3.kidsOf(st)) {
+    const ph = HM.houseOf(S.home, g.p), own = g3House(g.id), P0 = ph ? g3Places(ph) : null, OWN = own ? g3Places(own) : null;
+    const stg = G3.stageOf(g, S.day), schoolAge = stg === 'school' || stg === 'helper';
+    const ctx = { day: S.day, T, rain, park, parent: P0, own: OWN, toSchool: schoolAge && P0 ? g3SchoolRoute(P0.door) : null, toPark: park ? PK.toPark(TN.SCHOOL_DOOR) : null, parkSpots: PK ? PK.KID_SPOTS : null, parkIn: inPark.includes(g.id) };
+    const p = G3.placeOf(g, ctx); if (p) out.push(Object.assign({ id: g.id, name: g.name, look: p.wed ? (g.girl ? 'bride' : 'groom') : (p.school && (FAM_PRE[g.look + '_school'] || FAM_DERIVE[g.look + '_school']) ? g.look + '_school' : g.look) }, p));
+    if (g.w && OWN && G3.married(g, S.day, T) || (g.w && g.wd === S.day && OWN)) { const q = G3.placeOf(g, Object.assign({}, ctx, { partner: true })), m = G3.MATE[g.w];
+      if (q) out.push(Object.assign({ id: 'gs_' + g.id, name: m.name, look: q.wed ? (m.girl ? (g.girl ? 'bride2' : 'bride') : (g.girl ? 'groom' : 'groom2')) : m.look }, q, { cut: 3 })); }
+  }
+  g3PeopleC = { key, list: out }; return out;
+}
+function g3Draw(list) {
+  for (const g of g3People()) {
+    if (g.cradle) { list.push({ spr: CRADLE, x: g.x, y: g.y, w: 1, g3: g.id }); continue; }
+    const sh = famSheet(g.look, g.cut || 3); if (!sh) continue;
+    const q = { x: g.x, y: g.y, fx: g.fx || 0, fy: g.fy == null ? 1 : g.fy, moving: g.moving, walkPhase: g.phase, task: g.pose ? { pose: g.pose, work: 1 } : g.wed ? { rest: 1 } : null };
+    list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh, g3: g.id }, farmerPose(q)));
+  }
+}
+function g3Status() { // the panel lines
+  if (!G3 || !S.home || !S.home.g3) return [];
+  return G3.kidsOf(S.home.g3).map(g => { const pa = g3Parent(g.id), stg = G3.stageOf(g, S.day), mar = G3.married(g, S.day, S.t % 1440);
+    return { id: g.id, name: g.name, girl: !!g.girl, parent: pa.name, stage: stg, short: mar ? '成家' : g.mv ? '自立' : (window.PFKids ? PFKids.panelShort({ born: g.b }, S.day) : stg), note: G3.note(S.home.g3, g.id, S.day, S.t % 1440, pa.name),
+      mate: g.w ? G3.mateName(g.w) : '', house: g.mv && g3House(g.id) ? HM.siteName(g3House(g.id).site) : '' }; });
 }
 function spouseTask() { // the other half before they have moved in (the wedding evening), or after (their own day)
   if (F.crops.length && !F._helpWin && shopOpen(S.t % 1440) && homeOfActor(F)) return Object.assign(sellTask(), { kind: 'sell' }); // v5.11.0.28: what they gathered on the main farm goes to market
@@ -5026,9 +5111,19 @@ const FAM_LOOK = {
   parkK3: { '#4fa3cf': '#52af3a', '#2f6ea0': '#358a3c', '#1f3d68': '#24603a', '#a8432e': '#1c1626', '#7a2c24': '#1c1626' },
   parkK4: { '#4fa3cf': '#b08ad0', '#2f6ea0': '#8a62b0', '#1f3d68': '#5a3a80', '#a8432e': '#cf6a3c', '#7a2c24': '#a8432e' },
   kid1: { '#4fa3cf': '#e06a2c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#52af3a', '#7a2c24': '#358a3c', '#8a5530': '#5e3524' },
+  // v5.12.5 第三代: the grandsons (straw hat, like their uncle) and the two boy classmates; the girls are recolours of the g3girl sheet below
+  g3boy: { '#4fa3cf': '#8a5530', '#2f6ea0': '#5e3524', '#1f3d68': '#3b2219', '#a8432e': '#4fa8d8', '#7a2c24': '#2f7eae' }, // 乐乐
+  g3boy2: { '#4fa3cf': '#52af3a', '#2f6ea0': '#358a3c', '#1f3d68': '#24603a', '#a8432e': '#f2cf55', '#7a2c24': '#d3a83a' }, // 小树
+  g3m0: { '#4fa3cf': '#3a5a8c', '#2f6ea0': '#2a3e68', '#1f3d68': '#1a2848', '#a8432e': '#f6ecd0', '#7a2c24': '#cfd0c6' }, // 阿朗
+  g3m3: { '#4fa3cf': '#cf6a3c', '#2f6ea0': '#a8432e', '#1f3d68': '#7a2c24', '#a8432e': '#3e3f4c', '#7a2c24': '#1c1626' }, // 阿杰
 };
 // v5.11.0.21: a second bride or groom the same evening (two of the same) gets a recoloured copy: yellow flowers / a navy suit
-const FAM_DERIVE = { bride2: ['bride', { '#e57fa0': '#f2cf55', '#f2cf55': '#e06a2c' }], groom2: ['groom', { '#3e3f4c': '#1f3d68', '#3a2b38': '#16294a' }] };
+const G3G = { // v5.12.5: 小芽 (a yellow dress, dark hair), 小晴 (teal, black hair), 安安 (lavender, auburn hair) from the g3girl sheet
+  g3girl2: { '#e57fa0': '#f2cf55', '#c45a7a': '#d3a83a', '#8a3a54': '#8a6a18', '#8a5530': '#3b2219', '#5e3524': '#1c1626' },
+  g3m1: { '#e57fa0': '#5ec8a8', '#c45a7a': '#3aa888', '#8a3a54': '#1a7a64', '#8a5530': '#3e3f4c', '#5e3524': '#1c1626' },
+  g3m2: { '#e57fa0': '#b08ad0', '#c45a7a': '#8a62b0', '#8a3a54': '#5a3a80', '#8a5530': '#cf6a3c', '#5e3524': '#a8432e' } };
+const FAM_DERIVE = { bride2: ['bride', { '#e57fa0': '#f2cf55', '#f2cf55': '#e06a2c' }], groom2: ['groom', { '#3e3f4c': '#1f3d68', '#3a2b38': '#16294a' }],
+  g3girl2: ['g3girl', G3G.g3girl2], g3girl2_school: ['g3girl_school', G3G.g3girl2], g3m1: ['g3girl', G3G.g3m1], g3m2: ['g3girl', G3G.g3m2] };
 const FAM_SPR = new Map(); // look:cut -> { img, flip }; at most 8 (v5.8.1: the children's school look) (partner, father, two children x child / teen)
 function famSheet(look, cut = 0) {
   const key = look + ':' + cut; let sh = FAM_SPR.get(key); if (sh || !SPR.ok) return sh || null;
@@ -5065,7 +5160,8 @@ function familyDraw(list, T) { // pushes the family into the depth-sorted list; 
   partyList(list); // v5.11.0.15: plates, the barrel, lantern poles
   for (const g of STAYS) { if (g.inside) continue; const sh = famSheet(g.look, 0); if (sh) list.push(Object.assign({ bb: 1, x: g.x, y: g.y, sheet: sh }, farmerPose(g))); } // v5.10.7 inn guests
   if (TN) townDraw(list); // v5.8.0 classmates and neighbours
-  if (HM) homeDraw(list); // v5.9.0 the married children's partners and their hens
+  if (HM) homeDraw(list); // v5.9.0
+  if (G3) g3Draw(list); // v5.12.5 the grandchildren the married children's partners and their hens
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby');
   if (T >= WAKE && T < BEDTIME) babies.forEach((k, i) => list.push({ spr: CRADLE, x: DOOR.x + 11 + i * 7, y: DOOR.y - 3, w: 1 }));
   return out;
@@ -6323,7 +6419,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.4';
+const GAME_VERSION = '5.12.5';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
@@ -6668,6 +6764,7 @@ function jumpSpot(id) {
 function jumpTo(id) { const p = jumpSpot(id); if (!p) return false; if (id === 'home') cam.ta = DEFAULT_A; panTo(p.x, p.y); return true; }
 { const jb = document.getElementById('mmJump'); if (jb) jb.addEventListener('click', e => { const b = e.target.closest('button[data-j]'); if (b) { jumpTo(b.dataset.j); if (b.classList.contains('locked')) { const h = fogHint(b.dataset.j); if (h) say(h); } } }); }
 Object.assign(window.__farm, { jumpTo, jumpSpot, waterReset: () => { WG = { pond: null, sea: null }; }, waterGeomOf: k => WG[k] }); // v5.11.0.3: tools/coast-shots.js
+Object.assign(window.__farm, { G3, g3Morning: () => g3Morning(), g3People: () => { g3PeopleC = null; return g3People(); }, g3Status: () => g3Status(), g3Tend: () => g3Tend(), g3ParkKids: () => g3ParkKids(), houseGate: () => { homeGateKey = ''; return homeGate(S.up.cottage | 0); } }); // v5.12.5
 Object.assign(window.__farm, { PK, parkPeople: () => parkPeople(), parkPets: () => parkPets(), tourView: () => tourView(), tourCtx: () => tourCtx(), parkMorning: () => { parkDay = S.day - 1; parkMorning(S.town.hall); } });
 Object.assign(window.__farm, { FXP, FXA, xpfView: () => xpfView(), xpfVis: () => XPF_VIS.slice(), xpfTick: () => xpfTick(), xpfPlan: () => xpAnyPlan(), xpfGateCtx: () => xpfGateCtx(), xpfReset: () => { xpfPrevT = null; xpfPlanC = null; xpfTruckKey = ''; } }); // v5.12.4
 Object.assign(window.__farm, { EA, EAA, eastHideAt, eastTraffic: () => EA && S.eff ? EA.trafficAt(S.day, S.t, { avenue: !!S.eff.eastave, beach: !!S.eff.vacbeach }) : null, eastVis: () => EAST_VIS.slice() });

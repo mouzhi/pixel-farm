@@ -147,12 +147,12 @@
   function peopleAt(lv6, day, T, opts) {
     const out = [], t = ((T % 1440) + 1440) % 1440; if (opts && opts.rain) return out;
     const fams = familiesOn(lv6, day);
-    let kidsIn = 0;
+    let kidsIn = 0; const kmax = opts && opts.kids != null ? Math.max(0, Math.min(KIDS_MAX, opts.kids | 0)) : KIDS_MAX; // v5.12.5: farm grandchildren share the 4 slots
     fams.forEach((q, fi) => {
       const f = q.f, there = toPark(f.door), back = there.slice().reverse(), walkL = lenOf(there) / SPEED;
       // the children: out of school at 15:00, walk to the park, home at 17:30
       q.kids.forEach((k, ki) => {
-        if (kidsIn >= KIDS_MAX) return;
+        if (kidsIn >= kmax) return;
         const go = toPark(SCHOOL_DOOR), gL = lenOf(go) / SPEED, t0 = HOURS.kids[0] + ki * 2 + fi;
         let p = trip(go, t0, t), where = 'walk';
         if (!p && t >= t0 + gL && t < HOURS.kids[1] + fi * 6 + ki * 2) { p = stroll(KID_SPOTS, 7 + fi * 3 + ki, day, t0 + gL, t, 14); where = 'park'; }
