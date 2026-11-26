@@ -394,7 +394,7 @@ export default function IndexPage() {
   if (phase !== "ready" || !farm || !save) {
     return (
       <View className="widget-root farm-card">
-        <View className="widget-body widget-adaptive" __lynx_timing_flag="__lynx_timing_actual_fmp">
+        <View className="widget-body widget-adaptive">
           {phase === "loading" ? <Text className="widget-state-message">农场开门中…</Text> : null}
           {phase === "error" ? (
             <View className="farm-error">
