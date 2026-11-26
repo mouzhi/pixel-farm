@@ -196,6 +196,22 @@ function atobPoly(input: string) {
   return out
 }
 
+// 谁建的画布：调用栈里 createElement 之后的前两个函数名（跳过 mk/mkc 这类薄包装），V8「at 名字 (…)」和 JSC「名字@…」两种格式
+function creatorOf(stack: unknown) {
+  if (typeof stack !== "string") return ""
+  const names: string[] = []
+  for (const raw of stack.split("\n")) {
+    const line = raw.trim()
+    const m = line.startsWith("at ") ? /^at (?:new )?([\w$.<>]+) \(/.exec(line) : /^([\w$.<>]+)@/.exec(line)
+    if (!m) continue
+    const name = m[1].replace(/^Object\./, "")
+    if (name.length <= 2 || /createElement|^mkc?$|^wrapCanvas$/.test(name)) continue // 两个字母以内是压缩后的薄包装
+    names.push(name)
+    if (names.length >= 2) break
+  }
+  return names.join("<")
+}
+
 export function createFarmEnv(p: FarmPlatform) {
   clock = p.now
   const winListeners = new Map<string, Listener[]>()
@@ -222,7 +238,7 @@ export function createFarmEnv(p: FarmPlatform) {
 
   let canvasCount = 0
   // 最近新建的画布（看尺寸就知道是谁在建：树、物件缓存、临时画布…）
-  const born: { at: number; c: any }[] = []
+  const born: { at: number; c: any; by: string }[] = []
   let lastCount = { at: 0, n: 0, rate: 0 }
   const main = wrapCanvas(p.mainCanvas)
   const fb = p.framebuffer ? wrapCanvas(p.createOffscreenCanvas(main.width || 300, main.height || 150)) : main
@@ -290,7 +306,7 @@ export function createFarmEnv(p: FarmPlatform) {
       if (String(tag).toLowerCase() !== "canvas") return makeStubElement("")
       canvasCount++
       const made = wrapCanvas(p.createOffscreenCanvas(300, 150))
-      born.push({ at: p.now(), c: made })
+      born.push({ at: p.now(), c: made, by: creatorOf(new Error().stack) })
       if (born.length > 300) born.shift()
       return made
     },
@@ -529,7 +545,7 @@ export function createFarmEnv(p: FarmPlatform) {
         canvasSizes: (() => {
           const bySize: Record<string, number> = {}
           for (const b of born) if (now - b.at < 3000) {
-            const k = `${b.c.width}x${b.c.height}`
+            const k = `${b.c.width}x${b.c.height}${b.by ? ` ${b.by}` : ''}`
             bySize[k] = (bySize[k] || 0) + 1
           }
           return Object.keys(bySize).sort((a, b) => bySize[b] - bySize[a]).slice(0, 3).map((k) => `${k}×${bySize[k]}`).join(' ')
