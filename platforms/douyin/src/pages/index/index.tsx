@@ -115,7 +115,8 @@ export default function Index() {
   const [fastForward, setFastForward] = useState(false)
   const cacheRef = useRef(true)
   const [cacheOn, setCacheOn] = useState(true)
-  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, whole: 0, soilRate: 0, objRate: 0 })
+  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, whole: 0, wipe: 0, wipeWhy: '', blankOff: false, soilRate: 0, objRate: 0 })
+  const dragBaseRef = useRef<{ soil: number; obj: number; sync: number } | null>(null)
   const pfcPrevRef = useRef<{ at: number; soil: number; obj: number } | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [prevLog, setPrevLog] = useState<string[]>([])
@@ -366,7 +367,7 @@ export default function Index() {
         const prev = pfcPrevRef.current
         const dt = prev ? (now - prev.at) / 1000 : 0
         setPfc({
-          statics: st.statics, dyn: st.dyn, redraw: st.redraw, whole: st.badStatic || 0,
+          statics: st.statics, dyn: st.dyn, redraw: st.redraw, whole: st.badStatic || 0, wipe: st.wipe || 0, wipeWhy: st.wipeWhy || '', blankOff: !!st.blankOff,
           soilRate: dt > 0 ? (st.soilBuild - prev!.soil) / dt : 0,
           objRate: dt > 0 ? (st.objBuild - prev!.obj) / dt : 0,
         })
@@ -411,6 +412,8 @@ export default function Index() {
     env.G.__soilCache = on
     env.G.__objCache = on
     env.G.__noSway = on && level === 'low'
+    // 低：水面动画每 3 帧算一次，中间帧把上次结果贴回（省掉整块读像素）
+    env.G.__waterEvery = on && level === 'low' ? 3 : 1
   }
   const toggleCache = () => {
     cacheRef.current = !cacheRef.current
@@ -461,6 +464,13 @@ export default function Index() {
     const p = point(e)
     if (!p || touchRef.current || (e?.touches?.length || 1) > 1) return
     touchRef.current = p
+    const env = envRef.current
+    if (env) {
+      env.G.__dragging = true
+      env.resetDrag()
+      const st = env.G.__pfcStats
+      dragBaseRef.current = st ? { soil: st.soilBuild, obj: st.objBuild, sync: (st.soilSync || 0) + (st.objSync || 0) } : null
+    }
     envRef.current?.pointer('pointerdown', p.x, p.y, p.id)
   }
   const onTouchMove = (e: any) => {
@@ -473,6 +483,7 @@ export default function Index() {
     if (!p || !touchRef.current) return
     envRef.current?.pointer('pointerup', p.x, p.y, touchRef.current.id)
     touchRef.current = null
+    if (envRef.current) envRef.current.G.__dragging = false
   }
 
   return (
@@ -506,11 +517,20 @@ export default function Index() {
             })()}
             <Text className="farm-perf-line text-base">{topParts(perf.parts)}</Text>
             <Text className="farm-perf-line text-base">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
-            <Text className="farm-perf-line text-base">{`新画布尺寸 ${perf.canvasSizes || '无'}`}</Text>
+            <Text className="farm-perf-line text-base">{`新画布 ${perf.canvasSizes || '无'}`}</Text>
+            <Text className="farm-perf-line text-base">{`缓存全清${pfc.wipe}次${pfc.wipeWhy ? `(${pfc.wipeWhy})` : ''} 空白检查${pfc.blankOff ? '已停' : '在跑'} 水面每${envRef.current?.G.__waterEvery || 1}帧`}</Text>
             <Text className="farm-perf-line text-base">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 整屏框${pfc.whole} 重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
+            {(() => {
+              const env = envRef.current
+              const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0 }
+              const st = env?.G.__pfcStats
+              const base = dragBaseRef.current
+              const rb = st && base ? `${st.soilBuild - base.soil}+${st.objBuild - base.obj}（整帧${(st.soilSync || 0) + (st.objSync || 0) - base.sync}）` : '0'
+              return <Text className="farm-perf-line text-base">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 重建${rb}`}</Text>
+            })()}
             <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
             <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`v4补画 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            <Text className="farm-perf-line text-base">{`v5拖动 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
             {problems.slice(-2).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
@@ -535,7 +555,7 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v4补画 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v5拖动 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
               <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>

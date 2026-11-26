@@ -306,7 +306,8 @@ export function createFarmEnv(p: FarmPlatform) {
       if (String(tag).toLowerCase() !== "canvas") return makeStubElement("")
       canvasCount++
       const made = wrapCanvas(p.createOffscreenCanvas(300, 150))
-      born.push({ at: p.now(), c: made, by: creatorOf(new Error().stack) })
+      born.push({ at: p.now(), c: made, by: G.__mkTag ? String(G.__mkTag).replace(/<\?/g, "") : creatorOf(new Error().stack) })
+      G.__mkTag = ""
       if (born.length > 300) born.shift()
       return made
     },
@@ -332,6 +333,8 @@ export function createFarmEnv(p: FarmPlatform) {
   const workMs: number[] = []
   const stamps: number[] = []
   const samples: FrameSample[] = []
+  // 拖动地图时的帧（落地页在按下/抬起时开关 G.__dragging）
+  const drag = { n: 0, sum: 0, max: 0 }
   let frameSplit = { sim: 0, render: 0, hud: 0 }
   let lastProf: Record<string, number> = {}
   const tick = (now: number) => {
@@ -377,6 +380,11 @@ export function createFarmEnv(p: FarmPlatform) {
       parts,
     })
     if (samples.length > 90) samples.shift()
+    if (G.__dragging) {
+      drag.n++
+      drag.sum += t2 - t0
+      if (t2 - t0 > drag.max) drag.max = t2 - t0
+    }
     workMs.push(t2 - t0)
     stamps.push(t0)
     if (workMs.length > 240) workMs.shift()
@@ -574,6 +582,8 @@ export function createFarmEnv(p: FarmPlatform) {
     setPresentScale: (scale: number) => {
       presentScale = scale
     },
+    dragStats: () => ({ frames: drag.n, avgMs: drag.n ? drag.sum / drag.n : 0, maxMs: drag.max }),
+    resetDrag: () => { drag.n = 0; drag.sum = 0; drag.max = 0 },
     resetStats: () => { workMs.length = 0; stamps.length = 0; samples.length = 0 },
   }
 }

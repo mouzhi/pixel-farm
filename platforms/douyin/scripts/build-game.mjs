@@ -9,7 +9,7 @@ import generateMod from '@babel/generator';
 import * as t from '@babel/types';
 import { minify } from 'terser';
 import { transformSync } from '@babel/core';
-import { CACHE_PATCHES } from './patches-cache.mjs';
+import { CACHE_PATCHES, V5_PATCHES, ICON_PATCHES } from './patches-cache.mjs';
 const traverse = traverseMod.default || traverseMod, generate = generateMod.default || generateMod;
 const [repo, rev, out, flag] = process.argv.slice(2);
 const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
@@ -30,7 +30,7 @@ const PATCHES = { // exact, asserted source patches (trial toggles only)
     ['if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);', 'window.__trialHooks = { FOG, cam, zoomBy: d => { zoom = clamp(zoom + d, 0, 3); fit(); }, fit };\nif (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);']],
   // (each script is preceded by window.__bootMark(file) so a phone that hangs during boot can report where)
 };
-PATCHES['game.js'].push(...CACHE_PATCHES);
+PATCHES['game.js'].push(...CACHE_PATCHES, ...V5_PATCHES); PATCHES['codex_icons.js'] = (PATCHES['codex_icons.js'] || []).concat(ICON_PATCHES);
 let src = '';
 for (const f of files) {
   let s = git('show', `${rev}:${f}`);
@@ -42,6 +42,22 @@ const BUILTIN = new Set(('Math JSON Object Array Number String Boolean Symbol Ma
   'Proxy Reflect BigInt encodeURIComponent decodeURIComponent encodeURI decodeURI escape unescape setTimeout clearTimeout setInterval clearInterval Intl arguments eval Function').split(' '));
 const ast = parse(src, { sourceType: 'script', allowReturnOutsideFunction: true, errorRecovery: false });
 const globals = new Set(), topFns = new Set();
+// douyin: tag every canvas creation with the function(s) around it, so the landing panel can show who keeps making canvases
+// (Taro's own minifier mangles names, so call stacks on the phone are useless)
+const fnName = p => { const out = []; for (let f = p.getFunctionParent(); f && out.length < 2; f = f.parentPath && f.parentPath.getFunctionParent()) {
+  const n = f.node.id ? f.node.id.name : f.parentPath.isVariableDeclarator() ? f.parentPath.node.id.name : (f.parentPath.isObjectProperty() || f.parentPath.isObjectMethod()) && f.parentPath.node.key ? f.parentPath.node.key.name : f.isObjectMethod() && f.node.key ? f.node.key.name : '?';
+  out.push(n); } return out.join('<') || 'top'; };
+traverse(ast, {
+  CallExpression(p) {
+    const c = p.node.callee; if (p.node._pfTag) return;
+    const isMk = t.isIdentifier(c) && (c.name === 'mk' || c.name === 'mkc');
+    const isCe = t.isMemberExpression(c) && t.isIdentifier(c.object, { name: 'document' }) && t.isIdentifier(c.property, { name: 'createElement' });
+    if (!isMk && !isCe) return;
+    const who = fnName(p); if (who.startsWith('mkc')) return;
+    p.node._pfTag = true;
+    p.replaceWith(t.sequenceExpression([t.assignmentExpression('=', t.memberExpression(t.identifier('window'), t.identifier('__mkTag')), t.stringLiteral(who)), p.node]));
+  },
+});
 traverse(ast, {
   Program(p) { for (const [name, b] of Object.entries(p.scope.bindings)) if (b.kind === 'hoisted' || b.kind === 'var') topFns.add(name); },
   Identifier(p) {
