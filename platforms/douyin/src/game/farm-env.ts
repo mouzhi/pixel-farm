@@ -242,6 +242,14 @@ export function createFarmEnv(p: FarmPlatform) {
     return made
   }
   dom.body.innerHTML = FARM_UI_HTML
+  // v16.2：记下最近一次触摸 / 点击（帧率上限用：没人操作时少画几帧）
+  let lastInput = -1e9
+  const realDispatch = dom._dispatch.bind(dom)
+  dom._dispatch = (el: any, ev: any) => {
+    const t = ev && ev.type
+    if (typeof t === "string" && /^(pointer|touch|click|mouse|wheel)/.test(t)) lastInput = p.now()
+    return realDispatch(el, ev)
+  }
   if (p.rectOf) dom.rectOf = (el: any) => p.rectOf!(el._attrs.id || "", el)
   // 画面画布 #game：MElement 本身（监听、冒泡都走 DOM），宽高和 getContext 指到帧缓冲
   let canvasEl: any = dom.getElementById("game")
@@ -303,9 +311,23 @@ export function createFarmEnv(p: FarmPlatform) {
   let lastProf: Record<string, number> = {}
   const slow = { ew: 16, since: -1, cool: 0, n: 0 }
   const memLog = { at: 0, n: 0 }
+  // v16.2 帧率上限：最多 60 帧；8 秒没碰屏幕就 30 帧（G.__idleFps 可调）。游戏按真实时间推进（dt 上限 0.1 秒），所以速度不变，只是少画
+  let lastRun = -1
   const tick = (now: number) => {
     scheduled = false
     if (paused || (!pending && !extra.length)) return
+    {
+      const tn = p.now()
+      const idle = tn - lastInput > 8000 && !G.__dragging
+      const fps = idle ? (G.__idleFps || 30) : 60
+      if (lastRun >= 0 && tn - lastRun < 1000 / fps - 3) {
+        scheduled = true
+        p.requestFrame(tick)
+        return
+      }
+      lastRun = tn
+      G.__frames = (G.__frames || 0) + 1
+    }
     const cb = pending || (() => undefined)
     pending = null
     const more = extra

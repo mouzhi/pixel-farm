@@ -398,7 +398,10 @@ export default function Index() {
       env.G.__onSlow = (n: number) => {
         env.G.__valveNoLight = true
         applyLevel('low', `保险 ${n}：画面持续卡顿`)
-        if (n >= 2) env.G.__waterEvery = 6
+        if (n >= 2) {
+          env.G.__waterEvery = 6
+          env.G.__idleFps = 20 // v16.2：没人操作时 20 帧
+        }
       }
       setPhase('ready')
       // v15：量一下这台手机的画布 multiply 对不对（只在控制台留一行，排查黄昏发灰用；一个 4x4 小画布，首帧之后再做）
