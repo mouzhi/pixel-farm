@@ -376,6 +376,7 @@ export default function Index() {
       // v12：网页版界面（小红书版的手机外壳）：避让距离；地图上的区域牌子不显示（界面层节流刷新，会跟不上地图）
       env.G.__dyInsets = insetsRef.current
       env.G.__noSigns = true
+      env.G.__nativeMul = typeof OffscreenCanvas === 'function' // v15：原生画布才用 multiply 混合，抖音手机上改用等效叠色
       try {
         bootFarm(env.G)
       } catch (err) {
@@ -394,6 +395,25 @@ export default function Index() {
       }
       applyLevel(AUTO_START(), '自动起始')
       setPhase('ready')
+      // v15：量一下这台手机的画布 multiply 对不对（只在控制台留一行，排查黄昏发灰用；一个 4x4 小画布，首帧之后再做）
+      setTimeout(() => {
+        try {
+          const c: any = typeof OffscreenCanvas === 'function' ? new OffscreenCanvas(4, 4) : (Taro as any).createOffscreenCanvas({ type: '2d', width: 4, height: 4 })
+          c.width = 4
+          c.height = 4
+          const x = c.getContext('2d')
+          x.fillStyle = 'rgb(200,200,200)'
+          x.fillRect(0, 0, 4, 4)
+          x.globalCompositeOperation = 'multiply'
+          x.fillStyle = 'rgba(255,100,100,0.5)'
+          x.fillRect(0, 0, 4, 4)
+          x.globalCompositeOperation = 'source-over'
+          const d = x.getImageData(1, 1, 1, 1).data
+          console.info(`[farm-light] multiply test got ${d[0]},${d[1]},${d[2]},${d[3]} want 200,139,139,255; native=${String(env.G.__nativeMul)} lighting=${String(!env.G.__trialNoLight)}`)
+        } catch (err) {
+          console.warn('[farm-light] multiply test failed', err)
+        }
+      }, 4000)
     }, 60)
   }
 
@@ -528,7 +548,7 @@ export default function Index() {
     env.setPresentScale(next === 'high' ? 2 : 1)
     env.G.__gpuShadow = next !== 'high'
     env.G.__trialNoShadow = next === 'low'
-    env.G.__trialNoLight = next === 'low'
+    env.G.__trialNoLight = false // v15：夜里的暗色和灯光层低画质也要有（之前关掉了，手机上夜里没有夜景）
     const hooks = env.G.__trialHooks
     if (hooks) hooks.FOG.on = next !== 'low'
     levelRef.current = next

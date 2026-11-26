@@ -2,6 +2,7 @@
 // These patches only touch the UI / camera glue; game rules are unchanged.
 export const UI_PATCHES = {
   'game.js': [
+    ["  if (warm > 0) { ctx.globalCompositeOperation = 'multiply';", "  if (warm > 0 && window.__mulFill) window.__mulFill(ctx, 255, 190 + 40 * (1 - warm), 150 + 80 * (1 - warm), 0.55 * warm, W, H);\n  else if (warm > 0) { ctx.globalCompositeOperation = 'multiply';"],
     // follow the farmer (xhs: PFPlatform.followFarmer; the douyin shell starts with it off) and the two-finger gesture lock
     ['  cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;',
      '  cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;\n  if (window.PFPlatform && PFPlatform.followFarmer && !drag) panTo(FARMER.x, FARMER.y); // douyin v12: same as xhs'],
@@ -9,6 +10,12 @@ export const UI_PATCHES = {
      "function cancelDrag() { drag = null; document.body.classList.remove('grab'); }\ncv.addEventListener('pointermove', e => { if (window.PFPlatform && PFPlatform.gestureLock) { if (drag) cancelDrag(); return; } hoverAt(e); if (!drag) return;"],
     ['window.__trialHooks = { FOG, cam, zoomBy: d => { zoom = clamp(zoom + d, 0, 3); fit(); }, fit };',
      'window.__trialHooks = { FOG, cam, zoomBy: d => { zoom = clamp(zoom + d, 0, 3); fit(); }, fit };\nObject.assign(window.__farm, { fit, cancelDrag, setZoom: z => { zoom = clamp(z | 0, 0, 3); fit(); return zoom; }, getZoom: () => zoom, cam }); // douyin v12: pinch zoom (xhs hooks)'],
+  ],
+  // v15: the dusk / dawn warm tint and the rain wash use canvas 'multiply'. On the phone that blend came out grey, so they go through a
+  // hook (farm-env __mulFill): native multiply where the canvas does it right, an equivalent source-over fill where not
+  'weather.js': [
+    ["    ctx.save();\n    ctx.globalCompositeOperation = 'multiply';\n    ctx.fillStyle = `rgba(150, 165, 190, ${Math.min(0.28, a)})`;\n    ctx.fillRect(0, 0, W, H);\n    ctx.restore();\n    return 1;",
+     "    if (window.__mulFill) { window.__mulFill(ctx, 150, 165, 190, Math.min(0.28, a), W, H); return 1; }\n    ctx.save();\n    ctx.globalCompositeOperation = 'multiply';\n    ctx.fillStyle = `rgba(150, 165, 190, ${Math.min(0.28, a)})`;\n    ctx.fillRect(0, 0, W, H);\n    ctx.restore();\n    return 1;"],
   ],
   'ui.js': [
     // no minimap on the phone (douyin env returns null for it)

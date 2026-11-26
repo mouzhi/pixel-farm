@@ -466,6 +466,31 @@ export function createFarmEnv(p: FarmPlatform) {
     __pixURL: pixURL,
     __pngURL: pngURL,
   }
+  // v15：黄昏 / 清晨的暖色和雨天的灰蓝罩子在网页版里是 multiply 混合；抖音手机上这个混合出来是一片灰。
+  // 原生画布环境照旧用 multiply；抖音端改成等效的普通叠色（按场景平均亮度配的颜色，误差约 5/255）
+  G.__mulFill = (ctx: any, r: number, g: number, b: number, a: number, w: number, h: number) => {
+    if (G.__nativeMul && !G.__forceMulFallback) {
+      ctx.save()
+      ctx.globalCompositeOperation = "multiply"
+      ctx.fillStyle = `rgba(${r | 0},${g | 0},${b | 0},${a})`
+      ctx.fillRect(0, 0, w, h)
+      ctx.restore()
+      return
+    }
+    // 乘上 (r,g,b)/255、不透明度 a：每个通道的系数 f = 1 - a(1 - c/255)。用 α = 1 - min(f) 的普通叠色，
+    // 最暗那个通道叠黑，其余通道叠到「刚好等效于参考亮度」的颜色
+    const f = [1 - a * (1 - r / 255), 1 - a * (1 - g / 255), 1 - a * (1 - b / 255)]
+    const fmin = Math.min(f[0], f[1], f[2])
+    const al = 1 - fmin
+    if (al <= 0.002) return
+    const REF = 110
+    const k = f.map((fc) => Math.max(0, Math.min(255, (REF * (fc - 1 + al)) / al)))
+    const sv = ctx.globalAlpha
+    ctx.globalAlpha = al
+    ctx.fillStyle = `rgb(${k[0] | 0},${k[1] | 0},${k[2] | 0})`
+    ctx.fillRect(0, 0, w, h)
+    ctx.globalAlpha = sv
+  }
   G.__frameProf = (sim: number, render: number, hud: number) => {
     frameSplit = { sim, render, hud }
   }
