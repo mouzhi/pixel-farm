@@ -75,6 +75,7 @@ jobs:
           node tools/farmxp-test.js
           node tools/gen3-test.js
           node tools/bus-test.js
+          node tools/chop-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -215,6 +216,9 @@ jobs:
           # v5.12.6 旅游大巴: its own leg (~5.5m locally)
           - group: bus
             scripts: bus-shots.js
+          # v5.12.7 砍树不再卡住: its own leg (~15s locally)
+          - group: chop
+            scripts: chop-shots.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
