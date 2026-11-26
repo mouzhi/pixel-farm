@@ -1,4 +1,4 @@
-// 小红书小工具 1.4.0（同步网页版 v5.12.1–v5.12.6）：手机截图 + 检查，跑在打好的包上（390×844 @3x，XHS UA，真触摸事件）。
+// 小红书小工具 1.4.x（同步网页版 v5.12.1–v5.12.7）：手机截图 + 检查，跑在打好的包上（390×844 @3x，XHS UA，真触摸事件）。
 //   bash platforms/xhs/pack.sh && node tools/xhs140-shots.js [name-filter]   writes $PF_SHOTS/xhs140_*.png (default /workspace/pf-shots)
 // Checks the new web features on the phone layout: the shop's 体验 tab (tap the bar's 商店, tap 体验, five cards inside the screen, buy one by touch),
 // the 镇公园 at R1 (镇公所 tab shows 繁荣度 6 and the 旅游大巴 card), grandkids around the 宅园 houses, tour buses in the reserved bays, the 宅园 pads;
