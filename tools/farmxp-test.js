@@ -22,7 +22,7 @@ ok('gates: an inn first, then each item\'s own condition; the 留影角 needs an
   assert(/别的/.test(FX.gate('xpphoto', base))); assert.strictEqual(FX.gate('xpphoto', { inn: true, any: true }), null);
 });
 ok('shop + save: appended to UPGRADE_IDS, a 体验 tab, never bought by the family, no wood steering', () => {
-  assert.deepStrictEqual(SV.UPGRADE_IDS.slice(-5), FX.IDS);
+  const i = SV.UPGRADE_IDS.indexOf(FX.IDS[0]); assert(i >= 0); assert.deepStrictEqual(SV.UPGRADE_IDS.slice(i, i + FX.IDS.length), FX.IDS); // later shop ids (v5.13.0 小豆家 / 小米家) may follow
   const tab = SIM.SHOP_TABS.find(t => t.id === 'farmxp'); assert(tab && tab.ids.join() === FX.IDS.join());
   for (const id of FX.IDS) { assert(SIM.shopItem(id), id); assert(!SIM.AUTO_BUY.includes(id), id + ' in AUTO_BUY'); }
   const e = SIM.effects({ xppet: 1 }); assert.strictEqual(e.xppet, true); assert.strictEqual(e.xppick, false);
