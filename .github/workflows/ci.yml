@@ -119,7 +119,7 @@ jobs:
           - group: recent-b
           # v5.11.0.4: rain-shots (~7m on CI) joins the lightest leg (11m50s on run 44701568250; smoke with it was 21m52s)
           # v5.11.0.12: rain-shots -> agrilot (recent-b was 24m43s with rain on album run 44777224060; inn+resort stay here)
-            scripts: inn-shots.js
+            scripts: inn-shots.js stuck-shots.js
           # v5.11.0.9 房子比例: the scale audit (every building beside a grown-up, ~10s) and the district / town / farm / seaside
           # shots with door routes and perf (~5m on CI)
           # v5.11.0.11: + offline-shots and album-shots from townscale (townscale hit 25m13s with them on run 44772874375: v5110 15m, school 5m,
