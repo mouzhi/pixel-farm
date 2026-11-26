@@ -43,7 +43,7 @@ fs.mkdirSync(OUT, { recursive: true });
     await p.waitForTimeout(400); await p.screenshot({ path: path.join(OUT, name) });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
 
-  const VER = '5.12.9';
+  const VER = '5.12.10';
   // a cabin in the 农家乐区 (paid, then put up) so the inn path is open, then the wedding morning
   const innReady = `{ const r = f.innStart('cabin'); if (!r.ok) throw new Error('cabin ' + r.why); nextMorning(); at(9 * 60); S.inn.job = null; S.inn.cabins = Math.max(1, S.inn.cabins | 0); f.FARMER.wood = Math.max(f.FARMER.wood, 800); S.coins = Math.max(S.coins, 80000); }`;
   // per game minute, what kid0 and the spouse are doing; on shift = 9:00–17:00, evening = 18:00–21:00
