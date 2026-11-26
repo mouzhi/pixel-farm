@@ -50,6 +50,10 @@ const PFK_S = 256, PFK_MAXC = 48, PFK_BASE = 64, PFK_IDLE = 256, PFK_AHEAD = 768
 // a chunk's window: things standing up to MX px left/right of it, MT above, MB below (tall ones) can draw into it (per layer)
 let PFK_POOL = [], PFK_T0 = 0, PFK_MS = 4, PFK_LX = 0, PFK_LY = 0, PFK_VX = 0, PFK_VY = 0, PFK_STILL = 0, PFK_RG = [64, 64, 64, 64], PFK_PADS = [0, 0, 0, 0], PFK_IDLEDONE = false;
 let PFK_MOV = false, PFK_CT = 0, PFK_CB = 3, PFK_DEF = [], PFK_BLK = new Set(); // picture-making ms spent this frame, its share; deferred items
+// v10: one idle-work budget a frame for everything that is not needed on screen this frame (chunks ahead, pictures, the ground):
+// what is left of an ~18 ms frame after the frame's own work (running average of the frame interval minus this idle work:
+// simulation, drawing and presenting all count), 1..6 ms, never more
+let PFB = 1, PFB_SPENT = 0, PFB_T0 = 0, PFB_EMA = 30, PFB_N = 0, PFB_LAST = 0;
 let PFC_PG = null, PFC_POSE = 0, PFC_CAND = new Int32Array(0), PFC_KIND = new Uint8Array(0), PFK_SPENT = 0;
 function pfcCamR() { return pfcMix(pfcMix(Math.round(AQ * 1e4), Math.round(RS * 100)), W * 4099 + H); }
 function pfkTick() { // once a frame: pan velocity (plane px/frame), the ring to keep built around the view, the object list's reach
@@ -64,7 +68,15 @@ function pfkTick() { // once a frame: pan velocity (plane px/frame), the ring to
   // the list must reach every window of every chunk the ring touches (a chunk reaches up to S-1 past it); statics' own pad >= 30
   const P = PFK_PADS, ow = PFK_OL.mg; P[0] = R[0] + PFK_S + ow[0] - 30; P[1] = R[1] + PFK_S + ow[0] - 30; P[2] = R[2] + PFK_S + ow[1] - 30; P[3] = R[3] + PFK_S + ow[2] - 120;
   PFK_MS = moving ? 7 : 9; PFK_CB = moving ? 4 : 6; // ms of chunk building / of new pictures a frame
-}
+  pfbFrame(); }
+function pfbFrame() { if (PFB_N === realT) return; PFB_N = realT; PFB = Math.max(1, Math.min(PFK_MOV ? 7 : 6, 18 - PFB_EMA)); }
+function pfbLeft() { pfbFrame(); return PFB - PFB_SPENT; }
+function pfbEnd() { if (window.__pfcAlbum || !PFB_T0) return; const L = window.__gbl; if (L && L.left) { // the ground's own share: up to a ~22 ms frame while still (8 ms at most), ~18 ms (4) while moving
+    const t = performance.now(), gb = (PFK_MOV ? Math.min(4, 18 - PFB_EMA) : Math.max(1.5, Math.min(8, 22 - PFB_EMA))) - Math.max(0, PFB_SPENT - PFB); if (gb > 0.5) gbIdle(L, gb); PFB_SPENT += performance.now() - t; }
+  if (L && !L.left && window.__gbs && PFK_STILL > 60) { const t = performance.now(); gbSaveStep(Math.max(1, PFB - PFB_SPENT)); PFB_SPENT += performance.now() - t; }
+  const now = performance.now(); if (!PFC_ST.firstRender) PFC_ST.firstRender = now - PFB_T0; // v10: the first frame's drawing (ms)
+  if (PFB_LAST && now - PFB_LAST < 250) PFB_EMA = PFB_EMA * 0.85 + Math.max(0, Math.min(60, now - PFB_LAST - PFB_SPENT)) * 0.15; PFB_LAST = now;
+  PFC_ST.pfb = PFB; PFC_ST.pfbEma = PFB_EMA; }
 function pfkSlow(n, dt) { const S = PFC_ST.slow || (PFC_ST.slow = []); S.push(n + ' ' + Math.round(dt) ); if (S.length > 12) S.shift(); }
 function pfkDefer(x, y) { PFK_DEF.push(x, y); PFC_ST.defer++; }
 function pfkLayer(raw, name, st, mg) { return { ch: new Map(), camR: null, bx: new Map(), use: 0, raw, name, st, mg, lists: [], hs: new Int32Array(0), ranF: -2, idleDone: false }; }
@@ -157,7 +169,8 @@ function pfkRun(Ly, F, G) { // F: this frame's statics (picture-plane anchors); 
   todo.sort((a, b) => a.pr - b.pr);
   // v9: an unfinished chunk on screen while the map is not moving (load, zoom, a turn) is finished in a few ~20 ms frames rather
   // than drawn item by item each frame; while dragging the usual budget holds and the fallback covers it
-  const visTodo = todo.length && todo[0].pr < 1e6, dl = performance.now() + (visTodo && !PFK_MOV ? 20 : PFK_MS) * (Ly === PFK_SL ? 0.4 : 0.6); let first = true;
+  // v10: within the frame's idle budget (visible chunks first: they get at least 2 ms, the fallback draws them meanwhile)
+  const visTodo = todo.length && todo[0].pr < 1e6, tb0 = performance.now(), dl = tb0 + Math.max(visTodo ? 2 : 0.3, pfbLeft() * (Ly === PFK_SL ? 0.4 : 1)); let first = true;
   for (const P of todo) { if (!first && performance.now() > dl) break; first = false;
     let C = P.todo ? P : null;
     if (!C) { let reuse = null;
@@ -166,6 +179,7 @@ function pfkRun(Ly, F, G) { // F: this frame's statics (picture-plane anchors); 
       C = pfkChunk(P.i, P.j, reuse); C.use = use; const L = lists[P.c];
       C.todo = L.map(q => ({ k: F.key[q], sub: F.sub[q], rx: F.rx[q], ry: F.ry[q], d: F.d[q], it: F.it[q], b: null })); C.fh = hs[P.c]; Ly.ch.set(P.ck, C); }
     pfkStep(Ly, C, dl); }
+  PFB_SPENT += performance.now() - tb0;
   Ly.ranF = PFK_FR; Ly.idleDone = PFK_STILL > 15 && !need && !(G && PFK_DEF.length) && !todo.some(C => C.todo); // the still-time ring is all built
   const out = []; for (const ck of vis) { const C = Ly.ch.get(ck); out.push(C || { i: Math.floor(ck / 65536) - 32768, j: ck % 65536 - 32768, c: null, todo: [], ti: 0, ck, lc: lists }); }
   Ly.vis = out; Ly.vc = { ri0, rj0, nI, F }; return out;
@@ -236,17 +250,17 @@ function pfjStep(J, dl) { const m = J.m, g = PFJ.g, w = J.w, h = J.h, BW = J.BW;
       for (let i = 0; i < d.length; i++) if (o[i]) d[i] = o[i]; }
     return true; }
   return false; }
-function pfjRun(ms) { const t0 = performance.now(), dl = t0 + ms; let n = 0;
-  while (n === 0 || performance.now() < dl) { n++;
+function pfjRun(ms) { const t0 = performance.now(), dl = t0 + ms; let n = 0; // v10: an item is only started inside the budget
+  while (performance.now() < dl) { n++;
     let J = PFJ.cur;
     if (!J) { if (!PFJ.q.length) break; if (PFJ.sort) { PFJ.q.sort((a, b) => b.d - a.d); PFJ.sort = false; } J = PFJ.q.pop(); PFJ.set.delete(J.k);
-      if (J.t === 3) { seaBandMap(); continue; } // the sea's band map: built once for the whole map (~250 ms at 4x), not on first sight
+      if (J.t === 3) { if (PFB < 5 || PFK_STILL < 120) { PFJ.q.unshift(J); break; } seaBandMap(); continue; } // v10: only when frames are cheap and the map has sat still 2 s // the sea's band map: built once for the whole map (~250 ms at 4x), not on first sight
       if (J.t === 2) { if (J.o.tree) { treeCache(J.o, treePoseT(J.o)); PFC_ST.preTree++; } continue; } // a tree's picture (one go)
       if (J.m._ck && J.m._ck.get(J.a)) continue;
       if (J.t === 1) { stackCanvas(J.m, J.a); continue; } // a small stack (one go, plain nearest)
       PFJ.set.add(J.k); pfjStart(J); PFJ.cur = J; }
     if (pfjStep(J, dl)) { PFJ.cur = null; PFJ.set.delete(J.k); if (!(J.m._ck && J.m._ck.get(J.a))) { PFJ.pre.set(J.m, J); stackCanvas(J.m, J.a); PFJ.pre.delete(J.m); PFC_ST.preStk++; } } }
-  PFK_CT += performance.now() - t0; }
+  PFK_CT += performance.now() - t0; PFB_SPENT += performance.now() - t0; }
 // v9: the map sits still: every static picture on the farm at this angle (big stacks a part at a time, small ones and trees in
 // one go each), nearest first, within the frame's picture budget; the list then finds them made and nothing waits while dragging
 function pfjWarm(allTiles) {
@@ -310,7 +324,7 @@ function pfcObjects(list, poseT, allTiles) { // statics composed once into a lay
     if (prof) PT.hot += performance.now() - t1;
     if (e && e.hot > PFC_F) continue;
     kind[i] = 1; pfkPush(F, key, sub, rx, ry, o.depth, o, i); }
-  if (ns) { if (PFK_STILL > 15) pfjWarm(allTiles); if (PFJ.cur || PFJ.q.length) pfjRun(Math.max(1, PFK_CB - PFK_CT)); }
+  if (ns) { if (PFK_STILL > 15) pfjWarm(allTiles); if (PFJ.cur || PFJ.q.length) pfjRun(Math.max(0.5, Math.min(PFK_CB - PFK_CT, pfbLeft()))); }
   tick('o.scan');
   // the list reaches PFK_PADS past the screen (every static's own onScreen pad is at least 30): there it is complete
   const P = PFK_PADS, vis = pfkRun(PFK_OL, F, [-CX - P[0] - 29, -CY - P[2] - 29, W - CX + P[1] + 29, H - CY + P[3] + 119]); tick('o.build');
@@ -404,6 +418,84 @@ export const V5_PATCHES = [
 ];
 // v7: the expansion and workshop modules warm their models' per-angle pictures in the background (each one a new GPU canvas on
 // Krypton, ~15/s on a phone for minutes); off whenever the landing turns warming off (window.__noWarm), like game.js's own warmer
+// v10 地面: the ground picture of the whole map was painted pixel by pixel at boot (~3.3 s of a 4.6 s boot at desktop speed).
+// With window.__lazyGround the whole-map build (boot, a cache rebuild) only marks the map unbuilt in 32 px tiles: the tiles under
+// the screen are painted when the ground is drawn (same pixels: the same rect build), the rest within the frame's idle budget,
+// ahead of a drag / nearest the view first. Rect builds (a region opens, a path is laid) are painted at once as before.
+export const BOOT_PATCHES = [
+  ["const groundBase = mk(GW, GH);", "const groundBase = mk(GW, GH); window.__gbCanvas = groundBase;"],
+  ["function buildGroundBase(r) { // one ground pixel per screen pixel",
+   `function buildGroundBase(r) { if (!r && window.__lazyGround && !window.__pfcAlbum) { gbLazyAll(); return; } buildGroundBase0(r); }
+function gbLazyAll() { const T = 32, nx = Math.ceil(GW / T), ny = Math.ceil(GH / T), first = !window.__gbl;
+  const L = window.__gbl = { T, nx, ny, n: nx * ny, done: new Uint8Array(nx * ny), left: nx * ny, cx: GW / 2, cy: GH / 2, vx: 0, vy: 0, seen: 0, ci: -1, cj: -1, r: 0, built: 0, sync: 0, syncMs: 0, idleMs: 0, quiet: 0, cache: '' };
+  const B = window.__gbs; if (B && B.full) { gbPaint(B.ix); L.done.fill(1); L.left = 0; L.cache = 'mem'; return; } // a cache rebuild: from the copy kept
+  if (first) { const t = performance.now(); let ix = null; try { ix = gbLoad(); } catch (e) { ix = null; } L.loadMs = performance.now() - t;
+    if (ix) { gbPaint(ix); const S2 = gbShadowInit(); S2.ix = ix; S2.full = true; L.done.fill(1); L.left = 0; L.cache = 'hit'; } else L.cache = 'miss'; } }
+// v10: the finished ground is kept (palette index a pixel, in memory) and saved run-length coded (~200 KB) in local storage; at the
+// next boot it is painted from there in one go once a grid of ~7000 points re-computed now matches it (else it is built as above)
+const GB_KEY = 'pf-douyin-ground-v1';
+function gbShadowInit() { return window.__gbs || (window.__gbs = { ix: new Uint8Array(GW * GH), pal: new Map(), cols: [], full: false, dirty: false, enc: null, saved: 0 }); }
+function gbShadow(d, X0, Y0, w, h) { const B = gbShadowInit(), ix = B.ix, pal = B.pal; let lu = -1, li = 0;
+  for (let y = 0; y < h; y++) { const o = (Y0 + y) * GW + X0, r = y * w; for (let x = 0; x < w; x++) { const u = d[r + x];
+    if (u !== lu) { lu = u; let k = pal.get(u); if (k === undefined) { k = B.cols.length; if (k > 63) { B.bad = 1; k = 0; } else { pal.set(u, k); B.cols.push(u); } } li = k; } ix[o + x] = li; } }
+  const L = window.__gbl; if (!L || !L.quiet) B.dirty = true; B.enc = null; }
+function gbPaint(ix) { const B = gbShadowInit(), g = groundBase.getContext('2d'), img = g.createImageData(GW, GH), d = new Uint32Array(img.data.buffer), c = B.cols;
+  for (let i = 0; i < ix.length; i++) d[i] = c[ix[i]]; g.putImageData(img, 0, 0); if (window.__farm && window.__farm.onGround) window.__farm.onGround(); }
+function gbLoad() { const st = window.localStorage, s = st && st.getItem(GB_KEY); if (!s) return null; const bar = s.indexOf('|'); if (bar < 0) return null;
+  const hd = JSON.parse(s.slice(0, bar)); if (hd.w !== GW || hd.h !== GH || !Array.isArray(hd.pal)) return null;
+  const ix = new Uint8Array(GW * GH); let p = 0; for (let i = bar + 1; i + 2 < s.length + 0 && p < ix.length; i += 3) { const k = s.charCodeAt(i) - 48, n = (s.charCodeAt(i + 1) - 48) * 64 + s.charCodeAt(i + 2) - 48; ix.fill(k, p, p + n); p += n; }
+  if (p !== ix.length) return null; const B = gbShadowInit(); B.pal = new Map(); B.cols = hd.pal.slice(); hd.pal.forEach((u, k) => B.pal.set(u, k));
+  for (let y = 7; y < GH; y += 24) for (let x = 5 + (y % 48 ? 12 : 0); x < GW; x += 24) if (B.cols[ix[y * GW + x]] !== u32(groundAt(x / RS + GX0, y / RS + GY0)[0])) { B.cols = []; B.pal = new Map(); return null; } // the farm changed
+  return ix; }
+function gbSaveStep(ms) { const B = window.__gbs, L = window.__gbl; if (!B || B.bad || !L || L.left || !(B.dirty || !B.full || B.enc)) return; B.full = true;
+  const dl = performance.now() + ms; let E = B.enc; if (!E) E = B.enc = { y: 0, out: [] }; const ix = B.ix, ch = String.fromCharCode;
+  while (E.y < GH && performance.now() < dl) { const o = E.y * GW; let parts = ''; let k = ix[o], n = 0;
+    for (let x = 0; x <= GW; x++) { const v = x < GW ? ix[o + x] : -1; if (v === k && n < 4095) { n++; continue; } parts += ch(48 + k, 48 + (n >> 6), 48 + (n & 63)); k = v; n = 1; }
+    E.out.push(parts); E.y++; }
+  if (E.y < GH) return; try { window.localStorage.setItem(GB_KEY, JSON.stringify({ w: GW, h: GH, pal: B.cols }) + '|' + E.out.join('')); B.saved++; } catch (e) { B.bad = 1; } B.dirty = false; B.enc = null; }
+function gbTile(L, k) { const T = L.T, i = k % L.nx, j = (k / L.nx) | 0, X0 = i * T, Y0 = j * T, X1 = Math.min(GW, X0 + T), Y1 = Math.min(GH, Y0 + T);
+  L.done[k] = 1; L.left--; L.built++; L.quiet = 1;
+  try { buildGroundBase0([GX0 + X0 / RS, GY0 + Y0 / RS, GX0 + X1 / RS, GY0 + Y1 / RS]); } finally { L.quiet = 0; }
+  if (!L.left && window.__farm && window.__farm.onGround) window.__farm.onGround(); }
+function gbEnsure(x0, y0, x1, y1) { const L = window.__gbl; if (!L || !L.left) return; const T = L.T, t = performance.now();
+  const cx = (x0 + x1) / 2, cy = (y0 + y1) / 2; let dx = cx - L.cx, dy = cy - L.cy; if (!L.seen || Math.abs(dx) + Math.abs(dy) > 400) dx = dy = 0;
+  L.vx = L.vx * 0.6 + dx * 0.4; L.vy = L.vy * 0.6 + dy * 0.4; L.cx = cx; L.cy = cy; L.seen = 1;
+  const i0 = Math.max(0, Math.floor(x0 / T)), i1 = Math.min(L.nx - 1, Math.floor((x1 - 1) / T)), j0 = Math.max(0, Math.floor(y0 / T)), j1 = Math.min(L.ny - 1, Math.floor((y1 - 1) / T));
+  const hx = W / 2 + T * 0.75 + 4, hy = H / 2 + T * 0.75 + 4; // only tiles under the screen (the rect is the turned screen's bounding box)
+  let n = 0; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const k = j * L.nx + i; if (L.done[k]) continue;
+    const u = (i + 0.5) * T / RS + GX0, v = (j + 0.5) * T / RS + GY0, px = (u * CA - v * SA) * RS + CX, py = (u * SA + v * CA) * K * RS + CY;
+    if (Math.abs(px - W / 2) > hx || Math.abs(py - H / 2) > hy) continue; gbTile(L, k); n++; }
+  if (n) { L.sync += n; L.syncMs += performance.now() - t; } }
+function gbIdle(L, ms) { if (!(ms > 0) || !L.left || window.__gbNoIdle) return; const T = L.T, t = performance.now(), dl = t + ms, mv = Math.abs(L.vx) + Math.abs(L.vy) > 1;
+  const ci = Math.max(0, Math.min(L.nx - 1, Math.floor((L.cx + (mv ? L.vx * 25 : 0)) / T))), cj = Math.max(0, Math.min(L.ny - 1, Math.floor((L.cy + (mv ? L.vy * 25 : 0)) / T)));
+  if (ci !== L.ci || cj !== L.cj) { L.ci = ci; L.cj = cj; L.r = 0; }
+  const R = Math.max(ci, L.nx - 1 - ci, cj, L.ny - 1 - cj);
+  out: while (L.r <= R) { const r = L.r;
+    for (let dj = -r; dj <= r; dj++) { const j = cj + dj; if (j < 0 || j >= L.ny) continue; const st = dj === -r || dj === r ? 1 : 2 * r;
+      for (let di = -r; di <= r; di += st) { const i = ci + di; if (i < 0 || i >= L.nx) continue; const k = j * L.nx + i; if (L.done[k]) continue;
+        if (performance.now() >= dl) break out; gbTile(L, k); } }
+    L.r++; }
+  L.idleMs += performance.now() - t; }
+function buildGroundBase0(r) { // one ground pixel per screen pixel`],
+  ["  g.putImageData(img, X0, Y0);\n", "  g.putImageData(img, X0, Y0); if (window.__lazyGround) gbShadow(d, X0, Y0, w, h);\n"],
+  // the same colour words come back for every pixel: their numbers are kept (same values)
+  ["const u32 = h => { const [r, g, b] = hex(h); return ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; };",
+   "const U32M = new Map(); const u32 = h => { let v = U32M.get(h); if (v === undefined) { const [r, g, b] = hex(h); v = ((255 << 24) | (b << 16) | (g << 8) | r) >>> 0; U32M.set(h, v); } return v; };"],
+  ["  if (window.__farm && window.__farm.onGround) window.__farm.onGround(); // the minimap copies it",
+   "  if (!(window.__gbl && window.__gbl.quiet) && window.__farm && window.__farm.onGround) window.__farm.onGround(); // the minimap copies it"],
+  ["    if (x1 > x0 && y1 > y0) ctx.drawImage(groundBase, x0, y0,", "    if (x1 > x0 && y1 > y0 && window.__gbl) gbEnsure(x0, y0, x1, y1);\n    const gd0 = performance.now(); if (x1 > x0 && y1 > y0) ctx.drawImage(groundBase, x0, y0,"],
+  ["x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); ctx.setTransform(1, 0, 0, 1, 0, 0); }", "x1 - x0, y1 - y0, x0, y0, x1 - x0, y1 - y0); PFC_ST.gdMs = (PFC_ST.gdMs || 0) + performance.now() - gd0; ctx.setTransform(1, 0, 0, 1, 0, 0); }"],
+  ["  if (groundBase.getContext('2d').getImageData(GW >> 1, GH >> 1, 1, 1).data[3] === 0) return true;",
+   "  if (!(window.__gbl && window.__gbl.left) && groundBase.getContext('2d').getImageData(GW >> 1, GH >> 1, 1, 1).data[3] === 0) return true; // v10: not while the ground is still being painted"],
+  ["function render() {\n  setCam();", "function render() {\n  PFB_T0 = window.__pfcAlbum ? 0 : performance.now(); PFB_SPENT = 0; setCam();"],
+  ["  if (PATHDEBUG || dbgRoutes.length) drawPathOverlay();\n}", "  if (PATHDEBUG || dbgRoutes.length) drawPathOverlay();\n  pfbEnd();\n}"],
+  // v10 启动: where the boot goes (window.__bp(name): ms since the last mark, set by the landing)
+  ["const boot = PFSave.read();", "if (window.__bp) window.__bp('init');\nconst boot = PFSave.read();"],
+  ["if (WX && WX.ensure) S.weather = WX.ensure(", "if (window.__bp) window.__bp('save');\nif (WX && WX.ensure) S.weather = WX.ensure("],
+  ["buildGroundBase(); groundReady = true;", "if (window.__bp) window.__bp('region'); buildGroundBase(); groundReady = true; if (window.__bp) window.__bp('ground');"],
+  ["if (!boot.blocked) saveNow();", "if (!boot.blocked) saveNow(); if (window.__bp) window.__bp('write');"],
+  ["setInterval(saveNow, 15000);", "if (window.__bp) window.__bp('offline');\nsetInterval(saveNow, 15000);"],
+];
 export const WARM_PATCHES = {
   'expansion.js': [["const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 12",
     "const step = () => { if (X.manual || window.__noWarm) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 12"]],

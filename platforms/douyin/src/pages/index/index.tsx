@@ -46,6 +46,19 @@ type Hud = { day: string; clock: string; coins: string }
 
 const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
 
+// v10：页面脚本开始运行的时间（启动分段的“准备”从这里算）
+const PAGE_T0 = nowMs()
+// v10：自动画质的起点：抖音（无原生 OffscreenCanvas）直接从 低 开始，加载后的头十几秒不再先跑在 中
+const AUTO_START = (): QualityLevel => (typeof OffscreenCanvas === 'function' ? 'high' : 'low')
+const BOOT_PART_TEXT: [string, string][] = [['prep', '准备'], ['files', '前置'], ['init', '初始化'], ['save', '存档'], ['region', '区域'], ['ground', '地面'], ['write', '写档'], ['offline', '补算'], ['tail', '其他']]
+
+// v10：地面图：缓存命中=上次画好的整张图直接贴上；未命中=屏幕下的先画，其余空闲时画（百分比=已画）
+function groundText(L: any) {
+  if (!L) return ''
+  const c = L.cache === 'hit' || L.cache === 'mem' ? '缓存' : '现画'
+  return `地面${c}${L.left ? `${Math.round(100 * (1 - L.left / L.n))}%` : '完'}`
+}
+
 function readStorage(key: string): string | null {
   const value = Taro.getStorageSync(key)
   return typeof value === 'string' && value !== '' ? value : null
@@ -104,6 +117,8 @@ export default function Index() {
   const [phase, setPhase] = useState<Phase>('loading')
   const [errorText, setErrorText] = useState('')
   const [bootMs, setBootMs] = useState(0)
+  // v10：启动分段（毫秒）：准备=页面打开到引擎开始，前置=game.js 之前的文件，初始化=模型/地图/布局，存档=读档+迁移，地面=首帧前画的地面，写档，补算=离线补算，其他，首帧
+  const [bootParts, setBootParts] = useState<Record<string, number>>({})
   const [step, setStep] = useState('准备中')
   const [perf, setPerf] = useState<PerfReport | null>(null)
   const [quality, setQuality] = useState<QualityChoice>('auto')
@@ -278,9 +293,19 @@ export default function Index() {
     log('开始运行游戏引擎')
     setTimeout(() => {
       const t0 = nowMs()
+      const parts: Record<string, number> = { prep: Math.round(t0 - PAGE_T0) }
+      let tb = t0
+      env.G.__bp = (name: string) => {
+        const t = nowMs()
+        parts[name] = (parts[name] || 0) + Math.round(t - tb)
+        tb = t
+      }
+      // v10：整张地图的地面不在启动时一次画完：屏幕下的先画，其余每帧在空闲预算里画（画面相同）
+      env.G.__lazyGround = true
       let stage = '开始'
       let lastSaved = 0
       env.G.__bootMark = (file: string) => {
+        if (file === 'game.js') env.G.__bp('files')
         stage = file
         const t = nowMs()
         // 引擎是同步跑完的，界面刷新不了；把进度存起来，万一卡死，下次打开能看到停在哪个文件
@@ -301,15 +326,17 @@ export default function Index() {
         fail(`游戏引擎（${stage}）`, err)
         return
       }
+      env.G.__bp('tail')
       const ms = Math.round(nowMs() - t0)
       setBootMs(ms)
+      setBootParts(parts)
       log(`引擎启动完成 ${ms}ms`)
       try {
         Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: true, lines: logRef.current }))
       } catch {
         // ignore
       }
-      applyLevel(typeof OffscreenCanvas === 'function' ? 'high' : 'mid', '自动起始')
+      applyLevel(AUTO_START(), '自动起始')
       setPhase('ready')
     }, 60)
   }
@@ -454,7 +481,7 @@ export default function Index() {
     const next = order[(order.indexOf(qualityRef.current) + 1) % order.length]
     qualityRef.current = next
     setQuality(next)
-    applyLevel(next === 'auto' ? (typeof OffscreenCanvas === 'function' ? 'high' : 'mid') : next, next === 'auto' ? '自动' : '手动')
+    applyLevel(next === 'auto' ? AUTO_START() : next, next === 'auto' ? '自动' : '手动')
   }
   const goNight = () => {
     const farm = envRef.current?.G.__farm
@@ -547,7 +574,13 @@ export default function Index() {
             })()}
             <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
             <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`v9 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            <Text className="farm-perf-line text-base">{`启动 ${BOOT_PART_TEXT.filter(([k]) => bootParts[k] !== undefined).map(([k, t]) => `${t}${bootParts[k]}`).join(' ')} 首帧${Math.round(envRef.current?.bootFps().first || 0)}ms ${groundText(envRef.current?.G.__gbl)}`}</Text>
+            {(() => {
+              const b = envRef.current ? envRef.current.bootFps() : { first: 0, secs: 0, buckets: [] as { min: number; avg: number }[] }
+              const done = b.buckets.map((x, i) => `${i * 5}-${i * 5 + 5}s ${x.min}/${x.avg.toFixed(0)}`).join(' ')
+              return <Text className="farm-perf-line text-base">{`前20秒FPS(最低/均) ${done}${b.secs < 20 ? ` 测量中${b.secs}s` : ''}`}</Text>
+            })()}
+            <Text className="farm-perf-line text-base">{`v10 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
             {problems.slice(-2).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
@@ -572,7 +605,7 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v9 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v10 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
               <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>

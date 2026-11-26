@@ -346,6 +346,8 @@ export function createFarmEnv(p: FarmPlatform) {
     for (const k of DRAG_KEYS) o[k] = st[k] || 0
     return o
   }
+  // v10：加载后前 20 秒每秒的帧数（第一帧起算），面板按 5 秒一段显示 最低/平均
+  const early = { t0: -1, first: 0, fps: new Array(20).fill(0) as number[] }
   let frameSplit = { sim: 0, render: 0, hud: 0 }
   let lastProf: Record<string, number> = {}
   const tick = (now: number) => {
@@ -391,6 +393,8 @@ export function createFarmEnv(p: FarmPlatform) {
       parts,
     })
     if (samples.length > 90) samples.shift()
+    if (early.t0 < 0) { early.t0 = t0; early.first = t2 - t0 }
+    { const sec = Math.floor((t0 - early.t0) / 1000); if (sec < 20) early.fps[sec]++ }
     if (G.__dragging) {
       drag.n++
       drag.sum += t2 - t0
@@ -604,7 +608,8 @@ export function createFarmEnv(p: FarmPlatform) {
       presentScale = scale
     },
     dragStats: () => {
-      const d = (G.__dragging && dragReal(drag)) || !lastDrag ? drag : lastDrag
+      // 还没有完整的拖动：显示 0（不显示轻点/短按）
+      const d = G.__dragging && dragReal(drag) ? drag : lastDrag || { n: 0, sum: 0, max: 0, draws: 0, c0: -1, c1: 0, s0: null, s1: null, mf: 0, cx: NaN, cy: NaN }
       const pfc: Record<string, number> = {}
       if (d.s0 && d.s1) for (const k of DRAG_KEYS) pfc[k] = d.s1[k] - d.s0[k]
       return { frames: d.n, avgMs: d.n ? d.sum / d.n : 0, maxMs: d.max, draws: d.n ? d.draws / d.n : 0, canvases: d.c0 < 0 ? 0 : d.c1 - d.c0, secs: d.sum / 1000, pfc }
@@ -616,6 +621,17 @@ export function createFarmEnv(p: FarmPlatform) {
     // 松手：完整的拖动记下来
     endDrag: () => {
       if (dragReal(drag)) lastDrag = Object.assign({}, drag)
+    },
+    // v10：加载后前 20 秒的 FPS，每 5 秒一段（最低 1 秒/平均），只算已经走完的段
+    bootFps: () => {
+      const out: { min: number; avg: number }[] = []
+      if (early.t0 < 0) return { first: 0, secs: 0, buckets: out }
+      const secs = Math.min(20, Math.floor((p.now() - early.t0) / 1000))
+      for (let b = 0; b + 5 <= secs; b += 5) {
+        const w = early.fps.slice(b, b + 5)
+        out.push({ min: Math.min(...w), avg: w.reduce((x, y) => x + y, 0) / 5 })
+      }
+      return { first: early.first, secs, buckets: out }
     },
     resetStats: () => { workMs.length = 0; stamps.length = 0; samples.length = 0 },
   }
