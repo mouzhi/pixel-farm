@@ -36,6 +36,18 @@
     fam.love = Math.min(LOVE_MAX, fam.love + add); return add;
   }
   const kidCap = pop => Math.max(0, pop - 2);      // pop 3 → 1 child, pop 4 → 2 children
+  // v5.12.8: how many people the HUD and the 家人 slot show, and how many rooms they have.
+  // The manor's own rooms stay `manorPop` (kidCap / nextKid still use that). Spouses and
+  // grandchildren live in the new houses, so each one adds one person and one room — the same
+  // rule v5.11.0.19 used for a child's husband or wife. A grandchild's husband or wife counts too.
+  // `members` is S.members.length (阿禾 and children who have joined the task board).
+  // `babies` is original children still in the cradle (not yet members).
+  function census(o) {
+    const members = (o && o.members) | 0, babies = (o && o.babies) | 0, inlaws = (o && o.inlaws) | 0;
+    const grand = (o && o.grand) | 0, mates = (o && o.mates) | 0, manorPop = (o && o.manorPop) | 0;
+    const extra = inlaws + grand + mates, manor = 1 + members + babies;
+    return { people: manor + extra, pop: manorPop + extra, manor, manorPop, extra };
+  }
   // the morning check: she moves in when love is full and the house has a room for two; a child arrives when there is room
   function morning(fam, day, pop) {
     const ev = [];
@@ -97,6 +109,6 @@
     const st = kidStage(kid, day);
     return `${kid.name}（${{ baby: '宝宝，在家', child: '小孩，干轻活', teen: '少年' }[st] || st}）`;
   };
-  const api = { PARTNER, KID_NAMES, LOVE_MAX, CHAT, SALE, SALES_DAY, GIFTS, GIFT_FISH, MEET_DAY, KID_AFTER, KID_GAP, BABY_DAYS, CHILD_DAYS, CHILD_KINDS, empty, giftValue, bestGift, visit, kidCap, morning, kidStage, workers, canDo, AREA_OF, AREAS, OWN, HELP, areasOf, affinity, nextKid, kidText, kidLine, KIDS };
+  const api = { PARTNER, KID_NAMES, LOVE_MAX, CHAT, SALE, SALES_DAY, GIFTS, GIFT_FISH, MEET_DAY, KID_AFTER, KID_GAP, BABY_DAYS, CHILD_DAYS, CHILD_KINDS, empty, giftValue, bestGift, visit, kidCap, census, morning, kidStage, workers, canDo, AREA_OF, AREAS, OWN, HELP, areasOf, affinity, nextKid, kidText, kidLine, KIDS };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFFamily = api;
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -73,6 +73,7 @@ jobs:
           node tools/park-test.js
           node tools/farmxp-test.js
           node tools/gen3-test.js
+          node tools/family-test.js
           node tools/bus-test.js
           node tools/chop-test.js
 
