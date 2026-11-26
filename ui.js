@@ -264,10 +264,17 @@
         const inl = G.spousesIn ? G.spousesIn() : [], spA = G.SPOUSES || [];
         for (const q of inl) { const a = spA.find(x => x._spouse === q.kid); lines.push(`${q.name}（${(fam.kids.find(k => k.id === q.kid) || {}).name || '孩子'}的爱人）：${jobOf(a)}`); }
         const GR = (G.homeStatus && G.homeStatus().grand) || []; // v5.12.5 第三代: the grandchildren live in their parents' (or their own) new house
-        for (const q of GR) lines.push(`${q.name}（${q.short}）：${q.note}`);
+        const mates = GR.filter(q => q.short === '成家' && q.mate); // v5.12.8: a grandchild's husband or wife, once married
+        for (const q of GR) { lines.push(`${q.name}（${q.short}）：${q.note}`);
+          if (q.short === '成家' && q.mate) lines.push(`${q.mate}（${q.name}的爱人）：住在${q.house || '新房子'}`); }
         const busy = S.members.filter(m => !m.home && !m.away && m.task).length + spA.filter(a => !a.home && a.task && inl.some(q => q.kid === a._spouse)).length;
-        const pop = 1 + S.members.length + fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length + inl.length, room = tier.pop + inl.length;
-        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${tier.name}：最多住 ${tier.pop} 人${inl.length ? `，新房子里还住着 ${inl.map(q => q.name).join('、')}` : ''}${GR.length ? `，孙辈 ${GR.length} 个（${GR.map(q => q.name).join('、')}）` : ''}，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
+        const c = FA.census({ members: S.members.length, babies: fam.kids.filter(k => FA.kidStage(k, S.day) === 'baby').length, inlaws: inl.length, grand: GR.length, mates: mates.length, manorPop: tier.pop });
+        const pop = c.people, room = c.pop;
+        const houseBits = [`${tier.name}最多住 ${tier.pop} 人`];
+        if (inl.length) houseBits.push(`新房子里还住着 ${inl.map(q => q.name).join('、')}`);
+        if (GR.length) houseBits.push(`孙辈 ${GR.length} 个（${GR.map(q => q.name).join('、')}）`);
+        if (mates.length) houseBits.push(`孙辈的爱人 ${mates.map(q => q.mate).join('、')}`);
+        add({ id: 'family', ico: pic(ICONS.house), name: '家人', n: `${pop}/${room}`, tip: `${houseBits.join('，')}，一共 ${pop}/${room} 人，现在 ${busy} 人在干活。\n` + lines.join('\n'), mini: 1, miniN: busy ? `${busy} 人在干活` : `${pop} 口人` });
         const nk = FA.nextKid(fam, S.day, tier.pop); // v5.3: the wait for a child is visible, so it does not look stuck
         if (nk) add({ id: 'nextkid', ico: pic(ICONS.heart), name: nk.name, n: nk.room ? '要扩建' : nk.days === 1 ? '明天' : nk.days + ' 天', dim: nk.room, tip: `${FA.kidText(nk)}。阿禾搬来 ${FA.KID_AFTER} 天后第一个孩子出生，之后每个孩子相隔 ${FA.KID_GAP} 天；房子要有空房间（二层农舍住 3 人，庄园住 4 人）` });
       } }
@@ -303,7 +310,7 @@
   function inv() {
     const S = G.S, F = G.F, E = S.eff, mode = invMode(), sd = mode === 'full' ? null : storeSum();
     const specials = (F.crops || []).map(it => { const o = window.PFSurprise ? PFSurprise.itemOf(it) : { type: typ(it) }; return [o.type, o.glow || 0, o.giant || 0, o.rare || ''].join(':'); }).join('|');
-    const key = [mode, F.water, S.waterMax, E.basket, ...SIM.IDS.map(k => k + F.bag[k]), specials, F.gathered, F.wood, E.house, E.axe, E.crops.join('/'), F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.met, S.family.moved, S.family.kids.length, S.day, S.members.map(m => m.role + (m.home ? 'h' : '') + (m.away ? 'a' : '') + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), E.rod, E.searod, sd ? sd.sellGold : ''].join(',');
+    const key = [mode, F.water, S.waterMax, E.basket, ...SIM.IDS.map(k => k + F.bag[k]), specials, F.gathered, F.wood, E.house, E.axe, E.crops.join('/'), F.saplings.apple, F.saplings.orange, S.hay, S.family.love, S.family.met, S.family.moved, S.family.kids.length, S.home && S.home.wed ? Object.keys(S.home.wed).join() : '', S.home && S.home.g3 && S.home.g3.k ? Object.keys(S.home.g3.k).map(id => id + ((S.home.g3.k[id] && S.home.g3.k[id].w) || '')).join() : '', S.day, S.members.map(m => m.role + (m.home ? 'h' : '') + (m.away ? 'a' : '') + (m.task ? m.task.label : '')).join('/'), S.animals.map(a => a.h).join('/'), E.rod, E.searod, sd ? sd.sellGold : ''].join(',');
     if (key === invKey) return; invKey = key;
     const list = invEntries(mode), el = $('inv');
     const data = e => `data-id="${e.id}" data-name="${esc(e.name)}" data-tip="${esc(e.tip)}"${e.act ? ` data-act="${e.act}"` : ''}`;
@@ -1027,7 +1034,7 @@
     return h + '</div>';
   }
   function relHtml(H) {
-    if (!H || (!H.kids.length && !H.nb.length)) return '';
+    if (!H || (!H.kids.length && !H.nb.length && !(H.grand && H.grand.length))) return '';
     let h = '<div class="rel">';
     for (const k of H.kids) { const top = k.rel.filter(r => r.v > 0).slice(0, k.married ? 0 : 3);
       if (k.married) { const mate = k.wed && k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '';
@@ -1042,6 +1049,14 @@
       h += `<div class="rk"><b>${esc(k.name)}</b>的同学</div>` + top.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)} ${r.v}</span></div>`).join('');
       const CLOSE = (window.PFHome && PFHome.REL.close) || 80, b = top[0]; // v5.11.0.10: how far the closest classmate is from a wedding
       h += `<div class="rr rn"><span>${k.stage === 'teen' ? (b.v >= CLOSE ? `和${esc(b.name)}走得很近了，有空的新房子、晴天傍晚就办婚礼` : `和${esc(b.name)} ${b.v}/${CLOSE}，到 ${CLOSE}「走得很近」就能成家`) : '长成少年以后才谈婚事'}</span></div>`; }
+    if (H.grand && H.grand.length) { // v5.12.8: the grandchildren (and a spouse once they marry) in the family panel
+      h += '<div class="rk"><b>孙辈</b></div>';
+      for (const q of H.grand) {
+        const extra = (q.short === '成家' && q.mate ? '，和' + esc(q.mate) + '成家了' : '') + (q.house ? '，住在' + esc(q.house) : '');
+        h += `<div class="rr"><span>${esc(q.name)}</span><span class="rl">${esc(q.short)}${extra}</span></div>`;
+        if (q.note) h += `<div class="rr rn"><span>${esc(q.note)}</span></div>`;
+      }
+    }
     if (H.nb.length) h += '<div class="rk"><b>镇上的人</b></div>' + H.nb.map(r => `<div class="rr"><span>${esc(r.name)}</span>${hearts5(r.v)}<span class="rl">${esc(r.level)}</span></div>`).join('');
     return h + '</div>';
   }

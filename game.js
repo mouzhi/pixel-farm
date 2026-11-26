@@ -1516,15 +1516,20 @@ function giftAtStall() {
 function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next milestone
   const fam = S.family, max = FAM.LOVE_MAX, tier = WD.HOUSE_TIERS[S.eff.house || 0];
   const babies = fam.kids.filter(k => FAM.kidStage(k, S.day) === 'baby').length;
-  const people = 1 + S.members.length + babies;
   const inlaws = spousesIn(); // v5.11.0.19: a married child's husband or wife is family too (they live in the new house, so the manor's room count is unchanged)
+  const GR = (typeof g3Status === 'function') ? g3Status() : []; // v5.12.8: grandchildren (and their spouses once married) also live in the new houses
+  const mates = GR.filter(q => q.short === '成家' && q.mate);
+  const c = FAM.census({ members: S.members.length, babies, inlaws: inlaws.length, grand: GR.length, mates: mates.length, manorPop: tier.pop });
   const today = (fam.today && fam.today.day === S.day) ? fam.today : { chat: 0, gift: 0, giftName: '', sales: 0 };
   let hint;
   if (fam.moved) {
     const kids = fam.kids.map(k => FAM.kidLine(k, S.day));
-    const nk = FAM.kidText(FAM.nextKid(fam, S.day, tier.pop)); // v5.3: 「小豆还有 N 天到来」
+    const nk = FAM.kidText(FAM.nextKid(fam, S.day, tier.pop)); // v5.3: 「小豆还有 N 天到来」; still the manor's rooms
     const sps = inlaws.map(q => `${q.name}（${kidName(q.kid)}的爱人）`);
-    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}${sps.length ? '、' + sps.join('、') : ''}。${tier.name}，${people}/${tier.pop} 人${inlaws.length ? `；新房子里还有 ${inlaws.length} 位家人` : ''}。` + (nk ? nk + '。' : '');
+    const grs = GR.map(q => `${q.name}（${q.short}）`);
+    const gsp = mates.map(q => `${q.mate}（${q.name}的爱人）`);
+    const housed = inlaws.map(q => q.name).concat(GR.map(q => q.name), mates.map(q => q.mate));
+    hint = `阿禾已经住在农场。家人：农夫、阿禾${kids.length ? '、' + kids.join('、') : ''}${sps.length ? '、' + sps.join('、') : ''}${grs.length ? '、' + grs.join('、') : ''}${gsp.length ? '、' + gsp.join('、') : ''}。${tier.name}最多住 ${tier.pop} 人${housed.length ? `；新房子里还住着 ${housed.join('、')}` : ''}，一共 ${c.people}/${c.pop} 人。` + (nk ? nk + '。' : '');
   } else if (!fam.met) hint = '去集市逛逛，就能认识店主阿禾。';
   else if (fam.love >= max && S.eff.house >= 1) hint = '好感已满，她答应明天搬过来。';
   else if (fam.love >= max) hint = '已满，等待大木屋';
@@ -1536,9 +1541,8 @@ function loveStatus() { // v5.1.1: HUD heart meter, today's gains, and the next 
   const total = today.chat + today.gift + today.sales;
   const todayText = bits.length ? ('今天：' + bits.join('，') + '，共 +' + total) : (fam.moved ? '' : '今天还没去集市');
   if (HM && fam.moved) { const notes = fam.kids.map(k => HM.kidNote(S.home, k.id, k.name)).filter(Boolean); if (notes.length) hint += notes.join('；') + '。'; } // v5.9.0
-  const all = people + inlaws.length, room = tier.pop + inlaws.length;
-  return { home: HM ? homeStatus() : null, met: fam.met, moved: fam.moved, love: fam.love, max, people: all, pop: room, manor: people, manorPop: tier.pop, inlaws: inlaws.map(q => q.name), today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
-    label: fam.moved ? `一家 ${all}/${room}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
+  return { home: HM ? homeStatus() : null, met: fam.met, moved: fam.moved, love: fam.love, max, people: c.people, pop: c.pop, manor: c.manor, manorPop: c.manorPop, inlaws: inlaws.map(q => q.name), grand: GR.map(q => q.name), mates: mates.map(q => q.mate), today, todayText, hint, nextKid: FAM.nextKid(fam, S.day, tier.pop),
+    label: fam.moved ? `一家 ${c.people}/${c.pop}` : `${fam.love}/${max}`, title: fam.moved ? '家人' : '阿禾' };
 }
 // v5.11.0.19: the married children's partners, from the save (S.home.wed), so the count does not wait for their actor
 function spousesIn() {
@@ -6529,7 +6533,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.7';
+const GAME_VERSION = '5.12.8';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }
