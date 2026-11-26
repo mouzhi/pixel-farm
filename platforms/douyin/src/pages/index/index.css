@@ -55,15 +55,37 @@
   font-weight: 700;
 }
 
-.farm-perf {
+.farm-perf-wrap {
   display: flex;
   flex-direction: column;
-  align-self: flex-start;
-  align-self: stretch;
+  align-items: flex-start;
   margin: 4px 6px 0;
-  padding: 6px 10px;
-  background: rgba(0, 0, 0, 0.85);
+}
+
+/* v11：默认只有角上一行小角标，点一下展开 */
+.farm-badge {
+  padding: 2px 8px;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 10px;
+  pointer-events: auto;
+}
+
+.farm-badge-text {
+  color: #ffe98a;
+  line-height: 18px;
+  font-family: Menlo, Consolas, monospace;
+}
+
+/* 展开后：最多占屏幕约 40% 高，超出可滚动 */
+.farm-perf {
+  box-sizing: border-box;
+  width: calc(100vw - 12px);
+  max-height: 40vh;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(0, 0, 0, 0.72);
   border-radius: 4px;
+  pointer-events: auto;
 }
 
 .farm-perf-big {
@@ -74,8 +96,9 @@
 }
 
 .farm-perf-line {
+  display: block;
   color: #ffe98a;
-  line-height: 22px;
+  line-height: 15px;
   font-family: Menlo, Consolas, monospace;
 }
 

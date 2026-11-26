@@ -1,5 +1,5 @@
 import Taro, { useDidHide, useDidShow, useReady, useUnload } from '@tarojs/taro'
-import { Canvas, Text, View } from '@tarojs/components'
+import { Canvas, ScrollView, Text, View } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CustomNavSpace } from '@/components/custom-nav-space'
@@ -50,9 +50,23 @@ const nowMs = () => (typeof performance !== 'undefined' && performance.now ? per
 const PAGE_T0 = nowMs()
 // v10：自动画质的起点：抖音（无原生 OffscreenCanvas）直接从 低 开始，加载后的头十几秒不再先跑在 中
 const AUTO_START = (): QualityLevel => (typeof OffscreenCanvas === 'function' ? 'high' : 'low')
-const BOOT_PART_TEXT: [string, string][] = [['prep', '准备'], ['files', '前置'], ['init', '初始化'], ['save', '存档'], ['region', '区域'], ['ground', '地面'], ['write', '写档'], ['offline', '补算'], ['tail', '其他']]
+// v11：初始化再细分：基础=调色板/工具/地图数据，世界=河山与扩建区，工坊=工坊等，城镇=城镇/家园/民宿等各区，其余=初始化余下
+const BOOT_PART_TEXT: [string, string][] = [['prep', '准备'], ['files', '前置'], ['i.base', '基础'], ['i.world', '世界'], ['i.works', '工坊'], ['i.town', '城镇'], ['init', '其余'], ['save', '存档'], ['region', '区域'], ['ground', '地面'], ['write', '写档'], ['offline', '补算'], ['tail', '其他']]
 
 // v10：地面图：缓存命中=上次画好的整张图直接贴上；未命中=屏幕下的先画，其余空闲时画（百分比=已画）
+// v11：加载填充（首帧之后屏上的东西陆续画出来）还没完时，角标显示“加载中”
+function loadingText(st: any) {
+  return st && !st.loadF && st.load0 ? ' 加载中' : ''
+}
+// v11：首帧分项 + 模型懒建进度
+function frameText(G: any) {
+  const st = (G && G.__pfcStats) || {}
+  const ff = st.ff || {}
+  const Z = G && G.__lzm
+  const md = Z ? `模型${Z.built}/${Z.n}` : ''
+  const ld = st.loadF ? `填充${st.loadF}帧${st.loadMs}ms` : st.load0 ? '填充中' : ''
+  return `首帧 ${ff.ms || 0}ms(地面${ff.gb || 0}/${ff.gbn || 0}块 模型${ff.mdlMs || 0}/${ff.mdl || 0}个 图${ff.stk || 0}/${ff.stkN || 0}张) ${ld} ${md}`
+}
 function groundText(L: any) {
   if (!L) return ''
   const c = L.cache === 'hit' || L.cache === 'mem' ? '缓存' : '现画'
@@ -119,6 +133,8 @@ export default function Index() {
   const [bootMs, setBootMs] = useState(0)
   // v10：启动分段（毫秒）：准备=页面打开到引擎开始，前置=game.js 之前的文件，初始化=模型/地图/布局，存档=读档+迁移，地面=首帧前画的地面，写档，补算=离线补算，其他，首帧
   const [bootParts, setBootParts] = useState<Record<string, number>>({})
+  // v11：调试面板默认收起成角上一行小字，点一下展开/收起
+  const [panelOpen, setPanelOpen] = useState(false)
   const [step, setStep] = useState('准备中')
   const [perf, setPerf] = useState<PerfReport | null>(null)
   const [quality, setQuality] = useState<QualityChoice>('auto')
@@ -302,6 +318,8 @@ export default function Index() {
       }
       // v10：整张地图的地面不在启动时一次画完：屏幕下的先画，其余每帧在空闲预算里画（画面相同）
       env.G.__lazyGround = true
+      // v11：体素模型用到时才建（屏上的先建），其余在每帧空闲预算里补建；首帧后屏上东西几帧内陆续画出
+      env.G.__lazyModels = true
       let stage = '开始'
       let lastSaved = 0
       env.G.__bootMark = (file: string) => {
@@ -548,42 +566,50 @@ export default function Index() {
           ) : null}
         </View>
         {phase === 'ready' && perf ? (
-          <View className="farm-perf">
-            <Text className="farm-perf-big text-xl">{`FPS ${perf.fps.toFixed(1)}  均${perf.avgMs.toFixed(0)} 最大${perf.maxMs.toFixed(0)}ms`}</Text>
-            <Text className="farm-perf-line text-base">{`模拟${perf.sim.toFixed(1)} 渲染${perf.render.toFixed(1)} 上屏${perf.present.toFixed(1)} 界面${perf.hud.toFixed(1)}`}</Text>
-            {(() => {
-              const gr = renderGroups(perf.parts)
-              return <Text className="farm-perf-line text-base">{`地面${gr.ground.toFixed(1)} 物件${gr.objects.toFixed(1)} 阴影${gr.shadow.toFixed(1)} 雾${gr.fog.toFixed(1)} 光效${gr.fx.toFixed(1)}`}</Text>
-            })()}
-            <Text className="farm-perf-line text-base">{topParts(perf.parts)}</Text>
-            <Text className="farm-perf-line text-base">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
-            <Text className="farm-perf-line text-base">{`新画布 ${perf.canvasSizes || '无'}`}</Text>
-            <Text className="farm-perf-line text-base">{`缓存全清${pfc.wipe}次${pfc.wipeWhy ? `(${pfc.wipeWhy})` : ''} 空白检查${pfc.blankOff ? '已停' : '在跑'} 水面每${envRef.current?.G.__waterEvery || 1}帧`}</Text>
-            <Text className="farm-perf-line text-base">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 整屏框${pfc.whole} 整层重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
-            <Text className="farm-perf-line text-base">{`最近重建 地块:${pfc.soilWhy || '无'} 静物:${pfc.objWhy || '无'}`}</Text>
-            <Text className="farm-perf-line text-base">{`局部补丁${pfc.patchRate.toFixed(1)}/秒 每次${pfc.patchDraws.toFixed(0)}贴 最近 静物:${pfc.objPatchWhy || '无'} 地块:${pfc.soilPatchWhy || '无'}`}</Text>
-            <Text className="farm-perf-line text-base">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict} 新堆块${pfc.stkRate.toFixed(1)}/秒 ${pfc.stkTop || ''}`}</Text>
-            <Text className="farm-perf-line text-base">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 缺块${pfc.fbRate.toFixed(1)}/秒(共${pfc.fb}) 预建图${pfc.preStk} 延后${pfc.deferRate.toFixed(0)}/秒(共${pfc.defer}) 扫描ms ${pfc.scan || '无'}`}</Text>
-            {(() => {
-              const env = envRef.current
-              const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0, draws: 0, canvases: 0, secs: 0, pfc: {} as Record<string, number> }
-              const q = d.pfc || {}
-              // 整层：整层重建（应为0）；区块：建好的区块；缺块：屏上区块没建完、直接画的次数
-              const rb = `整层${(q.soilBuild || 0) + (q.objBuild || 0)} 区块${(q.soilChunk || 0) + (q.objChunk || 0)} 缺块${(q.soilFb || 0) + (q.objFb || 0)} 补丁${q.patch || 0}`
-              return <Text className="farm-perf-line text-base">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 贴图${d.draws.toFixed(0)} 新画布${d.canvases} ${rb}`}</Text>
-            })()}
-            <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
-            <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`启动 ${BOOT_PART_TEXT.filter(([k]) => bootParts[k] !== undefined).map(([k, t]) => `${t}${bootParts[k]}`).join(' ')} 首帧${Math.round(envRef.current?.bootFps().first || 0)}ms ${groundText(envRef.current?.G.__gbl)}`}</Text>
-            {(() => {
-              const b = envRef.current ? envRef.current.bootFps() : { first: 0, secs: 0, buckets: [] as { min: number; avg: number }[] }
-              const done = b.buckets.map((x, i) => `${i * 5}-${i * 5 + 5}s ${x.min}/${x.avg.toFixed(0)}`).join(' ')
-              return <Text className="farm-perf-line text-base">{`前20秒FPS(最低/均) ${done}${b.secs < 20 ? ` 测量中${b.secs}s` : ''}`}</Text>
-            })()}
-            <Text className="farm-perf-line text-base">{`v10 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
-            {problems.slice(-2).map((line, i) => (
-              <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
-            ))}
+          <View className="farm-perf-wrap">
+            <View className="farm-badge" onClick={() => setPanelOpen(!panelOpen)}>
+              <Text className="farm-badge-text text-xs">{`FPS ${perf.fps.toFixed(0)} · 启动${((bootMs + (envRef.current?.bootFps().first || 0)) / 1000).toFixed(1)}s${loadingText(envRef.current?.G.__pfcStats)} ${panelOpen ? '▲' : '▼'}`}</Text>
+            </View>
+            {panelOpen ? (
+              <ScrollView className="farm-perf" scrollY>
+                <Text className="farm-perf-line text-xs">{`FPS ${perf.fps.toFixed(1)} 均${perf.avgMs.toFixed(0)} 最大${perf.maxMs.toFixed(0)}ms`}</Text>
+                {(() => {
+                  const env = envRef.current
+                  const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0, draws: 0, canvases: 0, secs: 0, pfc: {} as Record<string, number> }
+                  const q = d.pfc || {}
+                  // 整层：整层重建（应为0）；区块：建好的区块；缺块：屏上区块没建完、直接画的次数
+                  const rb = `整层${(q.soilBuild || 0) + (q.objBuild || 0)} 区块${(q.soilChunk || 0) + (q.objChunk || 0)} 缺块${(q.soilFb || 0) + (q.objFb || 0)} 补丁${q.patch || 0}`
+                  return <Text className="farm-perf-line text-xs">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 贴图${d.draws.toFixed(0)} 新画布${d.canvases} ${rb}`}</Text>
+                })()}
+                <Text className="farm-perf-line text-xs">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
+                <Text className="farm-perf-line text-xs">{`启动 ${BOOT_PART_TEXT.filter(([k]) => bootParts[k] !== undefined).map(([k, t]) => `${t}${bootParts[k]}`).join(' ')} 首帧${Math.round(envRef.current?.bootFps().first || 0)}ms ${groundText(envRef.current?.G.__gbl)}`}</Text>
+                <Text className="farm-perf-line text-xs">{frameText(envRef.current?.G)}</Text>
+                {(() => {
+                  const b = envRef.current ? envRef.current.bootFps() : { first: 0, secs: 0, buckets: [] as { min: number; avg: number }[] }
+                  const done = b.buckets.map((x, i) => `${i * 5}-${i * 5 + 5}s ${x.min}/${x.avg.toFixed(0)}`).join(' ')
+                  return <Text className="farm-perf-line text-xs">{`前20秒FPS(最低/均) ${done}${b.secs < 20 ? ` 测量中${b.secs}s` : ''}`}</Text>
+                })()}
+                <Text className="farm-perf-line text-xs">{`模拟${perf.sim.toFixed(1)} 渲染${perf.render.toFixed(1)} 上屏${perf.present.toFixed(1)} 界面${perf.hud.toFixed(1)}`}</Text>
+                {(() => {
+                  const gr = renderGroups(perf.parts)
+                  return <Text className="farm-perf-line text-xs">{`地面${gr.ground.toFixed(1)} 物件${gr.objects.toFixed(1)} 阴影${gr.shadow.toFixed(1)} 雾${gr.fog.toFixed(1)} 光效${gr.fx.toFixed(1)}`}</Text>
+                })()}
+                <Text className="farm-perf-line text-xs">{topParts(perf.parts)}</Text>
+                <Text className="farm-perf-line text-xs">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
+                <Text className="farm-perf-line text-xs">{`新画布 ${perf.canvasSizes || '无'}`}</Text>
+                <Text className="farm-perf-line text-xs">{`缓存全清${pfc.wipe}次${pfc.wipeWhy ? `(${pfc.wipeWhy})` : ''} 空白检查${pfc.blankOff ? '已停' : '在跑'} 水面每${envRef.current?.G.__waterEvery || 1}帧`}</Text>
+                <Text className="farm-perf-line text-xs">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 整屏框${pfc.whole} 整层重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
+                <Text className="farm-perf-line text-xs">{`最近重建 地块:${pfc.soilWhy || '无'} 静物:${pfc.objWhy || '无'}`}</Text>
+                <Text className="farm-perf-line text-xs">{`局部补丁${pfc.patchRate.toFixed(1)}/秒 每次${pfc.patchDraws.toFixed(0)}贴 最近 静物:${pfc.objPatchWhy || '无'} 地块:${pfc.soilPatchWhy || '无'}`}</Text>
+                <Text className="farm-perf-line text-xs">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict} 新堆块${pfc.stkRate.toFixed(1)}/秒 ${pfc.stkTop || ''}`}</Text>
+                <Text className="farm-perf-line text-xs">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 缺块${pfc.fbRate.toFixed(1)}/秒(共${pfc.fb}) 预建图${pfc.preStk} 延后${pfc.deferRate.toFixed(0)}/秒(共${pfc.defer}) 扫描ms ${pfc.scan || '无'}`}</Text>
+                <Text className="farm-perf-line text-xs">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
+                <Text className="farm-perf-line text-xs">{`v11 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+                {problems.slice(-2).map((line, i) => (
+                  <Text key={`p-${i}`} className="farm-perf-warn text-xs">{line}</Text>
+                ))}
+              </ScrollView>
+            ) : null}
           </View>
         ) : null}
         {phase === 'loading' ? <Text className="farm-state text-base">{`农场加载中…（${step}）`}</Text> : null}
@@ -605,7 +631,7 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v10 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v11 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
               <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>

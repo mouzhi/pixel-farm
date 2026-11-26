@@ -53,6 +53,9 @@ let PFK_MOV = false, PFK_CT = 0, PFK_CB = 3, PFK_DEF = [], PFK_BLK = new Set(); 
 // v10: one idle-work budget a frame for everything that is not needed on screen this frame (chunks ahead, pictures, the ground):
 // what is left of an ~18 ms frame after the frame's own work (running average of the frame interval minus this idle work:
 // simulation, drawing and presenting all count), 1..6 ms, never more
+// v11 加载: until the first frame that needs no on-screen picture deferred, pictures on screen are made ~20 ms a frame too (big
+// ones as jobs); the chunks they draw into wait for them, so the farm fills in over the first frames instead of one long frame
+let PFK_LOAD = true, PFK_LOADN = 0, PFK_DEFON = 0; const PFK_LB = 20;
 let PFB = 1, PFB_SPENT = 0, PFB_T0 = 0, PFB_EMA = 30, PFB_N = 0, PFB_LAST = 0;
 let PFC_PG = null, PFC_POSE = 0, PFC_CAND = new Int32Array(0), PFC_KIND = new Uint8Array(0), PFK_SPENT = 0;
 function pfcCamR() { return pfcMix(pfcMix(Math.round(AQ * 1e4), Math.round(RS * 100)), W * 4099 + H); }
@@ -71,10 +74,12 @@ function pfkTick() { // once a frame: pan velocity (plane px/frame), the ring to
   pfbFrame(); }
 function pfbFrame() { if (PFB_N === realT) return; PFB_N = realT; PFB = Math.max(1, Math.min(PFK_MOV ? 7 : 6, 18 - PFB_EMA)); }
 function pfbLeft() { pfbFrame(); return PFB - PFB_SPENT; }
-function pfbEnd() { if (window.__pfcAlbum || !PFB_T0) return; const L = window.__gbl; if (L && L.left) { // the ground's own share: up to a ~22 ms frame while still (8 ms at most), ~18 ms (4) while moving
+function pfbEnd() { if (window.__pfcAlbum || !PFB_T0) return; const Z = window.__lzm; if (Z && Z.qi < Z.q.length) { const t = performance.now(); lzIdle((PFK_MOV ? Math.min(3, 18 - PFB_EMA) : Math.max(1.5, Math.min(4, 20 - PFB_EMA))) - Math.max(0, PFB_SPENT - PFB)); PFB_SPENT += performance.now() - t; }
+  else if (window.__lzLater && window.__lzLater.length && !PFK_MOV && PFK_STILL > 30) { const t = performance.now(); try { window.__lzLater.shift()(); } catch (e) {} PFB_SPENT += performance.now() - t; }
+  const L = window.__gbl; if (L && L.left) { // the ground's own share: up to a ~22 ms frame while still (8 ms at most), ~18 ms (4) while moving
     const t = performance.now(), gb = (PFK_MOV ? Math.min(4, 18 - PFB_EMA) : Math.max(1.5, Math.min(8, 22 - PFB_EMA))) - Math.max(0, PFB_SPENT - PFB); if (gb > 0.5) gbIdle(L, gb); PFB_SPENT += performance.now() - t; }
   if (L && !L.left && window.__gbs && PFK_STILL > 60) { const t = performance.now(); gbSaveStep(Math.max(1, PFB - PFB_SPENT)); PFB_SPENT += performance.now() - t; }
-  const now = performance.now(); if (!PFC_ST.firstRender) PFC_ST.firstRender = now - PFB_T0; // v10: the first frame's drawing (ms)
+  const now = performance.now(); if (!PFC_ST.firstRender) { PFC_ST.firstRender = now - PFB_T0; const L0 = window.__gbl, Z0 = window.__lzm; PFC_ST.ff = { ms: Math.round(now - PFB_T0), gb: L0 ? Math.round(L0.syncMs) : 0, gbn: L0 ? L0.sync : 0, mdl: Z0 ? Z0.built - (Z0.bootN || 0) : 0, mdlMs: Z0 ? Math.round(Z0.ms - (Z0.bootMs || 0)) : 0, stk: Math.round(PFC_ST.stkMs || 0), stkN: PFC_ST.stkNew || 0 }; } // v10: the first frame's drawing (ms)
   if (PFB_LAST && now - PFB_LAST < 250) PFB_EMA = PFB_EMA * 0.85 + Math.max(0, Math.min(60, now - PFB_LAST - PFB_SPENT)) * 0.15; PFB_LAST = now;
   PFC_ST.pfb = PFB; PFC_ST.pfbEma = PFB_EMA; }
 function pfkSlow(n, dt) { const S = PFC_ST.slow || (PFC_ST.slow = []); S.push(n + ' ' + Math.round(dt) ); if (S.length > 12) S.shift(); }
@@ -295,7 +300,7 @@ function pfcObjects(list, poseT, allTiles) { // statics composed once into a lay
   if (PFC_HOT.size > 4000) PFC_HOT.clear();
   // v7: no allocation per item (an interpreter-only JS engine pays for every array and boxed number): reused typed arrays, an
   // integer hot key, the projection inlined
-  const nl = list.length; if (PFC_KIND.length < nl) PFC_KIND = new Uint8Array(nl * 2);
+  const nl = list.length; if (PFC_KIND.length < nl) PFC_KIND = new Uint8Array(nl * 2); const LD = PFK_LOAD && ns && !window.__pfcAlbum; PFK_DEFON = 0;
   const kind = PFC_KIND, F = PFK_OF; kind.fill(0, 0, nl); F.n = 0; // kind: 0 moving, 1 static (in the chunks)
   const cs = CA * RS, sn = SA * RS, ks = K * RS, Sk = PFK_S, om = PFK_OL.mg; // v9: items that can draw into an on-screen chunk are never deferred
   const nx0 = Math.floor(-CX / Sk) * Sk - om[0], nx1 = (Math.floor((W - CX - 1) / Sk) + 1) * Sk + om[0], ny0 = Math.floor(-CY / Sk) * Sk - om[1], ny1 = (Math.floor((H - CY - 1) / Sk) + 1) * Sk + om[2];
@@ -310,11 +315,11 @@ function pfcObjects(list, poseT, allTiles) { // statics composed once into a lay
     if (o.tree) { // frozen pose and no lean: the tree's cached look cannot change, so skip re-keying it (the key string is costly)
       const still = ns || Math.abs(o.lean || 0) < 1e-3, k0 = o._ck;
       if (ns && still && k0 && k0.__pfcStill && k0.__pfcKey === k0.key) sub = k0.__pfcH;
-      else { if (off && PFK_CT > PFK_CB) { pfkDefer(rx, ry); continue; } const tc = performance.now(), k = treeCache(o, treePoseT(o)), dt = performance.now() - tc; PFK_CT += dt; if (dt > 15) pfkSlow('tree', dt); sub = k.__pfcH = pfcStr(pfcId(k), k.key); k.__pfcKey = k.key; k.__pfcStill = still; } }
+      else { if ((off && PFK_CT > PFK_CB) || (LD && !off && PFK_CT > PFK_LB)) { if (!off) PFK_DEFON++; kind[i] = 2; pfkDefer(rx, ry); continue; } const tc = performance.now(), k = treeCache(o, treePoseT(o)), dt = performance.now() - tc; PFK_CT += dt; if (dt > 15) pfkSlow('tree', dt); sub = k.__pfcH = pfcStr(pfcId(k), k.key); k.__pfcKey = k.key; k.__pfcStill = still; } }
     else if (o.ci !== undefined) sub = 9e5 + o.ci * 4 + (o.giant ? 2 : 0) + (o.flip ? 1 : 0);
     else if (o.spr) sub = pfcMix(pfcId(o.spr), (o.lift || 0) * 64 + (o.sway ? 7 : 0));
     else { const a = ns ? pfcQ(AQ + (o.rot || 0)) : AQ + (o.rot || 0); let k = o.m._ck && o.m._ck.get(a); // no LRU touch per frame
-      if (!k) { const big = pfjBig(o.m); if (off && (big || PFK_CT > PFK_CB)) { if (big) pfjWant(o.m, a, Math.abs(rx + CX - W / 2) + Math.abs(ry + CY - H / 2)); pfkDefer(rx, ry); continue; } const tc = performance.now(); k = stackCanvas(o.m, a); const dt = performance.now() - tc; PFK_CT += dt; if (dt > 15) pfkSlow('stack' + o.m.w + 'x' + o.m.d + 'x' + o.m.h, dt); }
+      if (!k) { const big = pfjBig(o.m); if ((off && (big || PFK_CT > PFK_CB)) || (LD && !off && (big || PFK_CT > PFK_LB))) { if (!off) PFK_DEFON++; if (big) pfjWant(o.m, a, Math.abs(rx + CX - W / 2) + Math.abs(ry + CY - H / 2)); kind[i] = 2; pfkDefer(rx, ry); continue; } const tc = performance.now(); k = stackCanvas(o.m, a); const dt = performance.now() - tc; PFK_CT += dt; if (dt > 15) pfkSlow('stack' + o.m.w + 'x' + o.m.d + 'x' + o.m.h, dt); }
       sub = pfcMix(pfcId(k), Math.round(o.z || 0)); }
     // a thing whose look changes once (a crop grows) is patched into the layer; one that keeps changing (a tree being shaken or
     // chopped, an animated sign) is drawn as moving for a while instead. Key: kind, half-unit spot, height (30 bits: a small int)
@@ -324,7 +329,8 @@ function pfcObjects(list, poseT, allTiles) { // statics composed once into a lay
     if (prof) PT.hot += performance.now() - t1;
     if (e && e.hot > PFC_F) continue;
     kind[i] = 1; pfkPush(F, key, sub, rx, ry, o.depth, o, i); }
-  if (ns) { if (PFK_STILL > 15) pfjWarm(allTiles); if (PFJ.cur || PFJ.q.length) pfjRun(Math.max(0.5, Math.min(PFK_CB - PFK_CT, pfbLeft()))); }
+  if (ns) { if (PFK_STILL > 15 && !LD) pfjWarm(allTiles); if (PFJ.cur || PFJ.q.length) pfjRun(LD ? Math.max(2, PFK_LB - PFK_CT) : Math.max(0.5, Math.min(PFK_CB - PFK_CT, pfbLeft()))); }
+  if (LD) { if (!PFC_ST.load0) PFC_ST.load0 = performance.now(); PFK_LOADN++; if ((!PFK_DEFON && PFK_LOADN > 2) || PFK_LOADN > 900) { PFK_LOAD = false; PFC_ST.loadF = PFK_LOADN; PFC_ST.loadMs = Math.round(performance.now() - PFC_ST.load0); } }
   tick('o.scan');
   // the list reaches PFK_PADS past the screen (every static's own onScreen pad is at least 30): there it is complete
   const P = PFK_PADS, vis = pfkRun(PFK_OL, F, [-CX - P[0] - 29, -CY - P[2] - 29, W - CX + P[1] + 29, H - CY + P[3] + 119]); tick('o.build');
@@ -462,9 +468,14 @@ function gbEnsure(x0, y0, x1, y1) { const L = window.__gbl; if (!L || !L.left) r
   L.vx = L.vx * 0.6 + dx * 0.4; L.vy = L.vy * 0.6 + dy * 0.4; L.cx = cx; L.cy = cy; L.seen = 1;
   const i0 = Math.max(0, Math.floor(x0 / T)), i1 = Math.min(L.nx - 1, Math.floor((x1 - 1) / T)), j0 = Math.max(0, Math.floor(y0 / T)), j1 = Math.min(L.ny - 1, Math.floor((y1 - 1) / T));
   const hx = W / 2 + T * 0.75 + 4, hy = H / 2 + T * 0.75 + 4; // only tiles under the screen (the rect is the turned screen's bounding box)
-  let n = 0; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const k = j * L.nx + i; if (L.done[k]) continue;
+  const need = []; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const k = j * L.nx + i; if (L.done[k]) continue;
     const u = (i + 0.5) * T / RS + GX0, v = (j + 0.5) * T / RS + GY0, px = (u * CA - v * SA) * RS + CX, py = (u * SA + v * CA) * K * RS + CY;
-    if (Math.abs(px - W / 2) > hx || Math.abs(py - H / 2) > hy) continue; gbTile(L, k); n++; }
+    if (Math.abs(px - W / 2) > hx || Math.abs(py - H / 2) > hy) continue; need.push(k, Math.abs(px - W / 2) + Math.abs(py - H / 2)); }
+  // v11: while loading, the screen's ground is painted ~25 ms a frame from the middle out (the rest shows next frames)
+  const lim = (PFK_LOAD || !L.cov) && !window.__pfcAlbum ? t + 25 : Infinity; let n = 0;
+  if (lim < Infinity && need.length > 2) { const ix = []; for (let q = 0; q < need.length; q += 2) ix.push(q); ix.sort((a, b) => need[a + 1] - need[b + 1]); for (const q of ix) { if (n && performance.now() > lim) break; gbTile(L, need[q]); n++; } }
+  else for (let q = 0; q < need.length; q += 2) { gbTile(L, need[q]); n++; }
+  if (n * 2 >= need.length) L.cov = true; // the screen was covered once: from now on what comes into view is painted at once
   if (n) { L.sync += n; L.syncMs += performance.now() - t; } }
 function gbIdle(L, ms) { if (!(ms > 0) || !L.left || window.__gbNoIdle) return; const T = L.T, t = performance.now(), dl = t + ms, mv = Math.abs(L.vx) + Math.abs(L.vy) > 1;
   const ci = Math.max(0, Math.min(L.nx - 1, Math.floor((L.cx + (mv ? L.vx * 25 : 0)) / T))), cj = Math.max(0, Math.min(L.ny - 1, Math.floor((L.cy + (mv ? L.vy * 25 : 0)) / T)));
@@ -494,9 +505,53 @@ function buildGroundBase0(r) { // one ground pixel per screen pixel`],
   ["if (WX && WX.ensure) S.weather = WX.ensure(", "if (window.__bp) window.__bp('save');\nif (WX && WX.ensure) S.weather = WX.ensure("],
   ["buildGroundBase(); groundReady = true;", "if (window.__bp) window.__bp('region'); buildGroundBase(); groundReady = true; if (window.__bp) window.__bp('ground');"],
   ["if (!boot.blocked) saveNow();", "if (!boot.blocked) saveNow(); if (window.__bp) window.__bp('write');"],
-  ["setInterval(saveNow, 15000);", "if (window.__bp) window.__bp('offline');\nsetInterval(saveNow, 15000);"],
+  ["setInterval(saveNow, 15000);", "if (window.__bp) window.__bp('offline'); if (window.__lzm) { window.__lzm.bootMs = window.__lzm.ms; window.__lzm.bootN = window.__lzm.built; }\nsetInterval(saveNow, 15000);"],
+];
+// v11 模型: the voxel models (~700 at boot, each 2 canvases) were all built at boot (~2/3 of what was left of it). With
+// window.__lazyModels a model is a shell (size known) whose voxels, footprint and first slice set are made the first time anything
+// reads them (the same function, same arguments: the same model); the rest are made a few a frame in the idle budget.
+export const MODEL_PATCHES = [
+  // the big buildings' angle warmer: its list is made (and its models built) once the idle model warm is done
+  ["{ const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;",
+   "{ let big0 = null; const bigF = () => big0 || (big0 = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000)); let n = 1, base = null;"],
+  ["  const work = dl => { const b = Math.round(cam.ta / ASTEP);", "  const work = dl => { if (window.__lzm && (window.__lzm.qi < window.__lzm.q.length || (window.__lzLater && window.__lzLater.length))) { setTimeout(() => idle(work), 400); return; } const big = bigF(); const b = Math.round(cam.ta / ASTEP);"],
+  ["const NSEC = 16, ALLM = [];", "const NSEC = 16, ALLM = []; window.__allm = ALLM;"],
+  ["function buildModel(w, d, h, fn, opt = {}) {\n  w = Math.round(w);",
+   `function buildModel(w, d, h, fn, opt = {}) { if (window.__lazyModels && !window.__pfcAlbum) return lazyModel(w, d, h, fn, opt); return buildModel0(w, d, h, fn, opt, false); }
+function lazyModel(w, d, h, fn, opt) { w = Math.round(w); d = Math.round(d); h = Math.round(h);
+  const Z = window.__lzm || (window.__lzm = { q: [], qi: 0, n: 0, built: 0, ms: 0, idle: 0, idleMs: 0 }), m = { w, d, h, secs: new Array(NSEC), noOutline: !!opt.noOutline }; let core = null;
+  const make = () => { if (!core) { if (window.__lzTrace) window.__lzTrace.push(new Error().stack); const t = performance.now(); core = buildModel0(w, d, h, fn, opt, true); Z.built++; Z.ms += performance.now() - t; } return core; };
+  const prop = (name, get) => Object.defineProperty(m, name, { configurable: true, enumerable: true, get, set(v) { Object.defineProperty(m, name, { value: v, writable: true, configurable: true, enumerable: true }); } });
+  prop('cells', () => { const c = make(); m.cells = c.cells; return c.cells; }); prop('foot', () => { const c = make(); m.foot = c.foot; return c.foot; });
+  prop('slices', () => { const v = sliceSet(m, 0); m.slices = v; return v; });
+  Object.defineProperty(m, '__lz', { value: () => !!core, enumerable: false }); Object.defineProperty(m, '__mk', { value: make, enumerable: false });
+  ALLM.push(m); Z.q.push(m); Z.n++; return m; }
+// a model whose build would not fit the frame's budget (estimated from its voxels) is put last; when only those are left, one is
+// built every 8th frame once the map has sat still 1.5 s
+function lzIdle(ms) { const Z = window.__lzm; if (!Z || Z.qi >= Z.q.length || !(ms > 0)) return; const t = performance.now(), dl = t + ms; Z.f = (Z.f || 0) + 1;
+  while (Z.qi < Z.q.length && performance.now() < dl) { const m = Z.q[Z.qi]; if (m.__lz()) { Z.qi++; continue; }
+    const est = m.w * m.d * m.h * (Z.rate || 0.002), left = dl - performance.now();
+    if (est > left * 1.5 && Z.rate) { if (!m.__big && Z.qi + 1 < Z.q.length) { m.__big = 1; Z.q.splice(Z.qi, 1); Z.q.push(m); continue; }
+      if (!(PFK_STILL > 90 && Z.f % 8 === 0)) break; }
+    Z.qi++; const t1 = performance.now(); m.__mk(); const dt = performance.now() - t1, v = m.w * m.d * m.h; if (v > 200) Z.rate = Z.rate ? Z.rate * 0.8 + 0.2 * dt / v : dt / v; Z.idle++; }
+  Z.idleMs += performance.now() - t; }
+function buildModel0(w, d, h, fn, opt, lz) {
+  w = Math.round(w);`],
+  ["  fctx.putImageData(fimg, 0, 0);\n  const m = { w, d, h, cells, foot,", "  fctx.putImageData(fimg, 0, 0); if (lz) return { cells, foot };\n  const m = { w, d, h, cells, foot,"],
+  // where 初始化 goes (marks for the boot line)
+  ["const XPM = XP.mount(", "if (window.__bp) window.__bp('i.base');\nconst XPM = XP.mount("],
+  ["PWA.mount({ S, buildModel, gab", "if (window.__bp) window.__bp('i.world');\nPWA.mount({ S, buildModel, gab"],
+  ["DA.mount({ S, buildModel, gableY, addPro", "if (window.__bp) window.__bp('i.works');\nDA.mount({ S, buildModel, gableY, addPro"],
+  ["if (FXA && FXP) { FXA.mount({ S, buildModel, addProp, props }); XPF_ON = true; } // v5.12.4", "if (FXA && FXP) { FXA.mount({ S, buildModel, addProp, props }); XPF_ON = true; } // v5.12.4\nif (window.__bp) window.__bp('i.town');"],
+  // stack / tree picture time (first frame breakdown)
+  ["  return buildStack(m, a, k);\n}", "  if (window.__stkTrace && window.__stkTrace.length < 200) window.__stkTrace.push(new Error().stack); const tq = performance.now(), rq = buildStack(m, a, k); if (window.__pfcStats) { window.__pfcStats.stkMs = (window.__pfcStats.stkMs || 0) + performance.now() - tq; } return rq;\n}"],
 ];
 export const WARM_PATCHES = {
+  // v11: the yard's shop icons (a stack picture each, so ~30 models) are made after the models are warm, not at boot
+  'decor-art.js': [["function mount(x) { X = x; S = x.S; MD = makeModels(x); mounted = true; sync(true); makeIcons(); return api; }",
+    "function mount(x) { X = x; S = x.S; MD = makeModels(x); mounted = true; sync(true); if (window.__lazyModels) (window.__lzLater || (window.__lzLater = [])).push(makeIcons); else makeIcons(); return api; }"]],
+  'yard-art.js': [["function mount(x) { X = x; S = x.S; MD = makeModels(x); mounted = true; sync(true); makeIcons(); return api; }",
+    "function mount(x) { X = x; S = x.S; MD = makeModels(x); mounted = true; sync(true); if (window.__lazyModels) (window.__lzLater || (window.__lzLater = [])).push(makeIcons); else makeIcons(); return api; }"]],
   'expansion.js': [["const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 12",
     "const step = () => { if (X.manual || window.__noWarm) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 12"]],
   'works-art.js': [["const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 8",
