@@ -10,12 +10,17 @@ import * as t from '@babel/types';
 import { minify } from 'terser';
 import { transformSync } from '@babel/core';
 import { CACHE_PATCHES, V5_PATCHES, ICON_PATCHES, WARM_PATCHES, BOOT_PATCHES, MODEL_PATCHES } from './patches-cache.mjs';
+import { UI_PATCHES } from './patches-ui.mjs';
+import { buildUi } from './ui/gen-ui.mjs';
+import path from 'node:path';
 const traverse = traverseMod.default || traverseMod, generate = generateMod.default || generateMod;
 const [repo, rev, out, flag] = process.argv.slice(2);
 const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
 const html = git('show', `${rev}:index.html`);
-const SKIP = new Set(['ui.js', 'events-ui.js', 'plots-ui.js', 'diary-ui.js', 'album-ui.js', 'audio.js']); // DOM panels + WebAudio: later phases
-const files = [...html.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]).filter(f => !SKIP.has(f));
+const SKIP = new Set(['audio.js']); // no WebAudio on the card (v12: the DOM panels run against the mini-DOM in farm-env)
+const UI_DIR = path.join(path.dirname(new URL(import.meta.url).pathname), 'ui');
+const LOCAL = { 'dy-mobile.js': path.join(UI_DIR, 'dy-mobile.js'), 'touch.js': path.join(UI_DIR, 'touch.js') }; // xhs touch layer (vendored) + douyin chrome
+const files = [...html.matchAll(/<script src="([^"?]+)/g)].map(m => m[1]).filter(f => !SKIP.has(f)).concat(['dy-mobile.js', 'touch.js']);
 const PATCHES = { // exact, asserted source patches (trial toggles only)
   'game.js': [['if (night > 0) lighting(night, T);', 'if (night > 0 && !window.__trialNoLight) lighting(night, T);'],
     ['const base = Math.max(1, Math.floor(Math.min(vw / BW, vh / BH))), s = base + zoom;', 'const base = Math.max(1, Math.floor(vh > vw ? Math.min(vw / BH, vh / BW) : Math.min(vw / BW, vh / BH))), s = base + zoom; // douyin: portrait uses the reference frame turned upright (same as the xhs build)'],
@@ -31,13 +36,16 @@ const PATCHES = { // exact, asserted source patches (trial toggles only)
   // (each script is preceded by window.__bootMark(file) so a phone that hangs during boot can report where)
 };
 PATCHES['game.js'].push(...CACHE_PATCHES, ...V5_PATCHES, ...BOOT_PATCHES, ...MODEL_PATCHES); PATCHES['codex_icons.js'] = (PATCHES['codex_icons.js'] || []).concat(ICON_PATCHES);
+for (const [f, list] of Object.entries(UI_PATCHES)) PATCHES[f] = (PATCHES[f] || []).concat(list);
 for (const [f, list] of Object.entries(WARM_PATCHES)) PATCHES[f] = (PATCHES[f] || []).concat(list);
 let src = '';
 for (const f of files) {
-  let s = git('show', `${rev}:${f}`);
+  let s = LOCAL[f] ? fs.readFileSync(LOCAL[f], 'utf8') : git('show', `${rev}:${f}`);
   for (const [a, b] of PATCHES[f] || []) { if (!s.includes(a)) throw new Error('patch miss ' + f); s = s.replace(a, b); }
   src += `\n;// ---- ${f}\n;if (window.__bootMark) window.__bootMark(${JSON.stringify(f)});\n` + s + '\n';
 }
+const ui = buildUi({ html, albumUi: git('show', `${rev}:album-ui.js`), diaryUi: git('show', `${rev}:diary-ui.js`), hudIconsPng: execFileSync('git', ['-C', repo, 'show', `${rev}:assets/hud_icons.png`], { maxBuffer: 64 << 20 }), outDir: path.dirname(out) });
+console.log('ui css', ui.cssBytes, 'attrs', ui.attrs.join(' '));
 const BUILTIN = new Set(('Math JSON Object Array Number String Boolean Symbol Map Set WeakMap WeakSet WeakRef Promise Date RegExp Error TypeError RangeError SyntaxError ReferenceError EvalError URIError AggregateError ' +
   'parseInt parseFloat isNaN isFinite Infinity NaN undefined ArrayBuffer SharedArrayBuffer DataView Int8Array Uint8Array Uint8ClampedArray Int16Array Uint16Array Int32Array Uint32Array Float32Array Float64Array BigInt64Array BigUint64Array ' +
   'Proxy Reflect BigInt encodeURIComponent decodeURIComponent encodeURI decodeURI escape unescape setTimeout clearTimeout setInterval clearInterval Intl arguments eval Function').split(' '));

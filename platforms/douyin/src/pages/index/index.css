@@ -26,40 +26,23 @@
   pointer-events: none;
 }
 
-.farm-top-shade {
-  display: flex;
-  flex-direction: column;
-  padding-bottom: 8px;
-  background: linear-gradient(180deg, rgba(20, 14, 10, 0.72) 0%, rgba(20, 14, 10, 0.35) 70%, rgba(20, 14, 10, 0) 100%);
-}
 
-.farm-hud {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  margin: 4px 12px 0;
-  padding: 6px 10px;
-  background: rgba(40, 28, 22, 0.82);
-  border: 2px solid #e8c78a;
-  border-radius: 4px;
-}
 
-.farm-hud-day {
-  color: #fff6dc;
-  font-weight: 600;
-}
 
-.farm-hud-coins {
-  color: #ffd76a;
-  font-weight: 700;
-}
 
 .farm-perf-wrap {
+  position: absolute;
+  right: 6px;
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  margin: 4px 6px 0;
+  align-items: flex-end;
+  pointer-events: none;
+}
+
+/* v12：展开后浮到界面层上面（收起时在界面层下面，面板会盖住它） */
+.farm-perf-wrap.is-open {
+  left: 6px;
+  z-index: 100;
 }
 
 /* v11：默认只有角上一行小角标，点一下展开 */
@@ -80,7 +63,7 @@
 .farm-perf {
   box-sizing: border-box;
   width: calc(100vw - 12px);
-  max-height: 40vh;
+  max-height: 55vh;
   margin-top: 4px;
   padding: 4px 8px;
   background: rgba(0, 0, 0, 0.72);
@@ -127,10 +110,8 @@
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px;
-  margin-top: auto;
-  padding: 10px 10px 28px;
+  padding: 8px 0 4px;
   pointer-events: auto;
-  background: linear-gradient(0deg, rgba(20, 14, 10, 0.7) 0%, rgba(20, 14, 10, 0) 100%);
 }
 
 .farm-btn {

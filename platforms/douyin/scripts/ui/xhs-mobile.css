@@ -1,0 +1,784 @@
+/* 竖屏壳：游戏画面铺满全屏，像素图标叠在上面。只在打包页生效。 */
+html.xhs-mobile, html.xhs-mobile body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  background: #1b2a24;
+  position: fixed;
+  inset: 0;
+}
+html.xhs-mobile body { padding: 0; }
+
+/* 顶部系统返回（左）和分享（右）完全避让——真机是左右箭头，不是右侧胶囊。
+   缺省按状态栏 + 约 44px 导航条预留；客户端 9.49+ 再用 getWindowInfo().safeArea /
+   statusBarHeight / menuButtons 精修。图标列放在 HUD 下方、右侧分享按钮底下。 */
+html.xhs-mobile {
+  --xhs-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --xhs-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --xhs-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --xhs-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+  --xhs-top-clear: max(96px, calc(var(--xhs-safe-top) + 52px));
+  --xhs-left-clear: max(12px, var(--xhs-safe-left));
+  --xhs-right-clear: max(12px, var(--xhs-safe-right));
+  --xhs-bottom-clear: max(8px, var(--xhs-safe-bottom));
+  --xhs-bar-h: 56px;
+  /* 图标列默认在 HUD 估算高度之下，JS 量完 HUD 后再收紧 */
+  --xhs-share-top: calc(var(--xhs-top-clear) + 56px);
+  --xhs-share-right: max(8px, var(--xhs-safe-right));
+}
+
+html.xhs-mobile #xhs-stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  touch-action: none;
+  z-index: 0;
+}
+html.xhs-mobile #wrap { position: fixed; margin: 0; z-index: 0; }
+
+/* —— 顶栏：小像素框，不挡世界 —— */
+html.xhs-mobile #hud {
+  position: fixed;
+  left: 12px;
+  right: 12px;
+  top: var(--xhs-top-clear);
+  transform: none;
+  width: auto;
+  max-width: none;
+  box-sizing: border-box;
+  z-index: 20;
+  background: rgba(40, 28, 22, .86);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 3px 3px 0 3px rgba(0,0,0,.35);
+  padding: 4px 8px 4px 6px;
+  min-width: 0;
+  color: #fff6dc;
+  font: 600 12px/1.3 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  letter-spacing: 0;
+}
+html.xhs-mobile #hud .row { gap: 8px; justify-content: flex-start; flex-wrap: nowrap; }
+html.xhs-mobile #act,
+html.xhs-mobile #prices,
+html.xhs-mobile #title,
+html.xhs-mobile #titleS,
+html.xhs-mobile #syncHint,
+html.xhs-mobile #fakecursor,
+html.xhs-mobile #storeHud,
+html.xhs-mobile #loveLab,
+html.xhs-mobile #loveBar,
+html.xhs-mobile #menuBtn,
+html.xhs-mobile #shopBtn,
+html.xhs-mobile #storeBtn,
+html.xhs-mobile #codexBtn,
+html.xhs-mobile #diaryBtn,
+html.xhs-mobile #mapBtn,
+html.xhs-mobile #mmJump,
+html.xhs-mobile #speed { display: none !important; }
+
+html.xhs-mobile #day, html.xhs-mobile #clock { font-size: 12px; }
+/* hide the '金币' label, keep the coin icon + number */
+html.xhs-mobile #hud .xhs-coins,
+html.xhs-mobile #hud .xhs-wood { font-size: 0; }
+html.xhs-mobile #hud .xhs-coins .ico,
+html.xhs-mobile #hud .xhs-coins b,
+html.xhs-mobile #hud #coins,
+html.xhs-mobile #hud .xhs-wood .ico,
+html.xhs-mobile #hud .xhs-wood b,
+html.xhs-mobile #hud #wood { font-size: 12px; }
+/* hud_icons.png is 5×16 at display size (coin seed carrot cabbage wood) */
+html.xhs-mobile #hud .ico { width: 16px; height: 16px; background-size: 80px 16px; margin-right: 2px; vertical-align: -3px; }
+html.xhs-mobile #hud .ico.coin { background-position: 0 0; }
+html.xhs-mobile #hud .ico.wood { background-position: -64px 0; }
+html.xhs-mobile #loveHud { margin: 2px 0 0; font-size: 12px; gap: 4px; }
+html.xhs-mobile #loveVal { font-size: 12px; color: #ffd76a; }
+html.xhs-mobile #loveTip {
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: auto;
+  width: auto; max-width: none; min-width: 0;
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
+  transform: none;
+  z-index: 25;
+}
+
+/* 日志 / 台词 / 钓鱼记录不再常驻遮挡农场，改走 #xhs-toast */
+html.xhs-mobile #log,
+html.xhs-mobile #say,
+html.xhs-mobile #catches,
+html.xhs-mobile #minimap {
+  display: none !important;
+}
+html.xhs-mobile #tools {
+  position: fixed;
+  z-index: 13;
+}
+html.xhs-mobile #tools {
+  left: max(8px, var(--xhs-safe-left));
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
+  display: flex; flex-wrap: wrap; gap: 6px;
+}
+
+html.xhs-mobile #rlabs {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 13;
+}
+html.xhs-mobile .rlab {
+  position: absolute;
+  font-size: 11px;
+  padding: 3px 6px;
+  max-width: 42vw;
+  pointer-events: auto;
+}
+
+/* —— 底栏 / 右侧：圆形木牌图标（变体 A），无文字标签 ——
+   首屏用 atlas_hud_128_q90.webp（4×2：包仓店随 / 关榜赞速），在主包不进 assets/。
+   全套 atlas_128_q90.webp 同样打进主包，供稍后的音乐/音效开关。 */
+html.xhs-mobile #xhs-bar {
+  position: fixed;
+  left: max(6px, var(--xhs-safe-left));
+  right: max(6px, var(--xhs-safe-right));
+  bottom: var(--xhs-bottom-clear);
+  z-index: 20;
+  display: flex;
+  justify-content: space-evenly;
+  align-items: center;
+  gap: 4px;
+  pointer-events: none;
+  padding: 0 0 6px;
+  box-sizing: border-box;
+}
+html.xhs-mobile #xhs-side {
+  position: fixed;
+  top: var(--xhs-share-top);
+  right: var(--xhs-share-right);
+  z-index: 21;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+html.xhs-mobile .xhs-ico {
+  pointer-events: auto;
+  width: 48px;
+  min-width: 44px;
+  height: 48px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 50%;
+  color: #fff6dc;
+  touch-action: manipulation;
+  flex: 0 0 auto;
+  position: relative;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+html.xhs-mobile .xhs-ico.loading {
+  opacity: 0.65;
+}
+html.xhs-mobile .xhs-ico.loading::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border: 2px solid rgba(255, 246, 220, 0.3);
+  border-top-color: #fff6dc;
+  border-radius: 50%;
+  animation: xhs-spin 0.8s linear infinite;
+  pointer-events: none;
+}
+@keyframes xhs-spin {
+  to { transform: rotate(360deg); }
+}
+
+html.xhs-mobile .xhs-ico.on {
+  box-shadow: 0 0 0 2px #ffe7a8, 0 2px 0 #3a2a20;
+}
+html.xhs-mobile .xhs-ico:active { transform: translate(1px, 1px); }
+html.xhs-mobile .xhs-ico[hidden] { display: none !important; }
+html.xhs-mobile .xhs-ico-lab { display: none !important; }
+/* 首屏表 512×256，单元格 128；显示 48px → background-size 192×96 */
+html.xhs-mobile .xhs-ico i {
+  display: block;
+  width: 48px;
+  height: 48px;
+  flex: none;
+  background: url(atlas_hud_128_q90.webp) no-repeat;
+  background-size: 192px 96px;
+}
+html.xhs-mobile .xhs-ico-bag i { background-position: 0 0; }
+html.xhs-mobile .xhs-ico-store i { background-position: -48px 0; }
+html.xhs-mobile .xhs-ico-shop i { background-position: -96px 0; }
+html.xhs-mobile .xhs-ico-follow i { background-position: -144px 0; }
+html.xhs-mobile .xhs-ico-author i { background-position: 0 -48px; }
+html.xhs-mobile .xhs-ico-board i { background-position: -48px -48px; }
+html.xhs-mobile .xhs-ico-note i { background-position: -96px -48px; }
+html.xhs-mobile .xhs-ico-diary i { background-position: -144px -48px; } /* 1.2.0：倍速图标那格换成了日记本 */
+/* 全套表 640×256，单元格 128；显示 48px → background-size 240×96 */
+html.xhs-mobile .xhs-ico-music i,
+html.xhs-mobile .xhs-ico-sfx i {
+  background-image: url(atlas_128_q90.webp);
+  background-size: 240px 96px;
+}
+html.xhs-mobile .xhs-ico-music i { background-position: -96px -48px; }
+html.xhs-mobile .xhs-ico-sfx i { background-position: -144px -48px; }
+html.xhs-mobile .xhs-ico.off { filter: grayscale(.45) brightness(.82); opacity: .78; }
+html.xhs-mobile #audioBar { display: none !important; }
+/* 分享 / 保存相册 / 赞赏 / 更多：主包额外表 512×128 */
+html.xhs-mobile .xhs-ico-share i,
+html.xhs-mobile .xhs-ico-save i,
+html.xhs-mobile .xhs-ico-tip i,
+html.xhs-mobile .xhs-ico-more i {
+  background-image: url(atlas_extra_128_q90.webp);
+  background-size: 192px 48px;
+}
+html.xhs-mobile .xhs-ico-share i { background-position: 0 0; }
+html.xhs-mobile .xhs-ico-save i { background-position: -48px 0; }
+html.xhs-mobile .xhs-ico-tip i { background-position: -96px 0; }
+html.xhs-mobile .xhs-ico-more i { background-position: -144px 0; }
+html.xhs-mobile #xhs-more-wrap {
+  position: relative;
+  width: 48px;
+  height: 48px;
+  pointer-events: auto;
+  flex: 0 0 auto;
+}
+html.xhs-mobile #xhs-more-menu {
+  position: absolute;
+  right: 54px;
+  top: 0;
+  display: flex;
+  flex-direction: row;
+  gap: 6px;
+  pointer-events: auto;
+}
+html.xhs-mobile #xhs-more-menu[hidden] { display: none !important; }
+html.xhs-mobile .xhs-board-hd .xhs-ico-author {
+  width: 36px;
+  min-width: 36px;
+  height: 36px;
+  min-height: 36px;
+  margin-left: auto;
+  flex: none;
+  padding: 0;
+}
+html.xhs-mobile .xhs-board-hd .xhs-ico-author i {
+  width: 36px;
+  height: 36px;
+  background-size: 144px 72px;
+  background-position: 0 -36px;
+}
+html.xhs-mobile .xhs-ico-speed em {
+  font-style: normal;
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #ffd76a;
+  text-shadow: 1px 1px 0 #1a120e;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* 背包展开：贴在底栏图标上方，不改舞台尺寸 */
+html.xhs-mobile #xhs-inv-dock {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h));
+  z-index: 19;
+  box-sizing: border-box;
+  background: rgba(40, 28, 22, .92);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 3px 3px 0 3px rgba(0,0,0,.35);
+  padding: 4px 6px;
+}
+html.xhs-mobile #xhs-inv-dock[hidden] { display: none !important; }
+html.xhs-mobile #xhs-inv-dock #inv,
+html.xhs-mobile #inv {
+  position: relative;
+  left: auto; right: auto; bottom: auto; top: auto;
+  transform: none;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  box-shadow: none;
+  background: none;
+  display: flex;
+  justify-content: flex-start;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  touch-action: pan-x;
+  -webkit-overflow-scrolling: touch;
+}
+html.xhs-mobile #inv .slot { width: 44px; height: 44px; min-width: 44px; min-height: 44px; }
+
+/* 面板：木头/羊皮纸像素框，不要圆角底板 */
+html.xhs-mobile #shop,
+html.xhs-mobile #store,
+html.xhs-mobile #codex,
+html.xhs-mobile #menu,
+html.xhs-mobile #xhs-board,
+html.xhs-mobile #offline {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  /* sit below the HUD card (JS sets --xhs-sheet-top) so the overlay stays out of the nav / HUD */
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  bottom: calc(var(--xhs-bottom-clear) + var(--xhs-bar-h) + 4px);
+  width: auto;
+  max-height: none;
+  transform: none;
+  border-radius: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 22;
+  padding: 10px 12px 16px;
+  background: rgba(40, 28, 22, .94);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 4px 4px 0 3px rgba(0,0,0,.35);
+  color: #fff6dc;
+}
+html.xhs-mobile #shop[hidden],
+html.xhs-mobile #store[hidden],
+html.xhs-mobile #codex[hidden],
+html.xhs-mobile #menu[hidden],
+html.xhs-mobile #xhs-board[hidden],
+html.xhs-mobile #offline[hidden] { display: none !important; }
+
+/* 商店分类页签与金币/木材筹码：沿用木头按钮，触控 ≥44px，不挡系统区 */
+html.xhs-mobile #shop .shead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+html.xhs-mobile #shop .shead .wallet,
+html.xhs-mobile #store .shead .wallet {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #ffd76a;
+  font-weight: 600;
+}
+html.xhs-mobile #shop .shead .wallet .cost:last-child { color: #e0b880; }
+html.xhs-mobile #shop .shead .x { margin-left: auto; min-width: 44px; min-height: 44px; }
+html.xhs-mobile #shop .tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+html.xhs-mobile #shop .tabs .pbtn {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0 10px;
+  font-size: 13px;
+  border-radius: 0;
+  background: #e8c78a;
+  color: #3a2a20;
+  border: 2px solid #3a2a20;
+  box-shadow: 2px 2px 0 #3a2a20;
+}
+html.xhs-mobile #shop .tabs .pbtn.on {
+  background: #ffd76a;
+  box-shadow: inset 0 0 0 2px #3a2a20, 2px 2px 0 #3a2a20;
+}
+html.xhs-mobile .cost .ico {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  background-size: 80px 16px;
+}
+html.xhs-mobile .cost .ico.wood { background-position: -64px 0; }
+html.xhs-mobile #shop .card .cb > .pbtn,
+html.xhs-mobile #shop .card .cb > .short {
+  min-height: 44px;
+}
+
+html.xhs-mobile .xhs-board-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+html.xhs-mobile .xhs-board-hd b { flex: 1; font-size: 15px; }
+html.xhs-mobile .xhs-board-hd span { opacity: .7; font-size: 12px; }
+
+html.xhs-mobile .xhs-board-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+html.xhs-mobile .xhs-board-sections .pbtn {
+  flex: 1 1 22%;
+  min-height: 44px;
+  min-width: 44px;
+}
+
+html.xhs-mobile #codex[data-hosted="1"] {
+  position: static !important;
+  left: auto !important;
+  right: auto !important;
+  top: auto !important;
+  bottom: auto !important;
+  width: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  z-index: auto !important;
+  display: block !important;
+}
+html.xhs-mobile #codex[data-hosted="1"] .shead,
+html.xhs-mobile #codex[data-hosted="1"] .tabs {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+html.xhs-mobile #xhs-board .xhs-board-body #codex {
+  position: static;
+  left: auto;
+  right: auto;
+  top: auto;
+  bottom: auto;
+  width: auto;
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  z-index: auto;
+  display: block !important;
+}
+html.xhs-mobile #xhs-board .xhs-board-body #codex .shead,
+html.xhs-mobile #xhs-board .xhs-board-body #codex .tabs {
+  display: none !important;
+}
+
+html.xhs-mobile .xhs-board-tabs { display: flex; gap: 8px; margin-bottom: 8px; }
+html.xhs-mobile .xhs-board-tabs .pbtn { flex: 1; min-height: 44px; }
+html.xhs-mobile .xhs-board-list { list-style: none; margin: 0; padding: 0; }
+html.xhs-mobile .xhs-board-list li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 0; border-bottom: 2px solid #3a2a20;
+  min-height: 44px;
+}
+html.xhs-mobile .xhs-board-list li.me { background: rgba(255,215,106,.12); margin: 0 -8px; padding-left: 8px; padding-right: 8px; }
+html.xhs-mobile .xhs-board-list i { width: 1.6em; text-align: right; color: #ffd76a; font-style: normal; font-weight: 700; }
+html.xhs-mobile .xhs-av {
+  width: 32px; height: 32px; border-radius: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-weight: 700; color: #fff6dc; flex: none; overflow: hidden;
+  border: 2px solid #e8c78a; image-rendering: pixelated;
+}
+html.xhs-mobile .xhs-av img { width: 100%; height: 100%; object-fit: cover; image-rendering: pixelated; }
+html.xhs-mobile .xhs-board-list .n { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+html.xhs-mobile .xhs-board-list .s { color: #ffd76a; font-weight: 700; }
+html.xhs-mobile .xhs-board-me { margin-top: 10px; color: #ffd76a; font-weight: 700; }
+
+html.xhs-mobile #xhs-toast {
+  position: fixed;
+  left: 50%;
+  top: calc(var(--xhs-top-clear) + 80px);
+  transform: translateX(-50%);
+  width: max-content;
+  max-width: min(220px, calc(100vw - 128px));
+  z-index: 21;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  box-shadow: none;
+  text-align: center;
+  pointer-events: none;
+  overflow: visible;
+  opacity: 0;
+  transition: opacity .4s ease;
+}
+html.xhs-mobile #xhs-toast.show { opacity: 1; }
+/* 只有字背后一层羽化暗晕，没有边框或矩形底板 */
+html.xhs-mobile #xhs-toast .xhs-toast-back {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: calc(100% + 40px);
+  height: calc(100% + 22px);
+  transform: translate(-50%, -42%);
+  background: radial-gradient(ellipse at center,
+    rgba(16, 10, 6, 0.58) 0%,
+    rgba(16, 10, 6, 0.36) 38%,
+    rgba(16, 10, 6, 0.16) 62%,
+    rgba(16, 10, 6, 0) 78%);
+  pointer-events: none;
+  z-index: 0;
+}
+html.xhs-mobile #xhs-toast .xhs-toast-text {
+  position: relative;
+  z-index: 1;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-height: 2.7em;
+  padding: 0 2px;
+  color: #fff6dc;
+  font: 600 12px/1.35 "Noto Sans CJK SC","Noto Sans SC","PingFang SC","Microsoft YaHei",sans-serif;
+  text-shadow:
+    -1px -1px 0 #120c08,
+     1px -1px 0 #120c08,
+    -1px  1px 0 #120c08,
+     1px  1px 0 #120c08,
+     0   -1px 0 #120c08,
+     0    1px 0 #120c08,
+    -1px  0   0 #120c08,
+     1px  0   0 #120c08,
+     0 0 3px rgba(18,12,8,0.95),
+     0 0 8px rgba(18,12,8,0.65);
+}
+
+html.xhs-mobile .pbtn {
+  min-width: 44px;
+  min-height: 36px;
+  border-radius: 0;
+}
+@media (orientation: landscape) {
+  html.xhs-mobile .rlab { display: none; }
+}
+
+html.xhs-mobile #codex .shead,
+html.xhs-mobile #codex .tabs,
+html.xhs-mobile #menu .row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+html.xhs-mobile #codex .tabs .pbtn,
+html.xhs-mobile #menu .pbtn,
+html.xhs-mobile #codex .shead .x {
+  min-height: 44px;
+  min-width: 44px;
+}
+html.xhs-mobile #codex .cell {
+  min-height: 44px;
+  min-width: 44px;
+}
+html.xhs-mobile #menu textarea {
+  max-width: 100%;
+  font-size: 13px;
+}
+
+/* 1.1.1：买不起的商品按钮仍显示为灰色，但可以点，点了提示还差多少并抖一下 */
+html.xhs-mobile #shop .pbtn.xhs-short { opacity: .55; cursor: default; }
+html.xhs-mobile #shop .pbtn.xhs-short:active { transform: none; }
+@keyframes xhs-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-4px); }
+  40% { transform: translateX(4px); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(3px); }
+}
+html.xhs-mobile .xhs-shake { animation: xhs-shake .36s steps(6) 1; }
+
+/* 1.1.1：商店标题行（含关闭 ×）滚动时贴在面板顶上，从地块牌子跳进来也能直接关 */
+html.xhs-mobile #shop .shead {
+  position: -webkit-sticky;
+  position: sticky;
+  top: -10px;
+  z-index: 2;
+  margin: -10px -12px 8px;
+  padding: 10px 12px 6px;
+  background: rgba(40, 28, 22, .98);
+}
+
+/* 端能力请求进行中：按钮轻微变暗，表示已经收到点按 */
+html.xhs-mobile .xhs-ico.busy { opacity: .6; }
+
+/* 游戏没能启动时的重试层（静态资源取回失败等） */
+#xhs-boot-fail {
+  position: fixed; left: 24px; right: 24px; top: 40%; z-index: 60;
+  padding: 16px; text-align: center; color: #fff6dc;
+  background: rgba(40, 28, 22, .96); border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20;
+  font: 600 14px/1.5 "PingFang SC", "Noto Sans CJK SC", sans-serif;
+}
+#xhs-boot-fail button {
+  margin-top: 12px; min-width: 120px; min-height: 44px;
+  background: #e8c78a; color: #3a2a20; border: 2px solid #3a2a20; font: inherit;
+}
+
+/* 面板打开时提示叠在面板上、底栏上方，带实底，保证点按反馈看得到 */
+html.xhs-mobile #xhs-toast.over-sheet {
+  z-index: 40;
+  padding: 7px 14px;
+  border-radius: 14px;
+  background: rgba(30, 18, 10, 0.92);
+  border: 2px solid #e0b880;
+  max-width: min(300px, calc(100vw - 48px));
+}
+html.xhs-mobile #xhs-toast.over-sheet .xhs-toast-back { display: none; }
+
+html.xhs-mobile #shop .tabs {
+  position: -webkit-sticky;
+  position: sticky;
+  top: calc(var(--xhs-shead-h, 60px) - 10px);
+  z-index: 2;
+  margin: -8px -12px 10px;
+  padding: 0 12px 8px;
+  background: rgba(40, 28, 22, .98);
+}
+
+/* 1.2.0：家人状态卡（点「一家」）和孩子选职业 / 成家后做什么的弹窗（网页版 v5.9.x 新增）。
+   网页版把家人卡放在左侧 HUD 下面；手机上它被挪到 body 里，原来的相对定位会跑到屏幕上方，
+   这里固定在 HUD 卡片下面，长了就在卡片里滚动。 */
+html.xhs-mobile #loveTip {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  bottom: auto;
+  height: auto;
+  min-height: 0;
+  max-height: calc(100% - var(--xhs-sheet-top, 160px) - var(--xhs-bottom-clear) - var(--xhs-bar-h) - 12px);
+  width: auto;
+  max-width: none;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 23;
+  padding: 10px 12px;
+  background: rgba(40, 28, 22, .94);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 4px 4px 0 3px rgba(0,0,0,.35);
+  color: #fff6dc;
+  font-size: 13px;
+  line-height: 1.5;
+}
+html.xhs-mobile #loveTip[hidden] { display: none !important; }
+html.xhs-mobile #loveTip .pbtn { min-height: 44px; }
+html.xhs-mobile #career {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  max-height: calc(100% - var(--xhs-sheet-top, 160px) - var(--xhs-bottom-clear) - var(--xhs-bar-h) - 12px);
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  transform: none;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 24;
+  box-sizing: border-box;
+  background: rgba(40, 28, 22, .96);
+  border: 3px solid #e8c78a;
+  box-shadow: 0 0 0 3px #3a2a20, 4px 4px 0 3px rgba(0,0,0,.35);
+  color: #fff6dc;
+}
+html.xhs-mobile #career[hidden] { display: none !important; }
+html.xhs-mobile #career .copt,
+html.xhs-mobile #career .crow .pbtn { min-height: 44px; }
+
+/* 1.2.0 日记本（网页版 v5.10.13）：羊皮纸配色沿用 diary-ui.js，位置和其它面板一样夹在 HUD 和底栏之间 */
+html.xhs-mobile #diary {
+  position: fixed;
+  left: max(8px, var(--xhs-safe-left));
+  right: max(8px, var(--xhs-safe-right));
+  top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 56px));
+  bottom: auto;
+  width: auto;
+  max-height: calc(100vh - var(--xhs-sheet-top, 160px) - var(--xhs-bottom-clear) - var(--xhs-bar-h) - 8px);
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  z-index: 22;
+  border-radius: 0;
+  padding: 10px 12px 12px;
+}
+html.xhs-mobile #diary[hidden] { display: none !important; }
+html.xhs-mobile #diary .shead b { font-size: 18px; }
+html.xhs-mobile #diary .shead .x,
+html.xhs-mobile #diary .ttl .nav { min-width: 44px; min-height: 44px; font-size: 16px; }
+html.xhs-mobile #diary .ttl { font-size: 15px; line-height: 24px; }
+html.xhs-mobile #diary p { font-size: 14px; line-height: 23px; }
+html.xhs-mobile #diary .page { background: repeating-linear-gradient(#f6e7c4 0 22px, #e6cf9e 22px 23px); }
+html.xhs-mobile #diary .days { gap: 6px; }
+html.xhs-mobile #diary .days .pbtn { min-height: 36px; padding: 2px 8px; font-size: 13px; }
+html.xhs-mobile #diary .note { font-size: 12px; }
+
+/* v5.11.x port: the web's right dock (nav buttons, minimap, 家/农家乐/小镇/海边 jump row) is all hidden or moved on the phone;
+   collapse the empty grid cell so it does not sit as an invisible box under the host's top-right buttons */
+html.xhs-mobile #rightDock { width: 0; min-width: 0; overflow: visible; }
+
+/* ---------- 触屏工具模式（touch.js）：⚒ 工具箱、准星、底部操作条、挪东西浮动按钮 ---------- */
+html.pf-touch #tools { display: none !important; }
+#pt-box[hidden], #pt-sheet[hidden], #pt-ret[hidden], #pt-bar[hidden], #pt-float[hidden] { display: none !important; }
+#pt-box { position: fixed; right: max(12px, var(--xhs-safe-right, 0px)); z-index: 26; width: 56px; height: 56px; padding: 0; border-radius: 50%;
+  border: 3px solid #5b3a1e; background: #f3d9a4; box-shadow: 0 3px 0 #5b3a1e, 0 4px 10px rgba(0,0,0,.35); color: #4a2e14; font-size: 28px; line-height: 50px; text-align: center; }
+#pt-box.on { background: #ffe9b0; transform: translateY(2px); box-shadow: 0 1px 0 #5b3a1e; }
+#pt-sheet { position: fixed; left: 8px; right: 8px; z-index: 27; background: #fbecc8; border: 3px solid #5b3a1e; border-radius: 14px; padding: 10px 10px 12px; box-shadow: 0 6px 18px rgba(0,0,0,.4); color: #4a2e14; }
+#pt-sheet h4 { margin: 0 2px 8px; font: 700 15px sans-serif; display: flex; align-items: center; gap: 8px; }
+#pt-sheet h4 small { margin-left: auto; font: 400 12px sans-serif; color: #8a5a2c; }
+#pt-sheet h4 .back { width: 32px; height: 32px; border-radius: 8px; border: 2px solid #8a5a2c; background: #fff6df; font: 700 18px sans-serif; color: #4a2e14; padding: 0; }
+#pt-sheet .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+#pt-sheet .grid button { height: 76px; border-radius: 10px; border: 2px solid #8a5a2c; background: #fff6df; color: #4a2e14; font: 600 13px sans-serif;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 0 2px; overflow: hidden; }
+#pt-sheet .grid button .i { font-size: 26px; line-height: 30px; } #pt-sheet .grid button .nm { white-space: nowrap; } #pt-sheet .grid button .c { font-size: 11px; color: #8a5a2c; }
+#pt-sheet .grid button.full { opacity: .5; }
+#pt-sheet .row2 { margin-top: 10px; display: flex; gap: 8px; }
+#pt-sheet .row2 button { flex: 1; height: 44px; border-radius: 10px; border: 2px solid #8a5a2c; background: #fff6df; color: #6b3a1a; font: 600 14px sans-serif; }
+#pt-sheet .row2 button.warn { background: #d9483b; border-color: #7a2018; color: #fff; }
+#pt-sheet .cf { font: 600 14px/1.5 sans-serif; padding: 4px 4px 2px; }
+#pt-ret { position: fixed; z-index: 24; width: 56px; height: 56px; margin: -28px 0 0 -28px; pointer-events: none; }
+#pt-ret:before, #pt-ret:after { content: ''; position: absolute; background: #fff; box-shadow: 0 0 0 1.5px rgba(40,25,10,.85); }
+#pt-ret:before { left: 27px; top: 0; width: 2px; height: 56px; } #pt-ret:after { top: 27px; left: 0; height: 2px; width: 56px; }
+#pt-ret i { position: absolute; left: 17px; top: 17px; width: 18px; height: 18px; border: 3px solid #fff; border-radius: 50%; box-sizing: border-box; box-shadow: 0 0 0 1.5px rgba(40,25,10,.85); }
+#pt-ret.ok i { border-color: #8cf07a; } #pt-ret.bad i { border-color: #ff7b6b; }
+#pt-bar { position: fixed; left: max(8px, var(--xhs-safe-left, 0px)); right: max(8px, var(--xhs-safe-right, 0px)); bottom: calc(var(--xhs-bottom-clear, 8px) + 2px); z-index: 26;
+  background: rgba(40,26,14,.94); border: 2px solid #c79a5a; border-radius: 14px; padding: 8px; display: flex; align-items: center; gap: 8px; color: #fff3d6; }
+#pt-bar .t { flex: 1; min-width: 0; font: 600 13px/1.35 sans-serif; } #pt-bar .t b { color: #ffd76a; display: block; font-size: 14px; } #pt-bar .t .why { color: #ffb0a4; }
+#pt-bar button { width: 56px; height: 56px; border-radius: 12px; font: 700 24px sans-serif; border: 2px solid #000; flex: none; padding: 0; }
+#pt-bar .x { background: #e8d6b8; color: #6b3a1a; } #pt-bar .ok { background: #7ccf5a; color: #fff; } #pt-bar .ok[disabled] { background: #6a6a5a; color: #bbb; }
+#pt-float { position: fixed; z-index: 25; display: flex; gap: 6px; transform: translate(-50%, -100%); }
+#pt-float button { white-space: nowrap; min-width: 56px; height: 44px; padding: 0 12px; border-radius: 22px; border: 2px solid #5b3a1e; background: #fff6df; font: 700 14px sans-serif; color: #4a2e14; box-shadow: 0 2px 0 #5b3a1e; }
+#pt-float button.p { background: #7ccf5a; color: #fff; }
+html.pf-touch.pt-mode #xhs-bar, html.pf-touch.pt-mode #xhs-toast { visibility: hidden; }
+
+/* 1.3.0：主线 v5.11.0.7 物品栏（xhs 用 full 样式：54px 格子带名字）。手机一行放不下 9 格，横向滑会藏住后几格，
+   改成折行居中，所有格子都看得见、都在屏幕里。 */
+html.xhs-mobile #xhs-inv-dock #inv { flex-wrap: wrap; justify-content: center; overflow: visible; touch-action: manipulation; row-gap: 4px; }
+html.xhs-mobile #diary { box-sizing: border-box; }
+/* 相册新照片的小提示：放在 HUD 下面，不压住天数和金币 */
+html.xhs-mobile #albumToast { top: var(--xhs-sheet-top, calc(var(--xhs-top-clear) + 116px)) !important; }
+#pt-sheet .row2.go { align-items: center; }
+#pt-sheet .row2.go span { font: 700 13px sans-serif; color: #8a5a2c; flex: none; }
+#pt-sheet .row2.go button { font-size: 13px; padding: 0 2px; white-space: nowrap; }
+#pt-sheet .row2.go button.locked { color: #8a7a6a; background: #efe6d2; }
+/* Chrome 61 没有 aspect-ratio：相册里还没拍好的格子（灰底 / 锁着的 ???）给一个固定高度，不塌成 0 */
+html.xhs-mobile .alb .grid .pol span.pic, html.xhs-mobile .alb .grid .pol i.pic { min-height: 96px; }

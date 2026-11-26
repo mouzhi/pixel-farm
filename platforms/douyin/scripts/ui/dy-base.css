@@ -1,0 +1,17 @@
+/* Douyin overlay base: the web markup is rendered as Taro Views (.n .t-<tag>), so give the tags their browser defaults back. */
+.pf-n { box-sizing: content-box; }
+.t-span, .t-b, .t-i, .t-small, .t-em, .t-strong, .t-a, .t-label, .t-u, .t-s, .t-sub, .t-sup, .t-code, .t-kbd { display: inline; }
+.t-b, .t-strong, .t-h1, .t-h2, .t-h3, .t-h4, .t-th { font-weight: bold; }
+.t-i, .t-em { font-style: italic; }
+.t-small { font-size: smaller; }
+.t-div, .t-p, .t-h1, .t-h2, .t-h3, .t-h4, .t-ul, .t-ol, .t-li, .t-section, .t-header, .t-footer, .t-details, .t-summary { display: block; }
+.t-p { margin: 1em 0; }
+.t-h3 { font-size: 1.17em; margin: 1em 0; }
+.t-h4 { margin: 1.33em 0; }
+.t-br { display: block; height: 0; }
+.t-img { display: inline-block; }
+.t-button { display: inline-block; box-sizing: border-box; text-align: center; font: inherit; color: inherit; line-height: normal;
+  padding: 1px 6px; border: 2px outset #d8c8a8; background: #efefef; border-radius: 0; margin: 0; white-space: nowrap; }
+.t-button.a-disabled { opacity: .55; }
+.t-input, .t-textarea, .t-select, .t-audio, .t-canvas, .t-style, .t-script { display: none; }
+.t-progress { display: inline-block; }

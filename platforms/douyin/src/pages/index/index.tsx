@@ -3,9 +3,12 @@ import { Canvas, ScrollView, Text, View } from '@tarojs/components'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { CustomNavSpace } from '@/components/custom-nav-space'
+import { measureCustomNavLayout } from '@/lib/custom-nav-layout'
 import bootFarm from '@/game/farm-engine'
 import { createFarmEnv, type PerfReport } from '@/game/farm-env'
 import { DEMO_SAVE, DEMO_SAVE_KEY } from '@/game/demo-save'
+import { FarmUI } from '@/game/farm-ui'
+import { estimateRect } from '@/game/farm-ui-model'
 
 import './index.css'
 
@@ -42,7 +45,6 @@ function renderGroups(parts: Record<string, number>) {
   }
 }
 type FarmEnv = ReturnType<typeof createFarmEnv>
-type Hud = { day: string; clock: string; coins: string }
 
 const nowMs = () => (typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now())
 
@@ -142,7 +144,8 @@ export default function Index() {
   const levelRef = useRef<QualityLevel>('mid')
   const qualityRef = useRef<QualityChoice>('auto')
   const sysRef = useRef<Record<string, unknown>>({})
-  const [hud, setHud] = useState<Hud>({ day: '', clock: '', coins: '' })
+  // v12：界面避让：顶部 = 抖音导航栏（左上角返回）下沿，底部 = 系统安全区
+  const insetsRef = useRef({ top: 96, bottom: 8 })
   const [fastForward, setFastForward] = useState(false)
   const cacheRef = useRef(true)
   const [cacheOn, setCacheOn] = useState(true)
@@ -252,6 +255,14 @@ export default function Index() {
     let env: FarmEnv
     try {
       const info = Taro.getSystemInfoSync()
+      try {
+        const nav = measureCustomNavLayout()
+        const sa: any = (info as any).safeArea
+        const sh = Number((info as any).screenHeight) || info.windowHeight
+        insetsRef.current = { top: Math.round((nav.paddingTop || 88) + 6), bottom: Math.max(8, Math.round(sa && sa.bottom ? sh - sa.bottom : 0) + 6) }
+      } catch {
+        // 用默认值
+      }
       sysRef.current = { brand: info.brand, model: info.model, platform: info.platform, system: info.system, version: info.version, sdk: info.SDKVersion, pixelRatio: info.pixelRatio, ww: info.windowWidth, wh: info.windowHeight, offscreen: typeof OffscreenCanvas === 'function' ? 'native' : 'tt' }
       log(`系统 ${info.platform || ''} ${info.system || ''} 宿主 ${info.version || ''} SDK ${info.SDKVersion || ''} 窗口 ${info.windowWidth}x${info.windowHeight}`)
       // 离屏画布：原生 OffscreenCanvas → Taro.createOffscreenCanvas → tt.createOffscreenCanvas
@@ -299,6 +310,7 @@ export default function Index() {
         canvasRect: () => rectRef.current,
         nativeImageData: typeof ImageData === 'function' ? ImageData : undefined,
         framebuffer: true,
+        rectOf: (id) => estimateRect(id, insetsRef.current, info.windowWidth, info.windowHeight),
       })
       envRef.current = env
     } catch (err) {
@@ -338,6 +350,9 @@ export default function Index() {
       }
       // Krypton（离屏tt）上每个预热角度都是新的 GL 画布，跳过空闲预热
       env.G.__noWarm = typeof OffscreenCanvas !== 'function'
+      // v12：网页版界面（小红书版的手机外壳）：避让距离；地图上的区域牌子不显示（界面层节流刷新，会跟不上地图）
+      env.G.__dyInsets = insetsRef.current
+      env.G.__noSigns = true
       try {
         bootFarm(env.G)
       } catch (err) {
@@ -430,11 +445,6 @@ export default function Index() {
         pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild, patch: st.patch || 0, pd: st.patchDraws || 0, stk: st.stkNew || 0, who: Object.assign({}, st.stkWho || {}), sc: st.chunkBuild || 0, sd: st.chunkDraws || 0, fb: (st.soilFb || 0) + (st.objFb || 0), df: st.defer || 0 }
       }
       setProblems(env.problems())
-      setHud({
-        day: env.element('day')?.textContent || '',
-        clock: env.element('clock')?.textContent || '',
-        coins: env.element('coins')?.textContent || '',
-      })
       // 自动画质：攒够约 45 帧后，低于 30 FPS 就降一档（只降不升，避免来回跳）
       if (qualityRef.current === 'auto' && ticks % 4 === 0 && report.frames >= 45 && report.fps < 30) {
         const next = levelRef.current === 'high' ? 'mid' : levelRef.current === 'mid' ? 'low' : null
@@ -517,7 +527,19 @@ export default function Index() {
     const y = typeof t.clientY === 'number' ? t.clientY : r.top + (t.y || 0)
     return { id: Number(t.identifier) || 0, x, y }
   }
+  // v12：多指也转给界面脚本（小红书版的双指缩放 / 旋转），单指照旧走 pointer
+  const touchList = (list: any) => {
+    const r = rectRef.current
+    const out: { id: number; x: number; y: number }[] = []
+    for (let i = 0; list && i < list.length; i++) {
+      const t = list[i]
+      out.push({ id: Number(t.identifier) || 0, x: typeof t.clientX === 'number' ? t.clientX : r.left + (t.x || 0), y: typeof t.clientY === 'number' ? t.clientY : r.top + (t.y || 0) })
+    }
+    return out
+  }
+  const forwardTouch = (type: string, e: any) => envRef.current?.touch(type, touchList(e?.touches), touchList(e?.changedTouches))
   const onTouchStart = (e: any) => {
+    forwardTouch('touchstart', e)
     const p = point(e)
     if (!p || touchRef.current || (e?.touches?.length || 1) > 1) return
     touchRef.current = p
@@ -529,11 +551,13 @@ export default function Index() {
     envRef.current?.pointer('pointerdown', p.x, p.y, p.id)
   }
   const onTouchMove = (e: any) => {
+    forwardTouch('touchmove', e)
     const p = point(e)
     if (!p || !touchRef.current) return
     envRef.current?.pointer('pointermove', p.x, p.y, touchRef.current.id)
   }
   const onTouchEnd = (e: any) => {
+    forwardTouch(e?.type === 'touchcancel' ? 'touchcancel' : 'touchend', e)
     const p = point(e) || touchRef.current
     if (!p || !touchRef.current) return
     envRef.current?.pointer('pointerup', p.x, p.y, touchRef.current.id)
@@ -555,63 +579,74 @@ export default function Index() {
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchEnd}
       />
-      <View className="farm-overlay">
-        <View className="farm-top-shade">
-          <CustomNavSpace />
-          {phase === 'ready' ? (
-            <View className="farm-hud">
-              <Text className="farm-hud-day text-sm">{`${hud.day} ${hud.clock}`}</Text>
-              <Text className="farm-hud-coins text-base">{`${hud.coins} 金`}</Text>
-            </View>
+      {/* v12：调试角标在界面层下面（面板盖住它）；展开后浮到最上面，画质/缓存/到夜晚/缩放都在展开的面板里 */}
+      {phase === 'ready' && perf ? (
+        <View className={panelOpen ? 'farm-perf-wrap is-open' : 'farm-perf-wrap'} style={{ top: `${insetsRef.current.top + 120}px` }}>
+          <View className="farm-badge" onClick={() => setPanelOpen(!panelOpen)}>
+            <Text className="farm-badge-text text-xs">{`v12 · FPS ${perf.fps.toFixed(0)} · 启动${((bootMs + (envRef.current?.bootFps().first || 0)) / 1000).toFixed(1)}s${loadingText(envRef.current?.G.__pfcStats)} ${panelOpen ? '▲' : '▼'}`}</Text>
+          </View>
+          {panelOpen ? (
+            <ScrollView className="farm-perf" scrollY>
+              <Text className="farm-perf-line text-xs">{`FPS ${perf.fps.toFixed(1)} 均${perf.avgMs.toFixed(0)} 最大${perf.maxMs.toFixed(0)}ms`}</Text>
+              {(() => {
+                const env = envRef.current
+                const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0, draws: 0, canvases: 0, secs: 0, pfc: {} as Record<string, number> }
+                const q = d.pfc || {}
+                // 整层：整层重建（应为0）；区块：建好的区块；缺块：屏上区块没建完、直接画的次数
+                const rb = `整层${(q.soilBuild || 0) + (q.objBuild || 0)} 区块${(q.soilChunk || 0) + (q.objChunk || 0)} 缺块${(q.soilFb || 0) + (q.objFb || 0)} 补丁${q.patch || 0}`
+                return <Text className="farm-perf-line text-xs">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 贴图${d.draws.toFixed(0)} 新画布${d.canvases} ${rb}`}</Text>
+              })()}
+              <Text className="farm-perf-line text-xs">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
+              <Text className="farm-perf-line text-xs">{`启动 ${BOOT_PART_TEXT.filter(([k]) => bootParts[k] !== undefined).map(([k, t]) => `${t}${bootParts[k]}`).join(' ')} 首帧${Math.round(envRef.current?.bootFps().first || 0)}ms ${groundText(envRef.current?.G.__gbl)}`}</Text>
+              <Text className="farm-perf-line text-xs">{frameText(envRef.current?.G)}</Text>
+              {(() => {
+                const b = envRef.current ? envRef.current.bootFps() : { first: 0, secs: 0, buckets: [] as { min: number; avg: number }[] }
+                const done = b.buckets.map((x, i) => `${i * 5}-${i * 5 + 5}s ${x.min}/${x.avg.toFixed(0)}`).join(' ')
+                return <Text className="farm-perf-line text-xs">{`前20秒FPS(最低/均) ${done}${b.secs < 20 ? ` 测量中${b.secs}s` : ''}`}</Text>
+              })()}
+              <Text className="farm-perf-line text-xs">{`模拟${perf.sim.toFixed(1)} 渲染${perf.render.toFixed(1)} 上屏${perf.present.toFixed(1)} 界面${perf.hud.toFixed(1)}`}</Text>
+              {(() => {
+                const gr = renderGroups(perf.parts)
+                return <Text className="farm-perf-line text-xs">{`地面${gr.ground.toFixed(1)} 物件${gr.objects.toFixed(1)} 阴影${gr.shadow.toFixed(1)} 雾${gr.fog.toFixed(1)} 光效${gr.fx.toFixed(1)}`}</Text>
+              })()}
+              <Text className="farm-perf-line text-xs">{topParts(perf.parts)}</Text>
+              <Text className="farm-perf-line text-xs">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
+              <Text className="farm-perf-line text-xs">{`新画布 ${perf.canvasSizes || '无'}`}</Text>
+              <Text className="farm-perf-line text-xs">{`缓存全清${pfc.wipe}次${pfc.wipeWhy ? `(${pfc.wipeWhy})` : ''} 空白检查${pfc.blankOff ? '已停' : '在跑'} 水面每${envRef.current?.G.__waterEvery || 1}帧`}</Text>
+              <Text className="farm-perf-line text-xs">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 整屏框${pfc.whole} 整层重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
+              <Text className="farm-perf-line text-xs">{`最近重建 地块:${pfc.soilWhy || '无'} 静物:${pfc.objWhy || '无'}`}</Text>
+              <Text className="farm-perf-line text-xs">{`局部补丁${pfc.patchRate.toFixed(1)}/秒 每次${pfc.patchDraws.toFixed(0)}贴 最近 静物:${pfc.objPatchWhy || '无'} 地块:${pfc.soilPatchWhy || '无'}`}</Text>
+              <Text className="farm-perf-line text-xs">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict} 新堆块${pfc.stkRate.toFixed(1)}/秒 ${pfc.stkTop || ''}`}</Text>
+              <Text className="farm-perf-line text-xs">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 缺块${pfc.fbRate.toFixed(1)}/秒(共${pfc.fb}) 预建图${pfc.preStk} 延后${pfc.deferRate.toFixed(0)}/秒(共${pfc.defer}) 扫描ms ${pfc.scan || '无'}`}</Text>
+              <Text className="farm-perf-line text-xs">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
+              <Text className="farm-perf-line text-xs">{`画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+              {problems.slice(-2).map((line, i) => (
+                <Text key={`p-${i}`} className="farm-perf-warn text-xs">{line}</Text>
+              ))}
+              <View className="farm-controls">
+                <View className="farm-btn is-on" onClick={cycleQuality}>
+                  <Text className="farm-btn-text text-sm">{`画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+                </View>
+                <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
+                  <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>
+                </View>
+                <View className={fastForward ? 'farm-btn is-on' : 'farm-btn'} onClick={goNight}>
+                  <Text className="farm-btn-text text-sm">{fastForward ? '快进中…' : '到夜晚'}</Text>
+                </View>
+                <View className="farm-btn" onClick={() => zoom(-1)}>
+                  <Text className="farm-btn-text text-sm">缩小</Text>
+                </View>
+                <View className="farm-btn" onClick={() => zoom(1)}>
+                  <Text className="farm-btn-text text-sm">放大</Text>
+                </View>
+              </View>
+            </ScrollView>
           ) : null}
         </View>
-        {phase === 'ready' && perf ? (
-          <View className="farm-perf-wrap">
-            <View className="farm-badge" onClick={() => setPanelOpen(!panelOpen)}>
-              <Text className="farm-badge-text text-xs">{`FPS ${perf.fps.toFixed(0)} · 启动${((bootMs + (envRef.current?.bootFps().first || 0)) / 1000).toFixed(1)}s${loadingText(envRef.current?.G.__pfcStats)} ${panelOpen ? '▲' : '▼'}`}</Text>
-            </View>
-            {panelOpen ? (
-              <ScrollView className="farm-perf" scrollY>
-                <Text className="farm-perf-line text-xs">{`FPS ${perf.fps.toFixed(1)} 均${perf.avgMs.toFixed(0)} 最大${perf.maxMs.toFixed(0)}ms`}</Text>
-                {(() => {
-                  const env = envRef.current
-                  const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0, draws: 0, canvases: 0, secs: 0, pfc: {} as Record<string, number> }
-                  const q = d.pfc || {}
-                  // 整层：整层重建（应为0）；区块：建好的区块；缺块：屏上区块没建完、直接画的次数
-                  const rb = `整层${(q.soilBuild || 0) + (q.objBuild || 0)} 区块${(q.soilChunk || 0) + (q.objChunk || 0)} 缺块${(q.soilFb || 0) + (q.objFb || 0)} 补丁${q.patch || 0}`
-                  return <Text className="farm-perf-line text-xs">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 贴图${d.draws.toFixed(0)} 新画布${d.canvases} ${rb}`}</Text>
-                })()}
-                <Text className="farm-perf-line text-xs">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-                <Text className="farm-perf-line text-xs">{`启动 ${BOOT_PART_TEXT.filter(([k]) => bootParts[k] !== undefined).map(([k, t]) => `${t}${bootParts[k]}`).join(' ')} 首帧${Math.round(envRef.current?.bootFps().first || 0)}ms ${groundText(envRef.current?.G.__gbl)}`}</Text>
-                <Text className="farm-perf-line text-xs">{frameText(envRef.current?.G)}</Text>
-                {(() => {
-                  const b = envRef.current ? envRef.current.bootFps() : { first: 0, secs: 0, buckets: [] as { min: number; avg: number }[] }
-                  const done = b.buckets.map((x, i) => `${i * 5}-${i * 5 + 5}s ${x.min}/${x.avg.toFixed(0)}`).join(' ')
-                  return <Text className="farm-perf-line text-xs">{`前20秒FPS(最低/均) ${done}${b.secs < 20 ? ` 测量中${b.secs}s` : ''}`}</Text>
-                })()}
-                <Text className="farm-perf-line text-xs">{`模拟${perf.sim.toFixed(1)} 渲染${perf.render.toFixed(1)} 上屏${perf.present.toFixed(1)} 界面${perf.hud.toFixed(1)}`}</Text>
-                {(() => {
-                  const gr = renderGroups(perf.parts)
-                  return <Text className="farm-perf-line text-xs">{`地面${gr.ground.toFixed(1)} 物件${gr.objects.toFixed(1)} 阴影${gr.shadow.toFixed(1)} 雾${gr.fog.toFixed(1)} 光效${gr.fx.toFixed(1)}`}</Text>
-                })()}
-                <Text className="farm-perf-line text-xs">{topParts(perf.parts)}</Text>
-                <Text className="farm-perf-line text-xs">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
-                <Text className="farm-perf-line text-xs">{`新画布 ${perf.canvasSizes || '无'}`}</Text>
-                <Text className="farm-perf-line text-xs">{`缓存全清${pfc.wipe}次${pfc.wipeWhy ? `(${pfc.wipeWhy})` : ''} 空白检查${pfc.blankOff ? '已停' : '在跑'} 水面每${envRef.current?.G.__waterEvery || 1}帧`}</Text>
-                <Text className="farm-perf-line text-xs">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 整屏框${pfc.whole} 整层重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
-                <Text className="farm-perf-line text-xs">{`最近重建 地块:${pfc.soilWhy || '无'} 静物:${pfc.objWhy || '无'}`}</Text>
-                <Text className="farm-perf-line text-xs">{`局部补丁${pfc.patchRate.toFixed(1)}/秒 每次${pfc.patchDraws.toFixed(0)}贴 最近 静物:${pfc.objPatchWhy || '无'} 地块:${pfc.soilPatchWhy || '无'}`}</Text>
-                <Text className="farm-perf-line text-xs">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict} 新堆块${pfc.stkRate.toFixed(1)}/秒 ${pfc.stkTop || ''}`}</Text>
-                <Text className="farm-perf-line text-xs">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 缺块${pfc.fbRate.toFixed(1)}/秒(共${pfc.fb}) 预建图${pfc.preStk} 延后${pfc.deferRate.toFixed(0)}/秒(共${pfc.defer}) 扫描ms ${pfc.scan || '无'}`}</Text>
-                <Text className="farm-perf-line text-xs">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
-                <Text className="farm-perf-line text-xs">{`v11 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
-                {problems.slice(-2).map((line, i) => (
-                  <Text key={`p-${i}`} className="farm-perf-warn text-xs">{line}</Text>
-                ))}
-              </ScrollView>
-            ) : null}
-          </View>
-        ) : null}
+      ) : null}
+      {phase === 'ready' && envRef.current ? <FarmUI env={envRef.current} /> : null}
+      <View className="farm-overlay">
+        {phase !== 'ready' ? <CustomNavSpace /> : null}
         {phase === 'loading' ? <Text className="farm-state text-base">{`农场加载中…（${step}）`}</Text> : null}
         {phase === 'error' ? (
           <View className="farm-error">
@@ -626,25 +661,6 @@ export default function Index() {
             {bootLog.map((line, i) => (
               <Text key={`log-${i}`} className="farm-perf-line text-xs">{line}</Text>
             ))}
-          </View>
-        ) : null}
-        {phase === 'ready' ? (
-          <View className="farm-controls">
-            <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v11 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
-            </View>
-            <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
-              <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>
-            </View>
-            <View className={fastForward ? 'farm-btn is-on' : 'farm-btn'} onClick={goNight}>
-              <Text className="farm-btn-text text-sm">{fastForward ? '快进中…' : '到夜晚'}</Text>
-            </View>
-            <View className="farm-btn" onClick={() => zoom(-1)}>
-              <Text className="farm-btn-text text-sm">缩小</Text>
-            </View>
-            <View className="farm-btn" onClick={() => zoom(1)}>
-              <Text className="farm-btn-text text-sm">放大</Text>
-            </View>
           </View>
         ) : null}
       </View>

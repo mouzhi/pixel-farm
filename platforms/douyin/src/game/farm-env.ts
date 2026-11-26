@@ -20,6 +20,8 @@ export interface FarmPlatform {
   nativeImageData?: any
   /** 游戏画在本地离屏画布上，每帧只把整帧拷到屏幕画布一次（屏幕画布跨线程代理时更稳更快） */
   framebuffer?: boolean
+  /** v12：界面元素的估算位置（真实布局在视图层） */
+  rectOf?: (id: string, el: any) => Rect | null
 }
 
 export interface FrameSample {
@@ -72,52 +74,14 @@ export interface FrameStats {
 
 type Listener = (event: any) => void
 
-const NULL_IDS = new Set(["minimap", "mmJump"])
+import { createDocument, MElement, type Rect } from "./mini-dom"
+import { pngURL, pixURL } from "./png"
+import { FARM_UI_HTML } from "./farm-ui-html"
 
-function makeStubElement(id: string): any {
-  const el: any = {
-    id,
-    style: {},
-    dataset: {},
-    hidden: false,
-    textContent: "",
-    innerHTML: "",
-    title: "",
-    children: [],
-    childNodes: [],
-    offsetWidth: 0,
-    offsetHeight: 0,
-    clientWidth: 0,
-    clientHeight: 0,
-    classList: {
-      add: () => undefined,
-      remove: () => undefined,
-      toggle: () => false,
-      contains: () => false,
-    },
-    addEventListener: () => undefined,
-    removeEventListener: () => undefined,
-    appendChild: (child: any) => child,
-    removeChild: (child: any) => child,
-    insertBefore: (child: any) => child,
-    append: () => undefined,
-    prepend: () => undefined,
-    remove: () => undefined,
-    setAttribute: () => undefined,
-    getAttribute: () => null,
-    removeAttribute: () => undefined,
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    closest: () => null,
-    contains: () => false,
-    insertAdjacentHTML: () => undefined,
-    scrollIntoView: () => undefined,
-    focus: () => undefined,
-    blur: () => undefined,
-    click: () => undefined,
-    getBoundingClientRect: () => ({ left: 0, top: 0, right: 0, bottom: 0, width: 0, height: 0, x: 0, y: 0 }),
-  }
-  return el
+// v12：手机上不显示的网页版元素（同小红书版 mobile.css 隐藏的那些）：不画、改了也不触发重画
+const UI_SKIP_IDS: Record<string, number> = {
+  wrap: 1, act: 1, prices: 1, title: 1, titleS: 1, syncHint: 1, storeHud: 1, loveLab: 1, loveBar: 1, menuBtn: 1, shopBtn: 1, storeBtn: 1, codexBtn: 1,
+  diaryBtn: 1, albumBtn: 1, mapBtn: 1, mmJump: 1, speed: 1, log: 1, say: 1, catches: 1, rlabs: 1, plabs: 1, fakecursor: 1, menu: 1,
 }
 
 function fakeImageData(this: any, a: any, b: number, c?: number) {
@@ -167,8 +131,18 @@ function patchContext(ctx: any) {
 }
 
 function wrapCanvas(canvas: any) {
-  // 离屏画布可能没有 toDataURL（只在网页版的 DOM 图标里用到），给一个空实现，避免每帧报错
-  if (typeof canvas.toDataURL !== "function") canvas.toDataURL = () => ""
+  // 离屏画布的 toDataURL 一律自己编 PNG，且只给小图（界面图标）：相册拍照要整块读回 GPU 画布、存进本地存储，手机上不做（返回空 = 不拍，同 v11）
+  canvas.toDataURL = () => {
+    try {
+      const w = canvas.width | 0
+      const h = canvas.height | 0
+      if (!w || !h || w * h > 96 * 96) return ""
+      const img = canvas.getContext("2d").getImageData(0, 0, w, h)
+      return pngURL(w, h, img.data)
+    } catch (err) {
+      return ""
+    }
+  }
   const getContext = canvas.getContext.bind(canvas)
   canvas.getContext = (type: string, opts?: unknown) => patchContext(opts ? getContext(type || "2d", opts) : getContext(type || "2d"))
   return canvas
@@ -214,28 +188,6 @@ function creatorOf(stack: unknown) {
 
 export function createFarmEnv(p: FarmPlatform) {
   clock = p.now
-  const winListeners = new Map<string, Listener[]>()
-  const docListeners = new Map<string, Listener[]>()
-  const canvasListeners = new Map<string, Listener[]>()
-  const elements = new Map<string, any>()
-  const add = (map: Map<string, Listener[]>) => (type: string, fn: Listener) => {
-    const list = map.get(type) || []
-    list.push(fn)
-    map.set(type, list)
-  }
-  const remove = (map: Map<string, Listener[]>) => (type: string, fn: Listener) => {
-    map.set(type, (map.get(type) || []).filter((f) => f !== fn))
-  }
-  const fire = (map: Map<string, Listener[]>, event: any) => {
-    for (const fn of map.get(event.type) || []) {
-      try {
-        fn(event)
-      } catch (err) {
-        console.error("[farm-env] listener", event.type, err)
-      }
-    }
-  }
-
   let canvasCount = 0
   // 最近新建的画布（看尺寸就知道是谁在建：树、物件缓存、临时画布…）
   const born: { at: number; c: any; by: string }[] = []
@@ -272,50 +224,42 @@ export function createFarmEnv(p: FarmPlatform) {
     const fctx = fb.getContext("2d")
     mainCtx.putImageData(fctx.getImageData(0, 0, fb.width, fb.height), 0, 0)
   }
-  const canvasEl: any = makeStubElement("game")
+  // v12：真正的（极简）DOM：网页版的界面（ui.js 等）在这里建节点、改 innerHTML，落地页节流后画成 Taro 组件
+  const dom: any = createDocument()
+  dom.skipIds = UI_SKIP_IDS
+  const realCreate = dom.createElement.bind(dom)
+  dom.createElement = (tag: string) => {
+    if (String(tag).toLowerCase() !== "canvas") return realCreate(tag)
+    canvasCount++
+    const made = wrapCanvas(p.createOffscreenCanvas(300, 150))
+    born.push({ at: p.now(), c: made, by: G.__mkTag ? String(G.__mkTag).replace(/<\?/g, "") : creatorOf(new Error().stack) })
+    G.__mkTag = ""
+    if (born.length > 300) born.shift()
+    return made
+  }
+  dom.body.innerHTML = FARM_UI_HTML
+  if (p.rectOf) dom.rectOf = (el: any) => p.rectOf!(el._attrs.id || "", el)
+  // 画面画布 #game：MElement 本身（监听、冒泡都走 DOM），宽高和 getContext 指到帧缓冲
+  let canvasEl: any = dom.getElementById("game")
+  if (!canvasEl) {
+    canvasEl = realCreate("canvas")
+    canvasEl.id = "game"
+    dom.body.appendChild(canvasEl)
+  }
   Object.defineProperties(canvasEl, {
-    width: { get: () => fb.width, set: (v: number) => { fb.width = v } },
-    height: { get: () => fb.height, set: (v: number) => { fb.height = v } },
+    width: { get: () => fb.width, set: (v: number) => { fb.width = v }, configurable: true },
+    height: { get: () => fb.height, set: (v: number) => { fb.height = v }, configurable: true },
   })
   canvasEl.getContext = (type: string, opts?: unknown) => fb.getContext(type, opts)
-  canvasEl.addEventListener = add(canvasListeners)
-  canvasEl.removeEventListener = remove(canvasListeners)
   canvasEl.setPointerCapture = () => undefined
   canvasEl.releasePointerCapture = () => undefined
+  canvasEl.toDataURL = () => fb.toDataURL()
   canvasEl.getBoundingClientRect = () => {
     const r = p.canvasRect()
     return { left: r.left, top: r.top, width: r.width, height: r.height, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top }
   }
-  elements.set("game", canvasEl)
-
-  const doc: any = {
-    hidden: false,
-    visibilityState: "visible",
-    body: makeStubElement("body"),
-    documentElement: makeStubElement("html"),
-    getElementById: (id: string) => {
-      if (NULL_IDS.has(id)) return null
-      let el = elements.get(id)
-      if (!el) {
-        el = makeStubElement(id)
-        elements.set(id, el)
-      }
-      return el
-    },
-    createElement: (tag: string) => {
-      if (String(tag).toLowerCase() !== "canvas") return makeStubElement("")
-      canvasCount++
-      const made = wrapCanvas(p.createOffscreenCanvas(300, 150))
-      born.push({ at: p.now(), c: made, by: G.__mkTag ? String(G.__mkTag).replace(/<\?/g, "") : creatorOf(new Error().stack) })
-      G.__mkTag = ""
-      if (born.length > 300) born.shift()
-      return made
-    },
-    querySelector: () => null,
-    querySelectorAll: () => [],
-    addEventListener: add(docListeners),
-    removeEventListener: remove(docListeners),
-  }
+  const doc = dom
+  const elements = { get: (id: string) => dom.getElementById(id) }
 
   const storage: any = {
     getItem: (k: string) => p.storage.get(String(k)),
@@ -328,6 +272,9 @@ export function createFarmEnv(p: FarmPlatform) {
 
   // 帧循环：游戏每帧末尾调用 requestAnimationFrame(frame)，这里统计帧间隔和每帧耗时
   let pending: ((now: number) => void) | null = null
+  // v12：界面脚本也会要帧（游戏那一个仍是 pending），其余的同一帧里接着跑
+  let extra: ((now: number) => void)[] = []
+  let gameFrame: ((now: number) => void) | null = null
   let scheduled = false
   let paused = false
   const workMs: number[] = []
@@ -352,9 +299,11 @@ export function createFarmEnv(p: FarmPlatform) {
   let lastProf: Record<string, number> = {}
   const tick = (now: number) => {
     scheduled = false
-    if (paused || !pending) return
-    const cb = pending
+    if (paused || (!pending && !extra.length)) return
+    const cb = pending || (() => undefined)
     pending = null
+    const more = extra
+    extra = []
     calls.getN = 0
     calls.getMs = 0
     calls.putN = 0
@@ -363,6 +312,9 @@ export function createFarmEnv(p: FarmPlatform) {
     frameSplit = { sim: 0, render: 0, hud: 0 }
     const t0 = p.now()
     cb(t0)
+    for (let i = 0; i < more.length; i++) {
+      try { more[i](t0) } catch (err) { note("error", ["[farm-env] raf", String(err)]) }
+    }
     const t1 = p.now()
     const drawGame = calls.drawN
     try {
@@ -417,7 +369,7 @@ export function createFarmEnv(p: FarmPlatform) {
     void now
   }
   const schedule = () => {
-    if (scheduled || paused || !pending) return
+    if (scheduled || paused || (!pending && !extra.length)) return
     scheduled = true
     p.requestFrame(tick)
   }
@@ -486,14 +438,18 @@ export function createFarmEnv(p: FarmPlatform) {
     Event: CustomEventShim,
     URLSearchParams: URLSearchParamsShim,
     requestAnimationFrame: (cb: (now: number) => void) => {
-      pending = cb
+      // 第一个要帧的是游戏主循环（game.js 末尾）；界面脚本的放进 extra
+      if (!gameFrame) gameFrame = cb
+      if (cb === gameFrame) pending = cb
+      else if (extra.indexOf(cb) < 0) extra.push(cb)
       schedule()
       return 1
     },
     cancelAnimationFrame: () => { pending = null },
-    addEventListener: add(winListeners),
-    removeEventListener: remove(winListeners),
-    dispatchEvent: (event: any) => { fire(winListeners, event); return true },
+    addEventListener: (type: string, fn: Listener, opts?: unknown) => MElement.prototype.addEventListener.call(dom.win as any, type, fn, opts),
+    removeEventListener: (type: string, fn: Listener, opts?: unknown) => MElement.prototype.removeEventListener.call(dom.win as any, type, fn, opts),
+    dispatchEvent: (event: any) => { winFire(event); return true },
+    ontouchstart: null,
     // 空闲时预热建筑缓存：每次最多占 8ms，不一次性卡住主线程
     requestIdleCallback: (cb: (deadline: { timeRemaining: () => number }) => void) =>
       setTimeout(() => {
@@ -504,6 +460,9 @@ export function createFarmEnv(p: FarmPlatform) {
     getComputedStyle: () => ({ getPropertyValue: () => "" }),
     atob: atobPoly,
     btoa: btoaPoly,
+    // v12：界面图标直接编码（不建画布）
+    __pixURL: pixURL,
+    __pngURL: pngURL,
   }
   G.__frameProf = (sim: number, render: number, hud: number) => {
     frameSplit = { sim, render, hud }
@@ -514,24 +473,36 @@ export function createFarmEnv(p: FarmPlatform) {
     devicePixelRatio: { get: () => p.viewport().dpr },
   })
 
+  const winFire = (event: any) => {
+    const ev = event && event.preventDefault ? event : dom.makeEvent(event.type, event)
+    if (!ev.target) ev.target = G
+    dom._callList(dom.win, ev, null)
+  }
+  dom.win.target = G
   const pointer = (type: string, x: number, y: number, id: number) => {
-    fire(canvasListeners, {
-      type, clientX: x, clientY: y, pointerId: id, button: 0, buttons: type === "pointerup" ? 0 : 1, shiftKey: false,
-      pointerType: "touch", target: canvasEl, preventDefault: () => undefined, stopPropagation: () => undefined,
-    })
+    // v12：从画布冒泡到 document / window（界面在 window 的 pointerdown 里收面板）
+    dom._dispatch(canvasEl, dom.makeEvent(type, {
+      clientX: x, clientY: y, pointerId: id, button: 0, buttons: type === "pointerup" ? 0 : 1, shiftKey: false, pointerType: "touch",
+    }))
+  }
+  const touchList = (list: { id: number; x: number; y: number }[]) => list.map((t) => ({ identifier: t.id, clientX: t.x, clientY: t.y, pageX: t.x, pageY: t.y }))
+  const touch = (type: string, touches: { id: number; x: number; y: number }[], changed: { id: number; x: number; y: number }[]) => {
+    dom._dispatch(canvasEl, dom.makeEvent(type, { touches: touchList(touches), changedTouches: touchList(changed), targetTouches: touchList(touches) }))
   }
 
   return {
     G,
     element: (id: string) => elements.get(id),
     pointer,
-    wheel: (deltaY: number) => fire(winListeners, { type: "wheel", deltaY, target: canvasEl, preventDefault: () => undefined }),
-    resize: () => fire(winListeners, { type: "resize" }),
+    touch,
+    dom,
+    wheel: (deltaY: number) => winFire({ type: "wheel", deltaY, target: canvasEl }),
+    resize: () => winFire({ type: "resize" }),
     setHidden: (hidden: boolean) => {
       doc.hidden = hidden
       doc.visibilityState = hidden ? "hidden" : "visible"
       paused = hidden
-      fire(docListeners, { type: "visibilitychange" })
+      dom._dispatch(null, dom.makeEvent("visibilitychange"))
       if (!hidden) schedule()
     },
     stats: (): FrameStats => {

@@ -1,0 +1,11 @@
+/* Douyin overrides (after the web + xhs CSS) */
+/* the page under the overlay is the Taro canvas: html/body/stage are see-through and let touches fall to the map */
+.t-html, .t-html.xhs-mobile, .t-html .t-body, .t-html.xhs-mobile .t-body {
+  position: fixed !important; left: 0; top: 0; right: 0; bottom: 0; width: auto; height: auto;
+  background: transparent !important; pointer-events: none !important; overflow: visible !important; margin: 0; padding: 0;
+  color: #fff6dc; font-size: 14PX; line-height: normal;
+}
+.t-body > .pf-n { pointer-events: auto; }
+#xhs-stage, #wrap, #rlabs, #plabs, #fakecursor { display: none !important; }
+/* no follow-author / share / note / tip on Douyin */
+.t-html.xhs-mobile #xhs-share, .t-html.xhs-mobile #xhs-note, .t-html.xhs-mobile #xhs-author { display: none !important; }
