@@ -35,7 +35,7 @@ function renderGroups(parts: Record<string, number>) {
   const g = (keys: string[]) => keys.reduce((a, k) => a + (parts[k] || 0), 0)
   return {
     ground: g(['ground', 'water', 'flow', 'soil+decals']),
-    objects: g(['list+shadowmask', 'o.tree', 'o.small', 'o.big', 'objects', 'o.hash', 'o.build', 'o.cache', 'o.dyn']),
+    objects: g(['list+shadowmask', 'o.tree', 'o.small', 'o.big', 'objects', 'o.scan', 'o.hash', 'o.build', 'o.cache', 'o.dyn']),
     shadow: g(['applyShadows']),
     fog: g(['fog']),
     fx: g(['marks', 'fx+light']),
@@ -115,9 +115,9 @@ export default function Index() {
   const [fastForward, setFastForward] = useState(false)
   const cacheRef = useRef(true)
   const [cacheOn, setCacheOn] = useState(true)
-  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, whole: 0, wipe: 0, wipeWhy: '', blankOff: false, soilRate: 0, objRate: 0, patchRate: 0, patchDraws: 0, objWhy: '', soilWhy: '', objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0 })
+  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, whole: 0, wipe: 0, wipeWhy: '', blankOff: false, soilRate: 0, objRate: 0, patchRate: 0, patchDraws: 0, objWhy: '', soilWhy: '', objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0, stkRate: 0, stkTop: '', scrollRate: 0, scrollDraws: 0, sync: 0, chunks: 0, scan: '' })
   const dragBaseRef = useRef<{ soil: number; obj: number; sync: number } | null>(null)
-  const pfcPrevRef = useRef<{ at: number; soil: number; obj: number; patch: number; pd: number } | null>(null)
+  const pfcPrevRef = useRef<{ at: number; soil: number; obj: number; patch: number; pd: number; stk: number; who: Record<string, number>; sc: number; sd: number } | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [prevLog, setPrevLog] = useState<string[]>([])
 
@@ -374,8 +374,15 @@ export default function Index() {
           patchDraws: dt > 0 && (st.patch || 0) > prev!.patch ? ((st.patchDraws || 0) - prev!.pd) / ((st.patch || 0) - prev!.patch) : 0,
           objWhy: st.objWhy || '', soilWhy: st.soilWhy || '', objPatchWhy: st.objPatchWhy || '', soilPatchWhy: st.soilPatchWhy || '',
           treeChg: st.treeChg || 0, treeShare: st.treeShare || 0, stkEvict: st.stkEvict || 0,
+          stkRate: dt > 0 ? ((st.stkNew || 0) - prev!.stk) / dt : 0,
+          // 这段时间里新做堆块图最多的模型（宽x深x高）
+          stkTop: Object.entries((st.stkWho || {}) as Record<string, number>).map(([k, v]) => [k, v - ((prev && prev.who[k]) || 0)] as [string, number]).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}×${v}`).join(' '),
+          scrollRate: dt > 0 ? ((st.chunkBuild || 0) - prev!.sc) / dt : 0,
+          scrollDraws: (st.chunkBuild || 0) > (prev ? prev.sc : 0) ? ((st.chunkDraws || 0) - (prev ? prev.sd : 0)) / ((st.chunkBuild || 0) - (prev ? prev.sc : 0)) : 0,
+          sync: (st.soilSync || 0) + (st.objSync || 0), chunks: st.chunks || 0,
+          scan: st.scanProf ? `树${st.scanProf.tree.toFixed(1)} 作物${st.scanProf.crop.toFixed(1)} 贴片${st.scanProf.spr.toFixed(1)} 堆块${st.scanProf.stack.toFixed(1)} 热表${st.scanProf.hot.toFixed(1)} 共${st.scanProf.n}` : '',
         })
-        pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild, patch: st.patch || 0, pd: st.patchDraws || 0 }
+        pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild, patch: st.patch || 0, pd: st.patchDraws || 0, stk: st.stkNew || 0, who: Object.assign({}, st.stkWho || {}), sc: st.chunkBuild || 0, sd: st.chunkDraws || 0 }
       }
       setProblems(env.problems())
       setHud({
@@ -527,18 +534,19 @@ export default function Index() {
             <Text className="farm-perf-line text-base">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 整屏框${pfc.whole} 重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
             <Text className="farm-perf-line text-base">{`最近重建 地块:${pfc.soilWhy || '无'} 静物:${pfc.objWhy || '无'}`}</Text>
             <Text className="farm-perf-line text-base">{`局部补丁${pfc.patchRate.toFixed(1)}/秒 每次${pfc.patchDraws.toFixed(0)}贴 最近 静物:${pfc.objPatchWhy || '无'} 地块:${pfc.soilPatchWhy || '无'}`}</Text>
-            <Text className="farm-perf-line text-base">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict}`}</Text>
+            <Text className="farm-perf-line text-base">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict} 新堆块${pfc.stkRate.toFixed(1)}/秒 ${pfc.stkTop || ''}`}</Text>
+            <Text className="farm-perf-line text-base">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 同步${pfc.sync} 扫描ms ${pfc.scan || '无'}`}</Text>
             {(() => {
               const env = envRef.current
-              const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0 }
+              const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0, draws: 0, canvases: 0, secs: 0 }
               const st = env?.G.__pfcStats
               const base = dragBaseRef.current
               const rb = st && base ? `${st.soilBuild - base.soil}+${st.objBuild - base.obj}（整帧${(st.soilSync || 0) + (st.objSync || 0) - base.sync}）` : '0'
-              return <Text className="farm-perf-line text-base">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 重建${rb}`}</Text>
+              return <Text className="farm-perf-line text-base">{`拖动 帧${d.frames} 均${d.avgMs.toFixed(0)} 最大${d.maxMs.toFixed(0)}ms 贴图${d.draws.toFixed(0)} 新画布${d.canvases} 重建${rb}`}</Text>
             })()}
             <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
             <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`v6静止 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            <Text className="farm-perf-line text-base">{`v7堆块 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
             {problems.slice(-2).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
@@ -563,7 +571,7 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v6静止 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v7堆块 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
               <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>

@@ -7,44 +7,11 @@ const soilBody = g => SOIL_A.replaceAll('ctx', g).replace('for (const d of decal
 const lilies = SOIL_DECALS.replace('for (const d of decals) { ', 'for (const d of decals) { if (d.lily === undefined) continue; ');
 const HELPERS = `
 // ---- douyin: cached static layers (see build patches-cache.mjs)
-let PFC_ID = 0, PFC_S = null, PFC_O = null, PFC_F = 0; const PFC_HOT = new Map();
-const PFC_ST = window.__pfcStats = { soilBuild: 0, objBuild: 0, soilSync: 0, objSync: 0, objWhy: '', soilWhy: '', redraw: 0, statics: 0, dyn: 0, bad: 0, badStatic: 0, wipe: 0, wipeWhy: '', blankOff: 0, patch: 0, patchDraws: 0, objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0 };
+let PFC_ID = 0, PFC_F = 0, PFK_FR = -1; const PFC_HOT = new Map();
+const PFC_ST = window.__pfcStats = { soilBuild: 0, objBuild: 0, soilSync: 0, objSync: 0, objWhy: '', soilWhy: '', redraw: 0, statics: 0, dyn: 0, bad: 0, badStatic: 0, wipe: 0, wipeWhy: '', blankOff: 0, chunkBuild: 0, chunkDraws: 0, chunkReset: 0, chunks: 0, probe: 0, patch: 0, patchDraws: 0, scroll: 0, scrollDraws: 0, stkNew: 0, stkWho: {}, objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0 };
 function pfcId(x) { return x.__pfc || (x.__pfc = ++PFC_ID); }
 function pfcMix(h, v) { return (Math.imul(h ^ (v | 0), 16777619) + 0x9e3779b9) | 0; }
 function pfcStr(h, s) { for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h | 0; }
-function pfcCam() { return pfcMix(pfcMix(pfcMix(pfcMix(CX, CY), Math.round(AQ * 1e4)), Math.round(RS * 100)), W * 4099 + H); }
-// v5 拖动: layers are PFC_M px bigger than the screen on every side and remember the camera (CX, CY: whole pixels) they were drawn
-// for; a pan inside the margin only moves the blit. Past half the margin a replacement is drawn in the background, a few items per
-// frame (a "job"), and swapped in when done, so a drag never rebuilds a whole layer in one frame unless it outruns the margin.
-const PFC_M = 64; // v6: was 128 (2.5x the screen's pixels per layer at 309x651; 64 is 1.7x)
-let PFC_S2 = null, PFC_O2 = null, PFC_SJ = null, PFC_OJ = null, PFC_POSE = 0;
-function pfcCamR() { return pfcMix(pfcMix(Math.round(AQ * 1e4), Math.round(RS * 100)), W * 4099 + H); }
-function pfcLayer(L) {
-  const w = W + 2 * PFC_M, h = H + 2 * PFC_M;
-  if (L && L.c.width === w && L.c.height === h) return L;
-  const c = (L && L.c) || mk(w, h); c.width = w; c.height = h; const g = c.getContext('2d'); g.imageSmoothingEnabled = false;
-  return { c, g, h: null, boxes: null, cx: 0, cy: 0 };
-}
-function pfcNear(L) { return !!L && Math.abs(CX - L.cx) <= PFC_M && Math.abs(CY - L.cy) <= PFC_M; }
-function pfcFar(L) { return Math.abs(CX - L.cx) > PFC_M / 2 || Math.abs(CY - L.cy) > PFC_M / 2; }
-let PFC_LX = 0, PFC_LY = 0, PFC_V = 0, PFC_VF = -1;
-function pfcChunk(F, J, min) { // enough items per frame to finish before the shown layer F runs out of margin at the current pan speed
-  if (PFC_VF !== realT) { PFC_VF = realT; PFC_V = Math.max(Math.abs(CX - PFC_LX), Math.abs(CY - PFC_LY)); PFC_LX = CX; PFC_LY = CY; }
-  const left = PFC_M - Math.max(Math.abs(CX - F.cx), Math.abs(CY - F.cy)), frames = Math.max(1, Math.floor(left / Math.max(1, PFC_V)) - 1);
-  return Math.max(min, Math.ceil((J.items.length - J.i) / frames)); }
-function pfcJobStart(L, sel, h, raw) { L.g.setTransform(1, 0, 0, 1, 0, 0); L.g.clearRect(0, 0, L.c.width, L.c.height); L.h = null;
-  return { L, items: sel.items, keys: sel.keys, sig: sel.sig, i: 0, h: h === null ? sel.h : h, cx: CX, cy: CY, cam: pfcCamR(), raw, boxes: new Array(sel.items.length * 4) }; }
-function pfcRecDraw(g, J, dx, dy) { J.raw(pfcRec(g), J.items[J.i]); const B = J.boxes, b = J.i * 4; // every item's box is kept (layer camera's screen space) for patches
-  if (PFR.bad) { PFC_ST.badStatic++; B[b] = -1e9; B[b + 1] = -1e9; B[b + 2] = 1e9; B[b + 3] = 1e9; }
-  else { B[b] = PFR.x0 - dx; B[b + 1] = PFR.y0 - dy; B[b + 2] = PFR.x1 - dx; B[b + 3] = PFR.y1 - dy; } }
-function pfcJobRun(J, n) { // up to n more items, placed for the camera the job started at (the layer's own origin)
-  const g = J.L.g, dx = CX - J.cx, dy = CY - J.cy, end = Math.min(J.items.length, J.i + n);
-  g.setTransform(1, 0, 0, 1, PFC_M - dx, PFC_M - dy);
-  for (; J.i < end; J.i++) pfcRecDraw(g, J, dx, dy);
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  return J.i >= J.items.length;
-}
-function pfcJobDone(J) { const L = J.L; L.h = J.h; L.cx = J.cx; L.cy = J.cy; L.boxes = J.boxes; L.sig = J.sig; L.keys = J.keys; L.kmap = null; L.camR = J.cam; L.items = J.items; return L; }
 const PFR = { x0: 0, y0: 0, x1: 0, y1: 0, bad: false, t: null, p: null, m: [1, 0, 0, 1, 0, 0], stack: [] };
 function pfcPt(x, y) { const m = PFR.m, X = m[0] * x + m[2] * y + m[4], Y = m[1] * x + m[3] * y + m[5];
   if (X < PFR.x0) PFR.x0 = X; if (Y < PFR.y0) PFR.y0 = Y; if (X > PFR.x1) PFR.x1 = X; if (Y > PFR.y1) PFR.y1 = Y; }
@@ -73,69 +40,109 @@ function pfcRec(target) { // forwards to target, records the screen box of what 
     set(_, k, v) { PFR.t[k] = v; return true; } });
   return PFR.p;
 }
-function pfcSoilItems(cx0, cy0) { // tilled tiles and decals (not the bobbing lilies) under a layer drawn for camera (cx0, cy0); pan-free keys
-  const items = [], keys = [], sig = [], M = PFC_M, ox = cx0 - CX, oy = cy0 - CY, allTiles = HT.length ? tiles.concat(HT) : tiles;
-  for (const t of allTiles) { if (!(t.tilled || t.crop)) continue; const p = proj(t.x, t.y), sx = p[0] + ox, sy = p[1] + oy;
-    if (sx > -20 - M && sx < W + 20 + M && sy > -20 - M && sy < H + 110 + M) { items.push({ tile: t }); keys.push(pfcId(t)); sig.push(t.watered ? 1 : 0, Math.round(p[0]) - CX, Math.round(p[1]) - CY); } }
-  for (const d of decals) { if (d.lily !== undefined) continue; const p = proj(d.x, d.y), sx = p[0] + ox, sy = p[1] + oy;
-    if (sx < -8 - M || sx > W + 8 + M || sy < -4 - M || sy > H + 12 + M) continue; items.push(d); keys.push(-pfcId(d)); sig.push(pfcId(d.c), Math.round(p[0]) - CX, Math.round(p[1]) - CY); }
-  return { items, keys, sig };
+// v7 块: the cached layers are fixed 256 px chunks on the camera-free picture plane (screen position minus the camera), so a pan
+// only moves where they are blitted. A chunk is built when it comes near the screen (a few draws a frame; all at once only when it
+// is already on screen), kept until the camera turns or zooms (least recently used past PFK_MAXC), and patched where something in
+// it changes: the old and new boxes of what changed are cleared and everything under them redrawn in order, clipped to the box.
+const PFK_S = 256, PFK_MAXC = 32, PFK_RING = 128, PFK_PAD = 188; // PFK_PAD: the object list's extra reach (onScreen)
+let PFK_POOL = [], PFK_SPENT = 0, PFK_BUDGET = 40, PFK_LX = 0, PFK_LY = 0, PFC_PG = null, PFC_POSE = 0, PFC_CAND = new Int32Array(0), PFC_KIND = new Uint8Array(0);
+function pfcCamR() { return pfcMix(pfcMix(Math.round(AQ * 1e4), Math.round(RS * 100)), W * 4099 + H); }
+function pfkLayer(raw, name, st) { return { ch: new Map(), camR: null, bx: new Map(), use: 0, raw, name, st, lists: [], hs: new Int32Array(0) }; }
+function pfkFrame() { return { n: 0, key: new Int32Array(512), sub: new Int32Array(512), rx: new Int32Array(512), ry: new Int32Array(512), li: new Int32Array(512), d: new Float64Array(512), it: [] }; }
+function pfkPush(F, key, sub, rx, ry, d, it, li) {
+  if (F.n >= F.key.length) for (const f of ['key', 'sub', 'rx', 'ry', 'li', 'd']) { const a = F[f], b = new a.constructor(a.length * 2); b.set(a); F[f] = b; }
+  const n = F.n++; F.key[n] = key; F.sub[n] = sub; F.rx[n] = rx; F.ry[n] = ry; F.d[n] = d; F.li[n] = li; F.it[n] = it; }
+function pfkRecBox() { return PFR.bad ? [-1e9, -1e9, 1e9, 1e9] : [PFR.x0 - CX, PFR.y0 - CY, PFR.x1 - CX, PFR.y1 - CY]; }
+function pfkKeep(Ly, k, sub, rx, ry, b) { if (Ly.bx.size > 60000) Ly.bx.clear(); Ly.bx.set(k, { sub, rx, ry, b }); }
+function pfkCached(Ly, k, sub, rx, ry) { const c = Ly.bx.get(k); return c && c.sub === sub && c.rx === rx && c.ry === ry ? c.b : null; }
+function pfkBox(Ly, k, sub, rx, ry, it) { // an item's box on the picture plane, kept while its look and spot stay the same
+  const c = pfkCached(Ly, k, sub, rx, ry); if (c) return c;
+  if (!PFC_PG) PFC_PG = mk(1, 1).getContext('2d'); PFC_PG.setTransform(1, 0, 0, 1, 0, 0); Ly.raw(pfcRec(PFC_PG), it); PFC_ST.probe++; PFK_SPENT++;
+  const b = pfkRecBox(); pfkKeep(Ly, k, sub, rx, ry, b); return b; }
+function pfkHit(b, x0, y0, x1, y1) { return b[0] < x1 && x0 < b[2] && b[1] < y1 && y0 < b[3]; }
+function pfkChunk(i, j) { const c = PFK_POOL.pop() || mk(PFK_S, PFK_S), g = c.getContext('2d'); g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, PFK_S, PFK_S); g.imageSmoothingEnabled = false; PFC_ST.chunkBuild++;
+  return { i, j, c, g, rec: null, todo: null, ti: 0, kmap: null, fh: 0, use: 0 }; }
+function pfkFree(C) { if (PFK_POOL.length < 12) PFK_POOL.push(C.c); else C.c.width = C.c.height = 0; }
+function pfkStep(Ly, C, n) { // up to n more draws of a new chunk (placed for the camera now: the plane does not move with it)
+  const S = PFK_S, x0 = C.i * S, y0 = C.j * S, g = C.g; let done = 0;
+  g.setTransform(1, 0, 0, 1, -x0 - CX, -y0 - CY);
+  for (; C.ti < C.todo.length && done < n; C.ti++) { const e = C.todo[C.ti], b = pfkCached(Ly, e.k, e.sub, e.rx, e.ry);
+    if (b) { e.b = b; if (!pfkHit(b, x0, y0, x0 + S, y0 + S)) continue; Ly.raw(g, e.it); }
+    else { Ly.raw(pfcRec(g), e.it); e.b = pfkRecBox(); pfkKeep(Ly, e.k, e.sub, e.rx, e.ry, e.b); }
+    done++; }
+  g.setTransform(1, 0, 0, 1, 0, 0); PFK_SPENT += done; PFC_ST.chunkDraws += done;
+  if (C.ti < C.todo.length) return false;
+  C.rec = C.todo; C.todo = null; C.kmap = null; PFC_ST[Ly.st[0]]++; return true; }
+function pfkPatch(Ly, C, F, qs, G) { // a built chunk brought up to date with this frame's items in its window (G: where F is complete)
+  const rec = C.rec; if (!C.kmap) { C.kmap = new Map(); for (let n = 0; n < rec.length; n++) C.kmap.set(rec[n].k, n); }
+  const seen = new Uint8Array(rec.length), R = [], add = []; let gone = 0, why = '', resort = false;
+  for (let t = 0; t < qs.length; t++) { const q = qs[t], k = F.key[q], n = C.kmap.get(k);
+    if (n !== undefined && !seen[n]) { seen[n] = 1; const e = rec[n]; e.it = F.it[q];
+      if (e.sub === F.sub[q] && e.rx === F.rx[q] && e.ry === F.ry[q]) continue;
+      if (!why) why = (e.sub !== F.sub[q] ? 'look:' : 'pos:') + Ly.name(e.it);
+      R.push(e.b); e.sub = F.sub[q]; e.rx = F.rx[q]; e.ry = F.ry[q]; if (e.d !== F.d[q]) { e.d = F.d[q]; resort = true; }
+      e.b = pfkBox(Ly, k, e.sub, e.rx, e.ry, e.it); R.push(e.b); continue; }
+    const e = { k, sub: F.sub[q], rx: F.rx[q], ry: F.ry[q], d: F.d[q], it: F.it[q], b: null }; e.b = pfkBox(Ly, k, e.sub, e.rx, e.ry, e.it);
+    if (!why) why = 'add:' + Ly.name(e.it); add.push(e); R.push(e.b); }
+  for (let n = 0; n < rec.length; n++) if (!seen[n]) { const e = rec[n];
+    if (G && !(e.rx > G[0] && e.rx < G[2] && e.ry > G[1] && e.ry < G[3])) { seen[n] = 2; continue; } // outside the known area: kept
+    if (!why) why = 'gone:' + Ly.name(e.it); R.push(e.b); gone++; }
+  if (add.length || gone) { const out = []; for (let n = 0; n < rec.length; n++) if (seen[n]) out.push(rec[n]); for (const e of add) out.push(e); C.rec = out; resort = true; }
+  if (resort) C.rec.sort((a, b) => a.d - b.d || a.k - b.k); C.kmap = null;
+  const S = PFK_S, X0 = C.i * S, Y0 = C.j * S, X1 = X0 + S, Y1 = Y0 + S, g = C.g; let rs = [];
+  for (const b of R) { if (!(b[2] > b[0]) || !pfkHit(b, X0, Y0, X1, Y1)) continue; if (b[2] - b[0] > S * 4) { rs = [[X0, Y0, X1, Y1]]; break; } rs.push(b); }
+  if (rs.length > 24) rs = [[X0, Y0, X1, Y1]];
+  if (!rs.length) return;
+  let nd = 0;
+  for (const b of rs) { const x0 = Math.max(X0, Math.floor(b[0]) - 1), y0 = Math.max(Y0, Math.floor(b[1]) - 1), x1 = Math.min(X1, Math.ceil(b[2]) + 1), y1 = Math.min(Y1, Math.ceil(b[3]) + 1);
+    g.save(); g.setTransform(1, 0, 0, 1, -X0, -Y0); g.clearRect(x0, y0, x1 - x0, y1 - y0); g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip(); g.translate(-CX, -CY);
+    for (const e of C.rec) if (pfkHit(e.b, x0, y0, x1, y1)) { Ly.raw(g, e.it); nd++; }
+    g.restore(); }
+  g.setTransform(1, 0, 0, 1, 0, 0); PFC_ST.patch++; PFC_ST.patchDraws += nd; PFK_SPENT += nd; if (why) PFC_ST[Ly.st[2]] = why;
 }
+function pfkRun(Ly, F, G) { // F: this frame's statics (picture-plane anchors); G: the plane area where F is complete (null: all of it)
+  const S = PFK_S, camR = pfcCamR(); if (PFK_FR !== realT) { PFK_FR = realT; PFK_SPENT = 0; // chunk-building draws per frame grow with the pan speed (~5 per px)
+    PFK_BUDGET = 40 + 5 * Math.min(40, Math.max(Math.abs(CX - PFK_LX), Math.abs(CY - PFK_LY))); PFK_LX = CX; PFK_LY = CY; }
+  if (Ly.camR !== camR) { for (const C of Ly.ch.values()) pfkFree(C); Ly.ch.clear(); Ly.bx.clear(); if (Ly.camR !== null) PFC_ST[Ly.st[3]] = 'cam(angle/zoom/size)'; Ly.camR = camR; PFC_ST.chunkReset++; }
+  const use = ++Ly.use, X0 = -CX, Y0 = -CY, X1 = W - CX, Y1 = H - CY, RG = PFK_RING;
+  const vi0 = Math.floor(X0 / S), vi1 = Math.floor((X1 - 1) / S), vj0 = Math.floor(Y0 / S), vj1 = Math.floor((Y1 - 1) / S);
+  const ri0 = Math.floor((X0 - RG) / S), ri1 = Math.floor((X1 + RG - 1) / S), rj0 = Math.floor((Y0 - RG) / S), rj1 = Math.floor((Y1 + RG - 1) / S);
+  const nI = ri1 - ri0 + 1, nC = nI * (rj1 - rj0 + 1), lists = Ly.lists;
+  for (let c = 0; c < nC; c++) { if (!lists[c]) lists[c] = []; else lists[c].length = 0; }
+  if (Ly.hs.length < nC) Ly.hs = new Int32Array(nC * 2); const hs = Ly.hs; hs.fill(0, 0, nC);
+  for (let q = 0; q < F.n; q++) { const x = F.rx[q], y = F.ry[q]; // a chunk's window: things standing up to 80 px left/right/above it, 170 below (tall ones)
+    let i0 = Math.floor((x - 80) / S), i1 = Math.floor((x + 80) / S), j0 = Math.floor((y - 170) / S), j1 = Math.floor((y + 80) / S);
+    if (i0 < ri0) i0 = ri0; if (i1 > ri1) i1 = ri1; if (j0 < rj0) j0 = rj0; if (j1 > rj1) j1 = rj1;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const c = (j - rj0) * nI + (i - ri0); lists[c].push(q); hs[c] = pfcMix(pfcMix(pfcMix(pfcMix(hs[c], F.key[q]), F.sub[q]), x), y); } }
+  const vis = [];
+  for (let j = rj0; j <= rj1; j++) for (let i = ri0; i <= ri1; i++) { const c = (j - rj0) * nI + (i - ri0), ck = (i + 32768) * 65536 + (j + 32768), on = i >= vi0 && i <= vi1 && j >= vj0 && j <= vj1;
+    let C = Ly.ch.get(ck);
+    if (!C) { if (!on && PFK_SPENT >= PFK_BUDGET) continue;
+      if (Ly.ch.size >= PFK_MAXC) { let ok = -1, ou = 1e18; for (const [k2, C2] of Ly.ch) if (C2.use !== use && C2.use < ou) { ou = C2.use; ok = k2; } // the least recently used gives up its canvas
+        if (ok !== -1) { pfkFree(Ly.ch.get(ok)); Ly.ch.delete(ok); } }
+      C = pfkChunk(i, j); const L = lists[c];
+      C.todo = L.map(q => ({ k: F.key[q], sub: F.sub[q], rx: F.rx[q], ry: F.ry[q], d: F.d[q], it: F.it[q], b: null })); C.fh = hs[c]; Ly.ch.set(ck, C); }
+    C.use = use;
+    if (C.todo) { const left = C.todo.length - C.ti; if (!pfkStep(Ly, C, on ? 1e9 : Math.max(0, PFK_BUDGET - PFK_SPENT))) continue; if (on && left > 8) PFC_ST[Ly.st[1]]++; }
+    if (C.fh !== hs[c]) { pfkPatch(Ly, C, F, lists[c], G); C.fh = hs[c]; }
+    if (on) vis.push(C); }
+  return vis;
+}
+function pfkBlit(vis) { for (const C of vis) ctx.drawImage(C.c, C.i * PFK_S + CX, C.j * PFK_S + CY); }
 function pfcSoilDraw(g, it) {
   if (!it.tile) { const [sx, sy] = proj(it.x, it.y); g.drawImage(it.c, Math.round(sx) - (it.c.width >> 1), Math.round(sy) - it.c.height + 1 + (it.bob || 0)); }
   else drawStack(g, models.soil[it.tile.watered ? 1 : 0], it.tile.x, it.tile.y, 0, 0);
 }
 function pfcSoilName(it) { return it.tile ? 'tile' + (it.tile.watered ? '(wet)' : '') : 'decal'; }
-// v6: a few things that changed (a tile watered, a crop grown, a decal added) are patched into the shown layer: their old and new
-// boxes are cleared and every static under them redrawn in order, clipped to the box. Only many changes rebuild the whole layer.
-let PFC_PG = null, PFC_PW = '';
-function pfcProbe(raw, it, dx, dy, B, b) { // the box (layer coordinates) of one item, drawn into a 1x1 scratch canvas
-  if (!PFC_PG) PFC_PG = mk(1, 1).getContext('2d');
-  PFC_PG.setTransform(1, 0, 0, 1, 0, 0); raw(pfcRec(PFC_PG), it);
-  if (PFR.bad) { B[b] = -1e9; B[b + 1] = -1e9; B[b + 2] = 1e9; B[b + 3] = 1e9; }
-  else { B[b] = PFR.x0 - dx; B[b + 1] = PFR.y0 - dy; B[b + 2] = PFR.x1 - dx; B[b + 3] = PFR.y1 - dy; } }
-function pfcPatch(L, sel, raw, name) { // false: too much changed (PFC_PW: the first change, for the panel)
-  if (!L.kmap) { L.kmap = new Map(); for (let q = 0; q < L.keys.length; q++) L.kmap.set(L.keys[q], q); }
-  const n = sel.keys.length, B = new Array(n * 4), OB = L.boxes, R = [], seen = new Uint8Array(L.keys.length), dx = CX - L.cx, dy = CY - L.cy, a = L.sig, s = sel.sig;
-  let first = '', ok = true;
-  for (let q = 0; q < n; q++) { const o = L.kmap.get(sel.keys[q]), b = q * 4;
-    if (o !== undefined && !seen[o]) { seen[o] = 1;
-      if (a[o * 3] === s[q * 3] && a[o * 3 + 1] === s[q * 3 + 1] && a[o * 3 + 2] === s[q * 3 + 2]) { B[b] = OB[o * 4]; B[b + 1] = OB[o * 4 + 1]; B[b + 2] = OB[o * 4 + 2]; B[b + 3] = OB[o * 4 + 3]; continue; }
-      R.push(OB[o * 4], OB[o * 4 + 1], OB[o * 4 + 2], OB[o * 4 + 3]); if (!first) first = (a[o * 3] !== s[q * 3] ? 'look:' : 'pos:') + name(sel.items[q]); }
-    else if (!first) first = 'add:' + name(sel.items[q]);
-    if (R.length > 96) { ok = false; break; }
-    pfcProbe(raw, sel.items[q], dx, dy, B, b); R.push(B[b], B[b + 1], B[b + 2], B[b + 3]); }
-  if (ok) for (let o = 0; o < L.keys.length; o++) if (!seen[o]) { R.push(OB[o * 4], OB[o * 4 + 1], OB[o * 4 + 2], OB[o * 4 + 3]); if (!first) first = 'gone:' + name(L.items[o]); }
-  PFC_PW = first || 'order';
-  if (!ok || R.length > 96) return false;
-  for (let r = 0; r < R.length; r += 4) if (R[r + 2] - R[r] > W || R[r + 3] - R[r + 1] > H) return false; // a box of unknown extent
-  const g = L.g; let nd = 0;
-  for (let r = 0; r < R.length; r += 4) { if (!(R[r + 2] > R[r] && R[r + 3] > R[r + 1])) continue; // drew nothing
-    const x0 = Math.floor(R[r]) - 1, y0 = Math.floor(R[r + 1]) - 1, x1 = Math.ceil(R[r + 2]) + 1, y1 = Math.ceil(R[r + 3]) + 1;
-    g.save(); g.setTransform(1, 0, 0, 1, PFC_M, PFC_M); g.clearRect(x0, y0, x1 - x0, y1 - y0); g.beginPath(); g.rect(x0, y0, x1 - x0, y1 - y0); g.clip(); g.translate(-dx, -dy);
-    for (let q = 0; q < n; q++) { const b = q * 4; if (B[b] < x1 && x0 < B[b + 2] && B[b + 1] < y1 && y0 < B[b + 3]) { raw(g, sel.items[q]); nd++; } }
-    g.restore(); }
-  g.setTransform(1, 0, 0, 1, 0, 0);
-  L.boxes = B; L.keys = sel.keys; L.sig = sel.sig; L.items = sel.items; L.h = sel.h; L.kmap = null; PFC_ST.patch++; PFC_ST.patchDraws += nd;
-  return true;
-}
-function pfcSoil(allTiles) {
-  const camR = pfcCamR(); let h = camR; // pan-free key: the tiles' state, not where they are on screen
-  for (let i = 0; i < allTiles.length; i++) { const t = allTiles[i]; if (t.tilled || t.crop) h = pfcMix(h, i * 2 + (t.watered ? 1 : 0)); }
-  h = pfcMix(h, decals.length);
-  h = pfcMix(pfcMix(h, pfcId(models.soil[0])), pfcId(models.soil[1]));
-  const swap = J => { PFC_S2 = PFC_S; PFC_S = pfcJobDone(J); PFC_SJ = null; PFC_ST.soilBuild++; };
-  const start = () => pfcJobStart(PFC_S2 = pfcLayer(PFC_S2), pfcSoilItems(CX, CY), h, pfcSoilDraw);
-  const fit = () => { if (PFC_S.h === h) return true; const s = pfcSoilItems(PFC_S.cx, PFC_S.cy); s.h = h;
-    if (pfcPatch(PFC_S, s, pfcSoilDraw, pfcSoilName)) { PFC_ST.soilPatchWhy = PFC_PW; return true; } return false; };
-  const full = why => { PFC_SJ = start(); pfcJobRun(PFC_SJ, 1e9); swap(PFC_SJ); PFC_ST.soilSync++; PFC_ST.soilWhy = why; };
-  if (PFC_SJ && (PFC_SJ.cam !== camR || !pfcNear(PFC_SJ))) PFC_SJ = null;
-  if (!(PFC_S && PFC_S.camR === camR && pfcNear(PFC_S) && fit())) { // the shown layer no longer fits: finish the background one, or draw now
-    const why = !PFC_S ? 'first' : PFC_S.camR !== camR ? 'cam(angle/zoom/size)' : !pfcNear(PFC_S) ? 'pan>margin' : 'many:' + PFC_PW;
-    if (PFC_SJ) { pfcJobRun(PFC_SJ, 1e9); swap(PFC_SJ); PFC_ST.soilSync++; PFC_ST.soilWhy = why; if (!fit()) full('many:' + PFC_PW); } else full(why);
-  } else if (PFC_SJ) { if (pfcJobRun(PFC_SJ, pfcChunk(PFC_S, PFC_SJ, 40))) { swap(PFC_SJ); if (!fit()) full('many:' + PFC_PW); } }
-  else if (pfcFar(PFC_S)) { PFC_SJ = start(); PFC_ST.soilWhy = 'pan'; }
-  ctx.drawImage(PFC_S.c, CX - PFC_S.cx - PFC_M, CY - PFC_S.cy - PFC_M);
+const PFK_SL = pfkLayer(pfcSoilDraw, pfcSoilName, ['soilBuild', 'soilSync', 'soilPatchWhy', 'soilWhy']), PFK_SF = pfkFrame();
+function pfkSoil(allTiles) { // tilled tiles and decals (not the bobbing lilies), on the plane area the chunks around the screen can need
+  const F = PFK_SF, cs = CA * RS, sn = SA * RS, S = PFK_S; F.n = 0; let d = 0;
+  const x0 = Math.floor((-CX - PFK_RING) / S) * S - 80, x1 = (Math.floor((W - CX + PFK_RING - 1) / S) + 1) * S + 80, y0 = Math.floor((-CY - PFK_RING) / S) * S - 80, y1 = (Math.floor((H - CY + PFK_RING - 1) / S) + 1) * S + 170;
+  for (const t of allTiles) { d++; if (!(t.tilled || t.crop)) continue; const rx = Math.round(t.x * cs - t.y * sn), ry = Math.round((t.x * sn + t.y * cs) * K);
+    if (rx < x0 || rx > x1 || ry < y0 || ry > y1) continue; pfkPush(F, pfcId(t), t.watered ? 1 : 0, rx, ry, d, t.__pfkIt || (t.__pfkIt = { tile: t }), 0); }
+  for (const dc of decals) { d++; if (dc.lily !== undefined) continue; const rx = Math.round(dc.x * cs - dc.y * sn), ry = Math.round((dc.x * sn + dc.y * cs) * K);
+    if (rx < x0 || rx > x1 || ry < y0 || ry > y1) continue; pfkPush(F, -pfcId(dc), pfcMix(pfcId(dc.c), dc.bob || 0), rx, ry, d, dc, 0); }
+  pfkBlit(pfkRun(PFK_SL, F, null));
 ${lilies}
 }
 function pfcDrawOne(c, o, poseT) {
@@ -146,13 +153,24 @@ function pfcDrawOne(c, o, poseT) {
   if (o.spr) { drawSpr(c, o, poseT); return; }
   drawStack(c, o.m, o.x, o.y, o.z || 0, o.rot || 0);
 }
+// v7: at 低 stack angles snap to the 256 camera steps (debris and yard clutter had random angles, vehicles turn smoothly), so the
+// per-angle pictures are shared and stop being made while the farm just sits there; panel: which models still make new ones
+function pfcQ(a) { return ((Math.round(a / ASTEP) % 256 + 256) % 256) * ASTEP; }
+function pfcStkNew(m) { const S = PFC_ST, k = m.w + 'x' + m.d + 'x' + m.h; S.stkNew++; S.stkWho[k] = (S.stkWho[k] || 0) + 1; }
 function pfcObjRaw(g, o) { pfcDrawOne(g, o, PFC_POSE); }
 function pfcObjName(o) { return o.tree ? 'tree' : o.ci !== undefined ? 'crop' : o.spr ? 'spr' + o.spr.width + 'x' + o.spr.height : o.m ? 'stack' + o.m.w + 'x' + o.m.d + 'x' + o.m.h : '?'; }
+const PFK_OL = pfkLayer((g, o) => pfcDrawOne(g, o, PFC_POSE), pfcObjName, ['objBuild', 'objSync', 'objPatchWhy', 'objWhy']), PFK_OF = pfkFrame();
 function pfcObjects(list, poseT) { // statics composed once into a layer; each moving thing is drawn over it, then the statics in front of it
   const ns = !!window.__noSway; PFC_F++; PFC_POSE = poseT; // that it overlaps are drawn again, so the stacking order stays the same
   if (PFC_HOT.size > 4000) PFC_HOT.clear();
-  const cand = [], kind = new Uint8Array(list.length); // kind: 0 moving, 1 static
-  for (let i = 0; i < list.length; i++) { const o = list[i];
+  // v7: no allocation per item (an interpreter-only JS engine pays for every array and boxed number): reused typed arrays, an
+  // integer hot key, the projection inlined
+  const nl = list.length; if (PFC_KIND.length < nl) PFC_KIND = new Uint8Array(nl * 2);
+  const kind = PFC_KIND, F = PFK_OF; kind.fill(0, 0, nl); F.n = 0; // kind: 0 moving, 1 static (in the chunks)
+  const cs = CA * RS, sn = SA * RS, ks = K * RS;
+  const prof = PFC_F % 30 === 0, PT = prof ? (PFC_ST.scanProf = { tree: 0, crop: 0, spr: 0, stack: 0, hot: 0, n: 0 }) : null; let t0 = 0, t1 = 0; // panel: where the scan's time goes (1 frame in 30)
+  for (let i = 0; i < nl; i++) { const o = list[i];
+    if (prof) t0 = performance.now();
     if (o.rain || o.bb || o.partyKey || (o.spr && o.w && !o.sway) || (o.ci !== undefined && o.glow) || (!ns && (o.tree || o.ci !== undefined || (o.spr && o.sway)))) continue;
     let sub;
     if (o.tree) { // frozen pose and no lean: the tree's cached look cannot change, so skip re-keying it (the key string is costly)
@@ -161,63 +179,44 @@ function pfcObjects(list, poseT) { // statics composed once into a layer; each m
       else { const k = treeCache(o, treePoseT(o)); sub = k.__pfcH = pfcStr(pfcId(k), k.key); k.__pfcKey = k.key; k.__pfcStill = still; } }
     else if (o.ci !== undefined) sub = 9e5 + o.ci * 4 + (o.giant ? 2 : 0) + (o.flip ? 1 : 0);
     else if (o.spr) sub = pfcMix(pfcId(o.spr), (o.lift || 0) * 64 + (o.sway ? 7 : 0));
-    else { const a = AQ + (o.rot || 0), k = (o.m._ck && o.m._ck.get(a)) || stackCanvas(o.m, a); sub = pfcMix(pfcId(k), Math.round(o.z || 0)); } // no LRU touch per frame
+    else { const a = ns ? pfcQ(AQ + (o.rot || 0)) : AQ + (o.rot || 0), k = (o.m._ck && o.m._ck.get(a)) || stackCanvas(o.m, a); sub = pfcMix(pfcId(k), Math.round(o.z || 0)); } // no LRU touch per frame
     // a thing whose look changes once (a crop grows) is patched into the layer; one that keeps changing (a tree being shaken or
-    // chopped, an animated sign) is drawn as moving for a while instead
-    const key = (o.tree ? 1 : o.spr ? 2 : o.ci !== undefined ? 3 : 4) * 1e11 + (Math.round(o.x * 4) + 50000) * 1e5 + Math.round(o.y * 4) + 50000 + ((o.z | 0) & 255) / 512;
+    // chopped, an animated sign) is drawn as moving for a while instead. Key: kind, half-unit spot, height (30 bits: a small int)
+    if (prof) { t1 = performance.now(); PT[o.tree ? 'tree' : o.ci !== undefined ? 'crop' : o.spr ? 'spr' : 'stack'] += t1 - t0; PT.n++; }
+    const key = ((((o.tree ? 1 : o.spr ? 2 : o.ci !== undefined ? 3 : 0) * 4096 + ((Math.round(o.x * 2) + 1024) & 4095)) * 4096 + ((Math.round(o.y * 2) + 1024) & 4095)) * 8 + ((o.z | 0) & 7)) | 0;
     const e = PFC_HOT.get(key); if (!e) PFC_HOT.set(key, { h: sub, hot: 0, chg: -1e9 }); else if (e.h !== sub) { e.h = sub; if (PFC_F - e.chg < 45) e.hot = PFC_F + 45; e.chg = PFC_F; }
+    if (prof) PT.hot += performance.now() - t1;
     if (e && e.hot > PFC_F) continue;
-    const p = proj(o.x, o.y); kind[i] = 1; cand.push(i, sub, Math.round(p[0]) - CX, Math.round(p[1]) - CY, key); }
-  const camR = pfcCamR(), M = PFC_M;
-  const pick = (cx0, cy0) => { // the statics under a layer drawn for camera (cx0, cy0), and a pan-free key of them
-    const st = [], keys = [], sig = []; let h = camR;
-    for (let k = 0; k < cand.length; k += 5) { const x = cand[k + 2] + cx0, y = cand[k + 3] + cy0;
-      if (x < -M - 80 || x > W + M + 80 || y < -M - 80 || y > H + M + 170) continue;
-      st.push(cand[k]); keys.push(cand[k + 4]); sig.push(cand[k + 1], cand[k + 2], cand[k + 3]); h = pfcMix(pfcMix(pfcMix(h, cand[k + 2]), cand[k + 3]), cand[k + 1]); }
-    return { st, keys, sig, h: pfcMix(h, st.length), items: null }; };
-  const withItems = s => { s.items = s.st.map(i => list[i]); return s; };
-  const swap = J => { PFC_O2 = PFC_O; PFC_O = pfcJobDone(J); PFC_OJ = null; PFC_ST.objBuild++; };
-  const start = () => pfcJobStart(PFC_O2 = pfcLayer(PFC_O2), withItems(pick(CX, CY)), null, pfcObjRaw);
-  const fit = () => { const s = pick(PFC_O.cx, PFC_O.cy); if (s.h === PFC_O.h) return s;
-    if (pfcPatch(PFC_O, withItems(s), pfcObjRaw, pfcObjName)) { PFC_ST.objPatchWhy = PFC_PW; return s; } return null; };
-  const full = why => { PFC_OJ = start(); PFC_ST.badStatic = 0; pfcJobRun(PFC_OJ, 1e9); swap(PFC_OJ); PFC_ST.objSync++; PFC_ST.objWhy = why; return pick(PFC_O.cx, PFC_O.cy); };
-  if (PFC_OJ && (PFC_OJ.cam !== camR || !pfcNear(PFC_OJ))) PFC_OJ = null; // a changed item no longer drops the job: it is patched after the swap
-  const near = PFC_O && PFC_O.camR === camR && pfcNear(PFC_O);
-  const s0 = near ? pick(PFC_O.cx, PFC_O.cy) : null;
-  tick('o.hash');
-  let sel = s0 && s0.h === PFC_O.h ? s0 : near ? fit() : null;
-  if (!sel) { // the shown layer no longer fits: finish the background one, or draw it now
-    const why = !PFC_O ? 'first' : PFC_O.camR !== camR ? 'cam(angle/zoom/size)' : !near ? 'pan>margin' : 'many:' + PFC_PW;
-    if (PFC_OJ) { pfcJobRun(PFC_OJ, 1e9); swap(PFC_OJ); PFC_ST.objSync++; PFC_ST.objWhy = why; sel = fit() || full('many:' + PFC_PW); } else sel = full(why);
-  } else if (PFC_OJ) { if (pfcJobRun(PFC_OJ, pfcChunk(PFC_O, PFC_OJ, 30))) { swap(PFC_OJ); sel = fit() || full('many:' + PFC_PW); } }
-  else if (pfcFar(PFC_O)) { PFC_OJ = start(); PFC_ST.objWhy = 'pan'; }
-  const st = sel.st, ox = CX - PFC_O.cx, oy = CY - PFC_O.cy;
-  tick('o.build');
-  ctx.drawImage(PFC_O.c, ox - M, oy - M); tick('o.cache');
-  const B = PFC_O.boxes; let j = 0, dyn = 0, redraw = 0;
-  for (let i = 0; i < list.length; i++) {
-    if (j < st.length && st[j] === i) { j++; continue; }
-    if (kind[i]) continue; // a static outside the layer's area: off screen
-    const o = list[i]; { const p = proj(o.x, o.y); if (p[0] < -100 || p[0] > W + 100 || p[1] < -100 || p[1] > H + 190) continue; } // the list reaches past the screen for the layer margin
+    kind[i] = 1; pfkPush(F, key, sub, Math.round(o.x * cs - o.y * sn), Math.round((o.x * sn + o.y * cs) * K), o.depth, o, i); }
+  tick('o.scan');
+  // the list reaches PFK_PAD past the screen (every static's own onScreen pad is at least 30): there it is complete
+  const gp = PFK_PAD + 29, vis = pfkRun(PFK_OL, F, [-CX - gp, -CY - gp, W - CX + gp, H - CY + gp + 90]); tick('o.build');
+  pfkBlit(vis); tick('o.cache');
+  let fi = 0, dyn = 0, redraw = 0;
+  for (let i = 0; i < nl; i++) { if (kind[i]) continue;
+    const o = list[i]; { const p = proj(o.x, o.y); if (p[0] < -100 || p[0] > W + 100 || p[1] < -100 || p[1] > H + 190) continue; } // the list reaches past the screen
+    while (fi < F.n && F.li[fi] < i) fi++;
     dyn++; pfcDrawOne(pfcRec(ctx), o, poseT);
     if (PFR.x1 < PFR.x0 && !PFR.bad) continue;
-    const bad = PFR.bad, x0 = PFR.x0 - ox, y0 = PFR.y0 - oy, x1 = PFR.x1 - ox, y1 = PFR.y1 - oy;
-    let clipped = false; // redraw only inside the moving thing's box, so statics keep their order among themselves
-    for (let q = j; q < st.length; q++) { const b = q * 4;
-      if (bad || (B[b] < x1 && x0 < B[b + 2] && B[b + 1] < y1 && y0 < B[b + 3])) {
+    const bad = PFR.bad, x0 = PFR.x0 - CX, y0 = PFR.y0 - CY, x1 = PFR.x1 - CX, y1 = PFR.y1 - CY;
+    let clipped = false; // the statics in front of it that it overlaps are drawn again inside its box, so the stacking order stays the same
+    for (let q = fi; q < F.n; q++) { const rx = F.rx[q], ry = F.ry[q];
+      if (!bad && (rx < x0 - 100 || rx > x1 + 100 || ry < y0 - 100 || ry > y1 + 190)) continue;
+      const b = pfkCached(PFK_OL, F.key[q], F.sub[q], rx, ry); if (!b) continue;
+      if (bad || pfkHit(b, x0, y0, x1, y1)) {
         if (!clipped && !bad) { clipped = true; ctx.save(); ctx.beginPath(); ctx.rect(Math.floor(PFR.x0), Math.floor(PFR.y0), Math.ceil(PFR.x1) - Math.floor(PFR.x0), Math.ceil(PFR.y1) - Math.floor(PFR.y0)); ctx.clip(); }
-        pfcDrawOne(ctx, list[st[q]], poseT); redraw++; } }
+        pfcDrawOne(ctx, F.it[q], poseT); redraw++; } }
     if (clipped) ctx.restore(); }
-  tick('o.dyn'); PFC_ST.statics = st.length; PFC_ST.dyn = dyn; PFC_ST.redraw = redraw;
+  tick('o.dyn'); PFC_ST.statics = F.n; PFC_ST.dyn = dyn; PFC_ST.redraw = redraw; PFC_ST.chunks = PFK_OL.ch.size + PFK_SL.ch.size;
 }
 `;
 export const CACHE_PATCHES = [
   // the object list reaches 2 margins (+60) past the screen while the cached layer is on: a layer drawn up to 1 margin away covers
   // 1 margin (+80) around its own screen, and all of that must stay in the list for its key to stay the same
   ['function onScreen(x, y, pad) { const [sx, sy] = proj(x, y); return sx > -pad', 'function onScreen(x, y, pad) { pad += window.__pfcPadX || 0; const [sx, sy] = proj(x, y); return sx > -pad'],
-  ['  const list = [];\n  if (WX && WX.eachDrop)', '  window.__pfcPadX = window.__objCache && !window.__pfcAlbum ? 2 * 64 + 60 : 0; const list = [];\n  if (WX && WX.eachDrop)'],
+  ['  const list = [];\n  if (WX && WX.eachDrop)', '  window.__pfcPadX = window.__objCache && !window.__pfcAlbum ? 188 : 0; const list = [];\n  if (WX && WX.eachDrop)'],
   ['  if (FOG.on && !FOG.empty && !FOG.peek) { let n = 0; for (const o of list)', '  window.__pfcPadX = 0;\n  if (FOG.on && !FOG.empty && !FOG.peek) { let n = 0; for (const o of list)'],
-  [SOIL_A, `  if (window.__soilCache && !window.__pfcAlbum) pfcSoil(allTiles); else {\n${SOIL_A} }`],
+  [SOIL_A, `  if (window.__soilCache && !window.__pfcAlbum) pfkSoil(allTiles); else {\n${SOIL_A} }`],
   ['  for (const o of list) {\n    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }', '  if (window.__objCache && !window.__pfcAlbum) pfcObjects(list, poseT); else for (const o of list) {\n    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }'],
   // the shadow mask is only read by (gpu)applyShadows: skip building it when shadows are off (低)
   ['  for (const o of list) { if (o.flat || o.ci !== undefined) continue; if (o.bb) { bbShadow(sctx, o); continue; }', '  if (night < 0.9 && !window.__trialNoShadow) for (const o of list) { if (o.flat || o.ci !== undefined) continue; if (window.__objCache) { const q = proj(o.x, o.y); if (q[0] < -100 || q[0] > W + 100 || q[1] < -100 || q[1] > H + 190) continue; } if (o.bb) { bbShadow(sctx, o); continue; }'],
@@ -237,15 +236,17 @@ function paintWater(t, box, key) {
   const [bx, by, bw, bh] = box; if (bw <= 0 || bh <= 0) return;
   // the key is relative to the camera, so while the map is dragged the last water is moved along with it instead of recomputed
   const WS = PFW[key] || (PFW[key] = { n: 0, img: null, cam: '' }), cam = (bx - CX) + ',' + (by - CY) + ',' + AQ + ',' + bw + ',' + bh, every = window.__waterEvery || 1, drag = !!window.__dragging;
-  if ((every > 1 || drag) && WS.img && WS.cam === cam && (drag || (++WS.n % every) !== 0)) {
-    const sx = bx - WS.bx, sy = by - WS.by;
-    if (WS.img !== 1) ctx.putImageData(WS.img, bx, by);
+  // v7: while dragging, a pond the screen edge cuts (its box changes every frame) is recomputed only every 8th frame; in between
+  // the last picture is moved with the camera
+  if ((every > 1 || drag) && WS.img && WS.aq === AQ && (WS.cam === cam ? (drag || (++WS.n % every) !== 0) : drag && (++WS.dn & 7) !== 0)) {
+    const sx = CX - WS.cx, sy = CY - WS.cy;
+    if (WS.img !== 1) ctx.putImageData(WS.img, WS.bx + sx, WS.by + sy);
     for (const p of WS.decor) pondDecor.push(sx || sy ? [p[0] + sx, p[1] + sy].concat(p.slice(2)) : p);
     for (const p of WS.leaves) pondLeaves.push(sx || sy ? [p[0] + sx, p[1] + sy].concat(p.slice(2)) : p);
     return; }
   const d0 = pondDecor.length, l0 = pondLeaves.length; PFW_LAST = null;
   paintWater0(t, box, key);
-  WS.img = PFW_LAST || 1; WS.cam = cam; WS.n = 0; WS.bx = bx; WS.by = by; WS.decor = pondDecor.slice(d0); WS.leaves = pondLeaves.slice(l0);
+  WS.img = PFW_LAST || 1; WS.cam = cam; WS.n = 0; WS.dn = 0; WS.bx = bx; WS.by = by; WS.cx = CX; WS.cy = CY; WS.aq = AQ; WS.decor = pondDecor.slice(d0); WS.leaves = pondLeaves.slice(l0);
 }
 function paintWater0(t, box, key) {`;
 export const V5_PATCHES = [
@@ -262,7 +263,9 @@ export const V5_PATCHES = [
   ["function resetTreeViews() { for (const o of TV.values()) if (o._ck && o._ck.c) o._ck", "function resetTreeViews() { PFT.clear(); for (const o of TV.values()) if (o._ck && o._ck.c && !o._ck.shared) o._ck"],
   ["dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c) o._ck", "dropTree: id => { const o = TV.get(id); if (o && o._ck && o._ck.c && !o._ck.shared) o._ck"],
   ["  for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null;", "  PFT.clear(); for (const p of props) if (p.tree) p._ck = null; for (const o of TV.values()) o._ck = null;"],
-  // panel: stack pictures dropped by the LRU (they get rebuilt when shown again)
+  ['function stackCanvas(m, a) {\n', 'function stackCanvas(m, a) {\n  if (window.__noSway) a = pfcQ(a);\n'],
+  ['  k = { a }; map.set(a, k); k.done', '  k = { a }; map.set(a, k); if (window.__pfcStats) pfcStkNew(m); k.done'],
+  // panel: stack pictures dropped by the LRU (see also EXP/WORKS warm patches below) (they get rebuilt when shown again)
   ["const [ok, om] = STK.entries().next().value; STK.delete(ok);", "const [ok, om] = STK.entries().next().value; STK.delete(ok); if (window.__pfcStats) window.__pfcStats.stkEvict++;"],
   ['function paintWater(t, box, key) {', WATER_WRAP],
   ['  ctx.putImageData(img, bx, by);\n}', '  ctx.putImageData(img, bx, by); PFW_LAST = img;\n}'],
@@ -272,6 +275,14 @@ export const V5_PATCHES = [
   ["setInterval(() => { if (!document.hidden && cacheBlank()) rebuildCaches('blank cache detected'); }, 3000);",
    "let PF_BLANK = 0; setInterval(() => { if (document.hidden || window.__blankOff) return; if (!cacheBlank()) { PF_BLANK = 0; return; } if (++PF_BLANK > 2) { window.__blankOff = 1; if (window.__pfcStats) window.__pfcStats.blankOff = 1; return; } rebuildCaches('blank cache detected'); }, 3000);"],
 ];
+// v7: the expansion and workshop modules warm their models' per-angle pictures in the background (each one a new GPU canvas on
+// Krypton, ~15/s on a phone for minutes); off whenever the landing turns warming off (window.__noWarm), like game.js's own warmer
+export const WARM_PATCHES = {
+  'expansion.js': [["const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 12",
+    "const step = () => { if (X.manual || window.__noWarm) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 12"]],
+  'works-art.js': [["const step = () => { if (X.manual) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 8",
+    "const step = () => { if (X.manual || window.__noWarm) return; const t0 = performance.now(), b = Math.round(X.cam.ta / X.ASTEP); if (b !== base) { base = b; n = 0; idx = 0; }\n      while (n <= 8"]],
+};
 export const ICON_PATCHES = [
   // fishing: blit made a new canvas from the same sprite every frame; keep one per sprite
   ['    const c = canvasOf(img); if (!c) return;\n    const s = (opt && opt.scale) || 1', '    const c = img.__cv || (img.__cv = canvasOf(img)); if (!c) return;\n    const s = (opt && opt.scale) || 1'],
