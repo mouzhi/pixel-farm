@@ -44,20 +44,61 @@
       if (z === 0) return Wd[2];
       return null;
     });
-    // the tour truck (18 x 9 world): cab at the front (+x), an open bed with two benches, 0–4 riders sitting facing in
-    const truck = n => B(36, 18, 24, (px, py, z) => {
-      const wx = px <= 9 && px >= 5 || px >= 26 && px <= 30, wy = py <= 2 || py >= 15;
-      if (wx && wy && z <= 6) return z >= 2 && z <= 4 && (px === 7 || px === 28) ? St[2] : TYRE; // wheels
-      if (z <= 3 && px >= 2 && px <= 33 && py >= 3 && py <= 14) return TYRE;
-      if (px >= 24 && px <= 34 && py >= 2 && py <= 15 && z >= 4 && z <= 17) { // cab
-        if (z >= 16) return St[3]; if (z >= 10 && z <= 15 && (px >= 33 || py <= 2 || py >= 15) && px >= 26) return Wt[3]; return G[2]; }
-      if (px === 35 && py >= 5 && py <= 12 && z >= 6 && z <= 7) return YEL;
-      if (px >= 1 && px <= 23 && py >= 2 && py <= 15 && z >= 4 && z <= 9) { const side = px <= 2 || py <= 3 || py >= 14; if (side) return z >= 8 ? Wd[4] : Wd[3]; if (z === 4) return Wd[2];
-        if (z >= 5 && z <= 7 && (py === 4 || py === 13) && px >= 4 && px <= 21) return Wd[1]; return null; }
-      for (let q = 0; q < n; q++) { const hx = 7 + (q >> 1) * 10, hy = q & 1 ? 12 : 5; // a rider: shirt, face, hair
+    // v5.12.10 the tour tractor (18 x 9 world, same footprint as before): a green tractor at the front (+x) with a driver in a straw hat, a
+    // wooden trailer behind it with a bench down each side (0–4 riders sitting facing the aisle), four posts and a red-and-yellow striped
+    // canopy with a scalloped fringe and a little pennant. The canopy is high (z 28+) so the riders' heads stay in view from the default camera.
+    const truck = n => B(36, 18, 40, (px, py, z) => {
+      const ring = (cx, cz, r, py0, py1, hub) => py >= py0 && py <= py1 && Math.hypot(px - cx, z - cz) <= r ? (Math.hypot(px - cx, z - cz) <= hub ? YEL : TYRE) : null;
+      const wheel = ring(25, 4.6, 4.6, 0, 3, 1.8) || ring(25, 4.6, 4.6, 14, 17, 1.8) || ring(32, 3.2, 3.2, 1, 3, 1.1) || ring(32, 3.2, 3.2, 14, 16, 1.1)
+        || ring(9, 3.6, 3.6, 0, 1, 1.2) || ring(9, 3.6, 3.6, 16, 17, 1.2);
+      if (wheel) return wheel;
+      // tractor: chassis, hood with grille, fenders, seat, exhaust
+      if (px >= 21 && px <= 35 && py >= 5 && py <= 12 && z >= 3 && z <= 5) return St[0];
+      if (px >= 28 && px <= 35 && py >= 5 && py <= 12 && z >= 6 && z <= 12) {
+        if (px === 35) return z >= 7 && z <= 11 && py >= 6 && py <= 11 ? (py % 2 ? St[2] : TYRE) : G[1];
+        return z === 12 ? G[3] : z >= 11 || py === 5 || py === 12 ? G[2] : G[1]; }
+      if (px === 35 && z >= 9 && z <= 10 && (py === 5 || py === 12)) return YEL; // lamps
+      if (px >= 21 && px <= 28 && py >= 4 && py <= 13 && z === 10 && (py <= 4 || py >= 13 || px <= 22)) return G[2];
+      if (px >= 20 && px <= 29 && ((py >= 1 && py <= 4) || (py >= 13 && py <= 16)) && z >= 10 && z <= 11) return z === 11 ? G[3] : G[1]; // fenders
+      if (px >= 21 && px <= 28 && py >= 5 && py <= 12 && z >= 6 && z <= 9) return G[1]; // rear body under the seat
+      if (px === 30 && py >= 10 && py <= 11 && z >= 13 && z <= 19) return z === 19 ? St[2] : TYRE; // exhaust
+      if (px >= 21 && px <= 22 && py >= 6 && py <= 11 && z >= 10 && z <= 13) return Wd[1]; // seat back
+      if (px >= 23 && px <= 25 && py >= 6 && py <= 11 && z >= 8 && z <= 9) return Wd[2]; // seat
+      if (px === 27 && py >= 8 && py <= 9 && z >= 10 && z <= 13) return TYRE; // steering column
+      if (px >= 26 && px <= 28 && py >= 6 && py <= 11 && z === 14) return TYRE; // steering wheel
+      // the driver: shirt, arms to the wheel, head with eyes, a straw hat
+      if (px >= 22 && px <= 25 && py >= 7 && py <= 10 && z >= 10 && z <= 15) return SHIRT;
+      if (px >= 26 && px <= 27 && (py === 6 || py === 11) && z >= 12 && z <= 13) return SHIRT;
+      if (px >= 22 && px <= 25 && py >= 7 && py <= 10 && z >= 16 && z <= 19) return px === 25 && z === 18 && (py === 7 || py === 10) ? TYRE : SKIN;
+      if (px >= 21 && px <= 26 && py >= 6 && py <= 11 && z === 20) return STRAW;
+      if (px >= 22 && px <= 25 && py >= 7 && py <= 10 && z >= 21 && z <= 22) return z === 21 ? Wd[2] : STRAW;
+      // drawbar, trailer floor with its rim, low rails, two benches
+      if (px >= 18 && px <= 22 && py >= 8 && py <= 9 && z >= 4 && z <= 5) return TYRE;
+      if (px >= 1 && px <= 18 && py >= 2 && py <= 15) {
+        if (z >= 4 && z <= 5 && (px <= 1 || px >= 18 || py <= 2 || py >= 15)) return z === 5 ? Wd[4] : Wd[2];
+        if (z === 5) return Wd[3];
+        if (z === 4) return Wd[2];
+        if (z === 6 && (py === 2 || py === 15)) return Wd[4];
+        const bench = (py >= 4 && py <= 6) || (py >= 11 && py <= 13);
+        if (bench && px >= 3 && px <= 16) { if (z === 7) return px % 4 === 0 ? Wd[2] : Wd[4]; if (z === 6 && (px <= 4 || px >= 15)) return Wd[1]; }
+      }
+      // the canopy: four posts, a striped roof (red / yellow, three voxels a stripe), a scalloped fringe on both long sides, a pennant
+      if (z >= 6 && z <= 29 && (px === 1 || px === 18) && (py === 2 || py === 15)) return Wd[1];
+      const st = (Math.floor(px / 3) % 2) ? YEL : RED;
+      if (px >= 0 && px <= 20) {
+        if (z === 30 && py >= 0 && py <= 17) return st;
+        if (z === 31 && py >= 1 && py <= 16) return st;
+        if (z === 32 && py >= 4 && py <= 13) return st;
+        if (z === 33 && py >= 7 && py <= 10) return Wd[1];
+        if ((py === 0 || py === 17) && (z === 29 || (z === 28 && px % 3 === 1))) return st;
+        if (px === 0 && py >= 1 && py <= 16 && z === 29 && py % 3 !== 0) return st; // back fringe
+      }
+      if (px === 19 && py === 8 && z >= 34 && z <= 39) return Wd[2];
+      if (py === 8 && z >= 37 && z <= 39 && px >= 13 && px <= 18 && px >= 18 - (z === 38 ? 5 : z === 39 ? 4 : 3)) return z === 38 ? RED : YEL; // pennant, flying back
+      for (let q = 0; q < n; q++) { const hx = 5 + (q >> 1) * 9, hy = q & 1 ? 12 : 5, fy = q & 1 ? -1 : 1; // a rider on a bench, facing the aisle: shirt, face, hair
         const dx = Math.abs(px - hx), dy = Math.abs(py - hy);
         if (dx <= 2 && dy <= 1 && z >= 8 && z <= 14) return [SHIRT, RED, G[2], ORANGE][q];
-        if (dx <= 1 && dy <= 1 && z >= 15 && z <= 18) return z === 18 ? HAIR : SKIN; }
+        if (dx <= 1 && dy <= 1 && z >= 15 && z <= 18) return z === 18 ? HAIR : (z === 16 && dx === 1 && py === hy + fy) ? TYRE : SKIN; }
       return null;
     });
     // 手作坊: a striped awning on four posts over a long table (32 x 16 world); jam jars, pie tins and fruit on the table,
