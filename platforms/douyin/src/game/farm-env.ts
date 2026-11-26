@@ -334,7 +334,17 @@ export function createFarmEnv(p: FarmPlatform) {
   const stamps: number[] = []
   const samples: FrameSample[] = []
   // 拖动地图时的帧（落地页在按下/抬起时开关 G.__dragging）
-  const drag = { n: 0, sum: 0, max: 0, draws: 0, c0: -1, c1: 0 }
+  const drag = { n: 0, sum: 0, max: 0, draws: 0, c0: -1, c1: 0, s0: null as Record<string, number> | null, s1: null as Record<string, number> | null }
+  // v8：少于 10 帧的轻触不算一次拖动，面板保留上一次真正的拖动
+  let lastDrag: typeof drag | null = null
+  const DRAG_KEYS = ['soilBuild', 'objBuild', 'soilChunk', 'objChunk', 'soilFb', 'objFb', 'patch', 'defer']
+  const pfcSnap = () => {
+    const st = G.__pfcStats
+    if (!st) return null
+    const o: Record<string, number> = {}
+    for (const k of DRAG_KEYS) o[k] = st[k] || 0
+    return o
+  }
   let frameSplit = { sim: 0, render: 0, hud: 0 }
   let lastProf: Record<string, number> = {}
   const tick = (now: number) => {
@@ -387,6 +397,7 @@ export function createFarmEnv(p: FarmPlatform) {
       drag.draws += drawGame
       if (drag.c0 < 0) drag.c0 = canvasCount
       drag.c1 = canvasCount
+      drag.s1 = pfcSnap()
     }
     workMs.push(t2 - t0)
     stamps.push(t0)
@@ -585,8 +596,16 @@ export function createFarmEnv(p: FarmPlatform) {
     setPresentScale: (scale: number) => {
       presentScale = scale
     },
-    dragStats: () => ({ frames: drag.n, avgMs: drag.n ? drag.sum / drag.n : 0, maxMs: drag.max, draws: drag.n ? drag.draws / drag.n : 0, canvases: drag.c0 < 0 ? 0 : drag.c1 - drag.c0, secs: drag.sum / 1000 }),
-    resetDrag: () => { drag.n = 0; drag.sum = 0; drag.max = 0; drag.draws = 0; drag.c0 = -1; drag.c1 = 0 },
+    dragStats: () => {
+      const d = drag.n >= 10 || !lastDrag ? drag : lastDrag
+      const pfc: Record<string, number> = {}
+      if (d.s0 && d.s1) for (const k of DRAG_KEYS) pfc[k] = d.s1[k] - d.s0[k]
+      return { frames: d.n, avgMs: d.n ? d.sum / d.n : 0, maxMs: d.max, draws: d.n ? d.draws / d.n : 0, canvases: d.c0 < 0 ? 0 : d.c1 - d.c0, secs: d.sum / 1000, pfc }
+    },
+    resetDrag: () => {
+      if (drag.n >= 10) lastDrag = Object.assign({}, drag)
+      drag.n = 0; drag.sum = 0; drag.max = 0; drag.draws = 0; drag.c0 = -1; drag.c1 = 0; drag.s0 = pfcSnap(); drag.s1 = drag.s0
+    },
     resetStats: () => { workMs.length = 0; stamps.length = 0; samples.length = 0 },
   }
 }
