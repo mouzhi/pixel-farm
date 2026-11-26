@@ -8,7 +8,7 @@ const lilies = SOIL_DECALS.replace('for (const d of decals) { ', 'for (const d o
 const HELPERS = `
 // ---- douyin: cached static layers (see build patches-cache.mjs)
 let PFC_ID = 0, PFC_F = 0, PFK_FR = -1; const PFC_HOT = new Map();
-const PFC_ST = window.__pfcStats = { soilBuild: 0, objBuild: 0, soilSync: 0, objSync: 0, objWhy: '', soilWhy: '', redraw: 0, statics: 0, dyn: 0, bad: 0, badStatic: 0, wipe: 0, wipeWhy: '', blankOff: 0, chunkBuild: 0, chunkDraws: 0, soilFb: 0, objFb: 0, fbDraws: 0, soilChunk: 0, objChunk: 0, preStk: 0, grow: 0, defer: 0, blocked: 0, chunkReset: 0, chunks: 0, probe: 0, patch: 0, patchDraws: 0, scroll: 0, scrollDraws: 0, stkNew: 0, stkWho: {}, objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0 };
+const PFC_ST = window.__pfcStats = { soilBuild: 0, objBuild: 0, soilSync: 0, objSync: 0, objWhy: '', soilWhy: '', redraw: 0, statics: 0, dyn: 0, bad: 0, badStatic: 0, wipe: 0, wipeWhy: '', blankOff: 0, chunkBuild: 0, chunkDraws: 0, soilFb: 0, objFb: 0, fbDraws: 0, soilChunk: 0, objChunk: 0, preStk: 0, preTree: 0, warmQ: 0, grow: 0, defer: 0, blocked: 0, chunkReset: 0, chunks: 0, probe: 0, patch: 0, patchDraws: 0, scroll: 0, scrollDraws: 0, stkNew: 0, stkWho: {}, objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0 };
 function pfcId(x) { return x.__pfc || (x.__pfc = ++PFC_ID); }
 function pfcMix(h, v) { return (Math.imul(h ^ (v | 0), 16777619) + 0x9e3779b9) | 0; }
 function pfcStr(h, s) { for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619); return h | 0; }
@@ -46,10 +46,10 @@ function pfcRec(target) { // forwards to target, records the screen box of what 
 // yet shows what it has and the rest of its items are drawn straight onto the screen (clipped to it) until it is. A chunk is only
 // started when the object list holds everything that can draw into it, so items coming into the list are never patched in:
 // patches are for real changes only. Kept until the camera turns or zooms (least recently used past PFK_MAXC).
-const PFK_S = 256, PFK_MAXC = 48, PFK_BASE = 64, PFK_IDLE = 256, PFK_AHEAD = 512;
+const PFK_S = 256, PFK_MAXC = 48, PFK_BASE = 64, PFK_IDLE = 256, PFK_AHEAD = 768;
 // a chunk's window: things standing up to MX px left/right of it, MT above, MB below (tall ones) can draw into it (per layer)
 let PFK_POOL = [], PFK_T0 = 0, PFK_MS = 4, PFK_LX = 0, PFK_LY = 0, PFK_VX = 0, PFK_VY = 0, PFK_STILL = 0, PFK_RG = [64, 64, 64, 64], PFK_PADS = [0, 0, 0, 0], PFK_IDLEDONE = false;
-let PFK_CT = 0, PFK_CB = 3, PFK_DEF = [], PFK_BLK = new Set(); // picture-making ms spent this frame, its share; deferred items
+let PFK_MOV = false, PFK_CT = 0, PFK_CB = 3, PFK_DEF = [], PFK_BLK = new Set(); // picture-making ms spent this frame, its share; deferred items
 let PFC_PG = null, PFC_POSE = 0, PFC_CAND = new Int32Array(0), PFC_KIND = new Uint8Array(0), PFK_SPENT = 0;
 function pfcCamR() { return pfcMix(pfcMix(Math.round(AQ * 1e4), Math.round(RS * 100)), W * 4099 + H); }
 function pfkTick() { // once a frame: pan velocity (plane px/frame), the ring to keep built around the view, the object list's reach
@@ -57,13 +57,13 @@ function pfkTick() { // once a frame: pan velocity (plane px/frame), the ring to
   PFK_IDLEDONE = (PFK_SL.ranF !== lastF || PFK_SL.idleDone) && (PFK_OL.ranF !== lastF || PFK_OL.idleDone); PFK_T0 = performance.now(); PFK_SPENT = 0; PFK_CT = 0; PFK_DEF.length = 0;
   let vx = PFK_LX - CX, vy = PFK_LY - CY; PFK_LX = CX; PFK_LY = CY; if (Math.abs(vx) > 300 || Math.abs(vy) > 300) vx = vy = 0; // a jump
   PFK_VX = PFK_VX * 0.6 + vx * 0.4; PFK_VY = PFK_VY * 0.6 + vy * 0.4;
-  const moving = Math.abs(vx) + Math.abs(vy) > 0.5 || !!window.__dragging; PFK_STILL = moving ? 0 : PFK_STILL + 1; if (moving) PFK_IDLEDONE = false;
-  const ax = Math.min(PFK_AHEAD, Math.abs(PFK_VX) * 30), ay = Math.min(PFK_AHEAD, Math.abs(PFK_VY) * 30), idle = PFK_STILL > 15 && !PFK_IDLEDONE ? PFK_IDLE : 0;
+  const moving = PFK_MOV = Math.abs(vx) + Math.abs(vy) > 0.5 || !!window.__dragging; PFK_STILL = moving ? 0 : PFK_STILL + 1; if (moving) PFK_IDLEDONE = false;
+  const ax = Math.min(PFK_AHEAD, Math.abs(PFK_VX) * 45), ay = Math.min(PFK_AHEAD, Math.abs(PFK_VY) * 45), idle = PFK_STILL > 15 && !PFK_IDLEDONE ? PFK_IDLE : 0;
   const R = PFK_RG; R[0] = Math.max(idle, PFK_BASE + (PFK_VX < 0 ? ax : 0)); R[1] = Math.max(idle, PFK_BASE + (PFK_VX > 0 ? ax : 0));
   R[2] = Math.max(idle, PFK_BASE + (PFK_VY < 0 ? ay : 0)); R[3] = Math.max(idle, PFK_BASE + (PFK_VY > 0 ? ay : 0));
   // the list must reach every window of every chunk the ring touches (a chunk reaches up to S-1 past it); statics' own pad >= 30
   const P = PFK_PADS, ow = PFK_OL.mg; P[0] = R[0] + PFK_S + ow[0] - 30; P[1] = R[1] + PFK_S + ow[0] - 30; P[2] = R[2] + PFK_S + ow[1] - 30; P[3] = R[3] + PFK_S + ow[2] - 120;
-  PFK_MS = moving ? 5 : 9; PFK_CB = moving ? 3 : 6; // ms of chunk building / of new pictures a frame
+  PFK_MS = moving ? 7 : 9; PFK_CB = moving ? 4 : 6; // ms of chunk building / of new pictures a frame
 }
 function pfkSlow(n, dt) { const S = PFC_ST.slow || (PFC_ST.slow = []); S.push(n + ' ' + Math.round(dt) ); if (S.length > 12) S.shift(); }
 function pfkDefer(x, y) { PFK_DEF.push(x, y); PFC_ST.defer++; }
@@ -155,7 +155,9 @@ function pfkRun(Ly, F, G) { // F: this frame's statics (picture-plane anchors); 
     if (on) vis.push(ck); }
   for (const C of todo) if (C.todo) C.pr = ((C.i >= vi0 && C.i <= vi1 && C.j >= vj0 && C.j <= vj1) ? 0 : 1e6) + Math.abs((C.i + 0.5) * S - hx) + Math.abs((C.j + 0.5) * S - hy) - 1; // started ones first
   todo.sort((a, b) => a.pr - b.pr);
-  const dl = performance.now() + PFK_MS * (Ly === PFK_SL ? 0.4 : 0.6); let first = true;
+  // v9: an unfinished chunk on screen while the map is not moving (load, zoom, a turn) is finished in a few ~20 ms frames rather
+  // than drawn item by item each frame; while dragging the usual budget holds and the fallback covers it
+  const visTodo = todo.length && todo[0].pr < 1e6, dl = performance.now() + (visTodo && !PFK_MOV ? 20 : PFK_MS) * (Ly === PFK_SL ? 0.4 : 0.6); let first = true;
   for (const P of todo) { if (!first && performance.now() > dl) break; first = false;
     let C = P.todo ? P : null;
     if (!C) { let reuse = null;
@@ -237,17 +239,28 @@ function pfjStep(J, dl) { const m = J.m, g = PFJ.g, w = J.w, h = J.h, BW = J.BW;
 function pfjRun(ms) { const t0 = performance.now(), dl = t0 + ms; let n = 0;
   while (n === 0 || performance.now() < dl) { n++;
     let J = PFJ.cur;
-    if (!J) { if (!PFJ.q.length) return; if (PFJ.sort) { PFJ.q.sort((a, b) => b.d - a.d); PFJ.sort = false; } J = PFJ.q.pop();
-      if (J.m._ck && J.m._ck.get(J.a)) { PFJ.set.delete(J.k); continue; } pfjStart(J); PFJ.cur = J; }
+    if (!J) { if (!PFJ.q.length) break; if (PFJ.sort) { PFJ.q.sort((a, b) => b.d - a.d); PFJ.sort = false; } J = PFJ.q.pop(); PFJ.set.delete(J.k);
+      if (J.t === 3) { seaBandMap(); continue; } // the sea's band map: built once for the whole map (~250 ms at 4x), not on first sight
+      if (J.t === 2) { if (J.o.tree) { treeCache(J.o, treePoseT(J.o)); PFC_ST.preTree++; } continue; } // a tree's picture (one go)
+      if (J.m._ck && J.m._ck.get(J.a)) continue;
+      if (J.t === 1) { stackCanvas(J.m, J.a); continue; } // a small stack (one go, plain nearest)
+      PFJ.set.add(J.k); pfjStart(J); PFJ.cur = J; }
     if (pfjStep(J, dl)) { PFJ.cur = null; PFJ.set.delete(J.k); if (!(J.m._ck && J.m._ck.get(J.a))) { PFJ.pre.set(J.m, J); stackCanvas(J.m, J.a); PFJ.pre.delete(J.m); PFC_ST.preStk++; } } }
   PFK_CT += performance.now() - t0; }
-function pfjWarm() { // the map sits still: every big model on the farm at this angle, nearest first
+// v9: the map sits still: every static picture on the farm at this angle (big stacks a part at a time, small ones and trees in
+// one go each), nearest first, within the frame's picture budget; the list then finds them made and nothing waits while dragging
+function pfjWarm(allTiles) {
   if (PFJ.warmAQ === AQ || PFJ.q.length || PFJ.cur) return; PFJ.warmAQ = AQ; const cs = CA * RS, sn = SA * RS, cx = W / 2 - CX, cy = H / 2 - CY;
-  const want = (m, x, y, rot) => { if (!m || !pfjBig(m)) return; const a = pfcQ(AQ + (rot || 0)); if (m._ck && m._ck.get(a)) return;
-    pfjWant(m, a, Math.abs(x * cs - y * sn - cx) + Math.abs((x * sn + y * cs) * K - cy)); };
-  for (const p of props) if (!p.tree && p.m) want(p.m, p.x, p.y, p.rot);
+  const dist = (x, y) => Math.abs(x * cs - y * sn - cx) + Math.abs((x * sn + y * cs) * K - cy);
+  const want = (m, x, y, rot) => { if (!m) return; const a = pfcQ(AQ + (rot || 0)); if (m._ck && m._ck.get(a)) return;
+    const k = pfjKey(m, a); if (PFJ.set.has(k)) return; PFJ.set.add(k); PFJ.q.push({ t: pfjBig(m) ? 0 : 1, m, a, k, d: dist(x, y) }); };
+  const tree = o => { const k0 = o._ck; if (k0 && k0.c && k0.__pfcStill) return; PFJ.q.push({ t: 2, o, k: -1, d: dist(o.x, o.y) }); };
+  for (const p of props) { if (p.tree) { if (!eastHideAt(p.x, p.y)) tree(p); } else if (p.m) want(p.m, p.x, p.y, p.rot); }
+  for (const t of S.trees) if (!eastHideAt(t.x, t.y)) { const o = treeView(t); if (o.tree) tree(o); else if (o.m) want(o.m, o.x, o.y, o.rot); }
   for (const c of yard) if (c.type !== 'weed') want(clutterModel(c), c.x, c.y, c.rot);
-  for (const t of allTiles) if (t.debris) want(debrisModel(t.debris), t.x, t.y, t.debris.rot); }
+  if (allTiles) for (const t of allTiles) if (t.debris) want(debrisModel(t.debris), t.x, t.y, t.debris.rot);
+  if (!SEA_BAND) PFJ.q.push({ t: 3, k: -1, d: -1 });
+  PFJ.sort = true; PFC_ST.warmQ = PFJ.q.length; }
 function pfcDrawOne(c, o, poseT) {
   if (o.rain) { WX.drawDrop(c, o.rain, proj); return; }
   if (o.bb) { drawBillboard(c, o); return; }
@@ -263,14 +276,15 @@ function pfcStkNew(m) { const S = PFC_ST, k = m.w + 'x' + m.d + 'x' + m.h; S.stk
 function pfcObjRaw(g, o) { pfcDrawOne(g, o, PFC_POSE); }
 function pfcObjName(o) { return o.tree ? 'tree' : o.ci !== undefined ? 'crop' : o.spr ? 'spr' + o.spr.width + 'x' + o.spr.height : o.m ? 'stack' + o.m.w + 'x' + o.m.d + 'x' + o.m.h : '?'; }
 const PFK_OL = pfkLayer((g, o) => pfcDrawOne(g, o, PFC_POSE), pfcObjName, ['objBuild', 'objFb', 'objPatchWhy', 'objWhy', 'objChunk'], [72, 60, 136]), PFK_OF = pfkFrame(); window.__pfk = { SL: PFK_SL, OL: PFK_OL, dbg: () => ({ still: PFK_STILL, idleDone: PFK_IDLEDONE, rg: PFK_RG.slice(), pads: PFK_PADS.slice(), ol: PFK_OL.ch.size, sl: PFK_SL.ch.size, olTodo: [...PFK_OL.ch.values()].filter(C => C.todo).length, def: PFK_DEF.length, jobs: PFJ.q.length + (PFJ.cur ? 1 : 0), vx: PFK_VX, vy: PFK_VY }) };
-function pfcObjects(list, poseT) { // statics composed once into a layer; each moving thing is drawn over it, then the statics in front of it
+function pfcObjects(list, poseT, allTiles) { // statics composed once into a layer; each moving thing is drawn over it, then the statics in front of it
   const ns = !!window.__noSway; PFC_F++; PFC_POSE = poseT; // that it overlaps are drawn again, so the stacking order stays the same
   if (PFC_HOT.size > 4000) PFC_HOT.clear();
   // v7: no allocation per item (an interpreter-only JS engine pays for every array and boxed number): reused typed arrays, an
   // integer hot key, the projection inlined
   const nl = list.length; if (PFC_KIND.length < nl) PFC_KIND = new Uint8Array(nl * 2);
   const kind = PFC_KIND, F = PFK_OF; kind.fill(0, 0, nl); F.n = 0; // kind: 0 moving, 1 static (in the chunks)
-  const cs = CA * RS, sn = SA * RS, ks = K * RS;
+  const cs = CA * RS, sn = SA * RS, ks = K * RS, Sk = PFK_S, om = PFK_OL.mg; // v9: items that can draw into an on-screen chunk are never deferred
+  const nx0 = Math.floor(-CX / Sk) * Sk - om[0], nx1 = (Math.floor((W - CX - 1) / Sk) + 1) * Sk + om[0], ny0 = Math.floor(-CY / Sk) * Sk - om[1], ny1 = (Math.floor((H - CY - 1) / Sk) + 1) * Sk + om[2];
   const prof = PFC_F % 30 === 0, PT = prof ? (PFC_ST.scanProf = { tree: 0, crop: 0, spr: 0, stack: 0, hot: 0, n: 0 }) : null; let t0 = 0, t1 = 0; // panel: where the scan's time goes (1 frame in 30)
   for (let i = 0; i < nl; i++) { const o = list[i];
     if (prof) t0 = performance.now();
@@ -278,7 +292,7 @@ function pfcObjects(list, poseT) { // statics composed once into a layer; each m
     let sub;
     // v8: a picture made for the first time (a stack at this angle, a tree's look) can take tens of ms; past this frame's share,
     // one that is still off screen waits for a later frame, and the chunks it can draw into are not started until it is in
-    const rx = Math.round(o.x * cs - o.y * sn), ry = Math.round((o.x * sn + o.y * cs) * K), off = rx + CX < -104 || rx + CX > W + 104 || ry + CY < -104 || ry + CY > H + 194;
+    const rx = Math.round(o.x * cs - o.y * sn), ry = Math.round((o.x * sn + o.y * cs) * K), off = rx < nx0 || rx > nx1 || ry < ny0 || ry > ny1;
     if (o.tree) { // frozen pose and no lean: the tree's cached look cannot change, so skip re-keying it (the key string is costly)
       const still = ns || Math.abs(o.lean || 0) < 1e-3, k0 = o._ck;
       if (ns && still && k0 && k0.__pfcStill && k0.__pfcKey === k0.key) sub = k0.__pfcH;
@@ -296,7 +310,7 @@ function pfcObjects(list, poseT) { // statics composed once into a layer; each m
     if (prof) PT.hot += performance.now() - t1;
     if (e && e.hot > PFC_F) continue;
     kind[i] = 1; pfkPush(F, key, sub, rx, ry, o.depth, o, i); }
-  if (ns) { if (PFK_STILL > 15) pfjWarm(); if (PFJ.cur || PFJ.q.length) pfjRun(Math.max(1, PFK_CB - PFK_CT)); }
+  if (ns) { if (PFK_STILL > 15) pfjWarm(allTiles); if (PFJ.cur || PFJ.q.length) pfjRun(Math.max(1, PFK_CB - PFK_CT)); }
   tick('o.scan');
   // the list reaches PFK_PADS past the screen (every static's own onScreen pad is at least 30): there it is complete
   const P = PFK_PADS, vis = pfkRun(PFK_OL, F, [-CX - P[0] - 29, -CY - P[2] - 29, W - CX + P[1] + 29, H - CY + P[3] + 119]); tick('o.build');
@@ -326,7 +340,7 @@ export const CACHE_PATCHES = [
   ['  const list = [];\n  if (WX && WX.eachDrop)', '  if (window.__objCache && !window.__pfcAlbum) { pfkTick(); window.__pfcPad4 = PFK_PADS; } else window.__pfcPad4 = null; const list = [];\n  if (WX && WX.eachDrop)'],
   ['  if (FOG.on && !FOG.empty && !FOG.peek) { let n = 0; for (const o of list)', '  window.__pfcPad4 = null;\n  if (FOG.on && !FOG.empty && !FOG.peek) { let n = 0; for (const o of list)'],
   [SOIL_A, `  if (window.__soilCache && !window.__pfcAlbum) pfkSoil(allTiles); else {\n${SOIL_A} }`],
-  ['  for (const o of list) {\n    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }', '  if (window.__objCache && !window.__pfcAlbum) pfcObjects(list, poseT); else for (const o of list) {\n    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }'],
+  ['  for (const o of list) {\n    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }', '  if (window.__objCache && !window.__pfcAlbum) pfcObjects(list, poseT, allTiles); else for (const o of list) {\n    if (o.rain) { WX.drawDrop(ctx, o.rain, proj); continue; }'],
   // the shadow mask is only read by (gpu)applyShadows: skip building it when shadows are off (低)
   ['  for (const o of list) { if (o.flat || o.ci !== undefined) continue; if (o.bb) { bbShadow(sctx, o); continue; }', '  if (night < 0.9 && !window.__trialNoShadow) for (const o of list) { if (o.flat || o.ci !== undefined) continue; if (window.__objCache) { const q = proj(o.x, o.y); if (q[0] < -100 || q[0] > W + 100 || q[1] < -100 || q[1] > H + 190) continue; } if (o.bb) { bbShadow(sctx, o); continue; }'],
   ['function treePoseT(o) { return Math.floor(realT * 10 + o.tick) / 10; }', 'function treePoseT(o) { return window.__noSway ? 0 : Math.floor(realT * 10 + o.tick) / 10; }'],
@@ -346,17 +360,17 @@ function paintWater(t, box, key) {
   // the key is relative to the camera, so while the map is dragged the last water is moved along with it instead of recomputed
   const WS = PFW[key] || (PFW[key] = { n: 0, img: null, cam: '' }), cam = (bx - CX) + ',' + (by - CY) + ',' + AQ + ',' + bw + ',' + bh, every = window.__waterEvery || 1, drag = !!window.__dragging;
   // v7/v8: while dragging, a pond the screen edge cuts (its box changes every frame) is moved with the camera; it is recomputed
-  // (a read-back and a new outline: tens of ms) only when the moved picture covers less than 70% of the new box, at most every 8th
+  // (a read-back and a new outline: tens of ms) only when the moved picture covers less than 55% of the new box, at most every 12th
   // frame (the strip it leaves shows the plain water of the ground under it until then)
   let cover = 1; if (drag && WS.img && WS.cam !== cam) { const ox = WS.bx + CX - WS.cx, oy = WS.by + CY - WS.cy, iw = Math.min(ox + WS.bw, bx + bw) - Math.max(ox, bx), ih = Math.min(oy + WS.bh, by + bh) - Math.max(oy, by); cover = iw > 0 && ih > 0 ? iw * ih / (bw * bh) : 0; WS.dn++; }
-  if ((every > 1 || drag) && WS.img && WS.aq === AQ && (WS.cam === cam ? (drag || (++WS.n % every) !== 0) : drag && (cover >= 0.7 || WS.dn < 8))) {
+  if ((every > 1 || drag) && WS.img && WS.aq === AQ && (WS.cam === cam ? (drag || (++WS.n % every) !== 0) : drag && (cover >= 0.55 || WS.dn < 12))) {
     const sx = CX - WS.cx, sy = CY - WS.cy;
     if (WS.img !== 1) ctx.putImageData(WS.img, WS.bx + sx, WS.by + sy);
     for (const p of WS.decor) pondDecor.push(sx || sy ? [p[0] + sx, p[1] + sy].concat(p.slice(2)) : p);
     for (const p of WS.leaves) pondLeaves.push(sx || sy ? [p[0] + sx, p[1] + sy].concat(p.slice(2)) : p);
     return; }
   const d0 = pondDecor.length, l0 = pondLeaves.length; PFW_LAST = null; const tw = performance.now();
-  paintWater0(t, box, key); if (window.__pfcStats) { const L = window.__pfcStats.wlog || (window.__pfcStats.wlog = []); L.push(key + ' ' + bw + 'x' + bh + ' ' + Math.round(performance.now() - tw) + (WS.img ? '' : ' first') + (drag ? ' d' : '')); if (L.length > 20) L.shift(); }
+  paintWater0(t, box, key); if (window.__pfcStats) { const L = window.__pfcStats.wlog || (window.__pfcStats.wlog = []); const ms = performance.now() - tw; if (ms > 20) L.push(key + ' ' + bw + 'x' + bh + ' ' + Math.round(ms) + (WS.img ? '' : ' first') + (drag ? ' d' : '') + ' f' + PFC_F); if (L.length > 20) L.shift(); }
   WS.img = PFW_LAST || 1; WS.cam = cam; WS.n = 0; WS.dn = 0; WS.bx = bx; WS.by = by; WS.bw = bw; WS.bh = bh; WS.cx = CX; WS.cy = CY; WS.aq = AQ; WS.decor = pondDecor.slice(d0); WS.leaves = pondLeaves.slice(l0);
 }
 function paintWater0(t, box, key) {`;

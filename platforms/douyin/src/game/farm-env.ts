@@ -334,8 +334,9 @@ export function createFarmEnv(p: FarmPlatform) {
   const stamps: number[] = []
   const samples: FrameSample[] = []
   // 拖动地图时的帧（落地页在按下/抬起时开关 G.__dragging）
-  const drag = { n: 0, sum: 0, max: 0, draws: 0, c0: -1, c1: 0, s0: null as Record<string, number> | null, s1: null as Record<string, number> | null }
-  // v8：少于 10 帧的轻触不算一次拖动，面板保留上一次真正的拖动
+  const drag = { n: 0, sum: 0, max: 0, draws: 0, c0: -1, c1: 0, s0: null as Record<string, number> | null, s1: null as Record<string, number> | null, mf: 0, cx: NaN, cy: NaN }
+  // v9：地图真的跟着动了至少 10 帧才算一次拖动（轻点、按住不动都不算），面板保留上一次完整的拖动
+  const dragReal = (d: typeof drag) => d.mf >= 10
   let lastDrag: typeof drag | null = null
   const DRAG_KEYS = ['soilBuild', 'objBuild', 'soilChunk', 'objChunk', 'soilFb', 'objFb', 'patch', 'defer']
   const pfcSnap = () => {
@@ -398,6 +399,12 @@ export function createFarmEnv(p: FarmPlatform) {
       if (drag.c0 < 0) drag.c0 = canvasCount
       drag.c1 = canvasCount
       drag.s1 = pfcSnap()
+      const cam = G.__trialHooks && G.__trialHooks.cam
+      if (cam) {
+        if (drag.n > 1 && (Math.abs(cam.x - drag.cx) + Math.abs(cam.y - drag.cy)) > 0.01) drag.mf++
+        drag.cx = cam.x
+        drag.cy = cam.y
+      }
     }
     workMs.push(t2 - t0)
     stamps.push(t0)
@@ -597,14 +604,18 @@ export function createFarmEnv(p: FarmPlatform) {
       presentScale = scale
     },
     dragStats: () => {
-      const d = drag.n >= 10 || !lastDrag ? drag : lastDrag
+      const d = (G.__dragging && dragReal(drag)) || !lastDrag ? drag : lastDrag
       const pfc: Record<string, number> = {}
       if (d.s0 && d.s1) for (const k of DRAG_KEYS) pfc[k] = d.s1[k] - d.s0[k]
       return { frames: d.n, avgMs: d.n ? d.sum / d.n : 0, maxMs: d.max, draws: d.n ? d.draws / d.n : 0, canvases: d.c0 < 0 ? 0 : d.c1 - d.c0, secs: d.sum / 1000, pfc }
     },
     resetDrag: () => {
-      if (drag.n >= 10) lastDrag = Object.assign({}, drag)
-      drag.n = 0; drag.sum = 0; drag.max = 0; drag.draws = 0; drag.c0 = -1; drag.c1 = 0; drag.s0 = pfcSnap(); drag.s1 = drag.s0
+      if (dragReal(drag)) lastDrag = Object.assign({}, drag)
+      drag.n = 0; drag.sum = 0; drag.max = 0; drag.draws = 0; drag.c0 = -1; drag.c1 = 0; drag.s0 = pfcSnap(); drag.s1 = drag.s0; drag.mf = 0; drag.cx = NaN; drag.cy = NaN
+    },
+    // 松手：完整的拖动记下来
+    endDrag: () => {
+      if (dragReal(drag)) lastDrag = Object.assign({}, drag)
     },
     resetStats: () => { workMs.length = 0; stamps.length = 0; samples.length = 0 },
   }

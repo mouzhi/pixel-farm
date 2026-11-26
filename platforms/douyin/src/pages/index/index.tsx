@@ -115,8 +115,8 @@ export default function Index() {
   const [fastForward, setFastForward] = useState(false)
   const cacheRef = useRef(true)
   const [cacheOn, setCacheOn] = useState(true)
-  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, whole: 0, wipe: 0, wipeWhy: '', blankOff: false, soilRate: 0, objRate: 0, patchRate: 0, patchDraws: 0, objWhy: '', soilWhy: '', objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0, stkRate: 0, stkTop: '', scrollRate: 0, scrollDraws: 0, fb: 0, chunks: 0, preStk: 0, defer: 0, scan: '' })
-  const pfcPrevRef = useRef<{ at: number; soil: number; obj: number; patch: number; pd: number; stk: number; who: Record<string, number>; sc: number; sd: number } | null>(null)
+  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, whole: 0, wipe: 0, wipeWhy: '', blankOff: false, soilRate: 0, objRate: 0, patchRate: 0, patchDraws: 0, objWhy: '', soilWhy: '', objPatchWhy: '', soilPatchWhy: '', treeChg: 0, treeShare: 0, stkEvict: 0, stkRate: 0, stkTop: '', scrollRate: 0, scrollDraws: 0, fb: 0, chunks: 0, preStk: 0, defer: 0, fbRate: 0, deferRate: 0, scan: '' })
+  const pfcPrevRef = useRef<{ at: number; soil: number; obj: number; patch: number; pd: number; stk: number; who: Record<string, number>; sc: number; sd: number; fb: number; df: number } | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [prevLog, setPrevLog] = useState<string[]>([])
 
@@ -378,10 +378,11 @@ export default function Index() {
           stkTop: Object.entries((st.stkWho || {}) as Record<string, number>).map(([k, v]) => [k, v - ((prev && prev.who[k]) || 0)] as [string, number]).filter(e => e[1] > 0).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k, v]) => `${k}×${v}`).join(' '),
           scrollRate: dt > 0 ? ((st.chunkBuild || 0) - prev!.sc) / dt : 0,
           scrollDraws: (st.chunkBuild || 0) > (prev ? prev.sc : 0) ? ((st.chunkDraws || 0) - (prev ? prev.sd : 0)) / ((st.chunkBuild || 0) - (prev ? prev.sc : 0)) : 0,
-          fb: (st.soilFb || 0) + (st.objFb || 0), chunks: st.chunks || 0, preStk: st.preStk || 0, defer: st.defer || 0,
+          fb: (st.soilFb || 0) + (st.objFb || 0), chunks: st.chunks || 0, preStk: (st.preStk || 0) + (st.preTree || 0), defer: st.defer || 0,
+          fbRate: dt > 0 ? ((st.soilFb || 0) + (st.objFb || 0) - prev!.fb) / dt : 0, deferRate: dt > 0 ? ((st.defer || 0) - prev!.df) / dt : 0,
           scan: st.scanProf ? `树${st.scanProf.tree.toFixed(1)} 作物${st.scanProf.crop.toFixed(1)} 贴片${st.scanProf.spr.toFixed(1)} 堆块${st.scanProf.stack.toFixed(1)} 热表${st.scanProf.hot.toFixed(1)} 共${st.scanProf.n}` : '',
         })
-        pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild, patch: st.patch || 0, pd: st.patchDraws || 0, stk: st.stkNew || 0, who: Object.assign({}, st.stkWho || {}), sc: st.chunkBuild || 0, sd: st.chunkDraws || 0 }
+        pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild, patch: st.patch || 0, pd: st.patchDraws || 0, stk: st.stkNew || 0, who: Object.assign({}, st.stkWho || {}), sc: st.chunkBuild || 0, sd: st.chunkDraws || 0, fb: (st.soilFb || 0) + (st.objFb || 0), df: st.defer || 0 }
       }
       setProblems(env.problems())
       setHud({
@@ -492,7 +493,10 @@ export default function Index() {
     if (!p || !touchRef.current) return
     envRef.current?.pointer('pointerup', p.x, p.y, touchRef.current.id)
     touchRef.current = null
-    if (envRef.current) envRef.current.G.__dragging = false
+    if (envRef.current) {
+      envRef.current.G.__dragging = false
+      envRef.current.endDrag()
+    }
   }
 
   return (
@@ -532,7 +536,7 @@ export default function Index() {
             <Text className="farm-perf-line text-base">{`最近重建 地块:${pfc.soilWhy || '无'} 静物:${pfc.objWhy || '无'}`}</Text>
             <Text className="farm-perf-line text-base">{`局部补丁${pfc.patchRate.toFixed(1)}/秒 每次${pfc.patchDraws.toFixed(0)}贴 最近 静物:${pfc.objPatchWhy || '无'} 地块:${pfc.soilPatchWhy || '无'}`}</Text>
             <Text className="farm-perf-line text-base">{`树换样${pfc.treeChg} 共用树图${pfc.treeShare} 堆块淘汰${pfc.stkEvict} 新堆块${pfc.stkRate.toFixed(1)}/秒 ${pfc.stkTop || ''}`}</Text>
-            <Text className="farm-perf-line text-base">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 缺块${pfc.fb} 预建堆块${pfc.preStk} 延后${pfc.defer} 扫描ms ${pfc.scan || '无'}`}</Text>
+            <Text className="farm-perf-line text-base">{`区块新建${pfc.scrollRate.toFixed(1)}/秒 每块${pfc.scrollDraws.toFixed(0)}贴 区块${pfc.chunks} 缺块${pfc.fbRate.toFixed(1)}/秒(共${pfc.fb}) 预建图${pfc.preStk} 延后${pfc.deferRate.toFixed(0)}/秒(共${pfc.defer}) 扫描ms ${pfc.scan || '无'}`}</Text>
             {(() => {
               const env = envRef.current
               const d = env ? env.dragStats() : { frames: 0, avgMs: 0, maxMs: 0, draws: 0, canvases: 0, secs: 0, pfc: {} as Record<string, number> }
@@ -543,7 +547,7 @@ export default function Index() {
             })()}
             <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
             <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`v8预建 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            <Text className="farm-perf-line text-base">{`v9 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
             {problems.slice(-2).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
@@ -568,7 +572,7 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v8预建 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v9 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
             </View>
             <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
               <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>
