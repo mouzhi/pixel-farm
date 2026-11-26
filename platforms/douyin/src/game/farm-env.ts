@@ -194,6 +194,28 @@ export function createFarmEnv(p: FarmPlatform) {
   // 最近新建的画布（看尺寸就知道是谁在建：树、物件缓存、临时画布…）
   const born: { at: number; c: any; by: string }[] = []
   let lastCount = { at: 0, n: 0, rate: 0 }
+  // v16：活着的画布（弱引用，不拦回收）——日志里看总数和像素是不是一直涨
+  const WR: any = (globalThis as any).WeakRef
+  let live: any[] = []
+  const track = (c: any) => {
+    if (!WR) return
+    live.push(new WR(c))
+    if (live.length > 4000) liveStats()
+  }
+  const liveStats = () => {
+    let n = 0
+    let px = 0
+    const keep: any[] = []
+    for (const r of live) {
+      const c = r.deref()
+      if (!c || !c.width || !c.height) continue
+      keep.push(r)
+      n++
+      px += c.width * c.height
+    }
+    live = keep
+    return { n, px }
+  }
   const main = wrapCanvas(p.mainCanvas)
   const fb = p.framebuffer ? wrapCanvas(p.createOffscreenCanvas(main.width || 300, main.height || 150)) : main
   let mainCtx: any = null
@@ -234,9 +256,12 @@ export function createFarmEnv(p: FarmPlatform) {
     if (String(tag).toLowerCase() !== "canvas") return realCreate(tag)
     canvasCount++
     const made = wrapCanvas(p.createOffscreenCanvas(300, 150))
-    born.push({ at: p.now(), c: made, by: G.__mkTag ? String(G.__mkTag).replace(/<\?/g, "") : creatorOf(new Error().stack) })
+    const at = p.now()
+    born.push({ at, c: made, by: G.__mkTag ? String(G.__mkTag).replace(/<\?/g, "") : creatorOf(new Error().stack) })
     G.__mkTag = ""
-    if (born.length > 300) born.shift()
+    // v16：这张表只给面板看「最近 3 秒谁在建画布」；以前留着最近 300 张画布本身，丢掉的临时画布也被它攥着放不掉
+    while (born.length && (born.length > 300 || at - born[0].at > 3000)) born.shift()
+    track(made)
     return made
   }
   dom.body.innerHTML = FARM_UI_HTML
@@ -299,6 +324,8 @@ export function createFarmEnv(p: FarmPlatform) {
   const early = { t0: -1, first: 0, fps: new Array(20).fill(0) as number[] }
   let frameSplit = { sim: 0, render: 0, hud: 0 }
   let lastProf: Record<string, number> = {}
+  const slow = { ew: 16, since: -1, cool: 0, n: 0 }
+  const memLog = { at: 0, n: 0 }
   const tick = (now: number) => {
     scheduled = false
     if (paused || (!pending && !extra.length)) return
@@ -362,6 +389,32 @@ export function createFarmEnv(p: FarmPlatform) {
         if (drag.n > 1 && (Math.abs(cam.x - drag.cx) + Math.abs(cam.y - drag.cy)) > 0.01) drag.mf++
         drag.cx = cam.x
         drag.cy = cam.y
+      }
+    }
+    // v16 保险：画面长时间卡住（帧间隔或单帧耗时持续很大）就让页面降画质、清缓存（G.__onSlow）
+    {
+      const prev = stamps.length ? stamps[stamps.length - 1] : -1
+      const gap = prev < 0 || t0 - prev > 2000 ? 16 : t0 - prev
+      const cost = Math.max(gap, t2 - t0)
+      slow.ew = slow.ew * 0.9 + cost * 0.1
+      if (slow.ew > 150 && t0 > slow.cool) {
+        if (slow.since < 0) slow.since = t0
+        else if (t0 - slow.since > 6000) {
+          slow.since = -1
+          slow.cool = t0 + 30000
+          slow.n++
+          const msg = `[farm-valve] slow frames ~${Math.round(slow.ew)}ms for 6s, step ${slow.n}`
+          note("warn", [msg])
+          console.warn(msg)
+          try { if (G.__onSlow) G.__onSlow(slow.n) } catch (err) { note("error", ["[farm-valve]", String(err)]) }
+        }
+      } else if (slow.ew < 80) slow.since = -1
+      if (t0 - memLog.at > 60000) {
+        memLog.at = t0
+        const ls = liveStats()
+        const pm: any = (globalThis as any).performance && (globalThis as any).performance.memory
+        console.log(...[`[farm-mem] canvases made ${canvasCount} (+${canvasCount - memLog.n}/min) live ${WR ? ls.n : '?'} ${WR ? (ls.px / 1e6).toFixed(1) + 'Mpx' : ''} heap ${pm ? Math.round(pm.usedJSHeapSize / 1e6) + 'MB' : '?'} frame ${Math.round(slow.ew)}ms valve ${slow.n}`])
+        memLog.n = canvasCount
       }
     }
     workMs.push(t2 - t0)

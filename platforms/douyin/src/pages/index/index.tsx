@@ -394,6 +394,12 @@ export default function Index() {
         // ignore
       }
       applyLevel(AUTO_START(), '自动起始')
+      // v16 保险：画面持续卡顿 6 秒（farm-env 量帧间隔）就降到低画质并关掉夜间灯光层，避免越卡越久直到完全不动
+      env.G.__onSlow = (n: number) => {
+        env.G.__valveNoLight = true
+        applyLevel('low', `保险 ${n}：画面持续卡顿`)
+        if (n >= 2) env.G.__waterEvery = 6
+      }
       setPhase('ready')
       // v15：量一下这台手机的画布 multiply 对不对（只在控制台留一行，排查黄昏发灰用；一个 4x4 小画布，首帧之后再做）
       setTimeout(() => {
@@ -409,6 +415,8 @@ export default function Index() {
           x.fillRect(0, 0, 4, 4)
           x.globalCompositeOperation = 'source-over'
           const d = x.getImageData(1, 1, 1, 1).data
+          c.width = 0 // v16：测完立刻释放（抖音端每张离屏画布都是 GL 画布）
+          c.height = 0
           console.info(`[farm-light] multiply test got ${d[0]},${d[1]},${d[2]},${d[3]} want 200,139,139,255; native=${String(env.G.__nativeMul)} lighting=${String(!env.G.__trialNoLight)}`)
         } catch (err) {
           console.warn('[farm-light] multiply test failed', err)
@@ -548,7 +556,7 @@ export default function Index() {
     env.setPresentScale(next === 'high' ? 2 : 1)
     env.G.__gpuShadow = next !== 'high'
     env.G.__trialNoShadow = next === 'low'
-    env.G.__trialNoLight = false // v15：夜里的暗色和灯光层低画质也要有（之前关掉了，手机上夜里没有夜景）
+    env.G.__trialNoLight = !!env.G.__valveNoLight // v16：保险触发后保持关灯光层；v15：夜里的暗色和灯光层低画质也要有（之前关掉了，手机上夜里没有夜景）
     const hooks = env.G.__trialHooks
     if (hooks) hooks.FOG.on = next !== 'low'
     levelRef.current = next

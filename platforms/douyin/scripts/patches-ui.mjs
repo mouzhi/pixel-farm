@@ -24,6 +24,11 @@ export const UI_PATCHES = {
     ['  function pixIcon(rows, cols) {\n', '  function pixIcon(rows, cols) {\n    if (window.__pixURL) return window.__pixURL(rows, cols);\n'],
     // region signs over the map are not shown on Douyin (the throttled overlay would trail the map); stop their per-frame loop
     ['    requestAnimationFrame(place); })();', '    if (!window.__noSigns) requestAnimationFrame(place); })();'],
+    // v16: glowing / giant crop icons in the item bar were redrawn on every bar refresh (new canvases + a pixel read-back each time);
+    // they only depend on (crop, kind, seen, size), so draw each once and keep its tag, and free the scratch canvases at once
+    ['  function decorateCrop(type, mode, seen, fit) {\n    const src = G.cropFrame && G.cropFrame(type);',
+     "  const dcCache = {};\n  function decorateCrop(type, mode, seen, fit) {\n    const k = type + '|' + mode + '|' + (seen ? 1 : 0) + '|' + (fit || 0);\n    if (dcCache[k]) return dcCache[k];\n    const out = decorateCrop0(type, mode, seen, fit);\n    if (out.indexOf('ico crop') >= 0) dcCache[k] = out;\n    return out;\n  }\n  function decorateCrop0(type, mode, seen, fit) {\n    const src = G.cropFrame && G.cropFrame(type);"],
+    ['    const url = ICN ? ICN.urlOf(img) : c.toDataURL();\n', '    const url = ICN ? ICN.urlOf(img) : c.toDataURL();\n    c.width = c.height = 0; src.width = src.height = 0;\n'],
   ],
   'plots-ui.js': [
     ['  function pixIcon(rows, cols) { ', '  function pixIcon(rows, cols) { if (window.__pixURL) return window.__pixURL(rows, cols); '],
