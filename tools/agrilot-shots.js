@@ -152,7 +152,7 @@ fs.mkdirSync(OUT, { recursive: true });
       return { got: { cabins: I.cabins, inn2: I.inn2, diner: I.diner.lv, served: I.diner.served, guests: I.guests.map(g => g.id + ':' + g.room).join(), stars: I.stars.last.length, earn: I.earn.rooms + I.earn.meals, huts: I.resort.huts, parasols: I.resort.parasols },
         site: f.innPlot(), where: s.inn.where, moved: s.inn.moved, plot: s.plots.glade, resort: s.plots.eshore, notice: /民宿搬到镇门口的农家乐区/.test(logTxt), offer: o && { ok: o.ok, cost: o.cost, wood: o.wood, free: o.free },
         props: (f.props || []).filter(q => q.inn && q.cabin != null).length, sv: s.saveVersion, ver: f.version }; })()`,
-      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.8' ? 'ver ' + r.ver
+      r => r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.9' ? 'ver ' + r.ver
         : JSON.stringify(r.got) !== JSON.stringify(want) ? 'lost progress ' + JSON.stringify(r.got) + ' want ' + JSON.stringify(want)
         : r.site !== 'agri' || r.where !== 'agri' || !r.moved ? 'not moved ' + JSON.stringify(r)
         : !r.plot || r.plot.mod !== 'inn' || r.plot.free !== 1 ? 'plot ' + JSON.stringify(r.plot)

@@ -1875,6 +1875,37 @@ function giveUp(k, why) { // drop the current job; a tree job skips that tree fo
   noteLog('event', { type: 'giveup', who: F.id || 'farmer', kind: k.kind || null, why, tree: k.tree ? k.tree.id : null });
   F.task = null; F.moving = false; unstick(F);
 }
+// ---- v5.12.9 pets and animals do not stay stuck (two lamp posts, the north fence and the house wall close a pocket of eight cells
+// in front of the house; a pet that spawned or napped there could never get out, and a job that was dropped left its animal frozen) ----
+const PET_UNSTICK_R = 6, PET_CHECK_MIN = 30; // nav cells searched for a way back; game minutes between looks (also whenever the map is rebuilt)
+function walledOff(g, x, y, home, resting) { // standing here, the farm's walkable area cannot be reached: a pocket of its own, or a rail / lamp edge that snaps into one
+  const here = NAV.areaOf(g, x, y); if (here === home) return false;
+  if (here >= 0) return true; if (resting) return true; // a pet that has stopped on a lamp's base or a fence rail is moved off it; one passing over is left alone
+  const w = NAV.nearestWalkable(g, x, y, 6); return !!w && NAV.areaOf(g, w.x, w.y) !== home;
+}
+function unstickPet(v, dm) { // a pet standing in a walled-off pocket of the yard steps back onto the farm's walkable area; true if it moved
+  v._pkT = (v._pkT || 0) - dm; if (v._pk === navVer && v._pkT > 0) return false; v._pkT = PET_CHECK_MIN;
+  const g = ensureNav(); v._pk = navVer;
+  const home = NAV.areaOf(g, DOOR.x, DOOR.y); if (!walledOff(g, v.x, v.y, home, Math.hypot(v.tx - v.x, v.ty - v.y) < 0.6)) return false;
+  const q = NAV.nearestInArea(g, v.x, v.y, home, PET_UNSTICK_R, inFarmOrTown); if (!q) return false;
+  (STUCK_STATS.last || (STUCK_STATS.last = [])).push([v.pet ? v.pet.id : 'pet', [Math.round(v.x * 10) / 10, Math.round(v.y * 10) / 10], Math.round(q.x), Math.round(q.y), 'pet']); if (STUCK_STATS.last.length > 20) STUCK_STATS.last.shift();
+  v.x = q.x; v.y = q.y; v.via = null; v._nav = -1; v.tx = q.x; v.ty = q.y; v.wait = Math.min(v.wait || 0, 10); STUCK_STATS.pet = (STUCK_STATS.pet || 0) + 1; return true;
+}
+let PET_SPOTS = { ver: -1, m: new Map() };
+function petSpot(x, y) { // a resting place for a pet (the porch at night, indoors in rain): never a cell the lamps, the fence and the house wall have closed off
+  const g = ensureNav(); if (PET_SPOTS.ver !== navVer) PET_SPOTS = { ver: navVer, m: new Map() };
+  const key = Math.round(x * 2) + ',' + Math.round(y * 2); let r = PET_SPOTS.m.get(key); if (r) return r;
+  const home = NAV.areaOf(g, DOOR.x, DOOR.y); r = { x, y };
+  if (walledOff(g, x, y, home, true)) { const q = NAV.nearestInArea(g, x, y, home, PET_UNSTICK_R, inFarmOrTown); if (q) r = q; }
+  if (PET_SPOTS.m.size > 400) PET_SPOTS.m.clear(); PET_SPOTS.m.set(key, r); return r;
+}
+function petGo(v, x, y) { const q = petSpot(x, y); setWalkTarget(v, q.x, q.y); }
+function releaseOrphanHolds() { // an animal is held still while somebody works on it; if that job was dropped (given up, a wedding call, an error) let it go
+  let any = false; for (const v of AV.values()) if (v.hold) { any = true; break; } if (!any) for (const v of PV.values()) if (v.hold) { any = true; break; } if (!any) return;
+  const live = new Set(); for (const a of [FARMER, ...S.members, ...SPOUSES]) { const k = a && a.task; if (!k) continue; if (k.an) live.add(k.an.id); if (k.tile) live.add(k.tile); }
+  for (const [id, v] of AV) if (v.hold && !live.has(id) && !live.has(v)) { v.hold = 0; STUCK_STATS.release = (STUCK_STATS.release || 0) + 1; }
+  for (const v of PV.values()) if (v.hold && !live.has(v)) { v.hold = 0; STUCK_STATS.release = (STUCK_STATS.release || 0) + 1; }
+}
 const treeGone = t => !t || t.stage !== 'tree' || !S.trees.includes(t);
 function stepActorInner(dm) {
   const me = F === FARMER;
@@ -3054,7 +3085,7 @@ function partyPlanNow() {
   const ph = W ? 'w' + DC.wedPhase(T) : DC.partyPhase(T), key = [L.key, ph, partyReg.keys.join(',')].join('|');
   if (partyPlanC.key !== key) { // v5.11.0.21: a wedding evening opens with the ceremony; afterwards the couple sit at the table first
     // v5.11.0.23: the family (farmer, members, spouses) sit before town guests, so a cramped ceremony still has 阿禾 in the rows
-    const fam = new Set(['farmer'].concat(S.members.map(m => m.id), (typeof SPOUSES !== 'undefined' ? SPOUSES : []).map(s => s.id)));
+    const fam = new Set(['farmer'].concat(S.members.map(m => m.id), SPOUSES.map(s => s.id)));
     const keys = couple ? couple.filter(k => partyReg.keys.includes(k)).concat(partyReg.keys.filter(k => !couple.includes(k) && fam.has(k)), partyReg.keys.filter(k => !couple.includes(k) && !fam.has(k))) : partyReg.keys, roster = keys.map(k => ({ key: k, kid: partyReg.kid[k] }));
     partyPlanC = { key, plan: W ? DC.weddingPlan(W, roster, couple, DC.wedPhase(T), L.extra) : DC.partyPlan(area, L.lawn, roster, ph, L.extra) }; }
   return partyPlanC.plan;
@@ -5027,7 +5058,7 @@ function petSprite(p) { const key = p.kind + ':' + p.coat; let s = PET_SPR[key];
 const anRng = mulberry32(99173), ASPEED = { chicken: 1.6, sheep: 1.1, cow: 0.9, pig: 1.0 };
 function animalView(a) { let v = AV.get(a.id); if (!v) { const R0 = PENS[homeOf(a)].roam; v = { x: R0[0] + anRng() * (R0[2] - R0[0]), y: R0[1] + anRng() * (R0[3] - R0[1]), tx: 0, ty: 0, wait: anRng() * 20, flip: anRng() < 0.5, graze: 0, step: 0, hold: 0, id: a.id, sim: a }; v.tx = v.x; v.ty = v.y; AV.set(a.id, v); } return v; }
 function stepAnimals(dm) {
-  stepPets(dm); stepPondFish(dm);
+  releaseOrphanHolds(); stepPets(dm); stepPondFish(dm);
   if (!S.animals.length) return;
   const T = S.t % 1440, night = T >= BEDTIME - 30 || T < WAKE, raining = !!(WX && WX.isRaining(S.weather, S.day, S.t));
   for (const a of S.animals) { const v = animalView(a); v.sim = a;
@@ -5109,10 +5140,11 @@ function stepPets(dm) {
     if (pack.length) { beginDogSurprise(pack[Math.floor(petRng() * pack.length)], S.dogPlan.kind); S.dogPlan.done = true; }
   }
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
+    if (!v.hold) unstickPet(v, dm);
     if (v.hold) { v.pose = 5; continue; } // happy face while being patted
     let speed = dog ? 4.2 : 2.4;
     if (night || (WX && WX.isRaining(S.weather, S.day, S.t)) || FARMER.home) { const bed = petBed(dog, k); // v5.10.3: a cat bed / dog house of its own
-      if (bed) setWalkTarget(v, bed.x, bed.y); else setWalkTarget(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; v.job = null; }
+      if (bed) petGo(v, bed.x, bed.y); else petGo(v, DOOR.x + 12 + (dog ? k * 7 : -14 - k * 6), DOOR.y + 5 + (k % 2) * 3); v.wait = 0; v.job = null; }
     else if (dog && herdDog(p, v)) speed = 5.2; // v5.6.0: herding the sheep out / home
     else if (dog) {
       const arriving = Math.hypot((v.tx || 0) - v.x, (v.ty || 0) - v.y) < 0.6;
@@ -5120,13 +5152,13 @@ function stepPets(dm) {
       if (!v.job) {
         const ctx = dogCtx(), bed = petBed(true, k); v.job = AN.pickDogJob(p, ctx, petRng);
         if (bed && !v.job.surprise && petRng() < 0.3) v.job = { kind: 'house', wait: 60 + petRng() * 60 }; // v5.10.3: a dog with a house likes lying at its door
-        const t = v.job.kind === 'house' ? bed : dogTarget(v.job.kind, ctx); v.job.x = t.x; v.job.y = t.y; setWalkTarget(v, t.x, t.y); v.wait = v.job.wait;
-      } else if (!arriving) { setWalkTarget(v, v.job.x, v.job.y); const far = Math.hypot(v.job.x - v.x, v.job.y - v.y); if (far > 26) speed = WALK * S.eff.walk * 1.05; }
+        const t = v.job.kind === 'house' ? bed : dogTarget(v.job.kind, ctx); v.job.x = t.x; v.job.y = t.y; petGo(v, t.x, t.y); v.wait = v.job.wait;
+      } else if (!arriving) { petGo(v, v.job.x, v.job.y); const far = Math.hypot(v.job.x - v.x, v.job.y - v.y); if (far > 26) speed = WALK * S.eff.walk * 1.05; }
     }
     else { // cat: nap somewhere sunny, sometimes come and sit by the farmer
       const d0 = Math.hypot(v.tx - v.x, v.ty - v.y);
       if (d0 < 0.4) { v.wait -= dm; if (v.wait <= 0) { const spots = WD.NAP_SPOTS.filter(napOpen), near = petRng() < 0.25 && (WD.areaAt(FARMER.x, FARMER.y) === 'home' || S.eff.regions.includes(WD.areaAt(FARMER.x, FARMER.y)));
-        const n = near && dry(FARMER.x + 8, FARMER.y + 4) ? { x: FARMER.x + 8, y: FARMER.y + 4 } : spots[Math.floor(petRng() * spots.length)]; setWalkTarget(v, n.x + (petRng() - 0.5) * 6 + k * 5, n.y + (petRng() - 0.5) * 4); v.wait = 60 + petRng() * 150; v.idle = 0; } } }
+        const n = near && dry(FARMER.x + 8, FARMER.y + 4) ? { x: FARMER.x + 8, y: FARMER.y + 4 } : spots[Math.floor(petRng() * spots.length)]; petGo(v, n.x + (petRng() - 0.5) * 6 + k * 5, n.y + (petRng() - 0.5) * 4); v.wait = 60 + petRng() * 150; v.idle = 0; } } }
     const hop = nextHop(v, { x: v.tx, y: v.ty }), dx = hop.x - v.x, dy = hop.y - v.y, d = Math.hypot(dx, dy);
     if (d > 0.4) { const st = Math.min(d, speed * dm); v.x += dx / d * st; v.y += dy / d * st; v.step += st; v.idle = 0; v.pose = Math.floor(v.step / 2.5) % 2;
       const sx = dx * CA - dy * SA; if (Math.abs(sx) > 0.2) v.flip = sx < 0; continue; }
@@ -6533,7 +6565,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.8';
+const GAME_VERSION = '5.12.9';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

@@ -36,7 +36,7 @@ fs.mkdirSync(OUT, { recursive: true });
     try { r = await p.evaluate(`(() => { ${setup} ${fn} })()`); } catch (e) { r = { error: String(e).slice(0, 400) }; }
     await p.waitForTimeout(350); await p.screenshot({ path: path.join(OUT, PREFIX + name) });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
-  const ver = r => r.ver !== '5.12.8' ? 'ver ' + r.ver : r.sv && r.sv !== 15 ? 'saveVersion ' + r.sv : null;
+  const ver = r => r.ver !== '5.12.9' ? 'ver ' + r.ver : r.sv && r.sv !== 15 ? 'saveVersion ' + r.sv : null;
 
   // 1. level 5, park not built: R1 still a signposted empty lot; the board offers 镇公园 and says what level 6 needs
   const boardFn = `at(11 * 60); look(781, -50, 0); hide(); const v0 = f.hallView(), park = v0.projects.find(p => p.id === 'park');
