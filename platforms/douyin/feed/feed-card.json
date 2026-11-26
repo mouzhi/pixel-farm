@@ -1,15 +1,15 @@
 {
   "AppID": "tt9ec6e87b00b4408501",
   "CardAppID": "tteecf987270bd308f22",
-  "PlanName": "像素小农场 - 种菜收菜挂机投放计划",
+  "PlanName": "像素放置农场 - 种菜收菜挂机投放计划",
   "TemplateType": 5,
   "TemplateStyleType": 6,
   "DataFetchMode": "dynamic",
   "CardBackgroundUrl": "https://lf-aihub.douyinpic.com/obj/developer/card_7712032872262617898_ext/6c5fae2d1617.png",
   "BgMusicUrl": "https://p9-dy.byteimg.com/obj/7e910003c4819b41823b",
   "Button": "进入小农场",
-  "RecommendReasonPrefix": "种菜",
-  "RecommendReasonSuffix": "收金币小农场",
+  "RecommendReasonPrefix": "像素放置",
+  "RecommendReasonSuffix": "农场",
   "PrimaryColor": "#5e6b2e",
   "ContentInfoList": [
     {

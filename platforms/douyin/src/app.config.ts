@@ -6,7 +6,7 @@ export default defineAppConfig({
     backgroundTextStyle: 'light',
     navigationStyle: 'custom',
     navigationBarBackgroundColor: '#ffffff',
-    navigationBarTitleText: '像素小农场',
+    navigationBarTitleText: '像素放置农场',
     navigationBarTextStyle: 'black',
   },
 })
