@@ -220,6 +220,30 @@
   }
   P.applyInsets = applyInsets;
 
+  // v14：右侧一列（同小红书版位置）：音乐开关、音效开关、拍照存相册。音频由落地页的 PFAudio 播放
+  var sideBtns = null;
+  function paintSide() {
+    if (!sideBtns) return;
+    var A = root.PFAudio, st = A && A.settings ? A.settings() : { music: true, sfx: true };
+    var m = !st.music, s = !st.sfx;
+    if (sideBtns.music.classList.contains('off') !== m) sideBtns.music.classList.toggle('off', m);
+    if (sideBtns.sfx.classList.contains('off') !== s) sideBtns.sfx.classList.toggle('off', s);
+  }
+  function buildSide() {
+    var side = doc.getElementById('xhs-side');
+    if (!side) { side = doc.createElement('div'); side.id = 'xhs-side'; doc.body.appendChild(side); }
+    var music = ico('dy-music', 'dymusic', '音乐', function () {
+      var A = root.PFAudio; if (!A) return; var on = !A.settings().music; A.setMusic(on); paintSide(); say(on ? '音乐已打开' : '音乐已关闭');
+    });
+    var sfx = ico('dy-sfx', 'dysfx', '音效', function () {
+      var A = root.PFAudio; if (!A) return; var on = !A.settings().sfx; A.setSfx(on); paintSide(); say(on ? '音效已打开' : '音效已关闭');
+    });
+    var photo = ico('dy-photo', 'dyphoto', '拍照存相册', function () { if (typeof root.__dyPhoto === 'function') root.__dyPhoto(); });
+    side.appendChild(music); side.appendChild(sfx); side.appendChild(photo);
+    sideBtns = { music: music, sfx: sfx, photo: photo };
+    paintSide();
+  }
+
   function buildChrome() {
     if (doc.getElementById('xhs-bar')) return;
     var stage = doc.createElement('div'); stage.id = 'xhs-stage';
@@ -240,6 +264,7 @@
     var follow = ico('xhs-follow', 'follow', '跟随', function () { setFollow(!P.followFarmer); say(P.followFarmer ? '镜头跟着农夫走' : '镜头不再跟着农夫'); });
     bar.appendChild(follow);
     bar.appendChild(boardIco());
+    buildSide();
     applyInsets();
     markIcons();
     if (root.__farm && root.__farm.fit) root.__farm.fit();

@@ -132,6 +132,8 @@ function patchContext(ctx: any) {
 
 function wrapCanvas(canvas: any) {
   // 离屏画布的 toDataURL 一律自己编 PNG，且只给小图（界面图标）：相册拍照要整块读回 GPU 画布、存进本地存储，手机上不做（返回空 = 不拍，同 v11）
+  // v14：原来的留着给「拍照存相册」用（只在玩家点按时整张导出主画布）
+  if (typeof canvas.toDataURL === "function" && !canvas.__realToDataURL) canvas.__realToDataURL = canvas.toDataURL.bind(canvas)
   canvas.toDataURL = () => {
     try {
       const w = canvas.width | 0

@@ -11,9 +11,9 @@
 .t-html.xhs-mobile #xhs-share, .t-html.xhs-mobile #xhs-note, .t-html.xhs-mobile #xhs-author { display: none !important; }
 
 /* v13: one button set. The atlas now has 3 rows (cell 48px): row 3 = tools, close. */
-html.xhs-mobile .xhs-ico i, #pt-box i, #dy-close i { background-size: 192px 144px; }
+html.xhs-mobile .xhs-ico i, #pt-box i, #dy-close i { background-size: 192px 192px; }
 #pt-box, #dy-close { width: 48px; height: 48px; min-width: 0; padding: 0; margin: 0; border: 0; border-radius: 50%; background: transparent; box-shadow: none; color: transparent; font-size: 0; line-height: 0; }
-#pt-box i, #dy-close i { display: block; width: 48px; height: 48px; background: url(atlas_hud_128_q90.webp) no-repeat; background-size: 192px 144px; }
+#pt-box i, #dy-close i { display: block; width: 48px; height: 48px; background: url(atlas_hud_128_q90.webp) no-repeat; background-size: 192px 192px; }
 #pt-box i { background-position: 0 -96px; }
 #dy-close i { background-position: -48px -96px; }
 #pt-box.on, #pt-box:active { transform: none; background: transparent; box-shadow: 0 0 0 2px #ffe7a8, 0 2px 0 #3a2a20; }
@@ -21,3 +21,11 @@ html.xhs-mobile .xhs-ico i, #pt-box i, #dy-close i { background-size: 192px 144p
 #dy-close[hidden] { display: none !important; }
 /* the panels' own ✕ is a font glyph that the phone font may not have; the round close button above replaces it */
 #shop .x, #store .x, #codex .x, #diary .x, #album .x { display: none !important; }
+/* v14: right column under the HUD (same place as the xhs side column): music, sound, photo. Atlas row 3-4 (cell 48px). */
+html.xhs-mobile #xhs-side .xhs-ico { margin: 0 0 6px 0; }
+html.xhs-mobile .xhs-ico-dymusic i { background-position: -96px -96px; }
+html.xhs-mobile .xhs-ico-dysfx i { background-position: -144px -96px; }
+html.xhs-mobile .xhs-ico-dymusic.off i { background-position: 0 -144px; }
+html.xhs-mobile .xhs-ico-dysfx.off i { background-position: -48px -144px; }
+html.xhs-mobile .xhs-ico-dyphoto i { background-position: -96px -144px; }
+html.xhs-mobile .xhs-ico-dyphoto.busy { opacity: 0.6; }

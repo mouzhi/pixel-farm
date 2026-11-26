@@ -43,8 +43,8 @@ importers:
         specifier: ^9.18.0
         version: 9.39.5
       '@open-dy/vibecoding-cli':
-        specifier: ^0.1.30
-        version: 0.1.30(@open-dy/vibecoding-sdk-opencard@0.1.24(@babel/plugin-transform-typescript@7.29.15(@babel/core@7.29.7))(@types/babel__core@7.20.5)(@types/node@18.19.130)(eslint@9.39.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.108.2)(terser@5.51.4)(typescript-eslint@8.72.1(eslint@9.39.5)(typescript@5.9.3))(typescript@5.9.3))
+        specifier: ^0.1.31
+        version: 0.1.31(@open-dy/vibecoding-sdk-opencard@0.1.24(@babel/plugin-transform-typescript@7.29.15(@babel/core@7.29.7))(@types/babel__core@7.20.5)(@types/node@18.19.130)(eslint@9.39.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.108.2)(terser@5.51.4)(typescript-eslint@8.72.1(eslint@9.39.5)(typescript@5.9.3))(typescript@5.9.3))
       '@types/node':
         specifier: ^18.15.11
         version: 18.19.130
@@ -1152,8 +1152,8 @@ packages:
     resolution: {integrity: sha512-/sfCPaRkMm1fVnrR9qx2m9tVwuIjboRiB6ToQxexUZ19aCZ+2Zvlw3aN8iIuUkkb7EskQmVyH/vNqc+1hPVqkg==}
     hasBin: true
 
-  '@open-dy/vibecoding-cli@0.1.30':
-    resolution: {integrity: sha512-Vr/+xS5GbJ6Z8vpFUmbek0RgsM3cDbdUlNVCWp19QmOdWJMB8KNCEIGCEhAF3r2pn6p2kp2JGzL7hvRzHsgLpQ==}
+  '@open-dy/vibecoding-cli@0.1.31':
+    resolution: {integrity: sha512-aT978+YgtWInoiIfo1z0FZ6hhBFWqEw01AF8lmbYLePt2GkveJolkqnf7fCwJcqbBSyTkxTi/fSNNOYf98dTDA==}
     engines: {node: '>=18'}
     hasBin: true
     peerDependencies:
@@ -3165,8 +3165,8 @@ packages:
     resolution: {integrity: sha512-6li2QanLsAXpIH2R6j77MzRyvOyrvdTqlKtO4CgBdHGNvN99ZZfyxszHc5o5+IZBWD5u6Hzwg83JoGXmqZNG9Q==}
     engines: {node: '>=18'}
 
-  node-releases@2.0.65:
-    resolution: {integrity: sha512-PfvofsGQ+MiOQIPkX9fU8ELUWmy5zL74CdQaph/ismKszfFkfwXaw0cGiwbwym2hT9k5+mdyl8O5WQ1MD8EHmA==}
+  node-releases@2.0.66:
+    resolution: {integrity: sha512-uSMWN9/XtWzxaE0d9ZNHe00Hda6028AXH3WRjTsK71neiPCSeL5nGSD9MXTQX/6Qx0k7Op1AyyinmIUw9fBzrg==}
     engines: {node: '>=18'}
 
   normalize-path@3.0.0:
@@ -5386,7 +5386,7 @@ snapshots:
       - tsx
       - typescript
 
-  '@open-dy/vibecoding-cli@0.1.30(@open-dy/vibecoding-sdk-opencard@0.1.24(@babel/plugin-transform-typescript@7.29.15(@babel/core@7.29.7))(@types/babel__core@7.20.5)(@types/node@18.19.130)(eslint@9.39.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.108.2)(terser@5.51.4)(typescript-eslint@8.72.1(eslint@9.39.5)(typescript@5.9.3))(typescript@5.9.3))':
+  '@open-dy/vibecoding-cli@0.1.31(@open-dy/vibecoding-sdk-opencard@0.1.24(@babel/plugin-transform-typescript@7.29.15(@babel/core@7.29.7))(@types/babel__core@7.20.5)(@types/node@18.19.130)(eslint@9.39.5)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(sass@1.108.2)(terser@5.51.4)(typescript-eslint@8.72.1(eslint@9.39.5)(typescript@5.9.3))(typescript@5.9.3))':
     dependencies:
       '@babel/parser': 7.29.12
       ajv: 8.20.0
@@ -6156,7 +6156,7 @@ snapshots:
       baseline-browser-mapping: 2.11.39
       caniuse-lite: 1.0.30001828
       electron-to-chromium: 1.5.494
-      node-releases: 2.0.65
+      node-releases: 2.0.66
       update-browserslist-db: 1.4.0(browserslist@4.29.6)
 
   buffer-alloc-unsafe@1.1.0: {}
@@ -7473,7 +7473,7 @@ snapshots:
 
   node-releases@2.0.63: {}
 
-  node-releases@2.0.65: {}
+  node-releases@2.0.66: {}
 
   normalize-path@3.0.0: {}
 

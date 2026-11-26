@@ -9,6 +9,8 @@ import { createFarmEnv, type PerfReport } from '@/game/farm-env'
 import { DEMO_SAVE, DEMO_SAVE_KEY } from '@/game/demo-save'
 import { FarmUI } from '@/game/farm-ui'
 import { estimateRect } from '@/game/farm-ui-model'
+import { createFarmAudio, type FarmAudio } from '@/game/dy-audio'
+import { saveFarmPhoto } from '@/game/dy-photo'
 
 import './index.css'
 
@@ -138,6 +140,8 @@ function createLocalImage() {
 export default function Index() {
   const DEBUG = useRef(isDebug()).current
   const envRef = useRef<FarmEnv | null>(null)
+  const audioRef = useRef<FarmAudio | null>(null)
+  const nodeRef = useRef<any>(null)
   const rectRef = useRef({ left: 0, top: 0, width: 375, height: 760 })
   const touchRef = useRef<{ id: number; x: number; y: number } | null>(null)
   const bootedRef = useRef(false)
@@ -324,6 +328,14 @@ export default function Index() {
         rectOf: (id) => estimateRect(id, insetsRef.current, info.windowWidth, info.windowHeight),
       })
       envRef.current = env
+      nodeRef.current = node
+      // v14：音乐音效（第一次点按后才准备，不占启动）；拍照存相册（右侧相机按钮）
+      try {
+        audioRef.current = createFarmAudio(env.G)
+      } catch (err) {
+        console.warn('[farm-audio] init', err)
+      }
+      env.G.__dyPhoto = () => void saveFarmPhoto(nodeRef.current, env.G)
     } catch (err) {
       fail('准备运行环境', err)
       return
@@ -418,9 +430,18 @@ export default function Index() {
     log('useReady')
     Taro.nextTick(() => kick('useReady'))
   })
-  useDidShow(() => envRef.current?.setHidden(false))
-  useDidHide(() => envRef.current?.setHidden(true))
-  useUnload(() => envRef.current?.setHidden(true))
+  useDidShow(() => {
+    envRef.current?.setHidden(false)
+    audioRef.current?.setHidden(false)
+  })
+  useDidHide(() => {
+    envRef.current?.setHidden(true)
+    audioRef.current?.setHidden(true)
+  })
+  useUnload(() => {
+    envRef.current?.setHidden(true)
+    audioRef.current?.destroy()
+  })
 
   useEffect(() => {
     if (phase !== 'ready') return undefined
