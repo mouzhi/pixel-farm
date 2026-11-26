@@ -2,6 +2,12 @@
 // These patches only touch the UI / camera glue; game rules are unchanged.
 export const UI_PATCHES = {
   'game.js': [
+    // v16.3: hud() runs every frame and rebuilt the event log and the fishing box strings each time (~19 KB with fish icon data URLs,
+    // ~1 MB/s of throwaway strings at 60 fps); the mini-DOM then dropped them as unchanged. Rebuild only when their inputs change.
+    ["  document.getElementById('log').innerHTML = S.log.map((s, i) => {",
+     "  const logEl = document.getElementById('log'), logKey = S.log.length + '|' + S.log[0] + '|' + S.log[1] + '|' + (lastCatch ? lastCatch.line + (lastCatch.url ? 1 : 0) : '');\n  if (logEl.__k !== logKey) logEl.__k = logKey, logEl.innerHTML = S.log.map((s, i) => {"],
+    ["  const box = document.getElementById('catches');\n  if (box) {",
+     "  const box = document.getElementById('catches'), c0 = S.catches[0], boxKey = S.day + '|' + S.fishGold + '|' + S.catches.length + '|' + (c0 ? c0.day + c0.id + c0.gold + c0.name : '');\n  if (box && (box.__k !== boxKey || box.__c0 !== c0)) { box.__k = boxKey; box.__c0 = c0;"],
     ["  if (warm > 0) { ctx.globalCompositeOperation = 'multiply';", "  if (warm > 0 && window.__mulFill) window.__mulFill(ctx, 255, 190 + 40 * (1 - warm), 150 + 80 * (1 - warm), 0.55 * warm, W, H);\n  else if (warm > 0) { ctx.globalCompositeOperation = 'multiply';"],
     // follow the farmer (xhs: PFPlatform.followFarmer; the douyin shell starts with it off) and the two-finger gesture lock
     ['  cam.a += (cam.ta - cam.a) * (1 - Math.exp(-dt * 14)); if (Math.abs(cam.ta - cam.a) < ASTEP / 4) cam.a = cam.ta;',
