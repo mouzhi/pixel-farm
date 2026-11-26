@@ -76,6 +76,7 @@ jobs:
           node tools/family-test.js
           node tools/bus-test.js
           node tools/chop-test.js
+          node tools/kidhouse-test.js
 
   shots:
     name: shots (${{ matrix.group }})
@@ -198,6 +199,9 @@ jobs:
             scripts: riverbank-test.js orchard-test.js
           - group: park
             scripts: park-shots.js
+          # v5.13.0 孩子的房子扩建: its own light leg (~5m locally: 10 page loads)
+          - group: kidhouse
+            scripts: kidhouse-shots.js
           # v5.12.4 农场体验: its own leg (~5m locally)
           - group: farmxp
             scripts: farmxp-shots.js

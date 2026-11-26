@@ -14,11 +14,18 @@
   // the roof overhang and deeper for the porch. CY: how far (world units) south of the anchor the model's centre sits.
   const W2 = HM.HOUSE.hw * 4, D2 = HM.HOUSE.hd * 4, CW = W2 + 8, CD = D2 + 14, CX0 = 4, CX1 = W2 + 3, CY0 = 3, CY1 = D2 + 2, ZW = 28; // v5.11.0.9 (房子比例): walls a storey high (were 20), the door as tall as a grown-up
   const CY = (CD / 2 - (CY0 + CY1) / 2) / 2;
-  const toWorld = (vx, vy) => ({ dx: (vx - CW / 2) / 2, dy: (vy - CD / 2) / 2 + CY });
   const CHIM = { x0: CX1 - 9, x1: CX1 - 6, y0: CY0 + 6, y1: CY0 + 9, top: ZW + 22 };
   const DTOP = 24, WZ = 12;                     // the door's top beam; the windows' sill
   const WINS = [CX0 + 4, CX1 - 12];             // the two front windows (left edge, 9 voxels wide)
   const DOOR = { x0: Math.round((CX0 + CX1) / 2) - 4, x1: Math.round((CX0 + CX1) / 2) + 3 };
+  // v5.13.0 扩建: tier lv adds HM.UP.back[lv] world units of rooms at the back (2 voxels each; the front wall, porch and door
+  // stay put) and raises the walls: 阁楼木屋 a half storey with attic windows, 两层小楼 a full upper floor with a balcony
+  const ZWS = [ZW, 40, 52], WZ2 = [0, 31, 36];
+  const GEO = [0, 1, 2].map(lv => { const b = (HM.UP ? HM.UP.back[lv] : 0) || 0, d2 = D2 + 2 * b, cd = d2 + 14, cy1 = d2 + 2, zw = ZWS[lv];
+    return { lv, b, CW, CD: cd, CX0, CX1, CY0, CY1: cy1, ZW: zw, WZ2: WZ2[lv], CY: (cd / 2 - (CY0 + cy1) / 2) / 2 - b / 2,
+      CHIM: { x0: CX1 - 9, x1: CX1 - 6, y0: CY0 + 6, y1: CY0 + 9, top: zw + 22 } }; });
+  const geoOf = h => GEO[HM.lvOf ? HM.lvOf(h) : 0] || GEO[0];
+  const toWorldG = (g, vx, vy) => ({ dx: (vx - g.CW / 2) / 2, dy: (vy - g.CD / 2) / 2 + g.CY });
   function makeModels(x) {
     const B = x.buildModel, gable = x.gableY, cx = (CX0 + CX1) / 2;
     const win = (u, v, u0, v0, s) => { const du = u - u0, dv = v - v0; if (du < 0 || du >= s || dv < 0 || dv >= s) return null;
@@ -28,7 +35,8 @@
     const logs = z => (z % 3 === 2 ? Wd[2] : (z % 6 < 3 ? Wd[3] : Wd[4]));
     // the new house: a log cottage on a stone footing; two front windows with flower boxes, one on each side and one at the
     // back, a small green door with a lantern, a porch with its own little roof, a gable vent and a stone chimney
-    const cottage = roof => B(CW, CD, ZW + 24, (x, y, z) => {
+    const cottage = (roof, lv) => { const g = GEO[lv | 0], { CD, CY1, ZW, CHIM } = g, up = g.WZ2, two = lv >= 2;
+      return B(CW, CD, ZW + 24, (x, y, z) => {
       const inX = x >= CX0 && x <= CX1, inY = y >= CY0 && y <= CY1;
       if (x >= CHIM.x0 && x <= CHIM.x1 && y >= CHIM.y0 && y <= CHIM.y1 && z >= 3 && z <= CHIM.top) return z >= CHIM.top - 1 ? St[1] : (z % 4 === 0 ? St[1] : St[2]);
       if (z <= 2 && x >= CX0 - 1 && x <= CX1 + 1 && y >= CY0 - 1 && y <= CY1 + 1) return (z === 2 || (x + y + z) % 5) ? St[2] : St[1]; // footing
@@ -37,6 +45,12 @@
         if (!(front || back || side)) return Wd[4];
         if (side && (front || back)) return Wd[1];                                                          // corner posts
         if (z >= ZW - 1) return Wd[2];                                                                      // eave beam
+        if (two && z === 30) return Wd[2];                                                                  // v5.13.0 the upper floor's beam
+        if (up && front) { const s = two ? 9 : 7;                                                           // v5.13.0 upper windows (attic: smaller)
+          for (const u0 of WINS) { const w = win(x, z, u0 + (two ? 0 : 1), up, s); if (w) return w; }
+          if (two && x >= DOOR.x0 && x <= DOOR.x1 && z >= 32 && z <= 46) { if (x === DOOR.x0 || x === DOOR.x1 || z === 46) return Wd[1]; return (x - DOOR.x0) % 3 === 0 ? G[1] : G[2]; } } // the balcony door
+        if (up && side) { const w = win(y, z, Math.round((CY0 + CY1) / 2) - 4, up, two ? 8 : 7); if (w) return w; }
+        if (two && back) { const w = win(x, z, Math.round(cx) - 4, up, 8); if (w) return w; }
         if (front) {
           if (x >= DOOR.x0 && x <= DOOR.x1 && z <= DTOP) { if (x === DOOR.x0 || x === DOOR.x1 || z === DTOP) return Wd[1]; if (x === DOOR.x1 - 2 && z === 13) return Ac[1]; return (x - DOOR.x0) % 3 === 0 ? G[1] : G[2]; }
           for (const u0 of WINS) { const w = win(x, z, u0, WZ, 9); if (w) return w; } }
@@ -48,14 +62,20 @@
       const P0 = DOOR.x0 - 6, P1 = DOOR.x1 + 6;
       if (y > CY1 && y <= CY1 + 6 && x >= P0 && x <= P1) {                                                  // the porch
         if (z <= 1) return (x & 1) ? Wd[3] : Wd[4];
-        if ((x === P0 || x === P1) && y === CY1 + 6 && z <= 25) return Wd[2];
+        if ((x === P0 || x === P1) && y === CY1 + 6 && z <= (two ? 30 : 25)) return Wd[2];
+        if (two) { // v5.13.0 两层小楼: a flat porch roof is the balcony, with a railing round its three open sides
+          if (z === 31) return (x + y) % 4 ? Wd[3] : Wd[2];
+          const rim = y === CY1 + 6 || x === P0 || x === P1;
+          if (rim && z >= 32 && z <= 35) return z === 35 ? Wd[1] : ((x + y) % 2 === 0 || y !== CY1 + 6 ? Wd[2] : null);
+          if (rim && z === 32 && y === CY1 + 6) return Ac[3];                                               // a row of pots
+          return null; }
         if (z === 26 + Math.floor((CY1 + 1 - y) / 2) + 2 || z === 27 + Math.floor((CY1 + 1 - y) / 2) + 2) return z % 2 ? PAL.dark(roof, 1) : roof;
         return null; }
       if (z === 0 && y > CY1 + 6 && y <= CY1 + 8 && x >= DOOR.x0 && x <= DOOR.x1) return St[3];             // doorstep
       const r = gable(x, y, z, { z0: ZW + 1, pitch: 0.8, x0: CX0 - 3, x1: CX1 + 3, y0: CY0 - 2, y1: CY1 + 2, fy0: CY0, fy1: CY1, base: roof, line: PAL.dark(roof, 1), ridge: PAL.dark(roof, 1), trim: Wd[2] });
       if (r === 'fill') { if (y >= CY1 - 1 && Math.abs(x - cx) <= 2 && z >= ZW + 4 && z <= ZW + 7) return (Math.abs(x - cx) === 2 || z === ZW + 4 || z === ZW + 7) ? Wd[1] : Wt[3]; return logs(z); }
       if (r) return r;
-      return null; });
+      return null; }); };
     // being built (the same size): the footing, the first log courses round three walls, corner and door posts, the eave beams,
     // a rafter pair on each gable, and logs and planks waiting out front
     const frame = B(CW, CD, ZW + 18, (x, y, z) => {
@@ -82,7 +102,9 @@
       if (z >= 8 && x >= 0 && x <= 17 && y >= 0 && y <= 10 && z === 8 + Math.floor((10 - y) / 3)) return (x % 4 === 0) ? PAL.dark(Rf[2], 1) : Rf[2];
       return null; });
     const bench = root.PFDecorArt && root.PFDecorArt.models && root.PFDecorArt.models() ? root.PFDecorArt.models().bench : null;
-    return { cottages: [cottage(Rf[3]), cottage(G[2])], frame, coop, bench };
+    const ROOFS = [Rf[3], G[2]], cache = {};
+    const cottageOf = (i, lv) => cache[i + ':' + lv] || (cache[i + ':' + lv] = cottage(ROOFS[i % ROOFS.length], lv)); // v5.13.0: built once per roof and tier
+    return { cottages: ROOFS.map((r, i) => cottageOf(i, 0)), cottageOf, frame, coop, bench };
   }
 
   // ---------- ground: a packed-dirt yard in front of the door and round the six tiles ----------
@@ -104,11 +126,11 @@
   const removeAll = () => { for (const q of own) { const i = X.props.indexOf(q); if (i >= 0) X.props.splice(i, 1); } own.length = 0; };
   function sync(force) {
     if (!mounted) return; const hs = S.home ? S.home.houses : [];
-    const k = hs.map(h => [h.site, h.x, h.y, h.m, h.built ? 1 : 0].join(':')).join('|'); if (!force && k === lastKey) return;
+    const k = hs.map(h => [h.site, h.x, h.y, h.m, h.built ? 1 : 0, HM.lvOf ? HM.lvOf(h) : 0].join(':')).join('|'); if (!force && k === lastKey) return;
     const moved = k !== lastKey; lastKey = k; removeAll(); FEET = feet();
     hs.forEach((h, i) => { const L = HM.layout(h);
       if (!h.built) { own.push(X.addProp(MD.frame, h.x, h.y + CY, 0, { xp: 1, big: 1, home: i })); return; }
-      own.push(X.addProp(MD.cottages[i % MD.cottages.length], h.x, h.y + CY, 0, { xp: 1, big: 1, home: i }));
+      const g = geoOf(h); own.push(X.addProp(MD.cottageOf(i, g.lv), h.x, h.y + g.CY, 0, { xp: 1, big: 1, home: i }));
       own.push(X.addProp(MD.coop, L.coop.x, L.coop.y, 0, { xp: 1, home: i }));
       if (MD.bench) own.push(X.addProp(MD.bench, L.bench.x, L.bench.y, 0, { xp: 1, home: i })); });
     // the yard is cleared: the meadow's wild bushes inside the footprint go (they are scenery, never saved)
@@ -121,14 +143,14 @@
   // evenings: the windows glow once someone lives there
   function lights(hz, T) {
     if (!(T >= 17 * 60 + 30 || T < 6 * 60 + 30)) return;
-    const fy = toWorld(0, CY1 + 1).dy, lant = toWorld(DOOR.x1 + 2, CY1 + 1);
-    for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) {
-      for (const u0 of WINS) hz(h.x + toWorld(u0 + 4.5, 0).dx, h.y + fy + 1, WZ + 4, 22, 0.85);
+    for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) { const g = geoOf(h), fy = toWorldG(g, 0, g.CY1 + 1).dy, lant = toWorldG(g, DOOR.x1 + 2, g.CY1 + 1);
+      for (const u0 of WINS) { hz(h.x + toWorldG(g, u0 + 4.5, 0).dx, h.y + fy + 1, WZ + 4, 22, 0.85); if (g.WZ2) hz(h.x + toWorldG(g, u0 + 4.5, 0).dx, h.y + fy + 1, g.WZ2 + 4, 18, 0.7); }
       hz(h.x + lant.dx, h.y + lant.dy + 1, 19, 14, 0.8); }
   }
   // the chimney top (world units, z up) of each house someone lives in, for a curl of smoke
-  function smoke() { const c = toWorld((CHIM.x0 + CHIM.x1) / 2 + 0.5, (CHIM.y0 + CHIM.y1) / 2 + 0.5);
-    return (S && S.home ? S.home.houses : []).filter(h => h.built && h.kid).map(h => ({ x: h.x + c.dx, y: h.y + c.dy, z: (CHIM.top + 1) / 2 })); }
+  function smoke() {
+    return (S && S.home ? S.home.houses : []).filter(h => h.built && h.kid).map(h => { const g = geoOf(h), c = toWorldG(g, (g.CHIM.x0 + g.CHIM.x1) / 2 + 0.5, (g.CHIM.y0 + g.CHIM.y1) / 2 + 0.5);
+      return { x: h.x + c.dx, y: h.y + c.dy, z: (g.CHIM.top + 1) / 2 }; }); }
   const inYard = (x, y) => feet().some(({ L }) => x > L.foot[0] - 3 && x < L.foot[2] + 3 && y > L.foot[1] - 3 && y < L.foot[3] + 3);
   const repaintAt = f => { if (X && X.repaint) X.repaint([f[0] - 4, f[1] - 4, f[2] + 4, f[3] + 4]); };
   const api = { mount, sync, inYard, repaintAt, ground, blocks, lights, smoke, models: () => MD, state: () => ({ props: own.length, key: lastKey }) };

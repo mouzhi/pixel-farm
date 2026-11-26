@@ -71,6 +71,15 @@
   const HOUSE = { levels: [{ cost: 5000, wood: 200 }, { cost: 6500, wood: 240 }, { cost: 8000, wood: 280 }, { cost: 9500, wood: 320 }, { cost: 11000, wood: 360 }, { cost: 12500, wood: 400 }], gen2: 2, max: 6, hw: 10, hd: 7, build: 40 }; // walls 20 x 14 (2.5 x 1.75 tiles)
   // the layout round the anchor (the house's centre, door to the south): the house, six tiles to one side (mirror: the other),
   // a little hen house on the far side of the house, a bench by the door. World units, 8 = one farm tile.
+  // v5.13.0 扩建: a married child's house grows like the farmhouse does (bought in the shop, never auto-bought). Each tier
+  // raises the walls a storey and adds rooms at the back (north): the door, the porch, the six tiles, the hen house and the
+  // bench stay where they are, so only a strip behind the house is newly taken (checked by growWhy before it is sold).
+  // Level n of `kidhouse0` / `kidhouse1` (shop) = tier n of 小豆家 / 小米家; game.js copies it onto the house as h.lv (never saved).
+  const UP = { ids: ['kidhouse0', 'kidhouse1'], names: ['木屋', '阁楼木屋', '两层小楼'], back: [0, 2, 3], bonus: [0, 0.15, 0.3], main: [0, 2, 3],
+    levels: [{ cost: 6000, wood: 220 }, { cost: 12000, wood: 400 }] };
+  const lvOf = h => Math.max(0, Math.min(UP.levels.length, (h && h.lv) | 0));
+  const earnMul = h => 1 + UP.bonus[lvOf(h)];
+  const upKid = id => UP.ids.indexOf(id) >= 0 ? KID_IDS[UP.ids.indexOf(id)] : null;
   const TILE_AT = [[17, -4], [25, -4], [33, -4], [17, 4], [25, 4], [33, 4]]; // v5.9.x: one unit further out for the bigger house
   const GARDEN = ['cabbage', 'pumpkin', 'carrot', 'pumpkin', 'cabbage', 'carrot']; // what each tile grows (their own seeds)
   const HENS = 2;
@@ -79,8 +88,9 @@
     const tiles = TILE_AT.map(([dx, dy], i) => ({ i, x: sx(h, dx), y: h.y + dy }));
     const coop = { x: sx(h, -17), y: h.y - 1 }, door = { x: h.x, y: h.y + HOUSE.hd + 3 }, bench = { x: sx(h, 9), y: h.y + HOUSE.hd + 4 };
     const x0 = Math.min(sx(h, -22), sx(h, 37)), x1 = Math.max(sx(h, -22), sx(h, 37));
-    return { tiles, coop, door, bench, foot: [x0, h.y - 9, x1, h.y + 13],
-      block: [h.x - HOUSE.hw, h.y - HOUSE.hd, h.x + HOUSE.hw, h.y + HOUSE.hd - 0.5],
+    const back = UP.back[lvOf(h)];
+    return { tiles, coop, door, bench, foot: [x0, h.y - 9 - back, x1, h.y + 13], lv: lvOf(h),
+      block: [h.x - HOUSE.hw, h.y - HOUSE.hd - back, h.x + HOUSE.hw, h.y + HOUSE.hd - 0.5],
       coopBlock: [coop.x - 4.5, coop.y - 3, coop.x + 4.5, coop.y + 2.5],
       eggs: { x: coop.x, y: coop.y + 6 } };
   }
@@ -168,8 +178,8 @@
     if (NAV.pathDist && NAV.pathDist(x, y, null) < 6) return '这里是路，不能放房子';
     return '新房子只能挪到买下的花甸、农田、宅园房基，或家里已买下的地里（一块地一座，宅园可以放 4 座）';
   }
-  function blockWhy(x, y, id, mod, avoid) {
-    const foot = layout({ x, y, m: 0 }).foot, field = fieldBox(id, mod), s = siteOf(id);
+  function blockWhy(x, y, id, mod, avoid, lv) {
+    const foot = layout({ x, y, m: 0, lv }).foot, field = fieldBox(id, mod), s = siteOf(id);
     if (field && (boxHit(foot, field) || (s && WD.inRect && WD.inRect(x, y, field)))) return '会压到农田，换一块空草地';
     if (s && s.gate && inBox(s.gate, foot, 12)) return '会挡住大门';
     if (s && s.barrel && inBox(s.barrel, foot, 6)) return '会压到水桶';
@@ -185,10 +195,11 @@
   }
   // where a house can go in site `id` (a plot bought as `mod`, or a first-ring region / 家里): inside the fence,
   // clear of its gate, its 农田 block, its water barrel and anything in `avoid` (boxes). Nearest the middle first.
-  function spotsIn(id, mod, avoid) {
+  function spotsIn(id, mod, avoid, lv) { // lv: the tier of the house being moved (v5.13.0; a new house is tier 0)
     if (isPadId(id)) {
       const pad = PL.padOf(id); if (!pad) return [];
-      const L = layout(pad), f = L.foot;
+      const L = layout({ x: pad.x, y: pad.y, m: pad.m, lv }), f = L.foot;
+      if (f[1] < PL.plot('nhome').rect[1] + 3) return [];
       // v5.12.5: the pads' yards touch edge to edge (x 280 between the west and east pairs), so no extra margin here: with the
       // 1-unit margin a house on 西北 blocked 东北 and the third / fourth house never fitted
       if ((avoid || []).some(b => boxHit(f, b, 0))) return [];
@@ -199,7 +210,7 @@
     const [X0, Y0, X1, Y1] = s.rect, out = [], cx = (X0 + X1) / 2, cy = (Y0 + Y1) / 2;
     const field = fieldBox(id, mod), extra = staticBlocks(id);
     for (let y = Math.ceil((Y0 + 10) / 4) * 4; y <= Y1 - 14; y += 4) for (let x = Math.ceil((X0 + 6) / 4) * 4; x <= X1 - 6; x += 4) for (const m of [0, 1]) {
-      const L = layout({ x, y, m }), f = L.foot;
+      const L = layout({ x, y, m, lv }), f = L.foot;
       if (f[0] < X0 + 4 || f[2] > X1 - 4 || f[1] < Y0 + 3 || f[3] > Y1 - 3) continue;
       if (s.gate && inBox(s.gate, f, 12)) continue;
       if (field && boxHit(f, field)) continue;
@@ -231,8 +242,8 @@
     const s0 = siteOf(id), pid = padPlot(id), mod = (ctx.plots && ctx.plots[pid] && ctx.plots[pid].mod) || (s0 && s0.field ? 'field' : 'meadow');
     const avoid = ctx.avoid || [];
     let best = null, bd = 16;
-    for (const s of spotsIn(id, mod, avoid)) { const d = Math.hypot(s.x - x, s.y - y) + s.m * 0.01; if (d < bd) { bd = d; best = s; } }
-    if (!best) return res(false, blockWhy(x, y, id, mod, avoid.concat(staticBlocks(id))));
+    for (const s of spotsIn(id, mod, avoid, lvOf(h))) { const d = Math.hypot(s.x - x, s.y - y) + s.m * 0.01; if (d < bd) { bd = d; best = s; } }
+    if (!best) return res(false, blockWhy(x, y, id, mod, avoid.concat(staticBlocks(id)), lvOf(h)));
     return res(true, null, { site: id, x: best.x, y: best.y, m: best.m });
   }
   // plots that can take a house now: bought 花甸 / 农田 on flat ground (phase 7 hook) without a house already
@@ -247,6 +258,28 @@
     if (!(ctx.sites | 0)) return SITE_HINT;
     if (!(ctx.room | 0)) return '花甸、农田或宅园里放不下新房子了（要一块空一点的地，或一个空房基）';
     return null;
+  }
+
+  // v5.13.0 扩建: can house h grow to tier lv where it stands? ctx: { others (the other houses' feet), avoid (boxes: trees,
+  // decorations, …) }. Only the strip behind the house is new; it must stay inside its site, off water, clear of the rest.
+  function growWhy(h, lv, ctx) {
+    ctx = ctx || {};
+    const L0 = layout(h), L = layout(Object.assign({}, h, { lv })), f = L.foot;
+    const strip = [L.block[0] - 1, L.block[1] - 1, L.block[2] + 1, L0.block[1]];
+    const s = siteOf(h.site), r = isPadId(h.site) ? (PL.plot('nhome') || {}).rect : s && s.rect;
+    if (r && (f[1] < r[1] + 3)) return '房子后面就是篱笆，没地方往后加屋子（先把房子挪到宽一点的地方）';
+    if (wetAt(f[0], f[1]) || wetAt(f[2], f[1]) || wetAt(h.x, f[1])) return '房子后面是水，没地方往后加屋子';
+    if ((ctx.others || []).some(b => boxHit(strip, b, 1))) return '房子后面挨着另一座房子，没地方往后加屋子';
+    if (staticBlocks(h.site).some(b => boxHit(strip, b, 1))) return '房子后面挨着别的建筑，没地方往后加屋子';
+    if ((ctx.avoid || []).some(b => boxHit(strip, b, 0.5))) return '房子后面有树或别的东西占着，先挪开再扩建';
+    return null;
+  }
+  // the shop gate for kidhouse0 / kidhouse1 at level `have`. ctx: { name, house (theirs, built and lived in), main (farmhouse tier), grow (growWhy) }
+  function upGate(ctx) {
+    const have = ctx.have | 0; if (have >= UP.levels.length) return null;
+    if (!ctx.house) return `${ctx.name}成家、搬进新房子以后才能扩建`;
+    if ((ctx.main | 0) < UP.main[have + 1]) return `主屋先扩建成${['小木屋', '大木屋', '二层农舍', '庄园'][UP.main[have + 1]]}，孩子的房子不比爸妈的大`;
+    return ctx.grow || null;
   }
 
   // ---------- getting married ----------
@@ -352,7 +385,7 @@
   }
 
   const api = { HS, REL, NB, LEVELS, levelOf, MATE_IDS, NB_IDS, KID_IDS, PREF, schoolDay, visit, best, taken, mateIndex, mateName, nbName, clampAdd,
-    HOUSE, TILE_AT, GARDEN, HENS, layout, boxHit, inBox, spotsIn, freeSites, SITE_HINT, houseGate, WED, WED_LOOK, wedLooks, wedReady, isMarried, houseOf, TEEN, teenVisit,
+    HOUSE, UP, lvOf, earnMul, upKid, growWhy, upGate, TILE_AT, GARDEN, HENS, layout, boxHit, inBox, spotsIn, freeSites, SITE_HINT, houseGate, WED, WED_LOOK, wedLooks, wedReady, isMarried, houseOf, TEEN, teenVisit,
     HELP, helpNow, empty, emptyTile, valid, kidRel, nbRel, kidNote,
     HOME_FIELD, isHomeSite, isRegionId, isPadId, padPlot, siteOf, siteName, siteRect, siteAt, siteOwned, siteAllowsHouse, fieldBox, staticBlocks, moveOk };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.PFHome = api;

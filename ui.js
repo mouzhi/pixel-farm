@@ -403,10 +403,10 @@
       const o = SIM.offer(S.up, S.coins, id, G.F.wood), it = o.item, n = it.levels.length, lv = o.have;
       const s2 = sectionFor(it, tab.id); if (s2 && s2 !== sec) { sec = s2; h += `<div class="sec">${sec}</div>`; }
       const look = it.region ? `<button class="pbtn look" data-look="${id}">看看</button>` : PFWorld.PENS[id] ? `<button class="pbtn look" data-look="pen:${id}">看看</button>` : '';
-      const now = id === 'rod' && lv === 0 ? '竹竿' : lv ? it.levels[lv - 1].label : '未购买';
+      const now = id === 'rod' && lv === 0 ? '竹竿' : it.kidup && lv === 0 ? '木屋' : lv ? it.levels[lv - 1].label : '未购买';
       const yp = it.yard && S.homeyard && S.homeyard.put ? (S.homeyard.put[id] | 0) : lv, wait = it.yard && yp < lv ? ` · 家人还没弄好 ${lv - yp} 个（已好 ${yp}）` : ''; // v5.10.11.1
       const short = o.lockText ? `<span class="short lock">${esc(o.lockText)}</span>` : o.locked ? `<span class="short lock">先买${esc(SIM.shopItem(o.locked).name)}</span>` : o.ok ? '' : `<span class="short"><span class="lab">还差</span><span class="price">${o.short ? costChip(o.short, 'coin') : ''}${o.shortWood ? costChip(o.shortWood, 'wood') : ''}</span></span>`;
-      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(it.yard ? it.icon : id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}${esc(wait)}</span></div>` +
+      h += `<div class="card${o.maxed ? ' max' : ''}" data-item="${id}">${icon(it.yard || it.kidup ? it.icon : id)}<div class="ct"><div><b>${it.name}</b> <span class="lv">${n > 1 ? `${lv}/${n}` : ''} ${esc(now)}${esc(wait)}</span></div>` +
         (o.maxed ? `<div class="d">已满级</div></div><div class="cb"><span class="done">✓</span></div>` :
           `<div class="d">下一级：${esc(o.level.label)} · ${esc(o.level.desc)}</div>${look}</div><div class="cb"><button class="pbtn" data-buy="${id}"${o.ok ? '' : ' disabled'}>${priceChips(o.cost, o.wood)}</button>${short}</div>`) + '</div>';
     }
@@ -1037,11 +1037,12 @@
     if (!H || (!H.kids.length && !H.nb.length && !(H.grand && H.grand.length))) return '';
     let h = '<div class="rel">';
     for (const k of H.kids) { const top = k.rel.filter(r => r.v > 0).slice(0, k.married ? 0 : 3);
+      const kidHomeName = id => { const HMw = window.PFHome, h = HMw && G.S && G.S.home ? HMw.houseOf(G.S.home, id) : null, lv = h && HMw.lvOf ? HMw.lvOf(h) : 0; return lv ? `新房子（${HMw.UP.names[lv]}）` : '新房子'; }; // v5.13.0
       if (k.married) { const mate = k.wed && k.rel.find(r => r.id === k.wed.mate) ? k.rel.find(r => r.id === k.wed.mate).name : '';
       const p = k.path, pending = p && p.pending;
       const line = (window.PFCareers && PFCareers.pathLine) ? PFCareers.pathLine(p, k.name) : (p && p.way === 'work' ? '在镇上上班' : p && p.way === 'shop' ? '在镇上开店' : p && p.way === 'inn' ? '经营民宿 / 菜馆' : '留家种地');
       const cool = (window.PFCareers && PFCareers.coolLeft) ? PFCareers.coolLeft(p, G.S ? G.S.day : 0) : 0;
-      h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(mate)}成家了，${esc(line)}${pending ? '（明天换）' : ''}，住在新房子</div>`;
+      h += `<div class="rk"><b>${esc(k.name)}</b> 和${esc(mate)}成家了，${esc(line)}${pending ? '（明天换）' : ''}，住在${kidHomeName(k.id)}</div>`;
       const lab = cool ? `换个活法（还要 ${cool} 天）` : '换个活法';
       h += `<div class="cchg"><button type="button" class="pbtn" data-cr="${esc(k.id)}">${lab}</button></div>`; continue; }
       if (k.wed && k.wed.mate) { h += `<div class="rk"><b>${esc(k.name)}</b> 今晚办婚礼</div>`; continue; }

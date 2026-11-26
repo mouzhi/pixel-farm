@@ -864,6 +864,7 @@ function applyUpgrades() { // shop levels -> farm: capacity, walking, open tiles
   syncAnimals();
   groundDirty = true;
   if (typeof setHouseTier === 'function') { setHouseTier(S.eff.house || 0); syncFenceProps(); }
+  if (kidHouseTiers()) { if (HOME_ON) HA.sync(true); markNavDirty(); } // v5.13.0 小豆家 / 小米家 扩建
   if (typeof syncRegionProps === 'function' && OPEN_REGIONS.join() !== S.eff.regions.join()) { const dirty = XP.dirtyRect(OPEN_REGIONS, S.eff.regions); OPEN_REGIONS = S.eff.regions.slice(); syncRegionProps(); if (groundReady) buildGroundBase(dirty); } // v5.5.0: a plot only repaints its own patch
   if (typeof syncLumberProps === 'function') syncLumberProps();
   syncAvenue();
@@ -901,7 +902,7 @@ function buy(id, who = 'player') { // the player's one action: spend gold on the
   if (!o || o.maxed) return { ok: false, reason: 'maxed' };
   if (o.locked) return Object.assign({ ok: false, reason: 'locked', needs: o.locked }, o.lockText ? { why: o.lockText } : {});
   if (!o.ok) return Object.assign({ ok: false, reason: 'short', short: o.short }, o.shortWood ? { shortWood: o.shortWood } : {});
-  S.coins -= o.cost; FARMER.wood -= o.wood; S.up[id] = o.have + 1; worksBought(id); if (id === 'cottage' && HM) homeBought(); if (DC.CATALOG[id]) decorGain(id); applyUpgrades(); emit('purchase', { item: id, level: o.have + 1, gold: o.cost, wood: o.wood, who });
+  S.coins -= o.cost; FARMER.wood -= o.wood; S.up[id] = o.have + 1; worksBought(id); if (id === 'cottage' && HM) homeBought(); if (DC.CATALOG[id]) decorGain(id); applyUpgrades(); if (o.item.kidup) kidHouseBought(id, o.have + 1); emit('purchase', { item: id, level: o.have + 1, gold: o.cost, wood: o.wood, who });
   if (who !== 'auto') log(`买下了${o.item.name}：${o.level.label}（${o.cost} 金` + (o.wood ? ` + 木材 ${o.wood} 份` : '') + '）'); popText(F.x, F.y, 22, '-' + o.cost, '#ffd76a'); burst(F.x, F.y, 14, ['#ffd76a', '#fff2a8'], 10, 'coin');
   if (id === 'field') log('新的田地开放了，农夫会去清理');
   if (o.item.region) log(`${o.item.name}的篱笆门打开了`);
@@ -2463,6 +2464,7 @@ const worksCtx = () => ({ plots: S.plots, regions: S.eff.regions, works: S.works
 const workersNow = () => 1 + S.members.filter(m => m.role === 'partner' || m.role === 'teen' || m.role === 'child').length;
 SIM.gate = (id, have) => { // shop gates the plain levels cannot express (the shop card shows the text)
   if (id === 'cottage' && HM) return homeGate(have); // v5.9.0
+  if (HM && HM.UP && HM.UP.ids.includes(id)) return kidUpGate(id, have); // v5.13.0
   if (id === 'town' && TN) return have ? null : TN.gate({ plots: S.plots, schoolDays: TN.schoolDays(S.town) }); // v5.8.0
   if (id === 'eastave' && EA) return have ? null : EA.gateAve({ town: townOpen(), lv: townLv() });
   if (FXP && FXP.BY[id]) return have ? null : FXP.gate(id, xpfGateCtx()); // v5.12.4
@@ -2486,6 +2488,7 @@ const revealSteps = id => { // the outside conditions behind a gate, in order; e
   const moved = !!S.family.moved;
   if (id === 'town') return [moved, !!(S.plots.eroad && S.plots.eroad.mod === 'road'), TN ? TN.schoolDays(S.town) > 0 || S.family.kids.length > 0 : true];
   if (id === 'cottage') return [moved, plotMod('meadow', 'field'), S.family.kids.length > 0];
+  if (HM && HM.UP && HM.UP.ids.includes(id)) { const k = HM.UP.ids.indexOf(id); return [moved, S.family.kids.length > k, (S.up.cottage | 0) > k, HM.isMarried(S.home, HM.upKid(id))]; } // v5.13.0: hidden until that child is close to moving out
   if (FXP && FXP.BY[id]) { const c = xpfGateCtx(); return [c.inn, id === 'xppick' ? c.orchard : id === 'xppet' ? c.coop || c.fold : id === 'xptour' ? c.avenue : id === 'xpcraft' ? c.diner : c.any]; } // v5.12.4
   if (PW.WORKS[id]) return [moved, plotMod('workshop')];
   if (id === 'wheel') return [moved, plotMod('dam')];
@@ -3820,6 +3823,40 @@ function homeGate(have) {
   const sites = HM.freeSites(S.plots, S.home.houses).length;
   return (homeGateVal = HM.houseGate({ moved: S.family.moved, have, sites, room: sites && homeSpot() ? 1 : 0, want, free }));
 }
+// ---- v5.13.0 扩建: 小豆家 / 小米家 grow like the farmhouse (shop levels kidhouse0 / kidhouse1 -> h.lv on that child's house) ----
+function kidHouseTiers() { // copies the shop levels onto the houses (h.lv is runtime only; the save keeps the shop levels). -> changed
+  if (!HM || !HM.UP || !S.home || !S.up) return false; let ch = false;
+  for (const h of S.home.houses) { const k = h.kid ? HM.KID_IDS.indexOf(h.kid) : -1, lv = k >= 0 ? Math.min(HM.UP.levels.length, S.up[HM.UP.ids[k]] | 0) : 0;
+    if ((h.lv | 0) !== lv) { if (lv) h.lv = lv; else delete h.lv; ch = true; } }
+  return ch; }
+let kidUpKey = {}, kidUpVal = {};
+function kidGrowWhy(h, lv) { // room behind the house, and the paths round it still open with the bigger walls
+  const ref = S.home.houses.indexOf(h);
+  const why = HM.growWhy(h, lv, { others: S.home.houses.filter(q => q !== h).map(q => HM.layout(q).foot), avoid: homeAvoid(ref) });
+  if (why) return why;
+  const L = HM.layout(Object.assign({}, h, { lv })), g = ensureNav(), gate = (HM.siteOf(h.site) || {}).gate || NAV.LAYOUT.DOOR;
+  if (DC && !DC.keepsPaths(g, L.block, entrySpots().concat([L.door, gate]), NAV.LAYOUT.DOOR)) return '房子再大就会把路堵上（先把房子挪到宽一点的地方）';
+  if (DC && kidPocket(g, L)) return '房子再大会围出一个走不进去的角落（先把房子挪到宽一点的地方）'; // PR #126: nobody gets walled in
+  return null; }
+function kidPocket(g, L) { // any open ground near the house that people reach now but not with the bigger walls
+  const f = L.foot, before = DC.reach(g, NAV.LAYOUT.DOOR, []), after = DC.reach(g, NAV.LAYOUT.DOOR, [L.block]);
+  for (let y = f[1] - 16; y <= f[3] + 16; y += g.cell) for (let x = f[0] - 16; x <= f[2] + 16; x += g.cell) {
+    if (x > L.block[0] - g.cell && x < L.block[2] + g.cell && y > L.block[1] - g.cell && y < L.block[3] + g.cell) continue;
+    const [i, j] = NAV.cellOf(g, x, y); if (i < 0 || j < 0 || i >= g.w || j >= g.h) continue; const c = j * g.w + i;
+    if (before[c] && !after[c]) return true; }
+  return false; }
+function kidUpGate(id, have) {
+  const kid = HM.upKid(id), h = HM.isMarried(S.home, kid) ? HM.houseOf(S.home, kid) : null, name = (FAM.KID_NAMES || ['小豆', '小米'])[HM.KID_IDS.indexOf(kid)];
+  const key = [have, S.eff.house | 0, h ? [h.site, h.x, h.y, h.m, h.built, h.lv | 0].join(':') : '-', S.home.houses.length, S.decor.placed.length, S.works.hives.length, S.trees.length, JSON.stringify(S.plots)].join('|');
+  if (kidUpKey[id] === key) return kidUpVal[id]; kidUpKey[id] = key;
+  const house = !!(h && h.built), main = S.eff.house | 0, base = HM.upGate({ have, name, house, main });
+  return (kidUpVal[id] = base || (house && have < HM.UP.levels.length ? kidGrowWhy(h, have + 1) : null)); }
+function kidHouseBought(id, lv) {
+  const kid = HM.upKid(id), h = HM.houseOf(S.home, kid), name = (FAM.KID_NAMES || ['小豆', '小米'])[HM.KID_IDS.indexOf(kid)]; kidUpKey = {};
+  if (!h) return; const L = HM.layout(h);
+  for (const a of [FARMER, ...S.members, ...SPOUSES]) if (a.x > L.block[0] - 1 && a.x < L.block[2] + 1 && a.y > L.block[1] - 1 && a.y < L.block[3] + 1) { a.x = L.door.x; a.y = L.door.y + 1; a.path = []; } // nobody is left inside the new walls
+  if (HOME_ON) { HA.sync(true); HA.repaintAt && HA.repaintAt(L.foot); } markNavDirty();
+  log(`${name}家扩建成了${HM.UP.names[lv]}，小田和鸡蛋的收入 +${Math.round(HM.UP.bonus[lv] * 100)}%`); burst(h.x, h.y, 26, [Wd[3], Wd[4], '#fff2a8'], 16, 'wood'); }
 function homeBought() {
   const s = homeSpot(); if (!s) return;
   S.home.houses.push({ site: s.site, x: s.x, y: s.y, m: s.m, d: S.day, built: 0, kid: null, tiles: [], eggs: 0, hens: HM.HENS }); homeGateKey = '';
@@ -4522,7 +4559,7 @@ function homeJobs(h) { const out = [], rain = WX && WX.isRaining(S.weather, S.da
     else if (!t.crop) out.push({ k: 'plant', t }); }
   if (h.eggs !== S.day && S.t % 1440 >= 7 * 60 && h.hens > 0 && !(h._eggBy && h._eggBy !== F && S.t - (h._eggT || 0) < 30)) out.push({ k: 'eggs', at: L.eggs });
   return out; }
-function homeEarn(h, g, x, y) { if (!(g > 0)) return; S.coins += g; S.earned += g; S.todayEarn += g; S.home.earn += g; h._today = (h._todayDay === S.day ? h._today | 0 : 0) + g; h._todayDay = S.day;
+function homeEarn(h, g, x, y) { if (!(g > 0)) return; g = Math.round(g * HM.earnMul(h)); S.coins += g; S.earned += g; S.todayEarn += g; S.home.earn += g; h._today = (h._todayDay === S.day ? h._today | 0 : 0) + g; h._todayDay = S.day;
   noteLog('income', 'crops', g); popText(x, y, 14, '+' + g, '#ffd76a'); }
 function homeJobTask(h, j) {
   const t = j.t, at = t ? { x: t.x, y: t.y + 5 } : { x: j.at.x, y: j.at.y }, who = F;
@@ -4651,7 +4688,7 @@ function homeDraw(list) {
 }
 function homeRestore(s) {
   const held = (s.home && s.home.held) || [];
-  S.home = HM.valid(s.home); for (const h of S.home.houses) h._tiles = null; homeTilesSync(); SPOUSES.length = 0; spouseSync(); HENS_VIEW.length = 0; homeGateKey = '';
+  S.home = HM.valid(s.home); kidHouseTiers(); for (const h of S.home.houses) h._tiles = null; homeTilesSync(); SPOUSES.length = 0; spouseSync(); HENS_VIEW.length = 0; homeGateKey = '';
   for (const k of HM.KID_IDS) { const h = HM.isMarried(S.home, k) ? HM.houseOf(S.home, k) : null, m = memberOf(k); if (h && m) { const d = HM.layout(h).door; m.x = d.x; m.y = d.y; } }
   const night = FARMER.sleeping; for (const sp of SPOUSES) { sp.sleeping = night; sp.home = true; }
   // v5.11.0.30: put mid-help cargo back (HM.valid drops held; live state lives on the spouse)
@@ -6581,7 +6618,7 @@ function markSeenLove() { // v5.11.0.39: first open of the family panel hides �
   return true;
 }
 // ---------- save / load (rules in save.js, UI in ui.js) ----------
-const GAME_VERSION = '5.12.9';
+const GAME_VERSION = '5.13.0';
 function logSnap() {
   return { day: S.day, t: S.t, coins: S.coins, createdAt: S.createdAt, gameVersion: GAME_VERSION, tiles: tiles.filter(t => t.open).length, regions: (S.eff.regions || []).length, animals: (S.animals || []).length, family: 1 + S.members.length, now: Date.now() };
 }

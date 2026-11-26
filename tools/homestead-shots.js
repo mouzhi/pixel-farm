@@ -34,7 +34,7 @@ fs.mkdirSync(path.join(OUT, 'after'), { recursive: true });
     if (folder) copy(name, folder);
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
 
-  const ver = r => r.ver !== '5.12.9' ? 'ver ' + r.ver : r.sv && r.sv !== 15 ? 'saveVersion ' + r.sv : null;
+  const ver = r => r.ver !== '5.13.0' ? 'ver ' + r.ver : r.sv && r.sv !== 15 ? 'saveVersion ' + r.sv : null;
 
   // 1. locked lot (before), desktop + phone
   const lockedFn = `look(280, 162, 0); hide();
