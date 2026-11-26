@@ -9,3 +9,15 @@
 #xhs-stage, #wrap, #rlabs, #plabs, #fakecursor { display: none !important; }
 /* no follow-author / share / note / tip on Douyin */
 .t-html.xhs-mobile #xhs-share, .t-html.xhs-mobile #xhs-note, .t-html.xhs-mobile #xhs-author { display: none !important; }
+
+/* v13: one button set. The atlas now has 3 rows (cell 48px): row 3 = tools, close. */
+html.xhs-mobile .xhs-ico i, #pt-box i, #dy-close i { background-size: 192px 144px; }
+#pt-box, #dy-close { width: 48px; height: 48px; min-width: 0; padding: 0; margin: 0; border: 0; border-radius: 50%; background: transparent; box-shadow: none; color: transparent; font-size: 0; line-height: 0; }
+#pt-box i, #dy-close i { display: block; width: 48px; height: 48px; background: url(atlas_hud_128_q90.webp) no-repeat; background-size: 192px 144px; }
+#pt-box i { background-position: 0 -96px; }
+#dy-close i { background-position: -48px -96px; }
+#pt-box.on, #pt-box:active { transform: none; background: transparent; box-shadow: 0 0 0 2px #ffe7a8, 0 2px 0 #3a2a20; }
+#dy-close { position: fixed; right: 10px; top: calc(var(--xhs-sheet-top, 160px) - 38px); z-index: 60; pointer-events: auto; }
+#dy-close[hidden] { display: none !important; }
+/* the panels' own ✕ is a font glyph that the phone font may not have; the round close button above replaces it */
+#shop .x, #store .x, #codex .x, #diary .x, #album .x { display: none !important; }

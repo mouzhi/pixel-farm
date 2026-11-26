@@ -168,6 +168,34 @@
     var f = doc.getElementById('xhs-follow'); if (f) f.classList.toggle('on', !!P.followFarmer);
   }
   P._markTabs = markIcons;
+
+  // v13: one round × (same wooden set as the bottom bar) for every open panel. The panels' own ✕ is a font glyph that the
+  // phone font may lack, and a scrolled header takes it away anyway.
+  var PANELS = ['shop', 'store', 'codex', 'diary', 'album', 'menu', 'offline', 'career', 'xhs-inv-dock', 'pt-sheet'];
+  function anyPanelOpen() {
+    for (var i = 0; i < PANELS.length; i++) if (isOpen(doc.getElementById(PANELS[i]))) return true;
+    return false;
+  }
+  function closeAll() {
+    root.dispatchEvent({ type: 'keydown', key: 'Escape' }); // ui.js: shop / store / codex / menu / career
+    var D = root.PFDiaryUI; if (D && D.close) D.close();
+    var off = doc.getElementById('offline');
+    if (isOpen(off)) { var ob = off.querySelector('button'); if (ob) ob.click(); else off.hidden = true; }
+    closeSheets(null);
+    updateClose();
+  }
+  var closeBtn = null;
+  function updateClose() {
+    if (!closeBtn) {
+      closeBtn = ico('dy-close', 'close', '关闭', null); closeBtn.className = ''; closeBtn.hidden = true; doc.body.appendChild(closeBtn);
+      // close on the press itself: ui.js folds panels on any outside pointerdown, which would take the button away before a click lands
+      closeBtn.addEventListener('pointerdown', closeAll); closeBtn.addEventListener('click', closeAll);
+    }
+    var on = anyPanelOpen();
+    if (closeBtn.hidden === on) closeBtn.hidden = !on;
+    if (on && doc.body.lastChild !== closeBtn) doc.body.appendChild(closeBtn);
+  }
+  setInterval(updateClose, 250);
   function setFollow(on) { P.followFarmer = !!on; markIcons(); }
   P.setFollow = setFollow; // touch.js 用工具时暂停跟随
   function compactHud() {

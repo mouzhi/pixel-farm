@@ -80,6 +80,16 @@ function readStorage(key: string): string | null {
   return typeof value === 'string' && value !== '' ? value : null
 }
 
+// v13：玩家版不显示任何调试信息（角标、面板、启动日志）。开发时在本地存储里写 pf-douyin-debug=1 才打开
+const DEBUG_KEY = 'pf-douyin-debug'
+const isDebug = () => {
+  try {
+    return readStorage(DEBUG_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
 /** 完整农场第一阶段：在落地页跑网页版的模拟与渲染，并测帧率 */
 // 预览器（逻辑层跑在 Worker 里）：图片在本地解码到离屏画布，不走画布代理，避免代理层报错
 function canDecodeLocally() {
@@ -126,6 +136,7 @@ function createLocalImage() {
 }
 
 export default function Index() {
+  const DEBUG = useRef(isDebug()).current
   const envRef = useRef<FarmEnv | null>(null)
   const rectRef = useRef({ left: 0, top: 0, width: 375, height: 760 })
   const touchRef = useRef<{ id: number; x: number; y: number } | null>(null)
@@ -162,7 +173,7 @@ export default function Index() {
   const log = (line: string) => {
     const t = Date.now() - pageT0
     logRef.current = logRef.current.concat(`${t}ms ${line}`).slice(-14)
-    setBootLog(logRef.current)
+    if (DEBUG) setBootLog(logRef.current)
     try {
       Taro.setStorageSync(BOOT_LOG_KEY, JSON.stringify({ at: Date.now(), done: false, lines: logRef.current }))
     } catch {
@@ -419,8 +430,8 @@ export default function Index() {
       if (!env) return
       ticks++
       const report = env.perf()
-      setPerf(report)
-      const st = env.G.__pfcStats
+      if (DEBUG) setPerf(report)
+      const st = DEBUG ? env.G.__pfcStats : null
       if (st) {
         const now = nowMs()
         const prev = pfcPrevRef.current
@@ -444,7 +455,7 @@ export default function Index() {
         })
         pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild, patch: st.patch || 0, pd: st.patchDraws || 0, stk: st.stkNew || 0, who: Object.assign({}, st.stkWho || {}), sc: st.chunkBuild || 0, sd: st.chunkDraws || 0, fb: (st.soilFb || 0) + (st.objFb || 0), df: st.defer || 0 }
       }
-      setProblems(env.problems())
+      if (DEBUG) setProblems(env.problems())
       // 自动画质：攒够约 45 帧后，低于 30 FPS 就降一档（只降不升，避免来回跳）
       if (qualityRef.current === 'auto' && ticks % 4 === 0 && report.frames >= 45 && report.fps < 30) {
         const next = levelRef.current === 'high' ? 'mid' : levelRef.current === 'mid' ? 'low' : null
@@ -580,7 +591,7 @@ export default function Index() {
         onTouchCancel={onTouchEnd}
       />
       {/* v12：调试角标在界面层下面（面板盖住它）；展开后浮到最上面，画质/缓存/到夜晚/缩放都在展开的面板里 */}
-      {phase === 'ready' && perf ? (
+      {DEBUG && phase === 'ready' && perf ? (
         <View className={panelOpen ? 'farm-perf-wrap is-open' : 'farm-perf-wrap'} style={{ top: `${insetsRef.current.top + 120}px` }}>
           <View className="farm-badge" onClick={() => setPanelOpen(!panelOpen)}>
             <Text className="farm-badge-text text-xs">{`v12 · FPS ${perf.fps.toFixed(0)} · 启动${((bootMs + (envRef.current?.bootFps().first || 0)) / 1000).toFixed(1)}s${loadingText(envRef.current?.G.__pfcStats)} ${panelOpen ? '▲' : '▼'}`}</Text>
@@ -647,13 +658,13 @@ export default function Index() {
       {phase === 'ready' && envRef.current ? <FarmUI env={envRef.current} /> : null}
       <View className="farm-overlay">
         {phase !== 'ready' ? <CustomNavSpace /> : null}
-        {phase === 'loading' ? <Text className="farm-state text-base">{`农场加载中…（${step}）`}</Text> : null}
+        {phase === 'loading' ? <Text className="farm-state text-base">{DEBUG ? `农场加载中…（${step}）` : '农场加载中…'}</Text> : null}
         {phase === 'error' ? (
           <View className="farm-error">
             <Text className="farm-state text-base">{`农场没能打开：${errorText}`}</Text>
           </View>
         ) : null}
-        {phase !== 'ready' ? (
+        {DEBUG && phase !== 'ready' ? (
           <View className="farm-bootlog">
             {prevLog.map((line, i) => (
               <Text key={`prev-${i}`} className="farm-perf-warn text-xs">{line}</Text>

@@ -27,6 +27,10 @@ export const UI_PATCHES = {
   ],
   'touch.js': [
     // a 10 Hz tick instead of a frame callback (the bar and crosshair state do not need 60 Hz)
+    // v13: the toolbox button is a picture from the same atlas as the bottom bar (no glyph), 48px like the bar buttons
+    ["mk('button', 'pt-box', '', '<span class=\"g\">⚒</span>')", "mk('button', 'pt-box', '', '<i class=\"g\"></i>')"],
+    ["box.style.top = Math.round(top - 66) + 'px';", "box.style.top = Math.round(top - 58) + 'px';"],
+    ['<h4><span>⚒ 工具</span>', '<h4><span>工具</span>'],
     ['    root.requestAnimationFrame(tick);\n  }\n  root.requestAnimationFrame(tick);', '    setTimeout(tick, 100);\n  }\n  setTimeout(tick, 100);'],
   ],
 };
