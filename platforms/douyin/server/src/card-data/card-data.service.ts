@@ -1,45 +1,39 @@
 import { Injectable } from '@nestjs/common';
 import type { CardData } from './card-data.types';
-import { CARD_PLOT_COUNT, CROPS } from '../farm/farm-config';
 import { FARM_ASSETS } from '../farm/farm-assets';
-import { FarmStoreService } from '../farm/farm-store.service';
+import { CARD_ART } from './card-art';
+
+/** 卡面田地四行依次种的作物（顺序与作物图集的行一致） */
+const CARD_CROPS = [
+  { id: 'carrot', name: '胡萝卜', growSeconds: 20, price: 8 },
+  { id: 'cabbage', name: '卷心菜', growSeconds: 30, price: 12 },
+  { id: 'strawberry', name: '草莓', growSeconds: 40, price: 16 },
+  { id: 'pumpkin', name: '南瓜', growSeconds: 55, price: 22 },
+];
 
 @Injectable()
 export class CardDataService {
-  constructor(private readonly store: FarmStoreService) {}
-
-  /** 组装卡面完整 CardData：作物配置、素材地址、文案与服务端记录的累计金币 */
-  buildCardData(openId?: string): CardData {
-    const progress = this.store.get(openId);
+  /** 组装卡面完整 CardData：素材地址、作物节奏与文案。卡面进度只存在本机，不读写服务端。 */
+  buildCardData(): CardData {
     return {
-      contractVersion: '1.0.0',
+      contractVersion: '2.1.0',
       displayMode: 'farm',
       views: {
         farm: {
-          plotCount: CARD_PLOT_COUNT,
-          soil: FARM_ASSETS.soil,
+          scene: { day: CARD_ART.sceneDay, night: CARD_ART.sceneNight },
+          cropAtlas: { day: CARD_ART.cropsDay, night: CARD_ART.cropsNight },
+          familySheet: { day: CARD_ART.familyDay, night: CARD_ART.familyNight },
+          propSheet: { day: CARD_ART.propsDay, night: CARD_ART.propsNight },
           coinIcon: FARM_ASSETS.coin,
-          seedIcon: FARM_ASSETS.seed,
-          farmer: {
-            hoe: FARM_ASSETS.farmerHoe,
-            water: FARM_ASSETS.farmerWater,
-            walk: FARM_ASSETS.farmerWalk,
-            frames: 4,
-          },
-          crops: CROPS.map((crop) => ({
-            id: crop.id,
-            name: crop.name,
-            growSeconds: crop.cardGrowSeconds,
-            price: crop.cardPrice,
-            icon: crop.stages.ripe,
-            stages: crop.stages,
-          })),
-          defaultCropId: 'carrot',
+          crops: CARD_CROPS,
+          helperName: '阿禾',
+          offlinePerMinute: 6,
+          offlineCapHours: 8,
           copy: {
-            emptyHint: '点空地播种',
-            growingHint: '还要{s}秒',
-            ripeHint: '熟了，点我收获',
-            harvestedLabel: '已收获',
+            ripeCta: '一键收菜',
+            waitCta: '等它长大',
+            collect: '收下',
+            nightHint: '夜里菜也在长',
           },
         },
         error: {
@@ -47,17 +41,13 @@ export class CardDataService {
           retryLabel: '重试',
         },
       },
-      userState: {
-        coins: progress.coins,
-        harvests: progress.harvests,
-      },
       meta: { source: 'farm' },
     };
   }
 
-  buildDyCardResponse(openId?: string): { success: boolean; data: string; message?: string } {
+  buildDyCardResponse(): { success: boolean; data: string; message?: string } {
     try {
-      return { success: true, data: JSON.stringify(this.buildCardData(openId)) };
+      return { success: true, data: JSON.stringify(this.buildCardData()) };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '获取卡片数据失败';
       console.error('[CardData] build failed:', error);

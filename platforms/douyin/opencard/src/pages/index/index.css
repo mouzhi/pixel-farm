@@ -88,7 +88,7 @@
   flex-shrink: 0;
 }
 
-/* ---------- 像素小农场 ---------- */
+/* ---------- 像素放置农场 · 卡面 ---------- */
 
 .pixel-image-fallback {
   background: rgba(136, 95, 63, 0.6);
@@ -99,7 +99,33 @@
   flex-direction: row;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 1.2vh;
+  margin-bottom: 1.4vh;
+}
+
+.hud-clock {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.hud-day {
+  color: #ffe9a8;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  text-shadow: 0 1px 0 #3a210d;
+  flex-shrink: 0;
+}
+
+.hud-time {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .hud-coins {
@@ -110,8 +136,8 @@
 }
 
 .hud-coin-icon {
-  width: 26px;
-  height: 26px;
+  width: 24px;
+  height: 24px;
   flex-shrink: 0;
 }
 
@@ -123,269 +149,895 @@
   margin-left: 6px;
   color: #ffd34d;
   font-family: "DIN Alternate", "DINAlternate-Bold", sans-serif;
-  font-size: 24px;
+  font-size: 22px;
   font-weight: 700;
-  line-height: 28px;
-  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12, 0 3px 0 rgba(0, 0, 0, 0.35);
+  line-height: 26px;
+  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12, 0 2px 0 rgba(0, 0, 0, 0.35);
   flex-shrink: 0;
 }
 
-.hud-status {
-  margin-left: 8px;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 18px;
-  text-align: right;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-grow: 1;
-  flex-shrink: 1;
-  flex-basis: 0;
-  min-width: 0;
-}
-
 .farm-body {
-  position: relative;
-}
-
-.farm-field {
-  position: relative;
-  z-index: 0;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  flex-grow: 1;
-  flex-shrink: 1;
-  flex-basis: 0;
-  min-height: 0;
-}
-
-.farm-row {
-  display: flex;
-  flex-direction: row;
-  width: 100%;
-  gap: 2.4vw;
-  flex-grow: 1;
-  flex-shrink: 1;
-  flex-basis: 0;
-  min-height: 0;
-  margin-bottom: 1vh;
-}
-
-.farm-row-first {
-  align-items: flex-end;
-}
-
-.farm-row-last {
-  align-items: flex-start;
-  margin-bottom: 0;
-}
-
-.farm-plot {
-  position: relative;
-  display: flex;
   align-items: center;
   justify-content: center;
-  height: 100%;
-  max-height: 112px;
-  min-width: 0;
-  flex-grow: 1;
-  flex-shrink: 1;
-  flex-basis: 0;
 }
 
-.farm-plot.is-shake {
-  animation: plotShake 0.3s linear;
+.farm-stage {
+  position: relative;
+  z-index: 0;
+  width: 100%;
+  aspect-ratio: 704 / 680;
+  flex-shrink: 0;
 }
 
-.plot-glow {
+.stage-scene {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  box-sizing: border-box;
-  border: 3px solid #ffd34d;
-  border-radius: 4px;
-  background: radial-gradient(circle, rgba(255, 220, 110, 0.45) 0%, rgba(255, 220, 110, 0) 72%);
-  animation: glowPulse 1s ease-in-out infinite;
+  border-radius: 8px;
 }
 
-.plot-badge {
+.stage-dusk {
   position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(255, 140, 60, 0.28) 0%, rgba(120, 60, 120, 0.18) 100%);
+}
+
+/* 作物（连同垦好的土）：一格 68×68（相对 704×680 农场图），图集 5 列（4 个阶段 + 不带土的成熟菜）× 4 行作物；没开垦的地就是底图上的空地 */
+.plot {
+  position: absolute;
+  width: 9.659%;
+  height: 10%;
+  overflow: hidden;
+}
+
+.plot-r0 {
   z-index: 1;
-  top: -8px;
-  right: -6px;
-  width: 24px;
-  height: 24px;
+}
+
+.plot-r1 {
+  z-index: 2;
+}
+
+.plot-r2 {
+  z-index: 3;
+}
+
+.plot-r3 {
+  z-index: 4;
+}
+
+.plot-atlas {
+  position: absolute;
+  width: 500%;
+  height: 400%;
+}
+
+.plot.is-ripe {
+  animation: ripeBob 1.6s ease-in-out infinite;
+}
+
+.plot.is-picked {
+  animation: pickUp 0.8s ease-out forwards;
+}
+
+.plot.is-new {
+  animation: popIn 0.6s ease-out both;
+}
+
+.wave-c1 {
+  animation-delay: 0.05s;
+}
+
+.wave-c2 {
+  animation-delay: 0.1s;
+}
+
+.wave-c3 {
+  animation-delay: 0.15s;
+}
+
+.wave-c4 {
+  animation-delay: 0.2s;
+}
+
+.wave-c5 {
+  animation-delay: 0.25s;
+}
+
+.field-hit {
+  position: absolute;
+  z-index: 5;
+  left: 39%;
+  top: 68.2%;
+  width: 49%;
+  height: 31.8%;
+}
+
+.ripe-bubble {
+  position: absolute;
+  z-index: 8;
+  left: 64%;
+  top: 70%;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 76px;
+  height: 24px;
+  margin-left: -38px;
+  margin-top: -26px;
   background: #ffd34d;
   border: 2px solid #4a2a12;
-  border-radius: 4px;
-  animation: ripeBob 0.8s ease-in-out infinite;
+  border-radius: 6px;
+  animation: ripeBob 0.9s ease-in-out infinite;
 }
 
-.plot-badge-text {
+.ripe-bubble-text {
   color: #4a2a12;
   font-size: 13px;
   font-weight: 700;
   line-height: 16px;
+  white-space: nowrap;
 }
 
-.plot-soil {
+/* 家人：一帧 80×84（相对 704×680），帧条 6 帧 */
+.actor {
+  position: absolute;
+  z-index: 6;
+  width: 11.364%;
+  height: 12.353%;
+  transition: left 0.9s linear, top 0.9s linear;
+}
+
+.actor-frame {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-}
-
-.plot-crop {
-  position: absolute;
-  top: 8%;
-  left: 11%;
-  width: 78%;
-  height: 78%;
-}
-
-.plot-crop-ripe {
-  animation: ripeBob 0.8s ease-in-out infinite;
-}
-
-.plot-bar {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 52px;
-  height: 6px;
-  margin-top: 28px;
-  margin-left: -26px;
-  background: rgba(30, 18, 8, 0.75);
-  border: 1px solid #2e1c0e;
-  border-radius: 2px;
   overflow: hidden;
 }
 
-.plot-bar-fill {
+.actor-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 600%;
   height: 100%;
-  background: #8fe04f;
 }
 
-.plot-tip {
+.actor-sheet.frame-0 {
+  transform: translateX(0);
+}
+
+.actor-sheet.frame-5 {
+  transform: translateX(-83.333%);
+}
+
+.actor-sheet.is-walk {
+  animation: farmerWalk 0.4s steps(2, end) infinite;
+}
+
+.actor-sheet.is-work {
+  animation: farmerWork 0.5s steps(2, end) infinite;
+}
+
+.actor-sheet.frame-5.is-hop {
+  animation: helperHop 0.45s ease-in-out infinite;
+}
+
+.actor-bubble {
   position: absolute;
-  z-index: 3;
-  top: 50%;
-  left: 0;
-  width: 100%;
-  margin-top: -40px;
-  text-align: center;
+  z-index: 1;
+  top: -16px;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 18px;
+  margin-left: -26px;
+  background: rgba(255, 250, 235, 0.95);
+  border: 1px solid #4a2a12;
+  border-radius: 9px;
+}
+
+.actor-bubble-text {
+  color: #4a2a12;
+  font-size: 11px;
   font-weight: 700;
+  line-height: 14px;
   white-space: nowrap;
 }
 
-.plot-tip-coin {
-  color: #ffd34d;
-  font-size: 26px;
-  line-height: 30px;
-  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12;
-  animation: tipFloat 0.9s ease-out forwards;
+.sleep-bubble {
+  position: absolute;
+  z-index: 6;
+  left: 31%;
+  top: 38%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 20px;
+  margin-left: -15px;
+  animation: sleepFloat 2.4s ease-in-out infinite;
 }
 
-.plot-tip-wait {
-  color: #ffffff;
-  font-size: 13px;
+.sleep-text {
+  color: #dfe8ff;
+  font-size: 15px;
+  font-weight: 700;
   line-height: 18px;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
-  animation: tipFade 0.9s ease-out forwards;
 }
 
-.farmer {
+.stage-tip {
   position: absolute;
-  z-index: 2;
-  width: 64px;
-  height: 64px;
-  transform: translateX(-50%);
-  transition: left 0.4s linear, top 0.4s linear;
+  z-index: 9;
+  width: 90px;
+  margin-left: -45px;
+  margin-top: -20px;
+  color: #ffd34d;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 20px;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12;
+  animation: tipFloat 1s ease-out forwards;
 }
 
-.farmer.is-left {
-  transform: translateX(-50%) scaleX(-1);
+.stage-note {
+  position: absolute;
+  z-index: 11;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  height: 24px;
+  margin-left: -66px;
+  margin-top: -12px;
+  background: #fff6dc;
+  border: 2px solid #4a2a12;
+  border-radius: 8px;
+  animation: noteFloat 1.8s ease-out forwards;
 }
 
-.farmer-frame {
-  width: 64px;
-  height: 64px;
-  overflow: hidden;
+.stage-note-text {
+  color: #4a2a12;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
+  white-space: nowrap;
 }
 
-.farmer-sheet {
-  width: 256px;
-  height: 64px;
+.stage-tip.is-big {
+  width: 140px;
+  margin-left: -70px;
+  margin-top: -34px;
+  font-size: 28px;
+  line-height: 34px;
 }
 
-.farmer-sheet.is-anim {
-  animation: farmerFrames 0.48s steps(4, end) infinite;
-}
-
-.farm-seeds {
-  flex-direction: row;
-  padding-top: 1.2vh;
-  gap: 2.4vw;
-}
-
-.seed-chip {
-  box-sizing: border-box;
+.away-panel {
+  position: absolute;
+  z-index: 10;
+  top: 3%;
+  left: 3%;
+  right: 3%;
   display: flex;
   flex-direction: row;
   align-items: center;
-  height: 40px;
-  padding: 0 6px;
-  min-width: 0;
+  box-sizing: border-box;
+  padding: 8px 8px 8px 10px;
+  background: rgba(46, 28, 14, 0.9);
+  border: 2px solid #ffd34d;
+  border-radius: 8px;
+  animation: awayIn 0.35s ease-out;
+}
+
+.away-text {
+  display: flex;
+  flex-direction: column;
   flex-grow: 1;
   flex-shrink: 1;
   flex-basis: 0;
-  background: rgba(92, 58, 34, 0.82);
-  border: 1px solid rgba(255, 226, 170, 0.35);
-  border-radius: 8px;
+  min-width: 0;
 }
 
-.seed-chip.is-selected {
-  background: rgba(124, 78, 40, 0.95);
-  border: 2px solid #ffd34d;
+.away-title {
+  color: #fff2cc;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  white-space: nowrap;
 }
 
-.seed-icon {
-  width: 28px;
-  height: 28px;
+.away-sub {
+  color: rgba(255, 242, 204, 0.75);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.away-gold {
+  margin-left: 6px;
+  color: #ffd34d;
+  font-family: "DIN Alternate", "DINAlternate-Bold", sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 26px;
+  text-shadow: 1px 1px 0 #4a2a12, -1px 1px 0 #4a2a12, 1px -1px 0 #4a2a12, -1px -1px 0 #4a2a12;
   flex-shrink: 0;
 }
 
-.seed-text {
+.away-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  width: 52px;
+  height: 30px;
+  background: #ffd34d;
+  border: 2px solid #4a2a12;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.away-btn-text {
+  color: #4a2a12;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 18px;
+}
+
+.farm-foot {
+  flex-direction: row;
+  align-items: center;
+  padding-top: 1.4vh;
+}
+
+.foot-status {
   display: flex;
   flex-direction: column;
-  margin-left: 4px;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
   min-width: 0;
+}
+
+.foot-main {
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  white-space: nowrap;
+}
+
+.foot-sub {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.foot-main.is-afford {
+  color: #a8f07a;
+}
+
+/* 小店按钮：买得起时变绿、上下跳、角上挂「可买 N」 */
+.foot-shop {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  width: 56px;
+  height: 40px;
+  box-sizing: border-box;
+  background: rgba(92, 58, 34, 0.85);
+  border: 2px solid rgba(255, 233, 168, 0.45);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.foot-shop.is-afford {
+  background: linear-gradient(180deg, #8fe05a 0%, #3f9a33 100%);
+  border: 2px solid #24451a;
+  animation: shopBob 1s ease-in-out infinite;
+}
+
+.foot-shop.is-open {
+  border: 2px solid #ffd34d;
+  animation: none;
+}
+
+.foot-shop-text {
+  color: rgba(255, 242, 204, 0.85);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.foot-shop-text.is-afford {
+  color: #ffffff;
+  text-shadow: 0 1px 0 #24451a;
+}
+
+.foot-shop-badge {
+  position: absolute;
+  top: -11px;
+  right: -8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 18px;
+  padding: 0 5px;
+  background: #ff5a3c;
+  border: 1px solid #ffffff;
+  border-radius: 9px;
+}
+
+.foot-shop-badge-text {
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.foot-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-left: 8px;
+  width: 92px;
+  height: 40px;
+  box-sizing: border-box;
+  background: rgba(92, 58, 34, 0.85);
+  border: 2px solid rgba(255, 233, 168, 0.45);
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.foot-cta.is-ready {
+  background: linear-gradient(180deg, #ffe07a 0%, #f5a623 100%);
+  border: 2px solid #4a2a12;
+  animation: ctaPulse 1.2s ease-in-out infinite;
+}
+
+.foot-cta.is-shake {
+  animation: plotShake 0.3s linear;
+}
+
+.foot-cta-text {
+  color: rgba(255, 242, 204, 0.85);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+}
+
+.foot-cta-text.is-ready {
+  color: #4a2a12;
+}
+
+/* ---------- 小商店买到的东西 ---------- */
+
+/* 道具：一格 72×112（相对 704×680），帧条 6 格：鸡、猪、花盆、长椅、石灯、稻草人 */
+.prop {
+  position: absolute;
+  z-index: 5;
+  width: 10.227%;
+  height: 16.471%;
+}
+
+.prop.is-animal {
+  animation: peck 2.2s ease-in-out infinite;
+}
+
+.prop.is-new {
+  animation: popIn 0.6s ease-out both;
+}
+
+.prop-frame {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.prop-frame.is-flip {
+  transform: scaleX(-1);
+}
+
+.prop-sheet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 600%;
+  height: 100%;
+}
+
+.prop-chicken {
+  transform: translateX(0);
+}
+
+.prop-pig {
+  transform: translateX(-16.667%);
+}
+
+.prop-flowerpot {
+  transform: translateX(-33.333%);
+}
+
+.prop-bench {
+  transform: translateX(-50%);
+}
+
+.prop-stonelamp {
+  transform: translateX(-66.667%);
+}
+
+.prop-scarecrow {
+  transform: translateX(-83.333%);
+}
+
+.actor.is-new {
+  animation: popIn 0.6s ease-out both;
+}
+
+/* 水井：田上时不时落几滴水，级别越高水越多 */
+.well-rain {
+  position: absolute;
+  z-index: 5;
+  left: 40%;
+  top: 64%;
+  width: 48%;
+  height: 32%;
+}
+
+.well-rain.is-new {
+  animation: popIn 0.6s ease-out both;
+}
+
+.rain-drop {
+  position: absolute;
+  width: 4px;
+  height: 7px;
+  background: #8fd8ff;
+  border: 1px solid #2a6fa8;
+  border-radius: 3px;
+  opacity: 0;
+  animation: dropFall 1.6s ease-in infinite;
+}
+
+.drop-1 {
+  left: 14%;
+  top: 18%;
+}
+
+.drop-2 {
+  left: 58%;
+  top: 34%;
+  animation-delay: 0.8s;
+}
+
+.drop-3 {
+  left: 34%;
+  top: 52%;
+  animation-delay: 0.4s;
+}
+
+.drop-4 {
+  left: 80%;
+  top: 46%;
+  animation-delay: 1.2s;
+}
+
+.drop-5 {
+  left: 24%;
+  top: 74%;
+  animation-delay: 0.6s;
+}
+
+.drop-6 {
+  left: 66%;
+  top: 70%;
+  animation-delay: 1s;
+}
+
+/* 主屋：烟囱冒烟，级别越高烟越足 */
+.chimney-smoke {
+  position: absolute;
+  z-index: 1;
+  left: 29.4%;
+  top: 4%;
+  width: 6%;
+  height: 8%;
+}
+
+.smoke-puff {
+  position: absolute;
+  bottom: 0;
+  left: 20%;
+  width: 9px;
+  height: 9px;
+  background: rgba(245, 245, 240, 0.85);
+  border-radius: 5px;
+  opacity: 0;
+  animation: smokeRise 2.4s ease-out infinite;
+}
+
+.puff-2 {
+  animation-delay: 0.8s;
+}
+
+.puff-3 {
+  animation-delay: 1.6s;
+}
+
+/* ---------- 小商店面板：盖在农场上，3 行 × 2 格，只点不滑 ---------- */
+.shop-panel {
+  position: absolute;
+  z-index: 12;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  padding: 6px;
+  background: rgba(40, 24, 12, 0.95);
+  border: 2px solid #ffd34d;
+  border-radius: 8px;
+  animation: awayIn 0.25s ease-out;
+}
+
+.shop-head {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.shop-title {
+  color: #ffd34d;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 20px;
+  text-shadow: 0 1px 0 #000000;
+  flex-shrink: 0;
+}
+
+.shop-hint {
+  margin-left: 8px;
+  color: rgba(255, 242, 204, 0.6);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-width: 0;
+}
+
+.shop-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 13px;
+  flex-shrink: 0;
+}
+
+.shop-close-text {
+  color: #fff2cc;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.shop-row {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+  margin-top: 5px;
   flex-grow: 1;
   flex-shrink: 1;
   flex-basis: 0;
 }
 
-.seed-name {
-  color: #fff3d6;
+.shop-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  width: 49%;
+  box-sizing: border-box;
+  padding: 4px;
+  background: rgba(255, 240, 205, 0.07);
+  border: 2px solid rgba(255, 233, 168, 0.22);
+  border-radius: 7px;
+}
+
+.shop-item.is-afford {
+  background: rgba(255, 211, 77, 0.14);
+  border: 2px solid #ffd34d;
+}
+
+.shop-item.is-max {
+  opacity: 0.55;
+}
+
+.shop-icon {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  margin-right: 6px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.28);
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.shop-icon-img {
+  position: absolute;
+}
+
+/* 图标都是从已有素材里裁的一块 */
+.icon-img-land {
+  left: 0;
+  top: 0;
+  width: 500%;
+  height: 400%;
+}
+
+.icon-img-seed-1 {
+  left: -300%;
+  top: -100%;
+  width: 500%;
+  height: 400%;
+}
+
+.icon-img-seed-2 {
+  left: -300%;
+  top: -200%;
+  width: 500%;
+  height: 400%;
+}
+
+.icon-img-seed-3 {
+  left: -300%;
+  top: -300%;
+  width: 500%;
+  height: 400%;
+}
+
+.icon-img-helper {
+  left: -500%;
+  top: 0;
+  width: 600%;
+  height: 100%;
+}
+
+.icon-img-coop {
+  left: -25%;
+  top: -129.167%;
+  width: 900%;
+  height: 233.333%;
+}
+
+.icon-img-well {
+  left: -303.333%;
+  top: -163.333%;
+  width: 469.333%;
+  height: 453.333%;
+}
+
+.icon-img-house {
+  left: -13.333%;
+  top: -22%;
+  width: 234.667%;
+  height: 226.667%;
+}
+
+.shop-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  flex-shrink: 1;
+  flex-basis: 0;
+  min-width: 0;
+}
+
+.shop-name-row {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.shop-name {
+  color: #fff2cc;
   font-size: 13px;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 17px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.shop-lv {
+  margin-left: 4px;
+  color: #ffd34d;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 14px;
+  flex-shrink: 0;
+}
+
+.shop-effect {
+  color: rgba(255, 242, 204, 0.72);
+  font-size: 11px;
+  line-height: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.shop-cost {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  margin-top: 3px;
+  height: 22px;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+}
+
+.shop-cost.is-afford {
+  background: linear-gradient(180deg, #ffe07a 0%, #f5a623 100%);
+  border: 1px solid #4a2a12;
+  animation: ctaPulse 1.2s ease-in-out infinite;
+}
+
+.shop-cost.is-shake {
+  animation: plotShake 0.3s linear;
+}
+
+.shop-cost-coin {
+  width: 14px;
+  height: 14px;
+  margin-right: 3px;
+  flex-shrink: 0;
+}
+
+.shop-cost-text {
+  color: rgba(255, 242, 204, 0.6);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 16px;
   white-space: nowrap;
 }
 
-.seed-meta {
-  color: rgba(255, 236, 190, 0.8);
-  font-size: 10px;
-  line-height: 14px;
-  white-space: nowrap;
+.shop-cost-text.is-afford {
+  color: #4a2a12;
 }
 
 .farm-error {
@@ -444,22 +1096,70 @@
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-3px);
+    transform: translateY(-2px);
   }
   100% {
     transform: translateY(0);
   }
 }
 
-@keyframes glowPulse {
+@keyframes pickUp {
   0% {
-    opacity: 0.55;
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  45% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.15);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-12px) scale(1.15);
+  }
+}
+
+@keyframes farmerWalk {
+  0% {
+    transform: translateX(-16.667%);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+@keyframes farmerWork {
+  0% {
+    transform: translateX(-50%);
+  }
+  100% {
+    transform: translateX(-83.333%);
+  }
+}
+
+@keyframes helperHop {
+  0% {
+    transform: translateX(-83.333%) translateY(0);
+  }
+  50% {
+    transform: translateX(-83.333%) translateY(-3%);
+  }
+  100% {
+    transform: translateX(-83.333%) translateY(0);
+  }
+}
+
+@keyframes sleepFloat {
+  0% {
+    opacity: 0.3;
+    transform: translateY(4px);
   }
   50% {
     opacity: 1;
+    transform: translateY(-4px);
   }
   100% {
-    opacity: 0.55;
+    opacity: 0.3;
+    transform: translateY(4px);
   }
 }
 
@@ -474,57 +1174,122 @@
   }
   100% {
     opacity: 0;
-    transform: translateY(-28px);
+    transform: translateY(-26px);
   }
 }
 
-@keyframes tipFade {
+@keyframes awayIn {
   0% {
     opacity: 0;
+    transform: translateY(-8px);
   }
-  20% {
+  100% {
     opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes ctaPulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: translateY(-10px) scale(0.4);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(0) scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes noteFloat {
+  0% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  15% {
+    opacity: 1;
+    transform: translateY(0);
   }
   80% {
     opacity: 1;
+    transform: translateY(-6px);
   }
   100% {
     opacity: 0;
+    transform: translateY(-12px);
   }
 }
 
-@keyframes farmerFrames {
+@keyframes shopBob {
   0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-256px);
-  }
-}
-
-.plot-seed-hint {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 30px;
-  height: 30px;
-  margin-top: -15px;
-  margin-left: -15px;
-  opacity: 0.85;
-  animation: seedHint 1.4s ease-in-out infinite;
-}
-
-@keyframes seedHint {
-  0% {
-    transform: scale(0.9);
-    opacity: 0.55;
+    transform: translateY(0);
   }
   50% {
-    transform: scale(1.08);
-    opacity: 0.95;
+    transform: translateY(-3px);
   }
   100% {
-    transform: scale(0.9);
-    opacity: 0.55;
+    transform: translateY(0);
+  }
+}
+
+@keyframes peck {
+  0% {
+    transform: translateY(0);
+  }
+  80% {
+    transform: translateY(0);
+  }
+  90% {
+    transform: translateY(1.5px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes dropFall {
+  0% {
+    opacity: 0;
+    transform: translateY(-14px);
+  }
+  30% {
+    opacity: 1;
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(4px);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes smokeRise {
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.5);
+  }
+  25% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-22px) translateX(6px) scale(1.6);
   }
 }

@@ -5,31 +5,85 @@ import {
   extractOpenCardLoadData,
   fetchCardData,
   resolveCardData,
-  type CardCrop,
   type CardData,
   type FarmViewPayload,
   type OpenCardLoadData,
 } from "@/services/card-data";
-import { postCardHarvest } from "@/services/farm-actions";
 import { PixelImage } from "@/components/pixel-image";
+import {
+  COOP_PROPS,
+  HOUSE_PROPS,
+  PLOTS,
+  SCARECROW,
+  SHOP_SPOTS,
+  SPOTS,
+  actorBox,
+  cropBox,
+  propBox,
+  type PropSpot,
+} from "@/services/farm-layout";
+import {
+  COOP_EVERY_MS,
+  COOP_GOLD,
+  HELPER_EVERY_MS,
+  HELPER_PICKS,
+  SHOP,
+  STORE_KEY,
+  affordableCount,
+  clockOf,
+  costOf,
+  cropCount,
+  growMs,
+  nextEffect,
+  offlineRate,
+  openCols,
+  plotOpen,
+  cropOfRow,
+  dayNumber,
+  formatAway,
+  formatCoins,
+  freshSave,
+  offlineGain,
+  parseSave,
+  stageOf,
+  type FarmSave,
+  type OfflineGain,
+  type ShopId,
+  type ShopItem,
+} from "@/services/farm-model";
 import "./index.css";
 
 type Phase = "loading" | "ready" | "error";
-type FarmerMode = "idle" | "walk" | "water" | "hoe";
+type FarmerMode = "idle" | "walk" | "work";
+type HelperMode = "idle" | "walk" | "pick" | "water";
 
-interface Plot {
-  cropId: string;
-  plantedAt: number;
-}
+type TipKind = "small" | "big" | "note";
 
 interface FloatTip {
   id: number;
-  plot: number;
+  x: number;
+  y: number;
   text: string;
-  kind: "coin" | "wait";
+  kind: TipKind;
 }
 
-const COLS = 3;
+interface Bought {
+  id: ShopId;
+  level: number;
+}
+
+/** 商店格子图标从哪张图里取（位置见 index.css .icon-img-*） */
+const ICON_ART: Record<ShopId, "crops" | "family" | "scene" | "props"> = {
+  land: "crops",
+  helper: "family",
+  seed: "crops",
+  well: "scene",
+  coop: "props",
+  house: "scene",
+};
+
+/** 主角帧：待机 0、走 1-2、挥锄 3-4；阿禾 5 */
+const HELPER_FRAME = 5;
 
 export default function IndexPage() {
   const taroRef = useRef<openCardTaro>();
@@ -38,23 +92,25 @@ export default function IndexPage() {
   const loadDataRef = useRef<OpenCardLoadData>();
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const tipIdRef = useRef(0);
+  const saveRef = useRef<FarmSave | null>(null);
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [farm, setFarm] = useState<FarmViewPayload | null>(null);
-  const [plots, setPlots] = useState<(Plot | null)[]>([]);
-  const [seedId, setSeedId] = useState("carrot");
-  const [baseCoins, setBaseCoins] = useState(0);
-  const [baseHarvests, setBaseHarvests] = useState(0);
-  const [sessionCoins, setSessionCoins] = useState(0);
-  const [sessionHarvests, setSessionHarvests] = useState(0);
+  const [save, setSave] = useState<FarmSave | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [ticking, setTicking] = useState(true);
-  const [farmerPlot, setFarmerPlot] = useState(4);
+  const [visible, setVisible] = useState(true);
+  const [away, setAway] = useState<OfflineGain | null>(null);
+  const [picking, setPicking] = useState<number[]>([]);
   const [farmerMode, setFarmerMode] = useState<FarmerMode>("idle");
-  const [facingLeft, setFacingLeft] = useState(false);
+  const [farmerAtWork, setFarmerAtWork] = useState(false);
+  const [helperPlot, setHelperPlot] = useState(-1);
+  const [helperMode, setHelperMode] = useState<HelperMode>("idle");
   const [tips, setTips] = useState<FloatTip[]>([]);
   const [coinPop, setCoinPop] = useState(0);
-  const [shakePlot, setShakePlot] = useState(-1);
+  const [ctaShake, setCtaShake] = useState(0);
+  const [shopOpen, setShopOpen] = useState(false);
+  const [bought, setBought] = useState<Bought | null>(null);
+  const [deny, setDeny] = useState<{ id: ShopId; n: number } | null>(null);
 
   const later = useCallback((fn: () => void, ms: number) => {
     const timer = setTimeout(() => {
@@ -70,6 +126,29 @@ export default function IndexPage() {
     };
   }, []);
 
+  const persist = useCallback((next: FarmSave) => {
+    const taro = taroRef.current;
+    if (!taro) return;
+    try {
+      taro.setStorageSync(STORE_KEY, JSON.stringify({ ...next, lastAt: Date.now() }));
+    } catch (error) {
+      console.error("[farm] save failed", error);
+    }
+  }, []);
+
+  const updateSave = useCallback(
+    (fn: (prev: FarmSave) => FarmSave) => {
+      setSave((prev) => {
+        if (!prev) return prev;
+        const next = fn(prev);
+        saveRef.current = next;
+        persist(next);
+        return next;
+      });
+    },
+    [persist],
+  );
+
   const applyCardData = useCallback((data: CardData | null) => {
     if (!mountedRef.current) return;
     if (!data || data.displayMode !== "farm" || !data.views?.farm) {
@@ -77,13 +156,23 @@ export default function IndexPage() {
       return;
     }
     const view = data.views.farm;
+    const current = Date.now();
+    let stored: FarmSave | null = null;
+    try {
+      stored = parseSave(taroRef.current?.getStorageSync(STORE_KEY));
+    } catch {
+      stored = null;
+    }
+    const next = stored ?? freshSave(view.crops, current);
+    const rate = stored ? offlineRate(view.offlinePerMinute, view.offlineCapHours, stored.lv) : null;
+    setAway(stored && rate ? offlineGain(stored.lastAt, current, rate.perMinute, rate.capHours) : null);
+    saveRef.current = next;
+    setSave(next);
     setFarm(view);
-    setPlots((prev) => (prev.length === view.plotCount ? prev : Array.from({ length: view.plotCount }, () => null)));
-    setSeedId(view.defaultCropId);
-    setBaseCoins(data.userState?.coins ?? 0);
-    setBaseHarvests(data.userState?.harvests ?? 0);
+    setNow(current);
     setPhase("ready");
-  }, []);
+    persist(next);
+  }, [persist]);
 
   const bootstrapCardData = useCallback(async () => {
     const taro = taroRef.current;
@@ -116,190 +205,478 @@ export default function IndexPage() {
     tryBootstrapCardData();
   });
 
-  useDidShow(() => setTicking(true));
-  useDidHide(() => setTicking(false));
+  useDidShow(() => setVisible(true));
+  useDidHide(() => {
+    setVisible(false);
+    if (saveRef.current) persist(saveRef.current);
+  });
 
-  // 有作物在长时才刷新进度
-  const hasGrowing = plots.some((plot) => plot !== null);
+  // 只在卡片可见时走钟；每秒一次足够驱动作物阶段
   useEffect(() => {
-    if (!ticking || !hasGrowing) return undefined;
-    const timer = setInterval(() => setNow(Date.now()), 200);
+    if (!visible || phase !== "ready") return undefined;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [ticking, hasGrowing]);
-
-  const cropOf = useCallback(
-    (id: string): CardCrop | undefined => farm?.crops.find((crop) => crop.id === id),
-    [farm],
-  );
+  }, [visible, phase]);
 
   const addTip = useCallback(
-    (plot: number, text: string, kind: FloatTip["kind"]) => {
+    (x: number, y: number, text: string, kind: TipKind) => {
       tipIdRef.current += 1;
       const id = tipIdRef.current;
-      setTips((prev) => [...prev, { id, plot, text, kind }]);
-      later(() => setTips((prev) => prev.filter((tip) => tip.id !== id)), 900);
+      setTips((prev) => [...prev.slice(-4), { id, x, y, text, kind }]);
+      later(() => setTips((prev) => prev.filter((tip) => tip.id !== id)), kind === "note" ? 1800 : 1000);
     },
     [later],
   );
 
-  const sendFarmer = useCallback(
-    (target: number, work: FarmerMode) => {
-      setFacingLeft(target % COLS < farmerPlot % COLS);
-      setFarmerPlot(target);
-      setFarmerMode("walk");
-      later(() => setFarmerMode(work), 420);
-      later(() => setFarmerMode("idle"), 1300);
-    },
-    [farmerPlot, later],
-  );
+  const clock = clockOf(new Date(now));
+  const isNight = clock.light === "night";
 
-  const onPlotTap = useCallback(
-    (index: number) => {
-      const plot = plots[index];
-      const current = Date.now();
-      setNow(current);
-      if (!plot) {
-        const crop = cropOf(seedId);
-        if (!crop) return;
-        setPlots((prev) => prev.map((item, i) => (i === index ? { cropId: crop.id, plantedAt: current } : item)));
-        sendFarmer(index, "water");
-        return;
-      }
-      const crop = cropOf(plot.cropId);
+  const ripeList: number[] = [];
+  let nextRipeMs = Infinity;
+  if (farm && save) {
+    PLOTS.forEach((spot, i) => {
+      if (!plotOpen(spot.col, save.lv)) return;
+      const crop = cropOfRow(farm.crops, spot.row, save.lv);
       if (!crop) return;
-      const left = crop.growSeconds * 1000 - (current - plot.plantedAt);
-      if (left > 0) {
-        setShakePlot(index);
-        later(() => setShakePlot(-1), 320);
-        addTip(index, farm ? farm.copy.growingHint.replace("{s}", String(Math.ceil(left / 1000))) : "", "wait");
+      const left = growMs(crop, save.lv) - (now - save.plantedAt[i]);
+      if (left <= 0) ripeList.push(i);
+      else nextRipeMs = Math.min(nextRipeMs, left);
+    });
+  }
+  const ripeCount = ripeList.length;
+
+  const harvestAll = useCallback(() => {
+    if (!farm || !saveRef.current) return;
+    const current = Date.now();
+    const s = saveRef.current;
+    const ripe: number[] = [];
+    let gold = 0;
+    PLOTS.forEach((spot, i) => {
+      if (!plotOpen(spot.col, s.lv)) return;
+      const crop = cropOfRow(farm.crops, spot.row, s.lv);
+      if (crop && current - s.plantedAt[i] >= growMs(crop, s.lv)) {
+        ripe.push(i);
+        gold += crop.price;
+      }
+    });
+    setNow(current);
+    if (!ripe.length) {
+      setCtaShake((v) => v + 1);
+      return;
+    }
+    setPicking(ripe);
+    later(() => setPicking([]), 1100);
+    updateSave((prev) => ({
+      ...prev,
+      coins: prev.coins + gold,
+      harvests: prev.harvests + ripe.length,
+      plantedAt: prev.plantedAt.map((t, i) => (ripe.includes(i) ? current : t)),
+    }));
+    setCoinPop((v) => v + 1);
+    addTip(SPOTS.ripeBubble.x, SPOTS.ripeBubble.y + 4, `+${formatCoins(gold)}`, "big");
+    setFarmerAtWork(true);
+    setFarmerMode("walk");
+    later(() => setFarmerMode("work"), 380);
+    later(() => setFarmerMode("idle"), 1700);
+  }, [farm, later, updateSave, addTip]);
+
+  // 阿禾挂机（雇来之后）：白天每隔几秒去收熟了的菜，没有熟的就去浇水；夜里回屋睡觉
+  const helperLv = save?.lv.helper ?? 0;
+  useEffect(() => {
+    if (!visible || phase !== "ready" || !farm || isNight || helperLv <= 0) {
+      setHelperPlot(-1);
+      setHelperMode("idle");
+      return undefined;
+    }
+    const every = HELPER_EVERY_MS[helperLv];
+    const timer = setInterval(() => {
+      const s = saveRef.current;
+      if (!s) return;
+      const current = Date.now();
+      const ripe: number[] = [];
+      const open: number[] = [];
+      PLOTS.forEach((spot, i) => {
+        if (!plotOpen(spot.col, s.lv)) return;
+        open.push(i);
+        const crop = cropOfRow(farm.crops, spot.row, s.lv);
+        if (crop && current - s.plantedAt[i] >= growMs(crop, s.lv)) ripe.push(i);
+      });
+      // 留几块给你亲手收：熟的不到 4 块时她只浇水
+      const willPick = ripe.length > 3;
+      const picks = willPick ? ripe.slice(-HELPER_PICKS[helperLv]) : [];
+      const target = willPick ? picks[0] : open[Math.floor((current / 4300) % Math.max(1, open.length))];
+      if (target === undefined) return;
+      setHelperPlot(target);
+      setHelperMode("walk");
+      later(() => {
+        setHelperMode(willPick ? "pick" : "water");
+        if (!willPick) return;
+        let gold = 0;
+        picks.forEach((i) => {
+          gold += cropOfRow(farm.crops, PLOTS[i].row, s.lv)?.price ?? 0;
+        });
+        updateSave((prev) => ({
+          ...prev,
+          coins: prev.coins + gold,
+          harvests: prev.harvests + picks.length,
+          plantedAt: prev.plantedAt.map((t, i) => (picks.includes(i) ? Date.now() : t)),
+        }));
+        setCoinPop((v) => v + 1);
+        addTip(PLOTS[target].x + 2, PLOTS[target].y - 9, `+${gold}`, "small");
+      }, Math.min(1000, every * 0.3));
+      later(() => setHelperMode("idle"), Math.min(2600, every - 300));
+    }, every);
+    return () => clearInterval(timer);
+  }, [visible, phase, farm, isNight, helperLv, later, updateSave, addTip]);
+
+  // 鸡舍：小动物每 10 秒下蛋换一点钱（卡片可见时）
+  const coopLv = save?.lv.coop ?? 0;
+  useEffect(() => {
+    if (!visible || phase !== "ready" || coopLv <= 0) return undefined;
+    const timer = setInterval(() => {
+      const gold = COOP_GOLD[coopLv];
+      updateSave((prev) => ({ ...prev, coins: prev.coins + gold }));
+      setCoinPop((v) => v + 1);
+      addTip(SHOP_SPOTS.coop.x, SHOP_SPOTS.coop.y, `+${gold}`, "small");
+    }, COOP_EVERY_MS);
+    return () => clearInterval(timer);
+  }, [visible, phase, coopLv, updateSave, addTip]);
+
+  const buy = useCallback(
+    (item: ShopItem) => {
+      const s = saveRef.current;
+      if (!farm || !s) return;
+      const level = s.lv[item.id];
+      const cost = costOf(item, level);
+      if (cost === null) return;
+      if (s.coins < cost) {
+        setDeny({ id: item.id, n: Date.now() });
         return;
       }
-      setPlots((prev) => prev.map((item, i) => (i === index ? null : item)));
-      setSessionCoins((value) => value + crop.price);
-      setSessionHarvests((value) => value + 1);
-      setCoinPop((value) => value + 1);
-      addTip(index, `+${crop.price}`, "coin");
-      sendFarmer(index, "hoe");
-      const taro = taroRef.current;
-      if (taro) void postCardHarvest(taro, crop.id);
+      const current = Date.now();
+      const newCol = openCols(s.lv);
+      updateSave((prev) => ({
+        ...prev,
+        coins: prev.coins - cost,
+        lv: { ...prev.lv, [item.id]: prev.lv[item.id] + 1 },
+        // 新开的一列从种子长起
+        plantedAt: item.id === "land" ? prev.plantedAt.map((t, i) => (PLOTS[i].col === newCol ? current : t)) : prev.plantedAt,
+      }));
+      const nextLv = { ...s.lv, [item.id]: level + 1 };
+      const crop = farm.crops[cropCount(nextLv) - 1];
+      const note: Record<ShopId, string> = {
+        land: `田多了 4 块`,
+        helper: level === 0 ? `${farm.helperName}来帮忙了` : `${farm.helperName}更勤快了`,
+        seed: `种上${crop?.name ?? "新菜"}了`,
+        well: "浇得勤，长得快",
+        coop: level === 0 ? "两只鸡住进来了" : level === 1 ? "又来两只鸡" : "小猪来了",
+        house: "主屋更舒服了",
+      };
+      setShopOpen(false);
+      setDeny(null);
+      setBought({ id: item.id, level: level + 1 });
+      later(() => setBought(null), 2400);
+      setCoinPop((v) => v + 1);
+      addTip(SHOP_SPOTS[item.id].x, SHOP_SPOTS[item.id].y, note[item.id], "note");
     },
-    [plots, cropOf, seedId, sendFarmer, later, addTip, farm],
+    [farm, later, updateSave, addTip],
   );
 
-  const coins = baseCoins + sessionCoins;
-  const harvests = baseHarvests + sessionHarvests;
-  const anyPlanted = plots.some((plot) => plot !== null);
-  const ripeCount = plots.filter((plot) => {
-    const crop = plot ? cropOf(plot.cropId) : undefined;
-    return Boolean(plot && crop && now - plot.plantedAt >= crop.growSeconds * 1000);
-  }).length;
-  const statusText =
-    ripeCount > 0 ? `${ripeCount} 块熟了，点它收获` : harvests > 0 ? `${farm?.copy.harvestedLabel ?? ""} ${harvests} 次` : anyPlanted ? "等它长大…" : farm?.copy.emptyHint ?? "";
+  const collectAway = useCallback(() => {
+    if (!away) return;
+    const gain = away.coins;
+    setAway(null);
+    updateSave((prev) => ({ ...prev, coins: prev.coins + gain }));
+    setCoinPop((v) => v + 1);
+    addTip(50, 30, `+${formatCoins(gain)}`, "big");
+  }, [away, updateSave, addTip]);
 
-  const farmerRow = Math.floor(farmerPlot / COLS);
-  const farmerCol = farmerPlot % COLS;
-  const farmerStyle = {
-    left: `${((farmerCol + 0.82) / COLS) * 100}%`,
-    top: farmerRow === 0 ? "calc(50% - 74px)" : "calc(50% + 30px)",
-  };
-  const farmerSheet =
-    farmerMode === "walk" ? farm?.farmer.walk : farmerMode === "water" ? farm?.farmer.water : farm?.farmer.hoe;
-
-  const renderPlot = (index: number) => {
-    if (!farm) return null;
-    const plot = plots[index] ?? null;
-    const crop = plot ? cropOf(plot.cropId) : undefined;
-    const progress = plot && crop ? Math.min(1, (now - plot.plantedAt) / (crop.growSeconds * 1000)) : 0;
-    const ripe = Boolean(plot && crop && progress >= 1);
-    const stageSrc = crop ? (ripe ? crop.stages.ripe : progress < 0.45 ? crop.stages.seed : crop.stages.growing) : "";
-    const label = ripe ? farm.copy.ripeHint : plot ? `${crop?.name ?? ""}生长中` : farm.copy.emptyHint;
-    const cellClass = `farm-plot${ripe ? " is-ripe" : ""}${shakePlot === index ? " is-shake" : ""}`;
+  if (phase !== "ready" || !farm || !save) {
     return (
-      <View key={`plot-${index}`} className={cellClass} ariaLabel={label} onClick={() => onPlotTap(index)}>
-        <PixelImage className="plot-soil" src={farm.soil} />
-        {ripe ? <View className="plot-glow" /> : null}
-        {crop ? <PixelImage className={ripe ? "plot-crop plot-crop-ripe" : "plot-crop"} src={stageSrc} /> : null}
-        {ripe ? (
-          <View className="plot-badge">
-            <Text className="plot-badge-text">收</Text>
-          </View>
-        ) : null}
-        {!plot && !anyPlanted && harvests === 0 ? <PixelImage className="plot-seed-hint" src={farm.seedIcon} /> : null}
-        {plot && !ripe ? (
-          <View className="plot-bar">
-            <View className="plot-bar-fill" style={{ width: `${Math.round(progress * 100)}%` }} />
-          </View>
-        ) : null}
-        {tips
-          .filter((tip) => tip.plot === index)
-          .map((tip) => (
-            <Text key={`tip-${tip.id}`} className={tip.kind === "coin" ? "plot-tip plot-tip-coin" : "plot-tip plot-tip-wait"}>
-              {tip.text}
-            </Text>
-          ))}
+      <View className="widget-root farm-card">
+        <View className="widget-body widget-adaptive" __lynx_timing_flag="__lynx_timing_actual_fmp">
+          {phase === "loading" ? <Text className="widget-state-message">农场开门中…</Text> : null}
+          {phase === "error" ? (
+            <View className="farm-error">
+              <Text className="widget-state-message">农场暂时打不开</Text>
+              <View className="farm-retry" ariaLabel="重试" onClick={() => void retry()}>
+                <Text className="farm-retry-text">重试</Text>
+              </View>
+            </View>
+          ) : null}
+        </View>
       </View>
     );
-  };
+  }
+
+  const art = (pair: { day: string; night: string }) => (isNight ? pair.night : pair.day);
+  const lv = save.lv;
+  const hasHelper = lv.helper > 0;
+  const affordable = affordableCount(save);
+  const farmerSpot = isNight ? SPOTS.farmerNight : farmerAtWork ? SPOTS.farmerWork : SPOTS.farmerIdle;
+  const helperSpot =
+    helperPlot >= 0 ? { x: PLOTS[helperPlot].x - 4, y: PLOTS[helperPlot].y + 1 } : SPOTS.helperIdle;
+  const helperBubble =
+    helperMode === "walk" ? "去田里" : helperMode === "pick" ? "收菜！" : helperMode === "water" ? "浇浇水" : "";
+  const nextSecs = Number.isFinite(nextRipeMs) ? Math.ceil(nextRipeMs / 1000) : 0;
+  const statusText =
+    ripeCount > 0 ? `地里 ${ripeCount} 块熟了` : affordable > 0 ? "钱够了，去小店升级" : `下一茬 ${nextSecs} 秒后熟`;
+  const helperText = !hasHelper
+    ? `已收 ${save.harvests} 筐 · 小店能雇${farm.helperName}`
+    : isNight
+      ? `${farm.helperName}睡了 · ${farm.copy.nightHint}`
+      : `${farm.helperName}在帮你种地 · 已收 ${save.harvests} 筐`;
+  const iconArt = { crops: farm.cropAtlas, family: farm.familySheet, scene: farm.scene, props: farm.propSheet };
+  const newCrop = bought?.id === "seed" ? farm.crops[cropCount(lv) - 1]?.id : undefined;
+
+  // 小商店买到的东西：小动物、门前装饰、田扩满后的稻草人
+  const props: { spot: PropSpot; fresh: boolean; animal: boolean }[] = [];
+  COOP_PROPS.forEach((group, level) => {
+    if (level > 0 && level <= lv.coop)
+      group.forEach((spot) => props.push({ spot, fresh: bought?.id === "coop" && bought.level === level, animal: true }));
+  });
+  HOUSE_PROPS.forEach((group, level) => {
+    if (level > 0 && level <= lv.house)
+      group.forEach((spot) => props.push({ spot, fresh: bought?.id === "house" && bought.level === level, animal: false }));
+  });
+  if (openCols(lv) >= 6) props.push({ spot: SCARECROW, fresh: bought?.id === "land", animal: false });
+  props.sort((p, q) => p.spot.y - q.spot.y);
 
   return (
-    <View className="widget-root farm-card">
-      {phase === "ready" && farm ? (
-        <View className="widget-header farm-hud">
-          <View className="hud-coins">
-            <PixelImage key={`coin-${coinPop}`} className={coinPop > 0 ? "hud-coin-icon is-pop" : "hud-coin-icon"} src={farm.coinIcon} />
-            <Text className="hud-coin-value">{String(coins)}</Text>
-          </View>
-          <Text className="hud-status">{statusText}</Text>
+    <View className={`widget-root farm-card is-${clock.light}`}>
+      <View className="widget-header farm-hud">
+        <View className="hud-clock">
+          <Text className="hud-day">{`第 ${dayNumber(save.firstAt, now)} 天`}</Text>
+          <Text className="hud-time">{`${clock.hhmm} ${clock.phase}`}</Text>
         </View>
-      ) : null}
-      <View
-        className={phase === "ready" ? "widget-body farm-body" : "widget-body widget-adaptive"}
-        __lynx_timing_flag="__lynx_timing_actual_fmp"
-      >
-        {phase === "loading" ? <Text className="widget-state-message">农场开门中…</Text> : null}
-        {phase === "error" ? (
-          <View className="farm-error">
-            <Text className="widget-state-message">农场暂时打不开</Text>
-            <View className="farm-retry" ariaLabel="重试" onClick={() => void retry()}>
-              <Text className="farm-retry-text">重试</Text>
+        <View className="hud-coins">
+          <PixelImage key={`coin-${coinPop}`} className={coinPop > 0 ? "hud-coin-icon is-pop" : "hud-coin-icon"} src={farm.coinIcon} />
+          <Text className="hud-coin-value">{formatCoins(save.coins)}</Text>
+        </View>
+      </View>
+
+      <View className="widget-body farm-body" __lynx_timing_flag="__lynx_timing_actual_fmp">
+        <View className="farm-stage">
+          <PixelImage className="stage-scene" src={art(farm.scene)} mode="scaleToFill" ariaLabel="我的农场" />
+          {clock.light === "dusk" ? <View className="stage-dusk" /> : null}
+
+          {lv.house > 0 ? (
+            <View className="chimney-smoke">
+              <View className="smoke-puff puff-1" />
+              <View className="smoke-puff puff-2" />
+              {lv.house >= 2 ? <View className="smoke-puff puff-3" /> : null}
             </View>
-          </View>
-        ) : null}
-        {phase === "ready" && farm ? (
-          <View className="farm-field">
-            <View className="farm-row farm-row-first">{[0, 1, 2].map((i) => renderPlot(i))}</View>
-            <View className="farm-row farm-row-last">{[3, 4, 5].map((i) => renderPlot(i))}</View>
-            <View className={facingLeft ? "farmer is-left" : "farmer"} style={farmerStyle}>
-              <View className="farmer-frame">
+          ) : null}
+
+          {PLOTS.map((spot, i) => {
+            if (!plotOpen(spot.col, lv)) return null;
+            const crop = cropOfRow(farm.crops, spot.row, lv);
+            const picked = picking.includes(i);
+            const stage = stageOf(crop, save.plantedAt[i], now, lv);
+            const box = cropBox(spot);
+            const cropIndex = Math.max(0, farm.crops.findIndex((c) => c.id === crop?.id));
+            const fresh =
+              (bought?.id === "land" && spot.col === openCols(lv) - 1) || (newCrop !== undefined && crop?.id === newCrop);
+            const cls = `plot plot-r${spot.row}${stage === 3 ? " is-ripe" : ""}${fresh ? ` is-new wave-c${spot.col}` : ""}`;
+            const plot = (
+              <View key={`plot-${i}`} className={cls} style={{ left: box.left, top: box.top }}>
                 <PixelImage
-                  key={`farmer-${farmerMode}`}
-                  className={farmerMode === "idle" ? "farmer-sheet" : "farmer-sheet is-anim"}
-                  src={farmerSheet ?? ""}
+                  className="plot-atlas"
+                  src={art(farm.cropAtlas)}
                   mode="scaleToFill"
+                  style={{ left: `-${stage * 100}%`, top: `-${cropIndex * 100}%` }}
                 />
               </View>
+            );
+            if (!picked) return plot;
+            // 收菜：土留在原地重新播种，熟了的菜（图集第 5 列，不带土）往上飞走
+            return [
+              plot,
+              <View key={`pick-${i}`} className={`plot plot-r${spot.row} is-picked wave-c${spot.col}`} style={{ left: box.left, top: box.top }}>
+                <PixelImage
+                  className="plot-atlas"
+                  src={art(farm.cropAtlas)}
+                  mode="scaleToFill"
+                  style={{ left: "-400%", top: `-${cropIndex * 100}%` }}
+                />
+              </View>,
+            ];
+          })}
+
+          {lv.well > 0 && !isNight ? (
+            <View className={bought?.id === "well" ? "well-rain is-new" : "well-rain"}>
+              {[1, 2, 3, 4, 5, 6].slice(0, lv.well * 2).map((n) => (
+                <View key={`drop-${n}`} className={`rain-drop drop-${n}`} />
+              ))}
             </View>
-          </View>
-        ) : null}
-      </View>
-      {phase === "ready" && farm ? (
-        <View className="widget-footer farm-seeds">
-          {farm.crops.map((crop) => (
+          ) : null}
+
+          {props.map(({ spot, fresh, animal }) => (
             <View
-              key={crop.id}
-              className={crop.id === seedId ? "seed-chip is-selected" : "seed-chip"}
-              ariaLabel={`选择${crop.name}种子`}
-              onClick={() => setSeedId(crop.id)}
+              key={`prop-${spot.kind}-${spot.x}`}
+              className={`prop${fresh ? " is-new" : ""}${animal ? " is-animal" : ""}`}
+              style={propBox(spot)}
             >
-              <PixelImage className="seed-icon" src={crop.icon} />
-              <View className="seed-text">
-                <Text className="seed-name">{crop.name}</Text>
-                <Text className="seed-meta">{`${crop.growSeconds}秒 · +${crop.price}`}</Text>
+              <View className={spot.flip ? "prop-frame is-flip" : "prop-frame"}>
+                <PixelImage className={`prop-sheet prop-${spot.kind}`} src={art(farm.propSheet)} mode="scaleToFill" />
               </View>
             </View>
           ))}
+
+          <View
+            className="field-hit"
+            ariaLabel={ripeCount > 0 ? `收获${ripeCount}块熟了的菜` : "田地"}
+            onClick={harvestAll}
+          />
+
+          {ripeCount > 0 && picking.length === 0 ? (
+            <View className="ripe-bubble" onClick={harvestAll}>
+              <Text className="ripe-bubble-text">{`熟了 ${ripeCount} 块`}</Text>
+            </View>
+          ) : null}
+
+          {isNight ? (
+            <View className="sleep-bubble">
+              <Text className="sleep-text">Zz</Text>
+            </View>
+          ) : hasHelper ? (
+            <View
+              className={bought?.id === "helper" && bought.level === 1 ? "actor actor-helper is-new" : "actor actor-helper"}
+              style={actorBox(helperSpot.x, helperSpot.y)}
+            >
+              <View className="actor-frame">
+                <PixelImage className={`actor-sheet frame-${HELPER_FRAME}${helperMode === "walk" ? " is-hop" : ""}`} src={art(farm.familySheet)} mode="scaleToFill" />
+              </View>
+              {helperBubble ? (
+                <View className="actor-bubble">
+                  <Text className="actor-bubble-text">{helperBubble}</Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+
+          <View className="actor actor-farmer" style={actorBox(farmerSpot.x, farmerSpot.y)}>
+            <View className="actor-frame">
+              <PixelImage
+                key={`farmer-${farmerMode}`}
+                className={`actor-sheet frame-0${farmerMode === "walk" ? " is-walk" : farmerMode === "work" ? " is-work" : ""}`}
+                src={art(farm.familySheet)}
+                mode="scaleToFill"
+              />
+            </View>
+          </View>
+
+          {tips.map((tip) =>
+            tip.kind === "note" ? (
+              <View key={`tip-${tip.id}`} className="stage-note" style={{ left: `${tip.x}%`, top: `${tip.y}%` }}>
+                <Text className="stage-note-text">{tip.text}</Text>
+              </View>
+            ) : (
+              <Text key={`tip-${tip.id}`} className={`stage-tip is-${tip.kind}`} style={{ left: `${tip.x}%`, top: `${tip.y}%` }}>
+                {tip.text}
+              </Text>
+            ),
+          )}
+
+          {away ? (
+            <View className="away-panel">
+              <View className="away-text">
+                <Text className="away-title">{`你离开了 ${formatAway(away.minutes)}`}</Text>
+                <Text className="away-sub">
+                  {hasHelper ? `${farm.helperName}帮你收了 ${away.baskets} 筐菜` : `地里攒下了 ${away.baskets} 筐菜`}
+                </Text>
+              </View>
+              <Text className="away-gold">{`+${formatCoins(away.coins)}`}</Text>
+              <View className="away-btn" ariaLabel={farm.copy.collect} onClick={collectAway}>
+                <Text className="away-btn-text">{farm.copy.collect}</Text>
+              </View>
+            </View>
+          ) : null}
+
+          {shopOpen ? (
+            <View className="shop-panel">
+              <View className="shop-head">
+                <Text className="shop-title">小商店</Text>
+                <Text className="shop-hint">挂机攒钱，买了农场就变样</Text>
+                <View className="shop-close" ariaLabel="关上小商店" onClick={() => setShopOpen(false)}>
+                  <Text className="shop-close-text">×</Text>
+                </View>
+              </View>
+              {[0, 1, 2].map((row) => (
+                <View key={`shop-row-${row}`} className="shop-row">
+                  {SHOP.slice(row * 2, row * 2 + 2).map((item) => {
+                    const level = lv[item.id];
+                    const cost = costOf(item, level);
+                    const can = cost !== null && save.coins >= cost;
+                    const short = deny?.id === item.id && cost !== null && !can;
+                    const iconCls =
+                      item.id === "seed" ? `icon-img-seed-${Math.min(3, cropCount(lv))}` : `icon-img-${item.id}`;
+                    return (
+                      <View
+                        key={`shop-${item.id}`}
+                        className={`shop-item${can ? " is-afford" : ""}${cost === null ? " is-max" : ""}`}
+                        ariaLabel={`${item.name} ${cost === null ? "满级" : `${cost} 金币`}`}
+                        onClick={() => buy(item)}
+                      >
+                        <View className="shop-icon">
+                          <PixelImage className={`shop-icon-img ${iconCls}`} src={art(iconArt[ICON_ART[item.id]])} mode="scaleToFill" />
+                        </View>
+                        <View className="shop-info">
+                          <View className="shop-name-row">
+                            <Text className="shop-name">{item.name}</Text>
+                            <Text className="shop-lv">{`Lv${level}`}</Text>
+                          </View>
+                          <Text className="shop-effect">
+                            {nextEffect(item.id, lv, farm.crops, farm.helperName, farm.offlinePerMinute)}
+                          </Text>
+                          <View
+                            key={`cost-${item.id}-${short ? deny?.n : 0}`}
+                            className={`shop-cost${can ? " is-afford" : ""}${short ? " is-shake" : ""}`}
+                          >
+                            {cost === null ? null : <PixelImage className="shop-cost-coin" src={farm.coinIcon} />}
+                            <Text className={can ? "shop-cost-text is-afford" : "shop-cost-text"}>
+                              {cost === null ? "满级" : short ? `差 ${formatCoins(cost - save.coins)}` : formatCoins(cost)}
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
-      ) : null}
+      </View>
+
+      <View className="widget-footer farm-foot">
+        <View className="foot-status">
+          <Text className={affordable > 0 && ripeCount === 0 ? "foot-main is-afford" : "foot-main"}>{statusText}</Text>
+          <Text className="foot-sub">{helperText}</Text>
+        </View>
+        <View
+          className={`foot-shop${affordable > 0 ? " is-afford" : ""}${shopOpen ? " is-open" : ""}`}
+          ariaLabel={affordable > 0 ? `小商店，有 ${affordable} 样买得起` : "小商店"}
+          onClick={() => setShopOpen((v) => !v)}
+        >
+          <Text className={affordable > 0 ? "foot-shop-text is-afford" : "foot-shop-text"}>小店</Text>
+          {affordable > 0 && !shopOpen ? (
+            <View className="foot-shop-badge">
+              <Text className="foot-shop-badge-text">{`可买${affordable}`}</Text>
+            </View>
+          ) : null}
+        </View>
+        <View
+          key={`cta-${ctaShake}`}
+          className={`foot-cta${ripeCount > 0 ? " is-ready" : ""}${ctaShake > 0 && ripeCount === 0 ? " is-shake" : ""}`}
+          ariaLabel={ripeCount > 0 ? farm.copy.ripeCta : farm.copy.waitCta}
+          onClick={harvestAll}
+        >
+          <Text className={ripeCount > 0 ? "foot-cta-text is-ready" : "foot-cta-text"}>
+            {ripeCount > 0 ? farm.copy.ripeCta : farm.copy.waitCta}
+          </Text>
+        </View>
+      </View>
     </View>
   );
 }

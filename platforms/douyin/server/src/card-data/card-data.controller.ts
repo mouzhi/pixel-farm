@@ -1,4 +1,4 @@
-import { All, Controller, Headers, HttpCode } from '@nestjs/common';
+import { All, Controller, HttpCode } from '@nestjs/common';
 import { CardDataService } from './card-data.service';
 
 /**
@@ -11,7 +11,7 @@ export class CardDataController {
 
   @All('dy_card/data')
   @HttpCode(200)
-  getDyCardData(@Headers('x-tt-openid') openId?: string): { success: boolean; data: string; message?: string } {
-    return this.cardDataService.buildDyCardResponse(openId);
+  getDyCardData(): { success: boolean; data: string; message?: string } {
+    return this.cardDataService.buildDyCardResponse();
   }
 }

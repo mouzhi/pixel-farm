@@ -3,46 +3,43 @@
  * 同步：server/src/card-data/card-data.types.ts 与 buildCardData() 返回值。
  */
 
-/** 作物生长阶段图：种子 → 幼苗 → 成熟 */
-export interface CropStageImages {
-  seed: string;
-  growing: string;
-  ripe: string;
+/** 同一张图的白天 / 夜晚两版（都由游戏引擎同一视角渲染） */
+export interface DayNightArt {
+  day: string;
+  night: string;
 }
 
 export interface CardCrop {
   id: string;
   name: string;
-  /** 卡面成熟所需秒数 */
+  /** 卡面从播种到成熟的秒数 */
   growSeconds: number;
-  /** 收获一次得到的金币 */
+  /** 收获一块地得到的金币 */
   price: number;
-  /** 种子按钮上的小图标（成熟图） */
-  icon: string;
-  stages: CropStageImages;
-}
-
-export interface FarmerSheets {
-  /** 4 帧横向帧条 */
-  hoe: string;
-  water: string;
-  walk: string;
-  frames: number;
 }
 
 export interface FarmViewPayload {
-  plotCount: number;
-  soil: string;
+  /** 农场一角：农舍、水井、池塘和 6×4 空地（未开垦、不含小动物），704×680 */
+  scene: DayNightArt;
+  /** 作物图集（连同垦好的土）：列 = 阶段（种子/幼苗/长大/成熟），行 = crops 顺序，每格 68×68 */
+  cropAtlas: DayNightArt;
+  /** 家人帧条：主角 待机/走1/走2/挥锄1/挥锄2，阿禾 待机；每帧 80×84 */
+  familySheet: DayNightArt;
+  /** 小商店买到的东西：鸡、猪、花盆、长椅、石灯、稻草人；每格 72×112，脚底在 (36, 104) */
+  propSheet: DayNightArt;
   coinIcon: string;
-  seedIcon: string;
-  farmer: FarmerSheets;
+  /** 田地四行依次种的作物 */
   crops: CardCrop[];
-  defaultCropId: string;
+  /** 帮你干活的家人 */
+  helperName: string;
+  /** 离开期间每分钟攒下的金币，以及最多算几小时（主屋 0 级；升级后卡面按倍率算） */
+  offlinePerMinute: number;
+  offlineCapHours: number;
   copy: {
-    emptyHint: string;
-    growingHint: string;
-    ripeHint: string;
-    harvestedLabel: string;
+    ripeCta: string;
+    waitCta: string;
+    collect: string;
+    nightHint: string;
   };
 }
 
@@ -60,12 +57,6 @@ export interface CardData {
   contractVersion: string;
   displayMode: 'farm' | 'error';
   views: CardDataViews;
-  userState?: {
-    /** 服务端记录的卡面累计金币 */
-    coins: number;
-    /** 服务端记录的卡面累计收获次数 */
-    harvests: number;
-  };
   meta?: {
     source?: string;
   };
