@@ -128,6 +128,9 @@
       levels: Array.from({ length: t.max }, (_, i) => ({ cost: YD.costAt(t, i), ...(t.wood ? { wood: t.wood } : {}), label: t.max > 1 ? (t.id === 'roof' ? ['绿屋顶', '蓝屋顶', '青灰屋顶'][i] : `第 ${i + 1} ${t.id === 'gravel' || t.id === 'flag' || t.id === 'vegfence' ? '段' : '个'}`) : t.name, desc: t.desc })) })) : []),
     // v5.12.4 农场体验 (rules in farmxp.js): five things tourists pay to do; bought by the player only (never in AUTO_BUY)
     ...(FXP ? FXP.ITEMS.map(t => ({ id: t.id, p124: 1, name: t.name, icon: t.id, levels: [{ cost: t.cost, wood: t.wood, label: t.name, desc: `${t.desc}。每人 ${t.fee} 金，每天最多 ${t.cap} 人` }] })) : []),
+    // v5.13.0 扩建 (rules in home.js HM.UP): 小豆家 / 小米家 grow like the farmhouse. Bought by the player only (never in AUTO_BUY)
+    ...(HM && HM.UP ? HM.UP.ids.map((id, k) => ({ id, p11: 1, kidup: 1, name: ['小豆家', '小米家'][k], icon: 'cottage', levels: HM.UP.levels.map((l, i) => ({ cost: l.cost, wood: l.wood, label: HM.UP.names[i + 1],
+      desc: (i ? '加盖整层二楼，后面再接一间屋，门廊上多一个小阳台' : '墙加高一截，屋顶下隔出阁楼，后面加一间小屋') + `；门、小田和鸡舍都不动。小两口打理得更用心：小田和鸡蛋的收入 +${Math.round(HM.UP.bonus[i + 1] * 100)}%。要主屋先到${['小木屋', '大木屋', '二层农舍', '庄园'][HM.UP.main[i + 1]]}` })) })) : []),
   ];
   const SHOP_IDS = SHOP.map(s => s.id);
   // shop UI tabs: every item lives in exactly one category; the panel remembers the last tab
@@ -135,7 +138,7 @@
     { id: 'tools', name: '工具', ids: ['can', 'shoe', 'hoe', 'basket', 'axe', 'rod', 'searod'] },
     { id: 'seeds', name: '种子', ids: ['strawberry', 'watermelon'] },
     { id: 'land', name: '地块', title: '地块与区域', ids: ['field', 'forest', 'east', 'orchard', 'south', 'pasture', 'coast', ...(TN ? ['town'] : []), ...(EA ? ['eastave', 'vacbeach'] : [])] },
-    { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
+    { id: 'build', name: '建筑', ids: ['house', 'fence', ...(HM ? ['cottage'] : []), ...(HM && HM.UP ? HM.UP.ids : []), 'lumber', 'coop', 'sty', 'fold', 'graze', 'shed', 'coop2', 'sty2', 'fold2', 'shed2'] },
     { id: 'works', name: '工坊', title: '浇水器、加工坊、水车和蜂箱', ids: ['sprinkler', 'mill', 'jam', 'cheese', 'pie', 'wheel', 'hive', 'feeder', 'feedset', 'chute', 'milker', 'tray'] }, // v5.6.0; v5.10.9 pie; v5.11.0.29 machines
     { id: 'animals', name: '动物', ids: ['chicken', 'pig', 'sheep', 'cow', 'cat', 'dog'] },
     ...(YD ? [{ id: 'yard', name: '院子', title: '院子、阿禾的小摊和动物照护', ids: YD.IDS.slice() }] : []), // v5.10.3
@@ -166,6 +169,7 @@
       eastave: EA ? lv('eastave') > 0 : false, vacbeach: EA ? lv('vacbeach') > 0 : false, // v5.12.2
       ...(FXP ? Object.fromEntries(FXP.IDS.map(k => [k, lv(k) > 0])) : {}), // v5.12.4 农场体验
       cottage: HM ? lv('cottage') : 0, // v5.9.0
+      kidhouse: HM && HM.UP ? HM.UP.ids.map(lv) : [0, 0], // v5.13.0 小豆家 / 小米家 tiers
       coop2: lv('coop2') > 0, sty2: lv('sty2') > 0, fold2: lv('fold2') > 0, shed2: lv('shed2') > 0,
     };
   }
