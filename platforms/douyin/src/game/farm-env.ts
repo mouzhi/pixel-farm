@@ -59,6 +59,7 @@ export interface PerfReport {
   frames: number
   /** 每秒新建的离屏画布数（Krypton 上每个都是一个 GL 画布） */
   canvasPerSec: number
+  canvasSizes: string
   canvasTotal: number
 }
 
@@ -220,6 +221,8 @@ export function createFarmEnv(p: FarmPlatform) {
   }
 
   let canvasCount = 0
+  // 最近新建的画布（看尺寸就知道是谁在建：树、物件缓存、临时画布…）
+  const born: { at: number; c: any }[] = []
   let lastCount = { at: 0, n: 0, rate: 0 }
   const main = wrapCanvas(p.mainCanvas)
   const fb = p.framebuffer ? wrapCanvas(p.createOffscreenCanvas(main.width || 300, main.height || 150)) : main
@@ -286,7 +289,10 @@ export function createFarmEnv(p: FarmPlatform) {
     createElement: (tag: string) => {
       if (String(tag).toLowerCase() !== "canvas") return makeStubElement("")
       canvasCount++
-      return wrapCanvas(p.createOffscreenCanvas(300, 150))
+      const made = wrapCanvas(p.createOffscreenCanvas(300, 150))
+      born.push({ at: p.now(), c: made })
+      if (born.length > 300) born.shift()
+      return made
     },
     querySelector: () => null,
     querySelectorAll: () => [],
@@ -520,6 +526,14 @@ export function createFarmEnv(p: FarmPlatform) {
       }
       return {
         canvasPerSec: lastCount.rate,
+        canvasSizes: (() => {
+          const bySize: Record<string, number> = {}
+          for (const b of born) if (now - b.at < 3000) {
+            const k = `${b.c.width}x${b.c.height}`
+            bySize[k] = (bySize[k] || 0) + 1
+          }
+          return Object.keys(bySize).sort((a, b) => bySize[b] - bySize[a]).slice(0, 3).map((k) => `${k}×${bySize[k]}`).join(' ')
+        })(),
         canvasTotal: canvasCount,
         fps: span > 0 ? ((n - 1) * 1000) / span : 0,
         avgMs: sum.total / d,

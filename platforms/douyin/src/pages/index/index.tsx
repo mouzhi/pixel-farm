@@ -113,6 +113,10 @@ export default function Index() {
   const sysRef = useRef<Record<string, unknown>>({})
   const [hud, setHud] = useState<Hud>({ day: '', clock: '', coins: '' })
   const [fastForward, setFastForward] = useState(false)
+  const cacheRef = useRef(true)
+  const [cacheOn, setCacheOn] = useState(true)
+  const [pfc, setPfc] = useState({ statics: 0, dyn: 0, redraw: 0, soilRate: 0, objRate: 0 })
+  const pfcPrevRef = useRef<{ at: number; soil: number; obj: number } | null>(null)
   const [problems, setProblems] = useState<string[]>([])
   const [prevLog, setPrevLog] = useState<string[]>([])
 
@@ -356,6 +360,18 @@ export default function Index() {
       ticks++
       const report = env.perf()
       setPerf(report)
+      const st = env.G.__pfcStats
+      if (st) {
+        const now = nowMs()
+        const prev = pfcPrevRef.current
+        const dt = prev ? (now - prev.at) / 1000 : 0
+        setPfc({
+          statics: st.statics, dyn: st.dyn, redraw: st.redraw,
+          soilRate: dt > 0 ? (st.soilBuild - prev!.soil) / dt : 0,
+          objRate: dt > 0 ? (st.objBuild - prev!.obj) / dt : 0,
+        })
+        pfcPrevRef.current = { at: now, soil: st.soilBuild, obj: st.objBuild }
+      }
       setProblems(env.problems())
       setHud({
         day: env.element('day')?.textContent || '',
@@ -387,9 +403,26 @@ export default function Index() {
   }, [fastForward])
 
   // 画质：高 = 屏幕画布 2 倍 + 精确阴影（逐像素读回）；中 = 1 倍 + GPU 阴影（不读回）；低 = 1 倍、不画阴影、雾和夜间光照关
+  // 缓存（A/B）：新 = 地块+静物各合成一张缓存层、每帧只贴一次（画面不变；低画质另把风吹摆动定格，树也能进缓存）；旧 = 逐个贴图
+  const applyCache = (level: QualityLevel) => {
+    const env = envRef.current
+    if (!env) return
+    const on = cacheRef.current
+    env.G.__soilCache = on
+    env.G.__objCache = on
+    env.G.__noSway = on && level === 'low'
+  }
+  const toggleCache = () => {
+    cacheRef.current = !cacheRef.current
+    setCacheOn(cacheRef.current)
+    applyCache(levelRef.current)
+    envRef.current?.resetStats()
+    log(`缓存 ${cacheRef.current ? '新' : '旧'}`)
+  }
   const applyLevel = (next: QualityLevel, why: string) => {
     const env = envRef.current
     if (!env) return
+    applyCache(next)
     env.setPresentScale(next === 'high' ? 2 : 1)
     env.G.__gpuShadow = next !== 'high'
     env.G.__trialNoShadow = next === 'low'
@@ -473,9 +506,11 @@ export default function Index() {
             })()}
             <Text className="farm-perf-line text-base">{topParts(perf.parts)}</Text>
             <Text className="farm-perf-line text-base">{`新建画布${perf.canvasPerSec.toFixed(1)}/秒 共${perf.canvasTotal} 预热${envRef.current?.G.__noWarm ? '关' : '开'}`}</Text>
+            <Text className="farm-perf-line text-base">{`新画布尺寸 ${perf.canvasSizes || '无'}`}</Text>
+            <Text className="farm-perf-line text-base">{`缓存${cacheOn ? '新' : '旧'} 静物${pfc.statics} 动态${pfc.dyn} 补画${pfc.redraw} 重建 地块${pfc.soilRate.toFixed(1)} 静物${pfc.objRate.toFixed(1)}/秒`}</Text>
             <Text className="farm-perf-line text-base">{`读像素${perf.getN.toFixed(1)}次${perf.getMs.toFixed(1)}ms 写像素${perf.putN.toFixed(1)}次${perf.putMs.toFixed(1)}ms 贴图${perf.drawN.toFixed(0)}`}</Text>
             <Text className="farm-perf-line text-base">{`dpr${String(sysRef.current.pixelRatio ?? '?')} 画布${perf.backW}x${perf.backH} 画面${perf.fbW}x${perf.fbH} 启动${(bootMs / 1000).toFixed(1)}s`}</Text>
-            <Text className="farm-perf-line text-base">{`v2无预热 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
+            <Text className="farm-perf-line text-base">{`v3缓存 画质 ${quality === 'auto' ? `自动·${LEVEL_TEXT[level]}` : LEVEL_TEXT[level]} · 离屏${String(sysRef.current.offscreen ?? '')}`}</Text>
             {problems.slice(-2).map((line, i) => (
               <Text key={`p-${i}`} className="farm-perf-warn text-sm">{line}</Text>
             ))}
@@ -500,7 +535,10 @@ export default function Index() {
         {phase === 'ready' ? (
           <View className="farm-controls">
             <View className="farm-btn is-on" onClick={cycleQuality}>
-              <Text className="farm-btn-text text-sm">{`v2无预热 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+              <Text className="farm-btn-text text-sm">{`v3缓存 画质 ${quality === 'auto' ? '自动' : LEVEL_TEXT[level]}`}</Text>
+            </View>
+            <View className={cacheOn ? 'farm-btn is-on' : 'farm-btn'} onClick={toggleCache}>
+              <Text className="farm-btn-text text-sm">{`缓存 ${cacheOn ? '新' : '旧'}`}</Text>
             </View>
             <View className={fastForward ? 'farm-btn is-on' : 'farm-btn'} onClick={goNight}>
               <Text className="farm-btn-text text-sm">{fastForward ? '快进中…' : '到夜晚'}</Text>

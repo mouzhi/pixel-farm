@@ -9,6 +9,7 @@ import generateMod from '@babel/generator';
 import * as t from '@babel/types';
 import { minify } from 'terser';
 import { transformSync } from '@babel/core';
+import { CACHE_PATCHES } from './patches-cache.mjs';
 const traverse = traverseMod.default || traverseMod, generate = generateMod.default || generateMod;
 const [repo, rev, out, flag] = process.argv.slice(2);
 const git = (...a) => execFileSync('git', ['-C', repo, ...a], { encoding: 'utf8', maxBuffer: 64 << 20 });
@@ -29,6 +30,7 @@ const PATCHES = { // exact, asserted source patches (trial toggles only)
     ['if (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);', 'window.__trialHooks = { FOG, cam, zoomBy: d => { zoom = clamp(zoom + d, 0, 3); fit(); }, fit };\nif (MANUAL) { render(); hud(); } else requestAnimationFrame(frame);']],
   // (each script is preceded by window.__bootMark(file) so a phone that hangs during boot can report where)
 };
+PATCHES['game.js'].push(...CACHE_PATCHES);
 let src = '';
 for (const f of files) {
   let s = git('show', `${rev}:${f}`);
