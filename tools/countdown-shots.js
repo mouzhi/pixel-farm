@@ -97,13 +97,13 @@ fs.mkdirSync(OUT, { recursive: true });
   // 1. the day-72 cottage fixture has no town projects: the chip stays hidden; save stays v15
   await shot('countdown_fixture.png', `(() => { ${helpers} look(96, 60, 0); f.advance(0.3, 10);
     const s = f.snapshot(); return Object.assign(cd(), { fxDay: s.clock.day, ov: overlaps() }); })()`,
-    r => r.fxDay !== save.clock.day ? 'day ' + r.fxDay : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.6' ? 'ver ' + r.ver : !r.hidden ? 'chip shown on a hall-less save: ' + r.text : r.ids.length ? 'items ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
+    r => r.fxDay !== save.clock.day ? 'day ' + r.fxDay : r.sv !== 15 ? 'saveVersion ' + r.sv : r.ver !== '5.12.7' ? 'ver ' + r.ver : !r.hidden ? 'chip shown on a hall-less save: ' + r.text : r.ids.length ? 'items ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : null,
     save);
 
   // 2. desktop, 3 days before a harvest festival (also a market + sports day): 「🏮丰收节 还有3天」
   await shot('countdown_desktop.png', `(() => { ${helpers} stampHall(40); day(53); at(10 * 60); look(96, 60, 0); f.advance(0.3, 10);
     return Object.assign(cd(), { ov: overlaps() }); })()`,
-    r => r.ver !== '5.12.6' ? 'ver ' + r.ver : !r.ov.diaryBtn ? 'no 日记 button' : r.hidden ? 'chip hidden' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.ids.join() !== 'festival,market,sports' && r.ids.join() !== 'market,sports,festival' ? 'ids ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
+    r => r.ver !== '5.12.7' ? 'ver ' + r.ver : !r.ov.diaryBtn ? 'no 日记 button' : r.hidden ? 'chip hidden' : r.line !== '🏮丰收节 还有3天' ? 'line ' + r.line : r.ids.join() !== 'festival,market,sports' && r.ids.join() !== 'market,sports,festival' ? 'ids ' + r.ids : r.ov.hit.length ? 'overlap ' + r.ov.hit : !r.ov.inside ? 'chip outside hud' : null,
     save);
 
   // 3. expanded list on desktop, staggered upcoming days
