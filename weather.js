@@ -281,9 +281,17 @@
     ctx.save();
     const sctx = wetScratch(W, H);
     if (sctx) {
-      sctx.clearRect(0, 0, W, H);
-      sctx.strokeStyle = 'rgb(120, 116, 122)';
-      strokeWetPaths(sctx, proj, RS, st, W, H);
+      // perf: every path on the map stroked 4+ px wide with round caps onto a full-screen canvas, every frame while wet. It only changes with
+      // the view (projection, size) or which regions' paths are open, so keep the stroked picture until one of those changes
+      const p0 = proj(0, 0), p1 = proj(64, 64), segs = st.pathSegs || [];
+      if (V.wetSegs !== segs) { V.wetSegs = segs; V.wetTags = [...new Set(segs.map(q => q[4]).filter(Boolean))]; }
+      const wk = [W, H, RS, p0[0], p0[1], p1[0], p1[1], segs.length, V.wetTags.map(t => (st.regionOpen && st.regionOpen(t) ? 1 : 0)).join('')].join(',');
+      if (V.wetKey !== wk) {
+        V.wetKey = wk;
+        sctx.clearRect(0, 0, W, H);
+        sctx.strokeStyle = 'rgb(120, 116, 122)';
+        strokeWetPaths(sctx, proj, RS, st, W, H);
+      }
       ctx.globalAlpha = 0.4 * V.wet;
       ctx.globalCompositeOperation = 'multiply';
       ctx.drawImage(V.wetCv, 0, 0);
