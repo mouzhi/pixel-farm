@@ -2,6 +2,32 @@
 // These patches only touch the UI / camera glue; game rules are unchanged.
 export const UI_PATCHES = {
   'game.js': [
+    // v16.5: pixText (the sleeping Zs, +gold numbers) was a fillRect per lit pixel, five per pixel with its outline. Each pass now marks its
+    // pixels, merges them into row runs and equal-span vertical stacks, and fills one path. The rects of a pass do not overlap except the
+    // outline's own neighbours, which a union fills once (only differs where the text is translucent and two outline rects overlapped)
+    ["      if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); }\n}",
+     "      if (pass) pxAdd(gx, gy); else { pxAdd(gx + 1, gy); pxAdd(gx - 1, gy); pxAdd(gx, gy + 1); pxAdd(gx, gy - 1); } } });\n    const ys = [...rows.keys()].sort((a, b) => a - b), open = new Map(), out = [];\n    for (const yy of ys) { const xs = rows.get(yy).sort((a, b) => a - b); let a = xs[0], b = a; for (let i = 1; i <= xs.length; i++) { const v = xs[i]; if (v === undefined || v > b + 1) { const key = a + ',' + b, o = open.get(key); if (o && o.y + o.h === yy) o.h++; else { const r = { x: a, y: yy, w: b - a + 1, h: 1 }; out.push(r); open.set(key, r); } a = v; b = v; } else if (v > b) b = v; } }\n    ctx.beginPath(); for (const r of out) ctx.rect(r.x, r.y, r.w, r.h); ctx.fill(); }\n}"],
+    ["  for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0];\n    [...s].forEach((ch, i) => { const g = FONT[ch];",
+     "  for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0]; const rows = new Map(), pxAdd = (px, py) => { for (let j = 0; j < sc; j++) { let r = rows.get(py + j); if (!r) rows.set(py + j, r = []); for (let k = 0; k < sc; k++) r.push(px + k); } };\n    [...s].forEach((ch, i) => { const g = FONT[ch];"],
+    // v16.5 test probe: pixText old (per-pixel fillRect) vs new (path) on the live canvas, same task, returns the max channel difference
+    ["function dayLight(T) {",
+     "window.__pixTextProbe = (s, x, y, col, sc, alpha) => { const px0 = ctx.getImageData(0, 0, W, H), old = () => { const w = s.length * 4 * sc - sc, X = Math.round(x - w / 2), Y = Math.round(y); for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0]; [...s].forEach((ch, i) => { const g = FONT[ch]; if (!g) return; for (let k = 0; k < 15; k++) if (g[k] === '1') { const gx = X + (i * 4 + k % 3) * sc, gy = Y + Math.floor(k / 3) * sc; if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); } }; ctx.save(); ctx.globalAlpha = alpha; old(); ctx.restore(); const a = ctx.getImageData(0, 0, W, H); ctx.putImageData(px0, 0, 0); ctx.save(); ctx.globalAlpha = alpha; pixText(s, x, y, col, sc); ctx.restore(); const b = ctx.getImageData(0, 0, W, H); ctx.putImageData(px0, 0, 0); let m = 0, n = 0; for (let i = 0; i < a.data.length; i++) { const d = Math.abs(a.data[i] - b.data[i]); if (d > m) m = d; if (d) n++; } return { max: m, diffChannels: n }; };\nfunction dayLight(T) {"],
+    // v16.5 start gate (Douyin review: nothing may progress or show a result before the player's first tap). While window.__gateHold is
+    // set: the sim does not advance (the view stays as loaded; realT still runs so chunk building / loading goes on), nothing is saved
+    // (so savedAt stays put and the away time is not lost), and settleOffline (boot + resume) is held. __farm.startPlay() — called on the
+    // first tap — releases all of it and then pays the offline earnings.
+    ["const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };",
+     "const SAVE = { at: 0, error: null, notes: [], off: !!window.__gateHold, offline: null };"],
+    ["function advance(dt) {\n  realT += dt;\n",
+     "function advance(dt) {\n  realT += dt;\n  if (window.__gateHold) return;\n"],
+    ["if (!boot.blocked) saveNow(); if (window.__bp)",
+     "if (!boot.blocked && !window.__gateHold) saveNow(); if (window.__bp)"],
+    ["if (boot.state) settleOffline((Date.now() - boot.state.savedAt) / 1000);\n",
+     "if (boot.state) { const offSec = (Date.now() - boot.state.savedAt) / 1000; if (window.__gateHold) window.__pendingOffline = offSec; else settleOffline(offSec); }\n"],
+    ["setInterval(saveNow, 15000);\nlet hiddenAt = 0;",
+     "setInterval(saveNow, 15000);\nlet hiddenAt = 0;\nwindow.__farm.startPlay = () => { if (!window.__gateHold) return false; window.__gateHold = false; SAVE.off = false; const o = window.__pendingOffline || 0; window.__pendingOffline = 0; if (o) settleOffline(o); else saveNow(); return true; };"],
+    ["else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }",
+     "else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; if (window.__gateHold) window.__pendingOffline = (window.__pendingOffline || 0) + sec; else settleOffline(sec); }"],
     // v16.3: hud() runs every frame and rebuilt the event log and the fishing box strings each time (~19 KB with fish icon data URLs,
     // ~1 MB/s of throwaway strings at 60 fps); the mini-DOM then dropped them as unchanged. Rebuild only when their inputs change.
     ["  document.getElementById('log').innerHTML = S.log.map((s, i) => {",
@@ -19,6 +45,13 @@ export const UI_PATCHES = {
   ],
   // v15: the dusk / dawn warm tint and the rain wash use canvas 'multiply'. On the phone that blend came out grey, so they go through a
   // hook (farm-env __mulFill): native multiply where the canvas does it right, an equivalent source-over fill where not
+  // v16.5: insects (butterflies, dragonflies) were ~27 one-pixel fillRects each, every frame (outline + cells): ~137 canvas commands
+  // per frame with a few insects out. Each (cells + colours) look is painted once into a small shared atlas canvas and drawn with one
+  // drawImage at the same place (1:1, no smoothing: the same pixels)
+  'insects.js': [
+    ["  function stamp(ctx, ox, oy, cells) {\n    const filled",
+     "  const ATL = { c: null, g: null, slots: new Map(), n: 0 }, ATS = 10, ATO = 4, ATN = 24;\n  function atlasSlot(key, cells) {\n    for (const [dx, dy] of cells) if (dx < -3 || dx > 4 || dy < -3 || dy > 4) return -1;\n    if (ATL.n >= ATN) return -1;\n    if (!ATL.c) { ATL.c = document.createElement('canvas'); ATL.c.width = ATS * ATN; ATL.c.height = ATS; ATL.g = ATL.c.getContext('2d'); }\n    const i = ATL.n++; stampPx(ATL.g, i * ATS + ATO, ATO, cells); ATL.slots.set(key, i); return i;\n  }\n  function stamp(ctx, ox, oy, cells) {\n    if (window.__insAtlas) {\n      let key = ''; for (const c of cells) key += c[0] + ',' + c[1] + ',' + c[2] + ';';\n      let sl = ATL.slots.get(key); if (sl === undefined) { sl = atlasSlot(key, cells); if (sl < 0) ATL.slots.set(key, -1); }\n      if (sl >= 0) { ctx.drawImage(ATL.c, sl * ATS, 0, ATS, ATS, ox - ATO, oy - ATO, ATS, ATS); return; }\n    }\n    stampPx(ctx, ox, oy, cells);\n  }\n  function stampPx(ctx, ox, oy, cells) {\n    const filled"],
+  ],
   'weather.js': [
     // v16.4: the wet-path stamp (every path on the map stroked 4+ px wide with round caps onto a full-screen canvas) was redrawn
     // every frame while wet; it only changes when the view does, so keep it until the projection / size / paths change. Where canvas

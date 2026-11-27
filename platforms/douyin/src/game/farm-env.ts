@@ -327,7 +327,8 @@ export function createFarmEnv(p: FarmPlatform) {
         loadingUntil = tn + 2000
       }
       const idle = tn - lastInput > 8000 && tn > loadingUntil && !G.__dragging
-      const fps = idle ? (G.__idleFps || 30) : 60
+      // v16.5：没人操作 8 秒后 20 帧，45 秒后 15 帧；一碰屏幕立刻回 60
+      const fps = idle ? (tn - lastInput > 45000 ? Math.min(15, G.__idleFps || 15) : G.__idleFps || 20) : 60
       if (lastRun >= 0 && tn - lastRun < 1000 / fps - 3) {
         scheduled = true
         p.requestFrame(tick)
@@ -529,6 +530,7 @@ export function createFarmEnv(p: FarmPlatform) {
   // v15：黄昏 / 清晨的暖色和雨天的灰蓝罩子在网页版里是 multiply 混合；抖音手机上这个混合出来是一片灰。
   // 原生画布环境照旧用 multiply；抖音端改成等效的普通叠色（按场景平均亮度配的颜色，误差约 5/255）
   // v16.4：画布 multiply 能不能直接用（雨天湿路面也走这条判断）
+  G.__poke = () => { lastInput = p.now() } // v16.5：开始页上的点按也算「刚操作过」
   G.__mulNative = () => !!G.__nativeMul && !G.__forceMulFallback
   G.__mulFill = (ctx: any, r: number, g: number, b: number, a: number, w: number, h: number) => {
     if (G.__nativeMul && !G.__forceMulFallback) {

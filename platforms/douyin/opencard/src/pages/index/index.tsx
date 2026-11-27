@@ -93,6 +93,7 @@ export default function IndexPage() {
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
   const tipIdRef = useRef(0);
   const saveRef = useRef<FarmSave | null>(null);
+  const startedRef = useRef(false);
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [farm, setFarm] = useState<FarmViewPayload | null>(null);
@@ -100,6 +101,8 @@ export default function IndexPage() {
   const [now, setNow] = useState(() => Date.now());
   const [visible, setVisible] = useState(true);
   const [away, setAway] = useState<OfflineGain | null>(null);
+  // 开始页：玩家点第一下之前，农场不走钟、不自动收菜、不下蛋、不弹离线收益
+  const [started, setStarted] = useState(false);
   const [picking, setPicking] = useState<number[]>([]);
   const [farmerMode, setFarmerMode] = useState<FarmerMode>("idle");
   const [farmerAtWork, setFarmerAtWork] = useState(false);
@@ -171,7 +174,8 @@ export default function IndexPage() {
     setFarm(view);
     setNow(current);
     setPhase("ready");
-    persist(next);
+    // 老存档先不写（lastAt 不动，离线收益留到点了开始之后再给）；新存档要写，免得下次进来又当新人
+    if (!stored) persist(next);
   }, [persist]);
 
   const bootstrapCardData = useCallback(async () => {
@@ -208,15 +212,21 @@ export default function IndexPage() {
   useDidShow(() => setVisible(true));
   useDidHide(() => {
     setVisible(false);
-    if (saveRef.current) persist(saveRef.current);
+    if (saveRef.current && startedRef.current) persist(saveRef.current);
   });
 
   // 只在卡片可见时走钟；每秒一次足够驱动作物阶段
   useEffect(() => {
-    if (!visible || phase !== "ready") return undefined;
+    if (!visible || phase !== "ready" || !started) return undefined;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [visible, phase]);
+  }, [visible, phase, started]);
+
+  const startPlay = useCallback(() => {
+    startedRef.current = true;
+    setNow(Date.now());
+    setStarted(true);
+  }, []);
 
   const addTip = useCallback(
     (x: number, y: number, text: string, kind: TipKind) => {
@@ -283,7 +293,7 @@ export default function IndexPage() {
   // 阿禾挂机（雇来之后）：白天每隔几秒去收熟了的菜，没有熟的就去浇水；夜里回屋睡觉
   const helperLv = save?.lv.helper ?? 0;
   useEffect(() => {
-    if (!visible || phase !== "ready" || !farm || isNight || helperLv <= 0) {
+    if (!visible || phase !== "ready" || !started || !farm || isNight || helperLv <= 0) {
       setHelperPlot(-1);
       setHelperMode("idle");
       return undefined;
@@ -327,12 +337,12 @@ export default function IndexPage() {
       later(() => setHelperMode("idle"), Math.min(2600, every - 300));
     }, every);
     return () => clearInterval(timer);
-  }, [visible, phase, farm, isNight, helperLv, later, updateSave, addTip]);
+  }, [visible, phase, started, farm, isNight, helperLv, later, updateSave, addTip]);
 
   // 鸡舍：小动物每 10 秒下蛋换一点钱（卡片可见时）
   const coopLv = save?.lv.coop ?? 0;
   useEffect(() => {
-    if (!visible || phase !== "ready" || coopLv <= 0) return undefined;
+    if (!visible || phase !== "ready" || !started || coopLv <= 0) return undefined;
     const timer = setInterval(() => {
       const gold = COOP_GOLD[coopLv];
       updateSave((prev) => ({ ...prev, coins: prev.coins + gold }));
@@ -340,7 +350,7 @@ export default function IndexPage() {
       addTip(SHOP_SPOTS.coop.x, SHOP_SPOTS.coop.y, `+${gold}`, "small");
     }, COOP_EVERY_MS);
     return () => clearInterval(timer);
-  }, [visible, phase, coopLv, updateSave, addTip]);
+  }, [visible, phase, started, coopLv, updateSave, addTip]);
 
   const buy = useCallback(
     (item: ShopItem) => {
@@ -420,8 +430,10 @@ export default function IndexPage() {
     helperMode === "walk" ? "去田里" : helperMode === "pick" ? "收菜！" : helperMode === "water" ? "浇浇水" : "";
   const nextSecs = Number.isFinite(nextRipeMs) ? Math.ceil(nextRipeMs / 1000) : 0;
   const statusText =
-    ripeCount > 0 ? `地里 ${ripeCount} 块熟了` : affordable > 0 ? "钱够了，去小店升级" : `下一茬 ${nextSecs} 秒后熟`;
-  const helperText = !hasHelper
+    !started ? "点一下，开始种田" : ripeCount > 0 ? `地里 ${ripeCount} 块熟了` : affordable > 0 ? "钱够了，去小店升级" : `下一茬 ${nextSecs} 秒后熟`;
+  const helperText = !started
+    ? "点了之后，农场才开始动"
+    : !hasHelper
     ? `已收 ${save.harvests} 筐 · 小店能雇${farm.helperName}`
     : isNight
       ? `${farm.helperName}睡了 · ${farm.copy.nightHint}`
@@ -529,7 +541,7 @@ export default function IndexPage() {
             onClick={harvestAll}
           />
 
-          {ripeCount > 0 && picking.length === 0 ? (
+          {started && ripeCount > 0 && picking.length === 0 ? (
             <View className="ripe-bubble" onClick={harvestAll}>
               <Text className="ripe-bubble-text">{`熟了 ${ripeCount} 块`}</Text>
             </View>
@@ -578,7 +590,7 @@ export default function IndexPage() {
             ),
           )}
 
-          {away ? (
+          {away && started ? (
             <View className="away-panel">
               <View className="away-text">
                 <Text className="away-title">{`你离开了 ${formatAway(away.minutes)}`}</Text>
@@ -677,6 +689,13 @@ export default function IndexPage() {
           </Text>
         </View>
       </View>
+      {!started ? (
+        <View className="farm-gate" ariaLabel="点一下开始种田" onClick={startPlay}>
+          <View className="farm-gate-btn">
+            <Text className="farm-gate-btn-text">点一下开始种田</Text>
+          </View>
+        </View>
+      ) : null}
     </View>
   );
 }

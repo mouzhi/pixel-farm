@@ -146,3 +146,46 @@
   border-radius: 6px;
   background: rgba(10, 16, 12, 0.72);
 }
+
+/* v16.5：开始页：点一下之前画面不动、不出结果 */
+.farm-gate {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(14, 12, 8, 0.58);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.farm-gate-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.farm-gate-title {
+  font-weight: bold;
+  color: #fff3d1;
+  letter-spacing: 2px;
+  margin-bottom: 18px;
+}
+
+.farm-gate-btn {
+  padding: 14px 34px;
+  background: #e8a73c;
+  border: 3px solid #fff3d1;
+  border-radius: 8px;
+}
+
+.farm-gate-btn-text {
+  font-weight: bold;
+  color: #3b2410;
+}
+
+.farm-gate-sub {
+  margin-top: 14px;
+  color: #d9cdb0;
+}

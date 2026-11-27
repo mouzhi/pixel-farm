@@ -146,6 +146,7 @@ export default function Index() {
   const touchRef = useRef<{ id: number; x: number; y: number } | null>(null)
   const bootedRef = useRef(false)
   const [phase, setPhase] = useState<Phase>('loading')
+  const [started, setStarted] = useState(false) // v16.5：玩家点第一下之前，农场不走、不结算、不出结果
   const [errorText, setErrorText] = useState('')
   const [bootMs, setBootMs] = useState(0)
   // v10：启动分段（毫秒）：准备=页面打开到引擎开始，前置=game.js 之前的文件，初始化=模型/地图/布局，存档=读档+迁移，地面=首帧前画的地面，写档，补算=离线补算，其他，首帧
@@ -376,6 +377,8 @@ export default function Index() {
       // v12：网页版界面（小红书版的手机外壳）：避让距离；地图上的区域牌子不显示（界面层节流刷新，会跟不上地图）
       env.G.__dyInsets = insetsRef.current
       env.G.__noSigns = true
+      env.G.__insAtlas = true // v16.5：虫子的像素图只画一次，之后每只一次贴图
+      env.G.__gateHold = true // v16.5：开始页：点一下之前，模拟不前进、不存档、不结算离线收益
       env.G.__nativeMul = typeof OffscreenCanvas === 'function' // v15：原生画布才用 multiply 混合，抖音手机上改用等效叠色
       try {
         bootFarm(env.G)
@@ -631,6 +634,19 @@ export default function Index() {
     }
   }
 
+  const startPlay = () => {
+    const env = envRef.current
+    if (!env || started) return
+    setStarted(true)
+    try {
+      if (env.G.__poke) env.G.__poke()
+      audioRef.current?.unlock()
+      env.G.__farm.startPlay() // 放开模拟，再结算离线收益（点了之后才给）
+    } catch (err) {
+      console.warn('[farm] start', err)
+    }
+  }
+
   return (
     <View className="farm-page">
       <Canvas
@@ -708,6 +724,17 @@ export default function Index() {
         </View>
       ) : null}
       {phase === 'ready' && envRef.current ? <FarmUI env={envRef.current} /> : null}
+      {phase === 'ready' && !started ? (
+        <View className="farm-gate" ariaLabel="点一下开始种田" onClick={startPlay}>
+          <View className="farm-gate-card">
+            <Text className="farm-gate-title text-xl">像素小农场</Text>
+            <View className="farm-gate-btn">
+              <Text className="farm-gate-btn-text text-lg">点一下开始种田</Text>
+            </View>
+            <Text className="farm-gate-sub text-xs">点了之后，农场才开始动</Text>
+          </View>
+        </View>
+      ) : null}
       <View className="farm-overlay">
         {phase !== 'ready' ? <CustomNavSpace /> : null}
         {phase === 'loading' ? <Text className="farm-state text-base">{DEBUG ? `农场加载中…（${step}）` : '农场加载中…'}</Text> : null}
