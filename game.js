@@ -1895,6 +1895,18 @@ function unstickPet(v, dm) { // a pet standing in a walled-off pocket of the yar
   (STUCK_STATS.last || (STUCK_STATS.last = [])).push([v.pet ? v.pet.id : 'pet', [Math.round(v.x * 10) / 10, Math.round(v.y * 10) / 10], Math.round(q.x), Math.round(q.y), 'pet']); if (STUCK_STATS.last.length > 20) STUCK_STATS.last.shift();
   v.x = q.x; v.y = q.y; v.via = null; v._nav = -1; STUCK_STATS.pet = (STUCK_STATS.pet || 0) + 1; return true;
 }
+// v5.13.1 a pet whose walk TARGET is inside a walled-off pocket never gets there: it paces at the fence / lamp base, is stepped back by
+// unstickPet, paces again, and (a cat or dog only picks its next spot on arriving) never chooses another one. The spawn spot (6..20 east of
+// the door, 6..14 south) lands in the front-lawn pocket, and 5.12.9's rescue deliberately kept the target. Retarget it onto the farm's walkable area.
+function fixPetTarget(v, dm) {
+  const key = Math.round(v.tx * 2) + ',' + Math.round(v.ty * 2) + ',' + navVer; v._ptT = (v._ptT || 0) + dm; v._ptP = v._ptP || 0;
+  if (v._ptK !== key) { v._ptK = key; const g = ensureNav(), home = NAV.areaOf(g, DOOR.x, DOOR.y), here = NAV.areaOf(g, v.x, v.y);
+    if (here === home && walledOff(g, v.tx, v.ty, home, true)) { const q = NAV.nearestInArea(g, v.tx, v.ty, home, PET_UNSTICK_R, inFarmOrTown);
+      if (q) { v.tx = q.x; v.ty = q.y; v.via = null; v._ptK = Math.round(q.x * 2) + ',' + Math.round(q.y * 2) + ',' + navVer; STUCK_STATS.petTarget = (STUCK_STATS.petTarget || 0) + 1; return; } } }
+  // safety net for any other target a pet cannot reach: no progress for 20 game minutes while still far from it -> forget it and choose anew
+  if (Math.hypot(v.tx - v.x, v.ty - v.y) < 1.5 || Math.hypot(v.x - (v._ptX || 0), v.y - (v._ptY || 0)) > 1.5 || v._ptP !== navVer) { v._ptX = v.x; v._ptY = v.y; v._ptT = 0; v._ptP = navVer; return; }
+  if (v._ptT > 20) { v.tx = v.x; v.ty = v.y; v.via = null; v.wait = 0; v.job = null; v._ptT = 0; STUCK_STATS.petNoProgress = (STUCK_STATS.petNoProgress || 0) + 1; }
+}
 let PET_SPOTS = { ver: -1, m: new Map() };
 function petSpot(x, y) { // a resting place for a pet (the porch at night, indoors in rain): never a cell the lamps, the fence and the house wall have closed off
   const g = ensureNav(); if (PET_SPOTS.ver !== navVer) PET_SPOTS = { ver: navVer, m: new Map() };
@@ -5193,7 +5205,7 @@ function stepPets(dm) {
     if (pack.length) { beginDogSurprise(pack[Math.floor(petRng() * pack.length)], S.dogPlan.kind); S.dogPlan.done = true; }
   }
   for (const p of PETS_LIVE) { const v = petView(p), dog = p.kind === 'dog', k = dog ? dogs++ : cats++;
-    if (!v.hold) unstickPet(v, dm);
+    if (!v.hold) { unstickPet(v, dm); fixPetTarget(v, dm); }
     if (v.hold) { v.pose = 5; continue; } // happy face while being patted
     let speed = dog ? 4.2 : 2.4;
     if (night || (WX && WX.isRaining(S.weather, S.day, S.t)) || FARMER.home) { const bed = petBed(dog, k); // v5.10.3: a cat bed / dog house of its own

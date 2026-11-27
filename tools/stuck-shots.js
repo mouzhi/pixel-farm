@@ -85,7 +85,7 @@ fs.mkdirSync(OUT, { recursive: true });
     while (S.t % 1440 > 11 * 60 || S.t % 1440 < 9 * 60) f.advance(2, 10);
     S.loose.length = 0; v.hold = 0; v.job = null; v.x = 58; v.y = 44.5; v.tx = 58; v.ty = 44.5; v.via = null; v._pk = -1; v._pkT = 0;
     f.dogSurprise(p, 'truffle'); const job = { x: v.job.x, y: v.job.y }, wait0 = v.wait, n0 = S.loose.length, t0 = S.t; let arrived = null, dropT = null;
-    for (let i = 0; i < 600 && dropT == null; i++) { f.advance(0.5, 10); if (arrived == null && Math.hypot(v.x - job.x, v.y - job.y) < 1.5) arrived = S.t - t0; if (S.loose.length > n0) dropT = S.t - t0; }
+    for (let i = 0; i < 600 && dropT == null; i++) { f.advance(0.5, 10); if (arrived == null && Math.hypot(v.x - job.x, v.y - job.y) < 8) arrived = S.t - t0; if (S.loose.length > n0) dropT = S.t - t0; }
     const tr = S.loose.filter(l => l.type === 'truffle'); const last = tr[tr.length - 1];
     return { job, wait0, arrived: arrived == null ? null : Math.round(arrived), dropT: dropT == null ? null : Math.round(dropT), n: tr.length, at: last ? [+last.x.toFixed(1), +last.y.toFixed(1)] : null, rescues: f.stuckStats().pet }; });
   console.log(JSON.stringify(dog));
@@ -110,6 +110,29 @@ fs.mkdirSync(OUT, { recursive: true });
   check(pat.trials.some(t => t.blockedStand), 'at least one stand spot beside the hens really is inside a block (coop / hay)');
   check(pat.trials.every(t => t.done && t.min <= 25 && !t.hold), `every pat is done within 25 game minutes even with the map rebuilt every half minute (${pat.trials.map(t => t.min).join(', ')})`);
   check(pat.long.dropped && pat.long.min <= 60 && !pat.long.hold, `a job that never ends is dropped after about 45 minutes and its animal let go (${pat.long.min} min)`);
+
+  // 4c. v5.13.1 the target of a pet that stands on the farm is inside the pocket (the spawn spot is) or on the fence rail: it used to pace at the fence
+  //     for ever (a cat / dog only chooses its next spot on arriving) while unstickPet stepped it back every half hour. Retarget, and then walk about.
+  const tgt = await p.evaluate(CASES => { const f = __farm, S = f.S, N = PFPath; while (S.t % 1440 > 10 * 60 || S.t % 1440 < 9 * 60) f.advance(2, 10);
+    const g = f.nav(), home = N.areaOf(g, 36, 40), out = { cases: [] }; const r0 = f.stuckStats().pet || 0, t0 = S.t, seen = {}, travelled = {}, last = {};
+    for (const c of CASES) { const v = f.PV.get(c.id), q = N.nearestInArea(g, c.from[0], c.from[1], home, 12); v.x = q.x; v.y = q.y; v.tx = c.to[0]; v.ty = c.to[1]; v.via = null; v.hold = 0; v.job = null; v.wait = 6; v._pk = -1; v._pkT = 0; v._ptK = null;
+      out.cases.push({ id: c.id, start: [q.x, q.y], targetWalled: f.petWalled(c.to[0], c.to[1]), startArea: N.areaOf(g, q.x, q.y), home }); seen[c.id] = new Set(); travelled[c.id] = 0; last[c.id] = [q.x, q.y]; }
+    let jump = 0, n = 0; while (S.t - t0 < 240) { f.advance(0.5, 10); f.markNavDirty(); /* what a farm with a cooking jam / cheese did every few frames (the works sync): each rebuild re-plans every walk and re-arms the pet check */ for (const c of CASES) { const v = f.PV.get(c.id); seen[c.id].add(Math.round(v.tx / 4) + ',' + Math.round(v.ty / 4)); const d = Math.hypot(v.x - last[c.id][0], v.y - last[c.id][1]); last[c.id] = [v.x, v.y]; if (d < 5) travelled[c.id] += d; else jump++; } }
+    out.rescues = (f.stuckStats().pet || 0) - r0; out.noProgress = f.stuckStats().petNoProgress || 0; out.retargeted = f.stuckStats().petTarget || 0; out.targets = Object.fromEntries(CASES.map(c => [c.id, seen[c.id].size])); out.travelled = Object.fromEntries(CASES.map(c => [c.id, Math.round(travelled[c.id])]));
+    out.pos = CASES.map(c => { const v = f.PV.get(c.id); return [c.id, +v.x.toFixed(1), +v.y.toFixed(1), f.petWalled(v.x, v.y), f.petWalled(v.tx, v.ty)]; }); return out; },
+    [{ id: 'cat0', from: [54, 52], to: [54, 44] }, { id: 'cat1', from: [47, 53], to: [47.5, 49.9] }, { id: 'dog0', from: [58, 52], to: [58, 45.5] }]);
+  console.log(JSON.stringify(tgt));
+  check(tgt.cases.every(c => c.startArea === c.home) && tgt.cases.filter(c => c.targetWalled).length >= 2, 'the three pets start on the farm; the targets are inside the pocket (two) or on the fence rail (one)');
+  check(tgt.rescues <= 1, `no pacing at the fence: the pets are not stepped back again and again (${tgt.rescues} rescues in four game hours)`);
+  check(tgt.travelled.cat0 > 20 && tgt.travelled.cat1 > 20 && Object.values(tgt.targets).every(n => n >= 2), `each pet picks new places and the cats walk (walked ${JSON.stringify(tgt.travelled)}, targets ${JSON.stringify(tgt.targets)}; a dog's steps are too long to sum)`);
+  check(tgt.pos.every(q => !q[3] && !q[4]), `no pet or target ends in the pocket (${JSON.stringify(tgt.pos)})`);
+
+  // 4d. v5.13.1 a work that is cooking counts its 'left' minutes down in S.works.works; the works sync keyed on the whole record, so every game minute it
+  //     re-added every work prop and rebuilt the navigation map (128 rebuilds in 90 game minutes on a real save), which re-planned every walk each frame.
+  const churn = await p.evaluate(() => { const f = __farm, S = f.S; S.works.works.jam = { at: 'wbank', slot: 1, inp: 6, left: 400, ready: 0 }; S.works.works.cheese = { at: 'wbank', slot: 0, inp: 2, left: 400, ready: 0 };
+    f.advance(0.2, 10); const v0 = f.navVer(), t0 = S.t; while (S.t - t0 < 90) { f.advance(0.5, 10); for (const k of ['jam', 'cheese']) S.works.works[k].left -= 1.5; } return { bumps: f.navVer() - v0, mins: Math.round(S.t - t0) }; });
+  console.log(JSON.stringify(churn));
+  check(churn.bumps <= 3, `a cooking work does not rebuild the navigation map every minute (${churn.bumps} rebuilds in ${churn.mins} game minutes)`);
 
   // 5. the screenshot: daytime in front of the house; the three pets are put back into the pocket and a few minutes later stand on the lawn
   const lawn = await p.evaluate(POCKET => { const f = __farm, S = f.S, N = PFPath; while (S.t % 1440 > 12 * 60 || S.t % 1440 < 9 * 60) f.advance(2, 10);

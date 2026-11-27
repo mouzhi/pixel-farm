@@ -151,7 +151,10 @@
 
   // ---------- mount / sync ----------
   function mount(x) { X = x; S = x.S; MD = makeModels(x); ICON = makeIcons(x); mounted = true; sync(true); warm(); return api; }
-  const keyOf = () => JSON.stringify([S.works.sprinklers.map(s => [s.x, s.y, s._c]), S.works.works, S.works.hives.map(h => [h.at, h.s, h.x, h.y, h._c]), S.plots, S.eff && S.eff.wheel, (S.eff && S.eff.regions || []).includes('orchard'), machKey()]);
+  // v5.13.1: the key holds only where each work stands (id, at, slot, x, y). It used to hold the whole record, whose countdown ('left') changes every
+  // game minute while a jam / cheese / pie is cooking: each tick re-added every work prop AND rebuilt the navigation map (navVer++), so pets re-planned and
+  // re-ran their stuck check every frame. The sync reads nothing else from a work.
+  const keyOf = () => JSON.stringify([S.works.sprinklers.map(s => [s.x, s.y, s._c]), PW.WORK_IDS.map(id => { const w = S.works.works[id]; return w ? [id, w.at, w.slot, w.x, w.y] : id; }), S.works.hives.map(h => [h.at, h.s, h.x, h.y, h._c]), S.plots, S.eff && S.eff.wheel, (S.eff && S.eff.regions || []).includes('orchard'), machKey()]);
   function clearList(list) { for (const q of list) removeFrom(X.props, q); list.length = 0; }
   function sync(force) {
     if (!mounted) return; const k = keyOf(); if (!force && k === lastKey) return; lastKey = k;
