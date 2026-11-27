@@ -12,22 +12,6 @@ export const UI_PATCHES = {
     // v16.5 test probe: pixText old (per-pixel fillRect) vs new (path) on the live canvas, same task, returns the max channel difference
     ["function dayLight(T) {",
      "window.__pixTextProbe = (s, x, y, col, sc, alpha) => { const px0 = ctx.getImageData(0, 0, W, H), old = () => { const w = s.length * 4 * sc - sc, X = Math.round(x - w / 2), Y = Math.round(y); for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0]; [...s].forEach((ch, i) => { const g = FONT[ch]; if (!g) return; for (let k = 0; k < 15; k++) if (g[k] === '1') { const gx = X + (i * 4 + k % 3) * sc, gy = Y + Math.floor(k / 3) * sc; if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); } }; ctx.save(); ctx.globalAlpha = alpha; old(); ctx.restore(); const a = ctx.getImageData(0, 0, W, H); ctx.putImageData(px0, 0, 0); ctx.save(); ctx.globalAlpha = alpha; pixText(s, x, y, col, sc); ctx.restore(); const b = ctx.getImageData(0, 0, W, H); ctx.putImageData(px0, 0, 0); let m = 0, n = 0; for (let i = 0; i < a.data.length; i++) { const d = Math.abs(a.data[i] - b.data[i]); if (d > m) m = d; if (d) n++; } return { max: m, diffChannels: n }; };\nfunction dayLight(T) {"],
-    // v16.5 start gate (Douyin review: nothing may progress or show a result before the player's first tap). While window.__gateHold is
-    // set: the sim does not advance (the view stays as loaded; realT still runs so chunk building / loading goes on), nothing is saved
-    // (so savedAt stays put and the away time is not lost), and settleOffline (boot + resume) is held. __farm.startPlay() — called on the
-    // first tap — releases all of it and then pays the offline earnings.
-    ["const SAVE = { at: 0, error: null, notes: [], off: false, offline: null };",
-     "const SAVE = { at: 0, error: null, notes: [], off: !!window.__gateHold, offline: null };"],
-    ["function advance(dt) {\n  realT += dt;\n",
-     "function advance(dt) {\n  realT += dt;\n  if (window.__gateHold) return;\n"],
-    ["if (!boot.blocked) saveNow(); if (window.__bp)",
-     "if (!boot.blocked && !window.__gateHold) saveNow(); if (window.__bp)"],
-    ["if (boot.state) settleOffline((Date.now() - boot.state.savedAt) / 1000);\n",
-     "if (boot.state) { const offSec = (Date.now() - boot.state.savedAt) / 1000; if (window.__gateHold) window.__pendingOffline = offSec; else settleOffline(offSec); }\n"],
-    ["setInterval(saveNow, 15000);\nlet hiddenAt = 0;",
-     "setInterval(saveNow, 15000);\nlet hiddenAt = 0;\nwindow.__farm.startPlay = () => { if (!window.__gateHold) return false; window.__gateHold = false; SAVE.off = false; const o = window.__pendingOffline || 0; window.__pendingOffline = 0; if (o) settleOffline(o); else saveNow(); return true; };"],
-    ["else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; settleOffline(sec); }",
-     "else if (hiddenAt) { const sec = (Date.now() - hiddenAt) / 1000; hiddenAt = 0; if (window.__gateHold) window.__pendingOffline = (window.__pendingOffline || 0) + sec; else settleOffline(sec); }"],
     // v16.3: hud() runs every frame and rebuilt the event log and the fishing box strings each time (~19 KB with fish icon data URLs,
     // ~1 MB/s of throwaway strings at 60 fps); the mini-DOM then dropped them as unchanged. Rebuild only when their inputs change.
     ["  document.getElementById('log').innerHTML = S.log.map((s, i) => {",

@@ -39,6 +39,7 @@ import {
   openCols,
   plotOpen,
   cropOfRow,
+  cropOfPlot,
   dayNumber,
   formatAway,
   formatCoins,
@@ -103,6 +104,7 @@ export default function IndexPage() {
   const [away, setAway] = useState<OfflineGain | null>(null);
   // 开始页：玩家点第一下之前，农场不走钟、不自动收菜、不下蛋、不弹离线收益
   const [started, setStarted] = useState(false);
+  const [plantedIdx, setPlantedIdx] = useState(-1);
   const [picking, setPicking] = useState<number[]>([]);
   const [farmerMode, setFarmerMode] = useState<FarmerMode>("idle");
   const [farmerAtWork, setFarmerAtWork] = useState(false);
@@ -222,11 +224,6 @@ export default function IndexPage() {
     return () => clearInterval(timer);
   }, [visible, phase, started]);
 
-  const startPlay = useCallback(() => {
-    startedRef.current = true;
-    setNow(Date.now());
-    setStarted(true);
-  }, []);
 
   const addTip = useCallback(
     (x: number, y: number, text: string, kind: TipKind) => {
@@ -238,6 +235,62 @@ export default function IndexPage() {
     [later],
   );
 
+  // 开始页：选一种种子，真的种到田里（挑一块长得最慢的地；全熟了就先收掉最后一块再种），然后农场才开始走
+  const chooseSeed = useCallback(
+    (cropIdx: number) => {
+      const s = saveRef.current;
+      if (!farm || !s || startedRef.current) return;
+      const crop = farm.crops[cropIdx];
+      if (!crop) return;
+      const current = Date.now();
+      let target = -1;
+      let best = 2;
+      let lastRipe = -1;
+      PLOTS.forEach((spot, i) => {
+        if (!plotOpen(spot.col, s.lv)) return;
+        const c = cropOfPlot(farm.crops, i, s);
+        const frac = c ? (current - s.plantedAt[i]) / growMs(c, s.lv) : 0;
+        if (frac < 1) {
+          if (frac < best) {
+            best = frac;
+            target = i;
+          }
+        } else {
+          lastRipe = i;
+        }
+      });
+      let gold = 0;
+      if (target < 0) {
+        target = lastRipe;
+        if (target < 0) return;
+        gold = cropOfPlot(farm.crops, target, s)?.price ?? 0;
+      }
+      startedRef.current = true;
+      const slot = target;
+      updateSave((prev) => {
+        const pc = (prev.plotCrop ?? PLOTS.map(() => -1)).slice();
+        pc[slot] = cropIdx;
+        return {
+          ...prev,
+          coins: prev.coins + gold,
+          harvests: prev.harvests + (gold > 0 ? 1 : 0),
+          plantedAt: prev.plantedAt.map((t, i) => (i === slot ? current : t)),
+          plotCrop: pc,
+        };
+      });
+      setNow(current);
+      setStarted(true);
+      setPlantedIdx(slot);
+      later(() => setPlantedIdx(-1), 1600);
+      if (gold > 0) {
+        setCoinPop((v) => v + 1);
+        addTip(PLOTS[slot].x, PLOTS[slot].y - 4, `+${formatCoins(gold)}`, "small");
+      }
+      addTip(PLOTS[slot].x, PLOTS[slot].y - 12, `种下了${crop.name}`, "note");
+    },
+    [farm, later, updateSave, addTip],
+  );
+
   const clock = clockOf(new Date(now));
   const isNight = clock.light === "night";
 
@@ -246,7 +299,7 @@ export default function IndexPage() {
   if (farm && save) {
     PLOTS.forEach((spot, i) => {
       if (!plotOpen(spot.col, save.lv)) return;
-      const crop = cropOfRow(farm.crops, spot.row, save.lv);
+      const crop = cropOfPlot(farm.crops, i, save);
       if (!crop) return;
       const left = growMs(crop, save.lv) - (now - save.plantedAt[i]);
       if (left <= 0) ripeList.push(i);
@@ -263,7 +316,7 @@ export default function IndexPage() {
     let gold = 0;
     PLOTS.forEach((spot, i) => {
       if (!plotOpen(spot.col, s.lv)) return;
-      const crop = cropOfRow(farm.crops, spot.row, s.lv);
+      const crop = cropOfPlot(farm.crops, i, s);
       if (crop && current - s.plantedAt[i] >= growMs(crop, s.lv)) {
         ripe.push(i);
         gold += crop.price;
@@ -281,6 +334,7 @@ export default function IndexPage() {
       coins: prev.coins + gold,
       harvests: prev.harvests + ripe.length,
       plantedAt: prev.plantedAt.map((t, i) => (ripe.includes(i) ? current : t)),
+      plotCrop: prev.plotCrop?.map((c, i) => (ripe.includes(i) ? -1 : c)),
     }));
     setCoinPop((v) => v + 1);
     addTip(SPOTS.ripeBubble.x, SPOTS.ripeBubble.y + 4, `+${formatCoins(gold)}`, "big");
@@ -308,7 +362,7 @@ export default function IndexPage() {
       PLOTS.forEach((spot, i) => {
         if (!plotOpen(spot.col, s.lv)) return;
         open.push(i);
-        const crop = cropOfRow(farm.crops, spot.row, s.lv);
+        const crop = cropOfPlot(farm.crops, i, s);
         if (crop && current - s.plantedAt[i] >= growMs(crop, s.lv)) ripe.push(i);
       });
       // 留几块给你亲手收：熟的不到 4 块时她只浇水
@@ -323,13 +377,14 @@ export default function IndexPage() {
         if (!willPick) return;
         let gold = 0;
         picks.forEach((i) => {
-          gold += cropOfRow(farm.crops, PLOTS[i].row, s.lv)?.price ?? 0;
+          gold += cropOfPlot(farm.crops, i, s)?.price ?? 0;
         });
         updateSave((prev) => ({
           ...prev,
           coins: prev.coins + gold,
           harvests: prev.harvests + picks.length,
           plantedAt: prev.plantedAt.map((t, i) => (picks.includes(i) ? Date.now() : t)),
+          plotCrop: prev.plotCrop?.map((c, i) => (picks.includes(i) ? -1 : c)),
         }));
         setCoinPop((v) => v + 1);
         addTip(PLOTS[target].x + 2, PLOTS[target].y - 9, `+${gold}`, "small");
@@ -430,9 +485,9 @@ export default function IndexPage() {
     helperMode === "walk" ? "去田里" : helperMode === "pick" ? "收菜！" : helperMode === "water" ? "浇浇水" : "";
   const nextSecs = Number.isFinite(nextRipeMs) ? Math.ceil(nextRipeMs / 1000) : 0;
   const statusText =
-    !started ? "点一下，开始种田" : ripeCount > 0 ? `地里 ${ripeCount} 块熟了` : affordable > 0 ? "钱够了，去小店升级" : `下一茬 ${nextSecs} 秒后熟`;
+    !started ? "选一种种子，看看种出什么" : ripeCount > 0 ? `地里 ${ripeCount} 块熟了` : affordable > 0 ? "钱够了，去小店升级" : `下一茬 ${nextSecs} 秒后熟`;
   const helperText = !started
-    ? "点了之后，农场才开始动"
+    ? "种下之后，农场才开始动"
     : !hasHelper
     ? `已收 ${save.harvests} 筐 · 小店能雇${farm.helperName}`
     : isNight
@@ -482,13 +537,13 @@ export default function IndexPage() {
 
           {PLOTS.map((spot, i) => {
             if (!plotOpen(spot.col, lv)) return null;
-            const crop = cropOfRow(farm.crops, spot.row, lv);
+            const crop = cropOfPlot(farm.crops, i, save);
             const picked = picking.includes(i);
             const stage = stageOf(crop, save.plantedAt[i], now, lv);
             const box = cropBox(spot);
             const cropIndex = Math.max(0, farm.crops.findIndex((c) => c.id === crop?.id));
             const fresh =
-              (bought?.id === "land" && spot.col === openCols(lv) - 1) || (newCrop !== undefined && crop?.id === newCrop);
+              (bought?.id === "land" && spot.col === openCols(lv) - 1) || (newCrop !== undefined && crop?.id === newCrop) || plantedIdx === i;
             const cls = `plot plot-r${spot.row}${stage === 3 ? " is-ripe" : ""}${fresh ? ` is-new wave-c${spot.col}` : ""}`;
             const plot = (
               <View key={`plot-${i}`} className={cls} style={{ left: box.left, top: box.top }}>
@@ -690,9 +745,18 @@ export default function IndexPage() {
         </View>
       </View>
       {!started ? (
-        <View className="farm-gate" ariaLabel="点一下开始种田" onClick={startPlay}>
-          <View className="farm-gate-btn">
-            <Text className="farm-gate-btn-text">点一下开始种田</Text>
+        <View className="farm-gate">
+          <Text className="farm-gate-title">选一种种子，看看种出什么</Text>
+          <View className="farm-gate-seeds">
+            {farm.crops.slice(0, 3).map((crop, idx) => (
+              <View key={`seed-${crop.id}`} className="seed-btn" ariaLabel={`种${crop.name}`} onClick={() => chooseSeed(idx)}>
+                <View className="seed-icon">
+                  <PixelImage className="plot-atlas" src={art(farm.cropAtlas)} mode="scaleToFill" style={{ left: "-400%", top: `-${idx * 100}%` }} />
+                </View>
+                <Text className="seed-name">{crop.name}</Text>
+                <Text className="seed-meta">{`${Math.round(growMs(crop, save.lv) / 1000)}秒熟 · ${crop.price}金`}</Text>
+              </View>
+            ))}
           </View>
         </View>
       ) : null}

@@ -1294,7 +1294,7 @@
   }
 }
 
-/* 开始页：点第一下之前，画面不动、不出结果、不结算 */
+/* 开始页：选一种种子，种下之后农场才开始走；点一下之前画面不动、不出结果、不结算 */
 .farm-gate {
   position: absolute;
   left: 0;
@@ -1302,25 +1302,57 @@
   width: 100%;
   height: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  background: rgba(16, 12, 8, 0.56);
+  background: rgba(16, 12, 8, 0.62);
   z-index: 50;
 }
 
-.farm-gate-btn {
+.farm-gate-title {
+  color: #fff3d1;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 22px;
+  margin-bottom: 10px;
+}
+
+.farm-gate-seeds {
   display: flex;
-  align-items: center;
+  flex-direction: row;
+  align-items: stretch;
   justify-content: center;
-  padding: 10px 26px;
+}
+
+.seed-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 78px;
+  margin: 0 5px;
+  padding: 6px 4px 6px;
   background: #ffd34d;
   border: 3px solid #4a2a12;
   border-radius: 8px;
 }
 
-.farm-gate-btn-text {
+.seed-icon {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+}
+
+.seed-name {
   color: #4a2a12;
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 700;
-  line-height: 24px;
+  line-height: 18px;
+  margin-top: 2px;
+}
+
+.seed-meta {
+  color: #6b4a22;
+  font-size: 10px;
+  line-height: 14px;
 }

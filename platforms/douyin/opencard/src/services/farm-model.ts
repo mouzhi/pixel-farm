@@ -15,6 +15,8 @@ export interface FarmSave {
   lastAt: number;
   /** 每块地的播种时间（毫秒） */
   plantedAt: number[];
+  /** 玩家亲手选的种子：这块地这一茬种第几种作物（-1 = 按行默认）；收获后清掉 */
+  plotCrop?: number[];
   /** 小商店各项等级 0..3 */
   lv: Levels;
 }
@@ -110,6 +112,13 @@ export function plotOpen(col: number, lv: Levels): boolean {
   return col < openCols(lv);
 }
 
+/** 这块地现在种的作物：玩家亲手选过的先算，否则按行 */
+export function cropOfPlot(crops: CardCrop[], i: number, save: Pick<FarmSave, 'lv' | 'plotCrop'>): CardCrop | undefined {
+  const pick = save.plotCrop?.[i];
+  if (typeof pick === 'number' && pick >= 0 && crops[pick]) return crops[pick];
+  return cropOfRow(crops, PLOTS[i].row, save.lv);
+}
+
 export function growMs(crop: CardCrop | undefined, lv: Levels): number {
   return ((crop?.growSeconds ?? 30) * 1000) / WELL_SPEED[lv.well];
 }
@@ -168,6 +177,10 @@ export function parseSave(raw: unknown): FarmSave | null {
     firstAt: s.firstAt,
     lastAt: s.lastAt,
     plantedAt: s.plantedAt.map((t) => (typeof t === 'number' ? t : 0)),
+    plotCrop:
+      Array.isArray(s.plotCrop) && s.plotCrop.length === PLOTS.length
+        ? s.plotCrop.map((n) => (typeof n === 'number' && n >= 0 ? Math.floor(n) : -1))
+        : undefined,
     lv,
   };
 }
