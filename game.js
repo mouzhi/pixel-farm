@@ -5396,9 +5396,23 @@ function syncResortJoin() { // open the beach path / 宅园 path, hide trees on 
 const FONT = { 0: '111101101101111', 1: '010110010010111', 2: '111001111100111', 3: '111001111001111', 4: '101101111001001', 5: '111100111001111', 6: '111100111101111', 7: '111001001001001', 8: '111101111101111', 9: '111101111001111', '+': '000010111010000', Z: '111001010100111', '♥': '101111111010000' };
 function pixText(s, x, y, col, sc = 1) {
   const w = s.length * 4 * sc - sc; x = Math.round(x - w / 2); y = Math.round(y);
+  // perf: one fillRect per lit pixel (five with the outline) was ~100 canvas calls for the sleeping Zs. Each pass now marks its pixels with a
+  // coverage count (the outline rects of neighbouring pixels overlap, and a translucent text blended them more than once), merges equal
+  // counts into row runs and equal-span stacks, and fills each count's path that many times: the same pixels as the fillRect version.
   for (const pass of [0, 1]) { ctx.fillStyle = pass ? col : Ink[0];
+    const cov = new Map(), add = (px, py) => { for (let j = 0; j < sc; j++) for (let k = 0; k < sc; k++) { const key = (py + j) * 65536 + (px + k + 32768); cov.set(key, (cov.get(key) || 0) + 1); } };
     [...s].forEach((ch, i) => { const g = FONT[ch]; if (!g) return; for (let k = 0; k < 15; k++) if (g[k] === '1') { const gx = x + (i * 4 + k % 3) * sc, gy = y + Math.floor(k / 3) * sc;
-      if (pass) ctx.fillRect(gx, gy, sc, sc); else for (const [ox, oy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) ctx.fillRect(gx + ox, gy + oy, sc, sc); } }); }
+      if (pass) add(gx, gy); else { add(gx + 1, gy); add(gx - 1, gy); add(gx, gy + 1); add(gx, gy - 1); } } });
+    const byN = new Map(); for (const [key, n] of cov) { let a = byN.get(n); if (!a) byN.set(n, a = []); a.push(key); }
+    for (const [n, keys] of byN) {
+      keys.sort((p, q) => p - q); const open = new Map(), out = []; let a = keys[0], b = a;
+      for (let i = 1; i <= keys.length; i++) { const v = keys[i];
+        if (v === undefined || v !== b + 1 || Math.floor(v / 65536) !== Math.floor(b / 65536)) { const yy = Math.floor(a / 65536), x0 = a - yy * 65536 - 32768, w = b - a + 1, id = x0 + ',' + w, o = open.get(id);
+          if (o && o.y + o.h === yy) o.h++; else { const r = { x: x0, y: yy, w, h: 1 }; out.push(r); open.set(id, r); } a = v; b = v; }
+        else b = v; }
+      ctx.beginPath(); for (const r of out) ctx.rect(r.x, r.y, r.w, r.h); for (let t = 0; t < n; t++) ctx.fill();
+    }
+  }
 }
 function dayLight(T) { const h = T / 60; if (h >= 6.3 && h < 17.5) return 0; if (h >= 17.5 && h < 20.5) return (h - 17.5) / 3; if (h >= 20.5 || h < 4.5) return 1; return Math.max(0, 1 - (h - 4.5) / 1.8); }
 function sunsetFade(T) { // v5.10.8: 0 at 17:00, full by 17:20, full until 18:40, 0 at 19:00 (smoothstep edges)
@@ -6228,12 +6242,14 @@ function hud() {
   const loveNew = document.getElementById('loveNew'); if (loveNew) loveNew.hidden = !!S.seenLove; // v5.11.0.39: ← new until the family panel is opened once
   // v5.11.0.10: the open heart tip belongs to ui.js (drawLoveTip: hint + each child's classmates + 镇上的人 + 民宿留言本). Rewriting it
   // here every frame with only the hint wiped the closeness rows a frame after ui.js drew them, so the hearts never stayed on screen.
-  document.getElementById('log').innerHTML = S.log.map((s, i) => {
+  // perf: the log and the fishing box were rebuilt as strings every frame (the fish icons are data URLs: ~19 KB a frame); rebuild only when they change
+  const logEl = document.getElementById('log'), logKey = S.log.join('\u0001') + '|' + (lastCatch ? lastCatch.line + (lastCatch.url ? 1 : 0) : '');
+  if (logEl.__k !== logKey) logEl.__k = logKey, logEl.innerHTML = S.log.map((s, i) => {
     if (i === 0 && lastCatch && lastCatch.line === s && lastCatch.url) return `<div><img class="log-bug" alt="" src="${lastCatch.url}">${s}</div>`;
     return `<div>${s}</div>`;
   }).join('');
-  const box = document.getElementById('catches');
-  if (box) {
+  const box = document.getElementById('catches'), c0 = S.catches[0], boxKey = S.day + '|' + S.fishGold + '|' + S.catches.length + '|' + (c0 ? c0.day + c0.id + c0.gold + c0.name + (c0.water || '') : '');
+  if (box && (box.__k !== boxKey || box.__c0 !== c0)) { box.__k = boxKey; box.__c0 = c0;
     const today = S.catches.filter(c => c.day === S.day), recent = S.catches.slice(0, 8);
     if (!recent.length) box.hidden = true;
     else { box.hidden = false; box.innerHTML = `<div class="h">今日钓到 ${today.length} 条` + (S.fishGold ? ` · 累计卖出 ${S.fishGold} 金` : '') + `</div>` +
@@ -6571,7 +6587,15 @@ function glowTick(dt) {
   }
 }
 let last = performance.now();
+// perf: nobody touching the screen = nothing to see move quickly. 60 fps while there is input (and for the first 8 s after loading),
+// 20 fps after 8 s without any, 15 fps after 45 s. Game time follows real elapsed time (dt below), so the speed does not change.
+let lastInput = performance.now();
+for (const t of ['pointerdown', 'pointermove', 'touchstart', 'touchmove', 'keydown', 'wheel', 'click']) addEventListener(t, () => { lastInput = performance.now(); }, { capture: true, passive: true });
+let rafPrev = 0, rafTick = 16.7; // the display's frame interval (smoothed): a frame is let through when the next tick would overshoot the target interval
 function frame(now) {
+  if (rafPrev) rafTick += (Math.min(40, Math.max(6, now - rafPrev)) - rafTick) * 0.1; rafPrev = now;
+  const quiet = now - lastInput, fps = drag || keyPan.size || keyRot ? 60 : quiet > 45000 ? 15 : quiet > 8000 ? 20 : 60;
+  if (fps < 60 && now - last < 1000 / fps - rafTick / 2) { requestAnimationFrame(frame); return; }
   const dt = Math.min(0.1, (now - last) / 1000); last = now;
   if (dt > 0) noteLog('sampleFps', 1 / dt);
   // v5.11.0.23: one actor or draw error must not black out the canvas or freeze the HUD at its HTML defaults
@@ -6584,8 +6608,10 @@ window.__farm = { S, F, tiles, cam, advance: (sec, fps = 30) => { const n = Math
 // warm the per-angle cache of the big buildings in idle time, nearest angles first, so manual rotation stays smooth
 { const big = props.filter(p => p.m && p.m.slices && p.m.slices.length && p.m.w * p.m.d * p.m.h >= 8000); let n = 1, base = null;
   const idle = window.requestIdleCallback || (f => setTimeout(() => f({ timeRemaining: () => 8 }), 30));
-  const work = dl => { const b = Math.round(cam.ta / ASTEP); if (b !== base) { base = b; n = 1; }
-    while (n <= 128 && dl.timeRemaining() > 4 && stkPx < STK_BUDGET * 0.8) { for (const s of [n, -n]) for (const p of big) stackCanvas(p.m, (base + s) * ASTEP + p.rot); n++; }
+  let k = 0; // perf: resume mid-angle, one stack at a time; a whole angle (every big building, both ways) is one ~190 ms task, which stalled frames once the idle cap left idle time
+  const work = dl => { const b = Math.round(cam.ta / ASTEP); if (b !== base) { base = b; n = 1; k = 0; }
+    const w0 = performance.now(), per = big.length * 2;
+    while (n <= 128 && dl.timeRemaining() > 4 && performance.now() - w0 < 4 && stkPx < STK_BUDGET * 0.8) { const p = big[k % big.length]; stackCanvas(p.m, (base + (k < big.length ? n : -n)) * ASTEP + p.rot); if (++k >= per) { k = 0; n++; } }
     setTimeout(() => idle(work), n > 128 || stkPx >= STK_BUDGET * 0.8 ? 400 : 0); }; // keep watching: after a manual turn, warm around the new angle
   if (!MANUAL) idle(work); }
 // Watchdog: if the browser ever hands back a blanked canvas anyway (context lost / restored), throw away every cache and rebuild

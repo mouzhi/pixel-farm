@@ -127,7 +127,17 @@
     const g = c.getContext('2d');
     return { w: c.width, h: c.height, px: new Uint8ClampedArray(g.getImageData(0, 0, c.width, c.height).data) };
   }
+  // perf: the glowing / giant crop icons in the item bar were redrawn (two canvases + a pixel read-back + a PNG) on every bar refresh; they only
+  // depend on (crop, kind, seen, size), so draw each once
+  const dcCache = {};
   function decorateCrop(type, mode, seen, fit) {
+    const k = type + '|' + mode + '|' + (seen ? 1 : 0) + '|' + (fit || 0);
+    if (dcCache[k]) return dcCache[k];
+    const out = decorateCrop0(type, mode, seen, fit);
+    if (out.indexOf('ico crop') >= 0) dcCache[k] = out;
+    return out;
+  }
+  function decorateCrop0(type, mode, seen, fit) {
     const src = G.cropFrame && G.cropFrame(type);
     if (!src) return cropIcon(type);
     const glow = mode === 'glow' || mode === 'glow-giant', giant = mode === 'giant' || mode === 'glow-giant';
@@ -154,6 +164,7 @@
     let img = canvasImg(c);
     if (!seen && ICN) img = ICN.silhouette(img);
     const url = ICN ? ICN.urlOf(img) : c.toDataURL();
+    c.width = c.height = 0; src.width = src.height = 0; // free the scratch canvases at once
     let show = giant ? 1.5 : 2, dw = Math.round(c.width * show), dh = Math.round(c.height * show);
     if (fit && Math.max(dw, dh) > fit) { const s = fit / Math.max(dw, dh); dw = Math.max(1, Math.round(dw * s)); dh = Math.max(1, Math.round(dh * s)); }
     return icoTag(url, 'crop', dw, dh);

@@ -452,7 +452,22 @@
   const BODY = { white: '#2a1d16', yellow: '#5a3a28', swallow: '#2a1d16', grey: '#2a1d16', dragon: '#4fa3cf', reddragon: '#e06a2c', damsel: '#4fa3cf', firefly: '#2a1d16' };
   const INK = '#2a1d16';
   function px(ctx, x, y, c) { ctx.fillStyle = c; ctx.fillRect(x, y, 1, 1); }
+  // perf: a butterfly or dragonfly was ~27 one-pixel fillRects every frame (outline + cells). Each (cells + colours) look is painted once into a
+  // shared atlas canvas and drawn with one drawImage at the same place (1:1, no smoothing: the same pixels)
+  const ATL = { c: null, g: null, slots: new Map(), n: 0 }, ATS = 10, ATO = 4, ATN = 24;
+  function atlasSlot(cells) {
+    for (const [dx, dy] of cells) if (dx < -3 || dx > 4 || dy < -3 || dy > 4) return -1;
+    if (ATL.n >= ATN) return -1;
+    if (!ATL.c) { ATL.c = document.createElement('canvas'); ATL.c.width = ATS * ATN; ATL.c.height = ATS; ATL.g = ATL.c.getContext('2d'); }
+    const i = ATL.n++; stampPx(ATL.g, i * ATS + ATO, ATO, cells); return i;
+  }
   function stamp(ctx, ox, oy, cells) {
+    let key = ''; for (const c of cells) key += c[0] + ',' + c[1] + ',' + c[2] + ';';
+    let sl = ATL.slots.get(key); if (sl === undefined) { sl = atlasSlot(cells); ATL.slots.set(key, sl); }
+    if (sl >= 0) { ctx.drawImage(ATL.c, sl * ATS, 0, ATS, ATS, ox - ATO, oy - ATO, ATS, ATS); return; }
+    stampPx(ctx, ox, oy, cells);
+  }
+  function stampPx(ctx, ox, oy, cells) {
     const filled = new Set(cells.map(([dx, dy]) => dx + ',' + dy));
     for (const [dx, dy] of cells) {
       for (const [ax, ay] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) {
