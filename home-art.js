@@ -19,7 +19,7 @@
   const WINS = [CX0 + 4, CX1 - 12];             // the two front windows (left edge, 9 voxels wide)
   const DOOR = { x0: Math.round((CX0 + CX1) / 2) - 4, x1: Math.round((CX0 + CX1) / 2) + 3 };
   // v5.13.0 扩建: tier lv adds HM.UP.back[lv] world units of rooms at the back (2 voxels each; the front wall, porch and door
-  // stay put) and raises the walls: 阁楼木屋 a half storey with attic windows, 两层小楼 a full upper floor with a balcony
+  // stay put) and raises the walls: 阁楼木屋 a half storey with attic windows, 两层小楼 a full upper floor with three front windows and a balcony
   const ZWS = [ZW, 40, 52], WZ2 = [0, 31, 36];
   const GEO = [0, 1, 2].map(lv => { const b = (HM.UP ? HM.UP.back[lv] : 0) || 0, d2 = D2 + 2 * b, cd = d2 + 14, cy1 = d2 + 2, zw = ZWS[lv];
     return { lv, b, CW, CD: cd, CX0, CX1, CY0, CY1: cy1, ZW: zw, WZ2: WZ2[lv], CY: (cd / 2 - (CY0 + cy1) / 2) / 2 - b / 2,
@@ -48,7 +48,7 @@
         if (two && z === 30) return Wd[2];                                                                  // v5.13.0 the upper floor's beam
         if (up && front) { const s = two ? 9 : 7;                                                           // v5.13.0 upper windows (attic: smaller)
           for (const u0 of WINS) { const w = win(x, z, u0 + (two ? 0 : 1), up, s); if (w) return w; }
-          if (two && x >= DOOR.x0 && x <= DOOR.x1 && z >= 32 && z <= 46) { if (x === DOOR.x0 || x === DOOR.x1 || z === 46) return Wd[1]; return (x - DOOR.x0) % 3 === 0 ? G[1] : G[2]; } } // the balcony door
+          if (two) { const w = win(x, z, Math.round(cx) - 4, up, s); if (w) return w; } }                    // v5.13.1 a third matching window, not a door onto the air
         if (up && side) { const w = win(y, z, Math.round((CY0 + CY1) / 2) - 4, up, two ? 8 : 7); if (w) return w; }
         if (two && back) { const w = win(x, z, Math.round(cx) - 4, up, 8); if (w) return w; }
         if (front) {
@@ -145,6 +145,7 @@
     if (!(T >= 17 * 60 + 30 || T < 6 * 60 + 30)) return;
     for (const h of (S && S.home ? S.home.houses : [])) if (h.built && h.kid) { const g = geoOf(h), fy = toWorldG(g, 0, g.CY1 + 1).dy, lant = toWorldG(g, DOOR.x1 + 2, g.CY1 + 1);
       for (const u0 of WINS) { hz(h.x + toWorldG(g, u0 + 4.5, 0).dx, h.y + fy + 1, WZ + 4, 22, 0.85); if (g.WZ2) hz(h.x + toWorldG(g, u0 + 4.5, 0).dx, h.y + fy + 1, g.WZ2 + 4, 18, 0.7); }
+      if (g.lv >= 2) hz(h.x + toWorldG(g, Math.round((CX0 + CX1) / 2), 0).dx, h.y + fy + 1, g.WZ2 + 4, 18, 0.7); // the middle upper window
       hz(h.x + lant.dx, h.y + lant.dy + 1, 19, 14, 0.8); }
   }
   // the chimney top (world units, z up) of each house someone lives in, for a curl of smoke
