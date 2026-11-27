@@ -1930,8 +1930,8 @@ packages:
     engines: {node: '>=6.0.0'}
     hasBin: true
 
-  baseline-browser-mapping@2.11.39:
-    resolution: {integrity: sha512-Q9buOYhr2ggrEZpImICecZTJHCCd8yXkRUokFlUEQ8uiD6oP82F4W4jWnhOHZYV+wlvrC51V7Wy0ULyWjil5Wg==}
+  baseline-browser-mapping@2.11.40:
+    resolution: {integrity: sha512-WJhaQ3kW5+5BpOduI64ewvykhCyK/IHHG5jCIzivmW2nkYPRowUjs0DbBXY4CAr1LLrN7QEzZGL9727aXH9sJA==}
     engines: {node: '>=6.0.0'}
     hasBin: true
 
@@ -2282,8 +2282,8 @@ packages:
   electron-to-chromium@1.5.475:
     resolution: {integrity: sha512-S9tceHJbIsHH8VRwh9x+8lJO50SYwTdwVGdEjdz2FERyP59j1N6rdXOSklIusrhxt9GG/WN4V/kRgmDHl9MM5w==}
 
-  electron-to-chromium@1.5.494:
-    resolution: {integrity: sha512-Tph7ohL4Xc0ft3DXElYEIVTmPI3H0MtPCTdgtz5AwWGZG6q+vMiT3IzJ3RJX/HJQ8pYzeimQyvi6SsBTOS0nyQ==}
+  electron-to-chromium@1.5.495:
+    resolution: {integrity: sha512-dZcmtNbDI5oeT9uP9Z+D7h/H5C1mvBewDTLgZgo9WgyPmqOXSt2cmoCK99evPygUOn9lyXZ4w0Eb8APrkBjqBA==}
 
   emoji-regex@8.0.0:
     resolution: {integrity: sha512-MSjYzcWNOA0ewAHpz0MxpYFvwg6yjy1NG3xteoqz644VCo/RPgnr1/GGt+ic3iJTzQ8Eu3TdM14SawnVUmGE6A==}
@@ -2678,8 +2678,8 @@ packages:
   graphemer@1.4.0:
     resolution: {integrity: sha512-EtKwoO6kxCL9WO5xipiHTZlSzBm7WLT627TqC/uVRd0HKmq8NXyebnNYxDoBi7wt8eTWrUrKXCOVaFq9x1kgag==}
 
-  hammerjs@2.0.9:
-    resolution: {integrity: sha512-lOkx/LMYDVffNFkBvLSehI5ubhffRVghREyoy59rXfuldBNw5IBLedmajRmVt/01c431BKz/L2WeVH8nsr+KBw==}
+  hammerjs@2.0.10:
+    resolution: {integrity: sha512-DiE7YOin4llGUKAENkcX6k3fPlTaTocH7kw3bclnavUxQ6z+wRsbf0Dl7EyPi/WluWqVkb6Wn6Lj02gwOJ/TJQ==}
     engines: {node: '>=0.8.0'}
 
   harmony-reflect@1.6.2:
@@ -3740,8 +3740,8 @@ packages:
   string_decoder@1.1.1:
     resolution: {integrity: sha512-n/ShnvDi6FHbbVfviro+WojiFzv+s8MPMHBczVePfUpDJLwoLT0ht1l4YwBCbi8pJAveEEdnkHyPyTP/mzRfwg==}
 
-  string_decoder@1.3.0:
-    resolution: {integrity: sha512-hkRX8U1WjJFd8LsDJ2yQ/wWWxaopEsABU1XfkM8A+j0+85JAGppt16cr1Whg6KIbb4okU6Mql6BOj+uup/wKeA==}
+  string_decoder@1.4.0:
+    resolution: {integrity: sha512-r8azg21Y67ckRmeG0hHol5CeDXMs4ZFkFT6eXMO39hX7khvJcopBcYTCeWZ0rQXkMoPh8lVdbjmsOMGL8krxRQ==}
 
   strip-ansi@6.0.1:
     resolution: {integrity: sha512-Y38VPSHcqkFrCpFnQ9vuSXmquuv5oXOKpGeT6aGrr3o3Gc9AlVa6JBfUSOCnbxGGZF+/0ooI7KrPuUSztUdU5A==}
@@ -5319,7 +5319,7 @@ snapshots:
       fast-glob: 3.3.3
       find-yarn-workspace-root: 2.0.0
       fs-extra: 11.4.1
-      hammerjs: 2.0.9
+      hammerjs: 2.0.10
       hls.js: 1.7.4
       html-minifier: 4.0.0
       identity-obj-proxy: 3.0.0
@@ -6107,7 +6107,7 @@ snapshots:
 
   baseline-browser-mapping@2.11.35: {}
 
-  baseline-browser-mapping@2.11.39: {}
+  baseline-browser-mapping@2.11.40: {}
 
   binary-extensions@2.3.0: {}
 
@@ -6153,9 +6153,9 @@ snapshots:
 
   browserslist@4.29.6:
     dependencies:
-      baseline-browser-mapping: 2.11.39
+      baseline-browser-mapping: 2.11.40
       caniuse-lite: 1.0.30001828
-      electron-to-chromium: 1.5.494
+      electron-to-chromium: 1.5.495
       node-releases: 2.0.66
       update-browserslist-db: 1.4.0(browserslist@4.29.6)
 
@@ -6537,7 +6537,7 @@ snapshots:
 
   electron-to-chromium@1.5.475: {}
 
-  electron-to-chromium@1.5.494: {}
+  electron-to-chromium@1.5.495: {}
 
   emoji-regex@8.0.0: {}
 
@@ -7057,7 +7057,7 @@ snapshots:
 
   graphemer@1.4.0: {}
 
-  hammerjs@2.0.9: {}
+  hammerjs@2.0.10: {}
 
   harmony-reflect@1.6.2: {}
 
@@ -7801,7 +7801,7 @@ snapshots:
   readable-stream@3.6.2:
     dependencies:
       inherits: 2.0.4
-      string_decoder: 1.3.0
+      string_decoder: 1.4.0
       util-deprecate: 1.0.2
 
   readdirp@3.6.0:
@@ -8031,7 +8031,7 @@ snapshots:
     dependencies:
       safe-buffer: 5.1.2
 
-  string_decoder@1.3.0:
+  string_decoder@1.4.0:
     dependencies:
       safe-buffer: 5.2.1
 

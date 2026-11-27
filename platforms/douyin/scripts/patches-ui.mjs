@@ -20,6 +20,11 @@ export const UI_PATCHES = {
   // v15: the dusk / dawn warm tint and the rain wash use canvas 'multiply'. On the phone that blend came out grey, so they go through a
   // hook (farm-env __mulFill): native multiply where the canvas does it right, an equivalent source-over fill where not
   'weather.js': [
+    // v16.4: the wet-path stamp (every path on the map stroked 4+ px wide with round caps onto a full-screen canvas) was redrawn
+    // every frame while wet; it only changes when the view does, so keep it until the projection / size / paths change. Where canvas
+    // multiply is wrong (Douyin), the grey multiply is the same as black at alpha a·(1 − 118/255) over source-over
+    ["      sctx.clearRect(0, 0, W, H);\n      sctx.strokeStyle = 'rgb(120, 116, 122)';\n      strokeWetPaths(sctx, proj, RS, st, W, H);\n      ctx.globalAlpha = 0.4 * V.wet;\n      ctx.globalCompositeOperation = 'multiply';\n      ctx.drawImage(V.wetCv, 0, 0);",
+     "      const mn = !window.__mulNative || window.__mulNative(), p0 = proj(0, 0), p1 = proj(64, 64), wk = [W, H, RS, mn ? 1 : 0, p0[0], p0[1], p1[0], p1[1], (st.pathSegs || []).length].join(',');\n      if (V.wetKey !== wk) { V.wetKey = wk;\n      sctx.clearRect(0, 0, W, H);\n      sctx.strokeStyle = mn ? 'rgb(120, 116, 122)' : '#000';\n      strokeWetPaths(sctx, proj, RS, st, W, H); }\n      ctx.globalAlpha = mn ? 0.4 * V.wet : 0.4 * V.wet * (1 - 118 / 255);\n      if (mn) ctx.globalCompositeOperation = 'multiply';\n      ctx.drawImage(V.wetCv, 0, 0);"],
     ["    ctx.save();\n    ctx.globalCompositeOperation = 'multiply';\n    ctx.fillStyle = `rgba(150, 165, 190, ${Math.min(0.28, a)})`;\n    ctx.fillRect(0, 0, W, H);\n    ctx.restore();\n    return 1;",
      "    if (window.__mulFill) { window.__mulFill(ctx, 150, 165, 190, Math.min(0.28, a), W, H); return 1; }\n    ctx.save();\n    ctx.globalCompositeOperation = 'multiply';\n    ctx.fillStyle = `rgba(150, 165, 190, ${Math.min(0.28, a)})`;\n    ctx.fillRect(0, 0, W, H);\n    ctx.restore();\n    return 1;"],
   ],

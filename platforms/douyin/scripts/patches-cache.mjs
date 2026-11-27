@@ -30,10 +30,23 @@ const PFR_FN = {
   scale(x, y) { const m = PFR.m; m[0] *= x; m[1] *= x; m[2] *= y; m[3] *= y; return PFR.t.scale(x, y); },
   setTransform(a, b, c, d, e, f) { PFR.m = [a, b, c, d, e, f]; return PFR.t.setTransform(a, b, c, d, e, f); },
   transform(a, b, c, d, e, f) { const m = PFR.m; PFR.m = [m[0] * a + m[2] * b, m[1] * a + m[3] * b, m[0] * c + m[2] * d, m[1] * c + m[3] * d, m[0] * e + m[2] * f + m[4], m[1] * e + m[3] * f + m[5]]; return PFR.t.transform(a, b, c, d, e, f); },
+  // v16.4 (douyin): a path made only of rects (rain drops) has a known box, so fill() on it is not 'bad'. Before, every falling drop
+  // made the recorder give up and redraw every static in front of it: ~25 000 draws a frame while it rained (4 fps in the harness)
+  beginPath() { PFR.rp = true; return PFR.t.beginPath(); },
+  rect(x, y, w, h) { pfcBox(x, y, w, h); return PFR.t.rect(x, y, w, h); },
+  fill(a, b) { if (!PFR.rp) { PFR.bad = true; PFC_ST.bad++; } return b === undefined ? (a === undefined ? PFR.t.fill() : PFR.t.fill(a)) : PFR.t.fill(a, b); },
+  moveTo(x, y) { PFR.rp = false; return PFR.t.moveTo(x, y); },
+  lineTo(x, y) { PFR.rp = false; return PFR.t.lineTo(x, y); },
+  arc(...a) { PFR.rp = false; return PFR.t.arc(...a); },
+  arcTo(...a) { PFR.rp = false; return PFR.t.arcTo(...a); },
+  ellipse(...a) { PFR.rp = false; return PFR.t.ellipse(...a); },
+  quadraticCurveTo(...a) { PFR.rp = false; return PFR.t.quadraticCurveTo(...a); },
+  bezierCurveTo(...a) { PFR.rp = false; return PFR.t.bezierCurveTo(...a); },
+  roundRect(...a) { PFR.rp = false; return PFR.t.roundRect(...a); },
 };
 const PFR_BAD = { rotate: 1, putImageData: 1, fill: 1, stroke: 1, fillText: 1, strokeText: 1, strokeRect: 1, clearRect: 1 };
 function pfcRec(target) { // forwards to target, records the screen box of what is drawn
-  PFR.t = target; PFR.x0 = PFR.y0 = 1e9; PFR.x1 = PFR.y1 = -1e9; PFR.bad = false; PFR.m = [1, 0, 0, 1, 0, 0]; PFR.stack.length = 0;
+  PFR.t = target; PFR.x0 = PFR.y0 = 1e9; PFR.x1 = PFR.y1 = -1e9; PFR.bad = false; PFR.m = [1, 0, 0, 1, 0, 0]; PFR.stack.length = 0; PFR.rp = false;
   if (!PFR.p) PFR.p = new Proxy({}, {
     get(_, k) { const f = PFR_FN[k]; if (f) return f; if (PFR_BAD[k]) { PFR.bad = true; PFC_ST.bad++; }
       const t = PFR.t, v = t[k]; return typeof v === 'function' ? v.bind(t) : v; },

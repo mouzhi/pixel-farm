@@ -243,7 +243,7 @@ export function createFarmEnv(p: FarmPlatform) {
   }
   dom.body.innerHTML = FARM_UI_HTML
   // v16.2：记下最近一次触摸 / 点击（帧率上限用：没人操作时少画几帧）
-  let lastInput = -1e9
+  let lastInput = p.now() // v16.4：启动后先按「刚操作过」算，开头 8 秒不限到 30 帧
   const realDispatch = dom._dispatch.bind(dom)
   dom._dispatch = (el: any, ev: any) => {
     const t = ev && ev.type
@@ -313,12 +313,20 @@ export function createFarmEnv(p: FarmPlatform) {
   const memLog = { at: 0, n: 0 }
   // v16.2 帧率上限：最多 60 帧；8 秒没碰屏幕就 30 帧（G.__idleFps 可调）。游戏按真实时间推进（dt 上限 0.1 秒），所以速度不变，只是少画
   let lastRun = -1
+  let lastDefer = -1
+  let loadingUntil = 0
   const tick = (now: number) => {
     scheduled = false
     if (paused || (!pending && !extra.length)) return
     {
       const tn = p.now()
-      const idle = tn - lastInput > 8000 && !G.__dragging
+      // v16.4：画面还在补画（屏幕上有推迟的图）时不限帧，加载不被拖慢
+      const pf = G.__pfcStats
+      if (pf && pf.defer !== lastDefer) {
+        lastDefer = pf.defer
+        loadingUntil = tn + 2000
+      }
+      const idle = tn - lastInput > 8000 && tn > loadingUntil && !G.__dragging
       const fps = idle ? (G.__idleFps || 30) : 60
       if (lastRun >= 0 && tn - lastRun < 1000 / fps - 3) {
         scheduled = true
@@ -520,6 +528,8 @@ export function createFarmEnv(p: FarmPlatform) {
   }
   // v15：黄昏 / 清晨的暖色和雨天的灰蓝罩子在网页版里是 multiply 混合；抖音手机上这个混合出来是一片灰。
   // 原生画布环境照旧用 multiply；抖音端改成等效的普通叠色（按场景平均亮度配的颜色，误差约 5/255）
+  // v16.4：画布 multiply 能不能直接用（雨天湿路面也走这条判断）
+  G.__mulNative = () => !!G.__nativeMul && !G.__forceMulFallback
   G.__mulFill = (ctx: any, r: number, g: number, b: number, a: number, w: number, h: number) => {
     if (G.__nativeMul && !G.__forceMulFallback) {
       ctx.save()
