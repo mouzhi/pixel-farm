@@ -76,7 +76,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return { ver: f.version, pier: S.inn.resort.pier, across: across.map(q => q.x), mouthWalk: walk(mouth.x, mouth.y),
       fishWalk: walk(fish.x, fish.y), standWalk: walk(L.pier.stand.x, L.pier.stand.y), fromWalk: walk(L.pier.from.x, L.pier.from.y),
       spots: (f.sunsetSpots() || []).length }; })()`,
-    r => r.ver !== "5.13.0" ? "ver " + r.ver
+    r => r.ver !== "5.13.1" ? "ver " + r.ver
       : !r.pier ? "no pier"
       : r.across.length ? "fence still across the guest pier " + r.across
       : !r.mouthWalk || !r.standWalk || !r.fromWalk ? "guest pier not walkable"
@@ -91,7 +91,7 @@ fs.mkdirSync(OUT, { recursive: true });
     look(L.pier.mouth.x, L.pier.mouth.y + 2, 0.18); hide();
     const across = (f.props || []).filter(q => q.region === "coast" && q.y === 256 && Math.abs(q.x - L.pier.mouth.x) < 16);
     return { ver: f.version, x: L.pier.mouth.x, y: L.pier.mouth.y, across: across.map(q => q.x) }; })()`,
-    r => r.ver !== "5.13.0" ? "ver " + r.ver : r.across.length ? "fence still across mouth " + r.across : null);
+    r => r.ver !== "5.13.1" ? "ver " + r.ver : r.across.length ? "fence still across mouth " + r.across : null);
 
   await shot("sunset_family_spread.png", "(() => { " + setup + `
     at(17 * 60 + 15); dry();
@@ -116,7 +116,7 @@ fs.mkdirSync(OUT, { recursive: true });
     return { ver: f.version, n: people.length, kinds, seats, reached, minD: +minD.toFixed(2),
       at: people.map(a => ({ id: a.id || "farmer", x: +a.x.toFixed(1), y: +a.y.toFixed(1), seat: a.task && a.task.seat })),
       sunset: f.IN.isSunset(S.t), fade: f.sunsetFade(S.t) }; })()`,
-    r => r.ver !== "5.13.0" ? "ver " + r.ver
+    r => r.ver !== "5.13.1" ? "ver " + r.ver
       : !r.sunset ? "not sunset"
       : r.kinds.some(k => k !== "sunset") ? "tasks " + r.kinds.join(",")
       : r.reached.some(v => !v) ? "unreachable seat"
@@ -140,7 +140,7 @@ fs.mkdirSync(OUT, { recursive: true });
     look(L.pier.x, L.pier.mouth.y + 4, 0.2); hide();
     return { ver: f.version, n: people.length, seats: kinds,
       at: people.map(a => ({ id: a.id || "farmer", x: +a.x.toFixed(1), y: +a.y.toFixed(1), seat: a.task && a.task.seat })) }; })()`,
-    r => r.ver !== "5.13.0" ? "ver " + r.ver
+    r => r.ver !== "5.13.1" ? "ver " + r.ver
       : r.n < 3 ? "family"
       : !r.seats.includes("guest-pier") && !r.seats.includes("fish-pier") ? "nobody on a pier " + r.seats.join(",")
       : null);

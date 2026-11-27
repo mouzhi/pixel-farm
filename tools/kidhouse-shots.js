@@ -39,7 +39,7 @@ fs.mkdirSync(OUT, { recursive: true });
     const bad = r && r.error ? r.error : check ? check(r) : null; console.log(bad ? 'FAIL' : 'ok  ', name, JSON.stringify(r).slice(0, 900)); if (bad) fails.push(name + ': ' + bad); await p.context().close(); };
   const PADS_CLIP = { x: 400, y: 150, width: 480, height: 440 }, MAIN_CLIP = { x: 330, y: 150, width: 620, height: 440 };
   const buyN = (a, b) => `for (let i = 0; i < ${a}; i++) f.buy('kidhouse0'); for (let i = 0; i < ${b}; i++) f.buy('kidhouse1');`;
-  const ver = r => r.ver !== '5.13.0' ? 'ver ' + r.ver : null;
+  const ver = r => r.ver !== '5.13.1' ? 'ver ' + r.ver : null;
 
   // 1. the farmhouse (庄园) at the same zoom and angle, for the side-by-side
   await shot('kh_main', 1280, 800, `${setup(3)} marry('kid0', 'm1', 0); marry('kid1', 'm0', 1); at(10 * 60); look(f.NAV.LAYOUT.HOUSE.x, f.NAV.LAYOUT.HOUSE.y + 6, 0); hide();
@@ -89,7 +89,7 @@ fs.mkdirSync(OUT, { recursive: true });
       f.setAngle(0.35); f.panTo(h.x, h.y + 8); f.advance(0.3, 10);
       return { ver: f.version, sv: snap.saveVersion, lv0, up0, b1: [b1.ok, b1.why || null], lv1, saved: snap.upgrades.kidhouse0, savedHouse: 'lv' in snap.home.houses[0], door: !!(rr && rr.reached), size: JSON.stringify(snap).length }; });
     await p.screenshot({ path: path.join(OUT, 'kh_v15save.png') });
-    const bad = r.ver !== '5.13.0' ? 'ver' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.lv0 || r.up0 ? 'old save not 木屋' : !r.b1[0] ? 'upgrade refused: ' + r.b1[1] : r.lv1 !== 1 ? 'lv ' + r.lv1 : r.saved !== 1 ? 'not saved' : r.savedHouse ? 'h.lv leaked into the save' : !r.door ? 'door unreachable' : r.size > 65536 ? 'save size ' + r.size : null;
+    const bad = r.ver !== '5.13.1' ? 'ver' : r.sv !== 15 ? 'saveVersion ' + r.sv : r.lv0 || r.up0 ? 'old save not 木屋' : !r.b1[0] ? 'upgrade refused: ' + r.b1[1] : r.lv1 !== 1 ? 'lv ' + r.lv1 : r.saved !== 1 ? 'not saved' : r.savedHouse ? 'h.lv leaked into the save' : !r.door ? 'door unreachable' : r.size > 65536 ? 'save size ' + r.size : null;
     console.log(bad ? 'FAIL' : 'ok  ', 'kh_v15save', JSON.stringify(r)); if (bad) fails.push('v15save: ' + bad); await p.context().close();
   }
   if (net.length) fails.push('network: ' + net.slice(0, 3).join(' '));
